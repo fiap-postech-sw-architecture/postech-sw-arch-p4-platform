@@ -56,7 +56,7 @@ cabecalho() { tr -d '\r' < "$TMP/h" | awk -v nome="$1:" 'tolower($1) == nome {pr
 # tenha sido chamado ("-").
 pede() {
   local status recebido limite resta
-  status=$(curl -s -X "$1" -D "$TMP/h" -o "$TMP/b" -w '%{http_code}' "$BORDA$2")
+  status=$(curl -s --path-as-is -X "$1" -D "$TMP/h" -o "$TMP/b" -w '%{http_code}' "$BORDA$2")
   recebido=$(jq -r '.path // "-"' "$TMP/b" 2>/dev/null || echo -)
   limite=$(cabecalho x-ratelimit-limit-minute)
   resta=$(cabecalho x-ratelimit-remaining-minute)
@@ -161,6 +161,10 @@ pede GET "/billing/api/v1/publico%2Forcamentos/$segredo?run=$marca" 404
 pede GET "/billing/simulador%2Fcheckout/123?token=$segredo&run=$marca" 404
 echo "only the path counts: %2F in the query string goes through"
 pede GET "/os/api/v1/ordens-de-servico?proximo=%2Fadmin" 200 /api/v1/ordens-de-servico
+echo "other spellings of the admin path: the Kong normalizes them before matching, so fora-da-borda still answers"
+pede GET //os//api/v1//admin/outbox 404
+pede GET /os/api/v1/./admin/outbox 404
+pede GET /os/api/v1/%61dmin/outbox 404
 
 titulo "X-Request-ID: same id in the response and in what the upstream got"
 curl -s -D "$TMP/h" -o "$TMP/b" "$BORDA/os/api/v1/ordens-de-servico"
