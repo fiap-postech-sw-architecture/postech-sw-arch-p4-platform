@@ -38,7 +38,9 @@ Provisionados em [`grafana/alertas.yaml`](grafana/alertas.yaml), pasta PytStop, 
 | DLQ com mensagens | alguma `.dlq` com mensagem por 1 minuto | critical |
 | RabbitMQ com alarme de memória ou disco | alarme ativo por 1 minuto | critical |
 | Gateway com mais de 1% de 5xx | razão de 5xx sobre o total do Kong acima de 1% por 5 minutos | critical |
-| Alvo de métricas fora do ar | `up` de algum job abaixo de 1 por 2 minutos | critical |
+| Alvo de métricas fora do ar | `up` de algum job abaixo de 1 por 2 minutos; pod que some da descoberta fica sem série e não entra aqui | critical |
+| RabbitMQ fora do ar ou sem alvo de métricas | `max(up{job="rabbitmq"}) < 1` ou sem dado (alvo sumiu) por 2 minutos | critical |
+| Kong fora do ar ou sem alvo de métricas | `max(up{job="kong"}) < 1` ou sem dado por 2 minutos | critical |
 | CPU de pod acima de 80% do limite | uso do cAdvisor sobre o limite do kube-state-metrics acima de 0,8 por 10 minutos, nos namespaces `pytstop-*` | warning |
 
 Alertas de saga (compensações acima do normal, saga parada, circuito aberto) entram junto com os dashboards de saga.

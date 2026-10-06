@@ -95,8 +95,9 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: gt, params: [0.01]}
-      # Alvo anotado que o Prometheus nao alcanca (servico, broker ou gateway
-      # fora do ar).
+      # Alvo anotado que o Prometheus nao alcanca (up = 0). Pod que some da
+      # descoberta deixa a serie sem dado e nao dispara esta regra: broker e
+      # gateway tem regra propria abaixo, e cada servico traz a dele.
       - uid: pytstop-alvo-fora
         title: Alvo de métricas fora do ar (2min)
         condition: C
@@ -115,6 +116,64 @@ groups:
               refId: A
               instant: true
               expr: min by (job) (up{job!="kubelet-cadvisor"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+      # Broker sem alvo: pod apagado, Pending ou em falha some da descoberta e
+      # o up fica sem serie, que a regra generica acima nao enxerga. Sem dado aqui
+      # = alerta.
+      - uid: pytstop-rabbitmq-fora
+        title: RabbitMQ fora do ar ou sem alvo de métricas (2min)
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O Prometheus não raspa o RabbitMQ há 2 minutos (pod fora do ar ou ausente da descoberta); comandos e eventos da saga não andam.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(up{job="rabbitmq"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+      # Gateway sem alvo, pelo mesmo motivo.
+      - uid: pytstop-kong-fora
+        title: Kong fora do ar ou sem alvo de métricas (2min)
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O Prometheus não raspa o Kong há 2 minutos (pod fora do ar ou ausente da descoberta); a borda pode estar sem rota.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(up{job="kong"})
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
