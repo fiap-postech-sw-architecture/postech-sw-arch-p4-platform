@@ -8,7 +8,8 @@
 # caminho mais longo vence) e respondem 404. Caminho com %2F ou %5C responde
 # 404 pelo plugin global bloqueia-barra-codificada, antes de qualquer rota: o
 # Kong casa por segmento e nao trata %2F como /, entao sem ele
-# /os/api/v1/admin%2Foutbox passaria por /os/api/v1.
+# /os/api/v1/admin%2Foutbox passaria por /os/api/v1. O Billing tem o seu
+# exemplo em borda-billing-service.yaml (webhook e simulador do checkout).
 #
 # strip-path tira do caminho tudo o que a regra casou: /os/api/v1/x chega ao
 # upstream como <konghq.com/path do Service> + /x. Por isso cada prefixo tem

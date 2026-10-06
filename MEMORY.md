@@ -25,6 +25,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Discovered conventions
 
+- 2026-10-06 - Exemplos de borda em `k8s/exemplos/`: `borda-os-service.yaml` e `borda-billing-service.yaml` (webhook com balde proprio, simulador do checkout fora de `/api/v1`); o smoke aplica os dois e um servico novo parte de um deles
 - 2026-10-06 - Todo limite de schema (itens, tamanho, quantidade, valor, formato) tem no `test_contratos.py` o valor na fronteira aceito e o seguinte rejeitado (`FRONTEIRAS`, lista de 1 a 50 itens, regra do `decidido_por` nos dois sentidos); limite novo ou mudado entra na tabela, e o que os negativos gerados nao alcancam fica nela
 - 2026-10-06 - `make smoke` aplica o exemplo de borda com um eco no lugar da API e prova rate limit, mascara de token no Loki, policies e redrive do RabbitMQ, fallback do Kong, Grafana provisionado e pods endurecidos; rodar so num cluster sem os servicos (usa os caminhos `/os`)
 - 2026-10-06 - Versoes: cada imagem com uma tag so entre `k8s/`, compose e as imagens de ferramenta do Makefile, e citada na tabela do README; o no do kind e o kubeconform no mesmo Kubernetes (`scripts/versoes.sh`, no make manifests)
