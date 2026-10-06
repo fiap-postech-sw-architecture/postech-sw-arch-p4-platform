@@ -47,8 +47,8 @@ Avaliadas a cada minuto e notificadas pela política padrão do Grafana, sem can
 | `pytstop-rabbitmq-alarme` | RabbitMQ com alarme de memória ou disco | `max(rabbitmq_alarms_memory_used_watermark) + max(rabbitmq_alarms_free_disk_space_watermark)` acima de 0 | 1 min | critical | OK | 3 |
 | `pytstop-gateway-5xx` | Gateway com mais de 1% de 5xx (5min) | `sum(rate(kong_http_requests_total{code=~"5.."}[5m])) / sum(rate(kong_http_requests_total[5m]))` acima de 0,01 | 5 min | critical | OK | 10 |
 | `pytstop-alvo-fora` | Alvo de métricas fora do ar (2min) | `min by (job) (up{job!="kubelet-cadvisor"})` abaixo de 1 | 2 min | critical | OK | 9 |
-| `pytstop-rabbitmq-fora` | RabbitMQ fora do ar ou sem alvo de métricas (2min) | `max(up{job="rabbitmq"})` abaixo de 1, ou sem série (pod apagado, Pending ou em falha some da descoberta) | 2 min | critical | Alerting | 9 |
-| `pytstop-kong-fora` | Kong fora do ar ou sem alvo de métricas (2min) | `max(up{job="kong"})` abaixo de 1, ou sem série | 2 min | critical | Alerting | 9 e 10 |
+| `pytstop-rabbitmq-fora` | RabbitMQ fora do ar ou sem alvo de métricas (2min) | `up{job="rabbitmq"}` abaixo de 1, ou sem série (pod apagado, Pending ou em falha some da descoberta); com o broker de pé, `up` = 1 e a regra fica OK | 2 min | critical | Alerting | 9 |
+| `pytstop-kong-fora` | Kong fora do ar ou sem alvo de métricas (2min) | `up{job="kong"}` abaixo de 1, ou sem série; com o Kong de pé, OK | 2 min | critical | Alerting | 9 e 10 |
 | `pytstop-cpu-pod-alta` | CPU de pod acima de 80% do limite (10min) | `sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~"pytstop-.+", container!=""}[5m])) / sum by (namespace, pod) (kube_pod_container_resource_limits{namespace=~"pytstop-.+", resource="cpu"})` acima de 0,8 | 10 min | warning | OK | nenhum (CPU por pod é do dashboard Serviços do ADR-043) |
 
 ## De onde vêm as métricas

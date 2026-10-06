@@ -125,9 +125,11 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: lt, params: [1]}
-      # Broker sem alvo: pod apagado, Pending ou em falha some da descoberta e
-      # o up fica sem serie, que a regra generica acima nao enxerga. Sem dado aqui
-      # = alerta.
+      # Broker fora do ar: up = 0 dispara pela condicao; pod apagado, Pending
+      # ou em falha some da descoberta e deixa o up sem serie, que a regra
+      # generica acima nao enxerga, e aqui sem dado tambem e alerta. Com o
+      # broker de pe, up = 1 e a regra fica OK. (absent() nao serve com
+      # noDataState Alerting: sem dado com o broker de pe, dispararia sempre.)
       - uid: pytstop-rabbitmq-fora
         title: RabbitMQ fora do ar ou sem alvo de métricas (2min)
         condition: C
@@ -145,7 +147,7 @@ groups:
             model:
               refId: A
               instant: true
-              expr: max(up{job="rabbitmq"})
+              expr: up{job="rabbitmq"}
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
@@ -155,7 +157,7 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: lt, params: [1]}
-      # Gateway sem alvo, pelo mesmo motivo.
+      # Gateway fora do ar ou sem alvo, pela mesma regra.
       - uid: pytstop-kong-fora
         title: Kong fora do ar ou sem alvo de métricas (2min)
         condition: C
@@ -173,7 +175,7 @@ groups:
             model:
               refId: A
               instant: true
-              expr: max(up{job="kong"})
+              expr: up{job="kong"}
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
