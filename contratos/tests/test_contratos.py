@@ -617,7 +617,6 @@ def _mudar(exemplo: dict[str, Any], caminho: str, valor: Any) -> dict[str, Any]:
     return mudado
 
 
-ITEM = {"tipo": "servico", "codigo": "SRV-X", "quantidade": 1}
 ATENDENTE = "2f4e8c1a-7b3d-4e5f-9a6b-1c2d3e4f5a6b"
 
 
@@ -642,11 +641,7 @@ ATENDENTE = "2f4e8c1a-7b3d-4e5f-9a6b-1c2d3e4f5a6b"
             id="placa-com-hifen",
         ),
         pytest.param("OrcamentoAprovado", "dados/canal", "email", id="canal-email"),
-        pytest.param(
-            "OrcamentoAprovado", "dados/decidido_por", ATENDENTE, id="link-com-autor"
-        ),
         pytest.param("DiagnosticoConcluido", "dados/itens", [], id="itens-vazio"),
-        pytest.param("GerarOrcamento", "dados/itens", [ITEM] * 51, id="itens-51"),
         pytest.param(
             "GerarOrcamento", "dados/itens/0/quantidade", 1001, id="quantidade-1001"
         ),
@@ -701,17 +696,6 @@ def test_contrato_rejeita_dado_invalido(
         validador(
             asyncapi["components"]["messages"][tipo]["payload"]["schema"]
         ).validate(invalido)
-
-
-def test_decisao_do_atendente_exige_o_autor(asyncapi: dict[str, Any]) -> None:
-    exemplo = ler_json(EXEMPLOS / "OrcamentoRecusado.json")
-    schema = validador(
-        asyncapi["components"]["messages"]["OrcamentoRecusado"]["payload"]["schema"]
-    )
-    del exemplo["dados"]["decidido_por"]
-
-    assert schema.is_valid(_mudar(exemplo, "dados/canal", "link"))
-    assert not schema.is_valid(exemplo)
 
 
 @pytest.mark.parametrize(
@@ -781,6 +765,221 @@ def test_todo_defeito_gerado_do_exemplo_e_rejeitado(
     ]
 
     assert aceitos == []
+
+
+# Os defeitos gerados acima mudam um campo por vez e nao chegam na fronteira
+# exata de um limite, nem provam o lado aceito. Daqui ate o fim da secao, cada
+# limite e cada regra condicional tem o valor na fronteira aceito e o seguinte
+# rejeitado, para que mexer em um limite, tirar uma regra ou apertar uma lista
+# reprove o teste. O oraculo e a RFC-004 5.3 e o README, nao o schema.
+def listas_dos_exemplos() -> list[Any]:
+    achadas = []
+    for tipo in CATALOGO:
+        exemplo = ler_json(EXEMPLOS / f"{tipo}.json")
+        for onde in caminhos(exemplo):
+            if isinstance(resolver_ponteiro(exemplo, onde), list):
+                nome = onde.rsplit("/", 1)[-1]
+                achadas.append(pytest.param(tipo, onde, id=f"{tipo}-{nome}"))
+    return achadas
+
+
+def n_itens(item: Any, n: int) -> list[Any]:
+    """n itens como o do exemplo; texto muda por indice (codigos nao repetem)."""
+    return [f"{item}-{i}" if isinstance(item, str) else item for i in range(n)]
+
+
+@pytest.mark.parametrize(("tipo", "onde"), listas_dos_exemplos())
+def test_lista_vai_de_um_a_50_itens_e_so_aceita_vazia_onde_a_rfc_deixa(
+    asyncapi: dict[str, Any], tipo: str, onde: str
+) -> None:
+    exemplo = ler_json(EXEMPLOS / f"{tipo}.json")
+    item = resolver_ponteiro(exemplo, onde)[0]
+    schema = validador(asyncapi["components"]["messages"][tipo]["payload"]["schema"])
+
+    def aceita(n: int) -> bool:
+        return schema.is_valid(_mudar(exemplo, onde, n_itens(item, n)))
+
+    assert aceita(1)
+    assert aceita(50)
+    assert not aceita(51)
+    assert aceita(0) is (onde.rsplit("/", 1)[-1] in VAZIAS_OK)
+
+
+def test_codigos_invalidos_nao_repete_codigo(asyncapi: dict[str, Any]) -> None:
+    exemplo = ler_json(EXEMPLOS / "GeracaoDeOrcamentoFalhou.json")
+    caminho = "dados/codigos_invalidos"
+    schema = validador(
+        asyncapi["components"]["messages"]["GeracaoDeOrcamentoFalhou"]["payload"][
+            "schema"
+        ]
+    )
+
+    assert schema.is_valid(_mudar(exemplo, caminho, ["PEC-A", "PEC-B"]))
+    assert not schema.is_valid(_mudar(exemplo, caminho, ["PEC-A", "PEC-A"]))
+
+
+@pytest.mark.parametrize("tipo", ["OrcamentoAprovado", "OrcamentoRecusado"])
+@pytest.mark.parametrize(
+    ("canal", "decidido_por", "valido"),
+    [
+        pytest.param("atendente", ATENDENTE, True, id="atendente-com-autor"),
+        pytest.param("atendente", None, False, id="atendente-sem-autor"),
+        pytest.param("atendente", "nao-e-uuid", False, id="atendente-autor-invalido"),
+        pytest.param("link", None, True, id="link-sem-autor"),
+        pytest.param("link", ATENDENTE, False, id="link-com-autor"),
+        pytest.param("email", None, False, id="canal-fora-da-enumeracao"),
+    ],
+)
+def test_decisao_so_leva_decidido_por_com_canal_atendente(
+    asyncapi: dict[str, Any],
+    tipo: str,
+    canal: str,
+    decidido_por: str | None,
+    valido: bool,
+) -> None:
+    exemplo = ler_json(EXEMPLOS / f"{tipo}.json")
+    dados = exemplo["dados"]
+    dados["canal"] = canal
+    dados.pop("decidido_por", None)
+    if decidido_por is not None:
+        dados["decidido_por"] = decidido_por
+    schema = validador(asyncapi["components"]["messages"][tipo]["payload"]["schema"])
+
+    assert schema.is_valid(exemplo) is valido
+
+
+def texto(n: int) -> str:
+    return "x" * n
+
+
+# (tipo, campo do exemplo, valores aceitos, valores rejeitados). quantidade,
+# codigo, dinheiro e uri vem de $defs iguais em varios schemas (outro teste
+# garante que as copias nao divergem): um tipo de cada basta.
+FRONTEIRAS: list[tuple[str, str, list[Any], list[Any]]] = [
+    ("GerarOrcamento", "dados/itens/0/quantidade", [1, 1000], [0, 1001, 1.5, "1"]),
+    (
+        "GerarOrcamento",
+        "dados/itens/0/codigo",
+        ["A", "A.b_c-9", texto(50)],
+        ["", texto(51), "-A", "A B", "ÁB", "A/B"],
+    ),
+    (
+        "PagamentoConfirmado",
+        "dados/valor",
+        ["0.50", "9999999999.99"],
+        ["10000000000.00", "01.00", "1.5", "1.234", "-1.00", 1.5],
+    ),
+    (
+        "PagamentoConfirmado",
+        "dados/referencia_provedor",
+        ["x", texto(100)],
+        ["", texto(101)],
+    ),
+    ("PagamentoRecusado", "dados/motivo", ["x", texto(500)], ["", texto(501)]),
+    (
+        "OrcamentoGerado",
+        "dados/link_decisao",
+        ["http://billing.local/p", "https://x/" + "a" * 2038],
+        ["https://x/" + "a" * 2039, "https://x/a b"],
+    ),
+    (
+        "OrcamentoGerado",
+        "dados/linhas/0/descricao",
+        ["x", texto(255)],
+        ["", texto(256)],
+    ),
+    ("DiagnosticoConcluido", "dados/observacoes", ["", texto(2000)], [texto(2001)]),
+    ("ExecucaoAgendada", "dados/posicao_na_fila", [1, 2], [0, -1, 1.5, "1"]),
+    ("ReservaDePecasFalhou", "dados/faltantes/0/disponivel", [0, 5], [-1, 0.5, "0"]),
+    (
+        "SolicitarDiagnostico",
+        "dados/descricao_problema",
+        ["x", texto(2000)],
+        ["", texto(2001)],
+    ),
+    (
+        "SolicitarDiagnostico",
+        "dados/veiculo/marca",
+        ["x", texto(100)],
+        ["", texto(101)],
+    ),
+    (
+        "SolicitarDiagnostico",
+        "dados/veiculo/modelo",
+        ["x", texto(100)],
+        ["", texto(101)],
+    ),
+    ("SolicitarDiagnostico", "dados/veiculo/ano", [1887, 2026], [1886, 2026.5, "2026"]),
+    (
+        "SolicitarDiagnostico",
+        "dados/veiculo/placa",
+        ["ABC1234", "ABC1D23"],
+        ["abc1234", "ABC123", "ABC12345", " ABC1234", "ABC1234 ", "AB1C234"],
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("tipo", "caminho", "aceitos", "rejeitados"),
+    FRONTEIRAS,
+    ids=[f"{t}-{c.removeprefix('dados/')}" for t, c, *_ in FRONTEIRAS],
+)
+def test_limite_aceita_o_valor_na_fronteira_e_rejeita_o_seguinte(
+    asyncapi: dict[str, Any],
+    tipo: str,
+    caminho: str,
+    aceitos: list[Any],
+    rejeitados: list[Any],
+) -> None:
+    exemplo = ler_json(EXEMPLOS / f"{tipo}.json")
+    schema = validador(asyncapi["components"]["messages"][tipo]["payload"]["schema"])
+
+    def valido(valor: Any) -> bool:
+        return schema.is_valid(_mudar(exemplo, caminho, valor))
+
+    assert [v for v in aceitos if not valido(v)] == []
+    assert [v for v in rejeitados if valido(v)] == []
+
+
+NAO_OBJETOS: tuple[Any, ...] = (None, True, 3, "x", [])
+
+
+@pytest.mark.parametrize("tipo", CATALOGO)
+def test_schema_de_dados_so_aceita_objeto(tipo: str) -> None:
+    schema = validador(ler_json(SCHEMAS / f"{tipo}.schema.json"))
+
+    assert [v for v in NAO_OBJETOS if schema.is_valid(v)] == []
+
+
+@pytest.mark.parametrize(
+    ("campo", "valor"),
+    [
+        ("origem", "outro-service"),
+        ("versao", 0),
+        ("versao", 1.5),
+        ("versao", "1"),
+        ("tipo", "gerarOrcamento"),
+        ("tipo", " GerarOrcamento"),
+        ("tipo", "GerarOrcamento!"),
+        ("tipo", 5),
+        ("dados", "x"),
+        ("dados", []),
+        ("dados", None),
+    ],
+)
+def test_envelope_rejeita_o_que_a_rfc_nao_define(campo: str, valor: Any) -> None:
+    envelope = validador(ler_json(SCHEMAS / "envelope.schema.json"))
+    exemplo = ler_json(EXEMPLOS / "GerarOrcamento.json")
+
+    assert not envelope.is_valid(_mudar(exemplo, campo, valor))
+
+
+def test_envelope_so_aceita_objeto_e_so_os_tres_servicos_como_origem() -> None:
+    schema = ler_json(SCHEMAS / "envelope.schema.json")
+    envelope = validador(schema)
+
+    assert [v for v in NAO_OBJETOS if envelope.is_valid(v)] == []
+    assert schema["properties"]["origem"]["enum"] == list(ORIGEM.values())
 
 
 # Enumeracoes fechadas da RFC-004 (5.3 e secao 9): mudar um valor e mudanca de

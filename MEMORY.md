@@ -24,6 +24,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Discovered conventions
 
+- 2026-10-06 - Todo limite de schema (itens, tamanho, quantidade, valor, formato) tem no `test_contratos.py` o valor na fronteira aceito e o seguinte rejeitado (`FRONTEIRAS`, lista de 1 a 50 itens, regra do `decidido_por` nos dois sentidos); limite novo ou mudado entra na tabela, e o que os negativos gerados nao alcancam fica nela
 - 2026-10-06 - `make smoke` aplica o exemplo de borda com um eco no lugar da API e prova rate limit, mascara de token no Loki, policies e redrive do RabbitMQ, fallback do Kong, Grafana provisionado e pods endurecidos; rodar so num cluster sem os servicos (usa os caminhos `/os`)
 - 2026-10-06 - Versoes: cada imagem com uma tag so entre `k8s/`, compose e as imagens de ferramenta do Makefile, e citada na tabela do README; o no do kind e o kubeconform no mesmo Kubernetes (`scripts/versoes.sh`, no make manifests)
 - 2026-10-06 - Mudou `k8s/base/kong/values.yaml`: `make kong-render` (kong.yaml, crds.yaml e o schema do KongClusterPlugin); o make manifests reprova render divergente
@@ -79,6 +80,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Review lessons
 
+- 2026-10-06 - "22 de 22 mutantes mortos" valia so para os mutantes escolhidos a mao: o conjunto sistematico (cada palavra-chave de cada schema removida ou deslocada em 1, 996 variacoes) deixava 118 vivos, entre eles `maxItems` de seis das sete listas e o `then` de OrcamentoAprovado; afirmacao de cobertura de contrato so entra depois de mutacao sistematica - PR #2
 - 2026-10-06 - Substituicao em lote deixou o texto antigo colado ao novo na descricao de 11 schemas, e o registro da correcao disse "aplicado" sem conferir: texto que mora em duas fontes (schema e AsyncAPI) ganha teste que compare as duas - PR #2
 - 2026-10-06 - Afirmacao sobre o comportamento do broker no README ("passiva nao exige permissao") estava errada e passou pela revisao do autor: afirmacao sobre RabbitMQ ou Kong so entra depois de executada no broker ou no gateway real - PR #2
 - 2026-10-06 - Schema estrito contrariava o leitor tolerante do ADR-036, e 203 testes verdes nao viam divergencia de campos com a RFC: teste de contrato precisa de oraculo externo (tabela da RFC) e de negativos gerados, nao so de exemplos validos - PR #2
