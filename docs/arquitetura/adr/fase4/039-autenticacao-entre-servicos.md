@@ -139,7 +139,7 @@ Nenhum segredo de aplicação fica no GitHub, por onde o `JWT_SECRET` do p3 pass
 
 * Token revogado no logout continua aceito por Billing e Execução por até 15 min
 * Com o OS Service fora do ar por mais tempo que o cache, Billing e Execução respondem 503 nas rotas autenticadas até ele voltar
-* Girar a chave RSA gera chave com outro `kid` e derruba todas as sessões; publicar duas chaves no JWKS durante a troca evitaria isso e fica como evolução
+* Girar a chave RSA pede duas etapas: primeiro o JWKS publica a chave nova ao lado da atual (`JWT_PREVIOUS_PUBLIC_KEY` guarda a que sai), depois a nova passa a assinar; com várias réplicas, trocar de uma vez faria um pod antigo recusar os tokens de um pod novo durante o rollout
 * Com `aud` único, um token vale nos três serviços, o que a propagação exige, mas amplia o alcance de um token roubado durante os 15 min
 * O tráfego interno, inclusive o `Authorization` propagado e a busca do JWKS, corre sem TLS dentro do cluster: risco aceito do ambiente de demonstração, limitado pela NetworkPolicy do [ADR-042](042-cicd-e-deploy-kubernetes.md)
 * O 401 uniforme torna o diagnóstico menos direto para quem chama; o motivo da recusa fica no log, ligado ao identificador da requisição (`id_requisicao` na resposta, `request_id` no log)
