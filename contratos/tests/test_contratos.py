@@ -474,12 +474,21 @@ def test_routing_key_chega_so_na_fila_do_consumidor(
     assert {"$ref": f"#/channels/{fila}/messages/{tipo}"} in consumo[0]["messages"]
 
 
+def politica(definitions: dict[str, Any], fila: str) -> dict[str, Any]:
+    """Definicao da policy que o RabbitMQ aplica na fila (re.search no nome)."""
+    casadas = [p for p in definitions["policies"] if re.search(p["pattern"], fila)]
+    assert len(casadas) == 1, (fila, [p["name"] for p in casadas])
+    assert casadas[0]["apply-to"] == "queues"
+    definicao: dict[str, Any] = casadas[0]["definition"]
+    return definicao
+
+
 @pytest.mark.parametrize("fila", FILAS_DE_TRABALHO)
-def test_fila_de_trabalho_tem_retry_e_dlq_com_os_argumentos_da_plataforma(
+def test_fila_de_trabalho_tem_retry_e_dlq_com_as_policies_da_plataforma(
     definitions: dict[str, Any], fila: str
 ) -> None:
     filas = {q["name"]: q for q in definitions["queues"]}
-    seguro = {"x-dead-letter-strategy": "at-least-once", "x-overflow": "reject-publish"}
+    seguro = {"dead-letter-strategy": "at-least-once", "overflow": "reject-publish"}
 
     def ligada(origem: str, destino: str) -> bool:
         return {
@@ -491,28 +500,31 @@ def test_fila_de_trabalho_tem_retry_e_dlq_com_os_argumentos_da_plataforma(
             "arguments": {},
         } in definitions["bindings"]
 
-    assert filas[fila]["durable"] is True
-    assert filas[fila]["arguments"] == {
-        "x-queue-type": "quorum",
-        "x-dead-letter-exchange": "pytstop.dlx",
-        "x-dead-letter-routing-key": fila,
+    # Argumento de fila e imutavel e a importacao no boot ignora a mudanca:
+    # so o tipo fica como argumento; o resto vem das policies, que convergem.
+    for nome in (fila, f"{fila}.retry", f"{fila}.dlq"):
+        assert filas[nome]["durable"] is True
+        assert filas[nome]["arguments"] == {"x-queue-type": "quorum"}
+    assert politica(definitions, fila) == {
+        "dead-letter-exchange": "pytstop.dlx",
+        "dead-letter-routing-key": fila,
+        "max-length": 10000,
         **seguro,
     }
     # O consumidor publica a copia no pytstop.retry; sem consumidor na .retry,
-    # a mensagem expira pelo TTL dela e o broker a devolve para a fila
-    # original pelo default exchange.
+    # a mensagem expira pelo TTL dela (no maximo o da fila, 300 s) e o broker
+    # a devolve para a fila original pelo default exchange.
     assert ligada("pytstop.retry", f"{fila}.retry")
-    assert filas[f"{fila}.retry"]["arguments"] == {
-        "x-queue-type": "quorum",
-        "x-dead-letter-exchange": "",
-        "x-dead-letter-routing-key": fila,
+    assert politica(definitions, f"{fila}.retry") == {
+        "dead-letter-exchange": "",
+        "dead-letter-routing-key": fila,
+        "message-ttl": 300_000,
         **seguro,
     }
     # DLQ guarda no maximo 7 dias: as mensagens carregam dado pessoal (placa).
     assert ligada("pytstop.dlx", f"{fila}.dlq")
-    assert filas[f"{fila}.dlq"]["arguments"] == {
-        "x-queue-type": "quorum",
-        "x-message-ttl": 7 * 24 * 60 * 60 * 1000,
+    assert politica(definitions, f"{fila}.dlq") == {
+        "message-ttl": 7 * 24 * 60 * 60 * 1000
     }
 
 

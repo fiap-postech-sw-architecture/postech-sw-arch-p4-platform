@@ -127,6 +127,12 @@ spec:
               mountPath: /etc/rabbitmq/conf.d/20-pytstop.conf
               subPath: rabbitmq.conf
               readOnly: true
+            # Os plugins da imagem (management e prometheus) mais o shovel,
+            # que o make redrive usa para devolver a DLQ a fila.
+            - name: config
+              mountPath: /etc/rabbitmq/enabled_plugins
+              subPath: enabled_plugins
+              readOnly: true
             # Arquivo a arquivo (subPath) de proposito: montado como volume
             # inteiro, o diretorio traz as entradas internas do kubelet
             # (..data, ..<timestamp>), o RabbitMQ tenta importa-las, falha

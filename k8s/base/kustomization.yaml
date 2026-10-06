@@ -59,6 +59,7 @@ configMapGenerator:
     files:
       - rabbitmq/definitions.json
       - rabbitmq/rabbitmq.conf
+      - rabbitmq/enabled_plugins
     options:
       labels:
         app: rabbitmq

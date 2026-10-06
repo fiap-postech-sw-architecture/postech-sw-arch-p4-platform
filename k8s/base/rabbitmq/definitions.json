@@ -49,11 +49,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-dead-letter-exchange": "pytstop.dlx",
-        "x-dead-letter-routing-key": "billing.comandos",
-        "x-dead-letter-strategy": "at-least-once",
-        "x-overflow": "reject-publish"
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -62,11 +58,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-dead-letter-exchange": "",
-        "x-dead-letter-routing-key": "billing.comandos",
-        "x-dead-letter-strategy": "at-least-once",
-        "x-overflow": "reject-publish"
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -75,8 +67,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-message-ttl": 604800000
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -85,11 +76,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-dead-letter-exchange": "pytstop.dlx",
-        "x-dead-letter-routing-key": "execucao.comandos",
-        "x-dead-letter-strategy": "at-least-once",
-        "x-overflow": "reject-publish"
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -98,11 +85,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-dead-letter-exchange": "",
-        "x-dead-letter-routing-key": "execucao.comandos",
-        "x-dead-letter-strategy": "at-least-once",
-        "x-overflow": "reject-publish"
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -111,8 +94,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-message-ttl": 604800000
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -121,11 +103,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-dead-letter-exchange": "pytstop.dlx",
-        "x-dead-letter-routing-key": "os.eventos",
-        "x-dead-letter-strategy": "at-least-once",
-        "x-overflow": "reject-publish"
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -134,11 +112,7 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-dead-letter-exchange": "",
-        "x-dead-letter-routing-key": "os.eventos",
-        "x-dead-letter-strategy": "at-least-once",
-        "x-overflow": "reject-publish"
+        "x-queue-type": "quorum"
       }
     },
     {
@@ -147,8 +121,103 @@
       "durable": true,
       "auto_delete": false,
       "arguments": {
-        "x-queue-type": "quorum",
-        "x-message-ttl": 604800000
+        "x-queue-type": "quorum"
+      }
+    }
+  ],
+  "policies": [
+    {
+      "vhost": "/",
+      "name": "trabalho-billing.comandos",
+      "pattern": "^billing\\.comandos$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {
+        "dead-letter-exchange": "pytstop.dlx",
+        "dead-letter-routing-key": "billing.comandos",
+        "dead-letter-strategy": "at-least-once",
+        "overflow": "reject-publish",
+        "max-length": 10000
+      }
+    },
+    {
+      "vhost": "/",
+      "name": "trabalho-execucao.comandos",
+      "pattern": "^execucao\\.comandos$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {
+        "dead-letter-exchange": "pytstop.dlx",
+        "dead-letter-routing-key": "execucao.comandos",
+        "dead-letter-strategy": "at-least-once",
+        "overflow": "reject-publish",
+        "max-length": 10000
+      }
+    },
+    {
+      "vhost": "/",
+      "name": "trabalho-os.eventos",
+      "pattern": "^os\\.eventos$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {
+        "dead-letter-exchange": "pytstop.dlx",
+        "dead-letter-routing-key": "os.eventos",
+        "dead-letter-strategy": "at-least-once",
+        "overflow": "reject-publish",
+        "max-length": 10000
+      }
+    },
+    {
+      "vhost": "/",
+      "name": "retry-billing.comandos",
+      "pattern": "^billing\\.comandos\\.retry$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {
+        "dead-letter-exchange": "",
+        "dead-letter-routing-key": "billing.comandos",
+        "dead-letter-strategy": "at-least-once",
+        "overflow": "reject-publish",
+        "message-ttl": 300000
+      }
+    },
+    {
+      "vhost": "/",
+      "name": "retry-execucao.comandos",
+      "pattern": "^execucao\\.comandos\\.retry$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {
+        "dead-letter-exchange": "",
+        "dead-letter-routing-key": "execucao.comandos",
+        "dead-letter-strategy": "at-least-once",
+        "overflow": "reject-publish",
+        "message-ttl": 300000
+      }
+    },
+    {
+      "vhost": "/",
+      "name": "retry-os.eventos",
+      "pattern": "^os\\.eventos\\.retry$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {
+        "dead-letter-exchange": "",
+        "dead-letter-routing-key": "os.eventos",
+        "dead-letter-strategy": "at-least-once",
+        "overflow": "reject-publish",
+        "message-ttl": 300000
+      }
+    },
+    {
+      "vhost": "/",
+      "name": "dlq",
+      "pattern": "\\.dlq$",
+      "apply-to": "queues",
+      "priority": 0,
+      "definition": {
+        "message-ttl": 604800000
       }
     }
   ],

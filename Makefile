@@ -35,7 +35,7 @@ KUBECONFORM_FLAGS := -strict -summary -output text \
 	-schema-location default \
 	-schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
-.PHONY: help kind-up kind-down deploy kong-check smoke status port-forward up down test lint manifests check kong-render
+.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint manifests check kong-render
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -68,6 +68,11 @@ kong-check: ## falha se o Kong recusou algum Ingress ou plugin (eventos dos ulti
 
 smoke: ## borda e rate limiting no cluster implantado (exemplo de Ingress com eco)
 	KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/smoke.sh
+
+redrive: ## devolve <fila>.dlq para <fila> depois de corrigida a causa (FILA=billing.comandos)
+	@case "$(FILA)" in billing.comandos|execucao.comandos|os.eventos) ;; \
+		*) echo "uso: make redrive FILA=billing.comandos|execucao.comandos|os.eventos"; exit 1;; esac
+	@KUBE_CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) scripts/redrive.sh $(FILA)
 
 status: ## pods, servicos, volumes e filas do RabbitMQ
 	$(KUBECTL) -n $(NAMESPACE) get pods,services,ingresses,pvc

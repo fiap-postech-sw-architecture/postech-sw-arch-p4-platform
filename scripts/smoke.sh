@@ -116,6 +116,40 @@ printf 'linhas do Kong no Loki com o token %s: %s\n' "$segredo" "$(loki "{app=\"
 echo "as mesmas requisicoes como o Loki guardou:"
 loki '{app="kong"} |~ "/billing/(api/v1/publico/orcamentos|simulador/checkout)/"' | head -2
 
+titulo "RabbitMQ: argumento so x-queue-type; TTL, dead-letter, overflow e tamanho por policy"
+R="$K -n pytstop-plataforma exec -i rabbitmq-0 -c rabbitmq --"
+# rabbitmqadmin como admin, com a senha lida no proprio pod (admin.json).
+adm() {
+  $R sh -c 'export RABBITMQADMIN_USERNAME=admin RABBITMQADMIN_PASSWORD="$(sed -n "s/.*\"password\": \"\([^\"]*\)\".*/\1/p" /etc/rabbitmq/definitions/admin.json)"; exec rabbitmqadmin "$@"' rabbitmqadmin "$@"
+}
+filas() { $R rabbitmqctl -q list_queues --no-table-headers name messages | grep "^billing" | tr '\n' ' '; echo; }
+$R rabbitmqctl -q list_queues --no-table-headers name arguments policy | sort
+$R rabbitmqctl -q list_policies --no-table-headers | cut -f2,5 | sort
+printf 'max_message_size: '; $R rabbitmqctl -q eval 'application:get_env(rabbit, max_message_size).'
+printf 'mensagem de 1,1 MiB: '
+head -c 1153434 /dev/zero | tr '\0' x \
+  | { adm publish message --exchange pytstop.dlx --routing-key billing.comandos --payload-file - 2>&1 || true; } \
+  | grep -m1 PRECONDITION
+
+titulo "retry: copia com expiration de 1 s no pytstop.retry volta para billing.comandos"
+adm publish message --exchange pytstop.retry --routing-key billing.comandos --payload '{"smoke":"retry"}' --properties '{"expiration":"1000","headers":{"x-tentativa":1}}'
+sleep 7  # a contagem das filas quorum e atualizada a cada 5 s
+filas
+$R rabbitmqctl -q purge_queue billing.comandos
+
+titulo "make redrive FILA=billing.comandos: a DLQ volta para a fila"
+adm publish message --exchange pytstop.dlx --routing-key billing.comandos --payload '{"smoke":"dlq"}' --properties '{"message_id":"smoke-dlq","headers":{"x-tentativa":5}}'
+sleep 7
+make --no-print-directory redrive FILA=billing.comandos KUBE_CONTEXT="$CONTEXTO"
+$R rabbitmqctl -q purge_queue billing.comandos
+
+titulo "policies convergem no boot: muda a da DLQ em tempo de execucao e reinicia o broker"
+$R rabbitmqctl -q set_policy --apply-to queues dlq '\.dlq$' '{"message-ttl":60000}'
+printf 'antes do restart: '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
+$K -n pytstop-plataforma delete pod rabbitmq-0 --wait=true >/dev/null
+$K -n pytstop-plataforma wait --for=condition=Ready pod/rabbitmq-0 --timeout=300s >/dev/null
+printf 'depois do restart: '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
+
 titulo "configuracao invalida de um servico nao derruba as outras (FallbackConfiguration)"
 $K apply -f - <<YAML
 apiVersion: configuration.konghq.com/v1

@@ -206,15 +206,19 @@ Toda a topologia está em [`k8s/base/rabbitmq/definitions.json`](k8s/base/rabbit
 | `pytstop.retry` | topic | Cópias para nova tentativa; a routing key é o nome da fila de trabalho. É topic, com bindings de chave exata, só para aceitar permissão de tópico; num direct qualquer serviço com escrita no exchange alcançaria a fila de outro |
 | `pytstop.dlx` | direct | Dead-letter das filas de trabalho; a routing key é o nome da fila |
 
-| Fila | Consumidor | Bindings | Argumentos |
+| Fila | Consumidor | Bindings | Policy |
 |---|---|---|---|
-| `billing.comandos` | Billing | `pytstop.comandos` com `comando.billing.#` | `x-queue-type=quorum`, `x-dead-letter-exchange=pytstop.dlx`, `x-dead-letter-routing-key=billing.comandos`, `x-dead-letter-strategy=at-least-once`, `x-overflow=reject-publish` |
-| `execucao.comandos` | Execução | `pytstop.comandos` com `comando.execucao.#` | os mesmos, com `x-dead-letter-routing-key=execucao.comandos` |
-| `os.eventos` | OS | `pytstop.eventos` com `evento.billing.#` e `evento.execucao.#` | os mesmos, com `x-dead-letter-routing-key=os.eventos` |
-| `<fila>.retry` | ninguém | `pytstop.retry` com routing key `<fila>` | `x-queue-type=quorum`, `x-dead-letter-exchange=""` (default exchange), `x-dead-letter-routing-key=<fila>`, `x-dead-letter-strategy=at-least-once`, `x-overflow=reject-publish`; sem `x-message-ttl`: o TTL vem em cada mensagem |
-| `<fila>.dlq` | ninguém (análise e replay manual) | `pytstop.dlx` com routing key `<fila>` | `x-queue-type=quorum`, `x-message-ttl=604800000` (7 dias: as mensagens carregam dado pessoal, como a placa) |
+| `billing.comandos` | Billing | `pytstop.comandos` com `comando.billing.#` | `trabalho-billing.comandos`: `dead-letter-exchange=pytstop.dlx`, `dead-letter-routing-key=billing.comandos`, `dead-letter-strategy=at-least-once`, `overflow=reject-publish`, `max-length=10000` |
+| `execucao.comandos` | Execução | `pytstop.comandos` com `comando.execucao.#` | `trabalho-execucao.comandos`: as mesmas, com `dead-letter-routing-key=execucao.comandos` |
+| `os.eventos` | OS | `pytstop.eventos` com `evento.billing.#` e `evento.execucao.#` | `trabalho-os.eventos`: as mesmas, com `dead-letter-routing-key=os.eventos` |
+| `<fila>.retry` | ninguém | `pytstop.retry` com routing key `<fila>` | `retry-<fila>`: `dead-letter-exchange=""` (default exchange), `dead-letter-routing-key=<fila>`, `dead-letter-strategy=at-least-once`, `overflow=reject-publish`, `message-ttl=300000` |
+| `<fila>.dlq` | ninguém (análise e `make redrive`) | `pytstop.dlx` com routing key `<fila>` | `dlq`: `message-ttl=604800000` (7 dias: as mensagens carregam dado pessoal, como a placa) |
 
-Todas duráveis, não exclusivas e sem auto-delete. No consumidor do Billing, com pika:
+Todas são quorum, duráveis, não exclusivas e sem auto-delete, e o tipo (`x-queue-type`) é o único argumento. O resto vem de policies, porque argumento de fila é imutável e a importação do boot ignora a mudança numa fila que já existe, enquanto as policies são regravadas a cada boot: mudar o `definitions.json` muda as filas no próximo restart do broker. Um broker criado com uma versão anterior deste arquivo, com os argumentos nas filas, precisa apagar as nove filas (ou o volume) uma vez.
+
+Tetos: o `message-ttl` de 300 s da `.retry` vale para a cópia que chegar sem `expiration`, que assim não fica parada para sempre; a fila de trabalho cheia (10000 mensagens) recusa a publicação, que o relay do produtor retenta; e o broker recusa mensagem acima de 1 MiB (`max_message_size` no `rabbitmq.conf`).
+
+No consumidor do Billing, com pika:
 
 ```python
 canal.queue_declare("billing.comandos", passive=True)  # confere, não cria
@@ -248,10 +252,12 @@ Fluxo de uma mensagem que falha no consumidor:
 
 1. Erro transitório: o consumidor publica uma cópia no `pytstop.retry` com a routing key igual ao nome da fila, `expiration` crescente por tentativa (1s, 5s, 15s, 60s, 300s) e o header `x-tentativa`, espera a confirmação do broker (publisher confirms, `mandatory`) e só então dá ack na original. O broker põe a cópia em `<fila>.retry`.
 2. Quando o TTL vence, a `.retry` devolve a mensagem para `<fila>` pelo default exchange, com o histórico no header `x-death`. Esse dead-letter é interno ao broker e não pede permissão do serviço.
-3. Depois da 5ª tentativa, ou em erro permanente (validação, schema), o consumidor faz `basic_reject(requeue=False)` e a mensagem vai para `<fila>.dlq` pelo `pytstop.dlx`, onde fica até 7 dias.
+3. Depois da 5ª tentativa, ou em erro permanente (validação, schema), o consumidor faz `basic_reject(requeue=False)` e a mensagem vai para `<fila>.dlq` pelo `pytstop.dlx`, onde fica até 7 dias. Corrigida a causa, `make redrive FILA=<fila>` a devolve para `<fila>` (abaixo).
 4. Mensagem que derruba o consumidor sem ack (conexão ou canal fechados) volta para a fila; no RabbitMQ 4 a fila quorum manda para a DLQ depois de 20 reentregas (limite padrão de entregas). `basic_nack` ou `basic_reject` com `requeue=True` não conta para esse limite: a mensagem volta para a fila indefinidamente. Retry é sempre pelo `pytstop.retry`.
 
 Por que filas quorum e não classic duráveis: a quorum grava em log Raft com fsync antes de confirmar, aceita TTL por mensagem e faz dead-lettering at-least-once (exige `x-overflow=reject-publish`). Assim a volta da `.retry` e a ida para a `.dlq` não perdem mensagem; na classic o dead-lettering é at-most-once. Com um nó não há replicação, mas os clientes não mudam se o broker virar cluster. O custo é um pouco mais de memória e disco por fila, e o prefetch tem de ser por consumidor, porque a quorum não aceita prefetch global.
+
+Redrive: `make redrive FILA=billing.comandos` (ou `execucao.comandos`, `os.eventos`) cria um shovel no próprio broker (plugin `rabbitmq_shovel`, ligado em [`enabled_plugins`](k8s/base/rabbitmq/enabled_plugins)) que move para a fila as mensagens que estavam na DLQ quando ele começou e se apaga ao terminar. O shovel só tira a mensagem da DLQ depois de a fila confirmar o recebimento, e preserva as propriedades (`user_id`, `message_id`, `x-tentativa`), então o consumidor a trata como a última tentativa. No compose, o mesmo comando do [`redrive.sh`](scripts/redrive.sh) roda com `docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl set_parameter shovel ...`.
 
 Limite conhecido: TTL por mensagem só vence quando a mensagem chega à cabeça da fila. Numa `.retry` com uma mensagem de 300s na frente, uma de 1s espera os 300s. Com o volume da demonstração isso não aparece; se aparecer, a saída é uma fila de retry por atraso.
 
