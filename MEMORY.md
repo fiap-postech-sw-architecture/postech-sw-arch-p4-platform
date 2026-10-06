@@ -77,6 +77,8 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Tech debt / TODO
 
+- 2026-10-06 - MEDIUM - O controller do Kong, no pod exposto a internet, ainda tem `list` e `watch` em Secrets dos quatro namespaces (chave RSA do JWT, segredo do webhook, credenciais de banco): risco aceito com a `watchNamespaces`; avaliar tirar a regra de Secrets das Roles (a plataforma nao usa Secret em Ingress nem em plugin) e conferir se o controller sobe sem ela - README, Decisoes e limites
+- 2026-10-06 - MEDIUM - IP real do cliente no k3s (ServiceLB com `externalTrafficPolicy: Local`) ainda a conferir com dois clientes: o rate limit por IP la e esperado, nao verificado - README, secao do gateway
 - 2026-10-06 - MEDIUM - Prometheus v2.54.1, Loki 2.9.8 e kube-state-metrics v2.13.0 com CVE HIGH/CRITICAL sem correcao na propria linha (trivy, out/2026): aceito porque rodam so dentro do cluster, sem Ingress; sair delas e trocar de linha (Prometheus 3, Loki 3) com mudanca de config - README, Decisoes e limites
 - 2026-10-06 - MEDIUM - Senhas de demonstracao versionadas (RabbitMQ, Grafana), iguais no kind e no k3s; o ADR-042 preve senhas geradas no cluster a cada deploy
 - 2026-10-06 - LOW - Overlay `kind-ci` do ADR-042 (sem Loki, Promtail e Grafana), exportadores de banco do ADR-043 e runbook da saga do ADR-036 ainda fora do repositorio
