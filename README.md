@@ -211,7 +211,9 @@ O serviço cria os próprios Ingress, no próprio namespace, com `ingressClassNa
 
 Com `strip-path`, o Kong tira do caminho tudo o que a regra casou e põe no lugar o `konghq.com/path` do Service de destino: `/os/api/v1/x` casa a regra `/os/api/v1` e chega ao serviço como `/api/v1` + `/x`. Por isso cada prefixo publicado tem um Service próprio, todos com os mesmos pods; o Service interno do serviço (o do `JWKS_URL` e do `BILLING_URL`) fica sem a anotação.
 
-Os plugins são `KongClusterPlugin`, que o Ingress de qualquer namespace pode usar ([`plugins.yaml`](k8s/base/kong/plugins.yaml)). `correlation-id`, `prometheus` e `rate-limiting-global` são globais e valem para toda rota sem anotação; os outros entram pela anotação `konghq.com/plugins`. O rate limiting conta por IP do cliente, com contador local no pod do Kong. O global usa um balde por IP para todas as rotas que não têm plugin de rate limiting próprio, e cada rota anotada conta num balde só dela.
+Barra codificada: o Kong casa as rotas por segmento e não trata `%2F` (nem `%5C`) como `/`, e o uvicorn dos serviços decodifica o `%2F` do caminho. Sem proteção, `/os/api/v1/admin%2Foutbox` passaria pelo Ingress de `/os/api/v1` em vez de cair no `fora-da-borda`, e `/os/api/v1/autenticacao%2Flogin` ficaria fora do limite de 5/min do login. O plugin global `bloqueia-barra-codificada` (um `pre-function` em [`plugins.yaml`](k8s/base/kong/plugins.yaml)) responde 404 a todo caminho com `%2F` ou `%5C`, em maiúsculas ou minúsculas, antes de qualquer rota e de qualquer rate limit; esse 404 não gasta balde. Só o caminho conta: `%2F` na query string passa.
+
+Os plugins são `KongClusterPlugin`, que o Ingress de qualquer namespace pode usar ([`plugins.yaml`](k8s/base/kong/plugins.yaml)). `correlation-id`, `prometheus`, `bloqueia-barra-codificada` e `rate-limiting-global` são globais e valem para toda rota sem anotação; os outros entram pela anotação `konghq.com/plugins`. O rate limiting conta por IP do cliente, com contador local no pod do Kong. O global usa um balde por IP para todas as rotas que não têm plugin de rate limiting próprio, e cada rota anotada conta num balde só dela.
 
 | Serviço | Caminho na borda | Plugin | Limite por IP |
 |---|---|---|---|
@@ -224,6 +226,7 @@ Os plugins são `KongClusterPlugin`, que o Ingress de qualquer namespace pode us
 | Billing | `POST /billing/api/v1/webhooks/mercadopago` | `rate-limiting-webhook` | 120/min |
 | todos | demais rotas de `/api/v1/*`, `/docs` e `/openapi.json` | `rate-limiting-global` (sem anotação) | 60/min |
 | todos | `/metrics` e `/api/v1/admin/*` | `fora-da-borda` | sempre 404 |
+| todos | qualquer caminho com `%2F` ou `%5C` | `bloqueia-barra-codificada` (global) | sempre 404 |
 
 No overlay kind os limites são multiplicados por 10 ([`rate-limit-x10.yaml`](k8s/overlays/kind/rate-limit-x10.yaml)), para que o E2E e a demonstração não recebam 429.
 

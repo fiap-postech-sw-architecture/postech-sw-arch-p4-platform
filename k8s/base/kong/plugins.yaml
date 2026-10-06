@@ -5,10 +5,10 @@
 # IngressClass.
 #
 # Globais (label global: "true"), valem para toda rota sem anotacao:
-# correlation-id, prometheus e rate-limiting-global. Os demais entram por
-# anotacao no Ingress (konghq.com/plugins: <nome>); o rate-limiting da rota
-# substitui o global e conta num balde proprio da rota. Tabela rota -> plugin
-# e exemplo completo de Ingress no README.
+# correlation-id, prometheus, bloqueia-barra-codificada e rate-limiting-global.
+# Os demais entram por anotacao no Ingress (konghq.com/plugins: <nome>); o
+# rate-limiting da rota substitui o global e conta num balde proprio da rota.
+# Tabela rota -> plugin e exemplos completos de Ingress no README.
 apiVersion: configuration.konghq.com/v1
 kind: KongClusterPlugin
 metadata:
@@ -42,6 +42,33 @@ config:
   # o que o dashboard e o alerta de 5xx usam.
   status_code_metrics: true
   latency_metrics: true
+---
+# Caminho com barra codificada (%2F) ou barra invertida codificada (%5C) nunca
+# chega a um servico. O Kong casa as rotas por segmento e nao conta %2F como /,
+# entao /os/api/v1/admin%2Foutbox escaparia do Ingress fora-da-borda e
+# /os/api/v1/autenticacao%2Flogin, do limite do login, e o servico (uvicorn)
+# decodifica o %2F e atende /admin/outbox. O %5C o uvicorn deixa como barra
+# invertida literal; sai junto por precaucao, com qualquer outro servidor que o
+# tratasse como separador. 404 igual ao de rota inexistente. O pre-function tem
+# a maior prioridade: responde antes dos plugins de rate limit, e esse 404 nao
+# gasta balde nenhum. So o caminho conta: a query string (get_raw_path nao a
+# inclui) pode levar %2F.
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: bloqueia-barra-codificada
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    global: "true"
+plugin: pre-function
+config:
+  access:
+    - |-
+      local caminho = kong.request.get_raw_path():lower()
+      if caminho:find("%2f", 1, true) or caminho:find("%5c", 1, true) then
+        return kong.response.exit(404, { message = "no Route matched with those values" })
+      end
 ---
 # /metrics e /api/v1/admin/* nunca saem pela borda: o Ingress do servico
 # casa esses caminhos (o mais longo vence) e anota este plugin. 404 igual ao

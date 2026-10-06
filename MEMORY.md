@@ -8,6 +8,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Recent decisions
 
+- 2026-10-06 - Caminho com `%2F` ou `%5C` e barrado na borda por um `pre-function` global (`bloqueia-barra-codificada`, 404 igual ao de rota inexistente, antes do rate limit e sem gastar balde); so o caminho conta, a query string passa - ADR-038
 - 2026-10-06 - Correcao da entrada "branch protection na `main` desde o commit inicial" (mais abaixo): o unico commit fora de PR e o `Initial commit` do GitHub (auto_init); a protecao e o ruleset entraram logo depois, e desde entao tudo entra por PR com squash - ADR-042
 - 2026-10-06 - Controller do Kong le Ingress, Services e Secrets so dos quatro namespaces `pytstop-*` (watchNamespaces, Role por namespace); o `make deploy` cria vazios os namespaces dos servicos que faltarem; Ingress de outro namespace nao chega ao Kong - README, Decisoes e limites
 - 2026-10-06 - Borda so com `/api/v1/*`, `/docs`, `/openapi.json`, JWKS e checkout do simulador; `/metrics` e `/api/v1/admin` barrados pelo `fora-da-borda` (404); um KongClusterPlugin de rate limit por classe mais o global de 60/min, x10 no kind; exemplo versionado em `k8s/exemplos/` - ADR-038
@@ -35,6 +36,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
+- 2026-10-06 - Kong casa rota por segmento e nao trata `%2F` como `/`, e o uvicorn decodifica o `%2F` do caminho que o FastAPI roteia: `/os/api/v1/admin%2Foutbox` escapava do fora-da-borda e `autenticacao%2Flogin`, do limite do login (o `%5C` o uvicorn deixa literal); rota por prefixo nao protege sozinha - ADR-038
 - 2026-10-06 - Kustomize com `namespace:` sobrescreve o namespace de todo recurso, inclusive as Roles que o chart do Kong poe nos namespaces dos servicos (watchNamespaces): NamespaceTransformer com `unsetOnly: true`
 - 2026-10-06 - Com watchNamespaces o KIC registra o evento de KongClusterPlugin no namespace `default`, onde nao tem Role: sem a Role so de eventos, plugin invalido some sem sinal (log "events is forbidden")
 - 2026-10-06 - Evento de recusa do KIC sai uma vez por mudanca e dura 1 hora: o kong-check ignora evento mais velho que a ultima mudanca do objeto
