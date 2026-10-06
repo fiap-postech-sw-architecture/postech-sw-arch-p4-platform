@@ -400,7 +400,7 @@ Regras que os schemas impõem:
 - Mensagens sem nome, documento nem contato do cliente; a placa só aparece no `SolicitarDiagnostico`.
 - Leitor tolerante: o schema aceita campo desconhecido, em qualquer nível, e o consumidor o ignora.
 
-Mudança de contrato começa por um PR aqui. Campo novo opcional mantém a `versao`: atualiza o schema, o exemplo e a tabela da RFC copiada no teste, e o produtor pode enviá-lo antes de os consumidores o conhecerem. Mudança incompatível vira `versao: 2` do tipo, com o consumidor implantado antes do produtor. Cada serviço copia os schemas que produz e consome e os valida no próprio teste de contrato.
+Mudança de contrato começa por um PR aqui. Campo novo opcional mantém a `versao`: atualiza o schema, o exemplo e a tabela da RFC copiada no teste, e o produtor pode enviá-lo antes de os consumidores o conhecerem. Mudança incompatível vira `versao: 2` do tipo, com o consumidor implantado antes do produtor. Cada serviço copia os schemas que produz e consome, e o `asyncapi.yaml`, que traz o usuário AMQP que publica cada tipo (`userId`, de onde o consumidor tira o produtor esperado); e os valida no próprio teste de contrato.
 
 ```bash
 make test   # exemplos e negativos gerados contra os schemas, campos da RFC, AsyncAPI, routing key e topologia
