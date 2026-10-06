@@ -1,14 +1,14 @@
-# Plugins do Kong compartilhados pelos tres servicos. Sao KongClusterPlugin
-# (escopo de cluster) porque os Ingress ficam nos namespaces dos servicos e
-# um KongPlugin so pode ser usado por Ingress do proprio namespace.
+# Plugins do Kong compartilhados pelos tres servicos (ADR-038). Sao
+# KongClusterPlugin (escopo de cluster) porque os Ingress ficam nos namespaces
+# dos servicos e um KongPlugin so pode ser usado por Ingress do proprio
+# namespace. O controller so le KongClusterPlugin com a anotacao da
+# IngressClass.
 #
-# correlation-id e prometheus sao globais (label global: "true"): valem para
-# toda rota do gateway sem anotacao nenhuma. rate-limiting e opt-in: o
-# servico anota o Ingress das rotas publicas com
-#   konghq.com/plugins: rate-limiting-publico
-# (exemplo completo no README).
-#
-# KongClusterPlugin so e lido pelo controller com a anotacao da IngressClass.
+# Globais (label global: "true"), valem para toda rota sem anotacao:
+# correlation-id, prometheus e rate-limiting-global. Os demais entram por
+# anotacao no Ingress (konghq.com/plugins: <nome>); o rate-limiting da rota
+# substitui o global e conta num balde proprio da rota. Tabela rota -> plugin
+# e exemplo completo de Ingress no README.
 apiVersion: configuration.konghq.com/v1
 kind: KongClusterPlugin
 metadata:
@@ -43,6 +43,66 @@ config:
   status_code_metrics: true
   latency_metrics: true
 ---
+# /metrics e /api/v1/admin/* nunca saem pela borda: o Ingress do servico
+# casa esses caminhos (o mais longo vence) e anota este plugin. 404 igual ao
+# de rota inexistente, para nao confirmar que o caminho existe.
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: fora-da-borda
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: request-termination
+config:
+  status_code: 404
+  message: no Route matched with those values
+---
+# Rate limiting por IP do cliente, contador local na memoria do pod do Kong
+# (com mais de uma replica do gateway cada uma conta a sua parte; a policy
+# redis resolveria). Limites do ADR-038; o overlay kind os multiplica por 10.
+# O IP real chega pelo externalTrafficPolicy Local do kong-proxy (values.yaml
+# e README).
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-global
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    global: "true"
+plugin: rate-limiting
+config:
+  # Demais rotas: o limite global da API da fase 3.
+  minute: 60
+  policy: local
+  limit_by: ip
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-login
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: rate-limiting
+config:
+  # POST /api/v1/autenticacao/login (fase 3).
+  minute: 5
+  policy: local
+  limit_by: ip
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-sessao
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: rate-limiting
+config:
+  # POST /api/v1/autenticacao/refresh e /logout (fase 3).
+  minute: 10
+  policy: local
+  limit_by: ip
+---
 apiVersion: configuration.konghq.com/v1
 kind: KongClusterPlugin
 metadata:
@@ -51,10 +111,34 @@ metadata:
     kubernetes.io/ingress.class: kong
 plugin: rate-limiting
 config:
-  # Mesmo teto da API da fase 3 (60/min por IP; o IP real chega porque o
-  # kong-proxy usa externalTrafficPolicy Local, ver values.yaml). Contador
-  # local, em memoria do pod do Kong: vale por replica do gateway; com mais de
-  # uma, cada replica conta a sua parte (policy redis resolveria).
+  # Rotas sem JWT: acompanhamento, link de decisao e simulador do checkout.
+  minute: 10
+  policy: local
+  limit_by: ip
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-jwks
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: rate-limiting
+config:
+  # GET /.well-known/jwks.json: quem valida guarda a chave em cache.
   minute: 60
+  policy: local
+  limit_by: ip
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-webhook
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: rate-limiting
+config:
+  # POST /api/v1/webhooks/mercadopago: folga para rajadas e reenvios do
+  # provedor, num balde que nao divide limite com o resto.
+  minute: 120
   policy: local
   limit_by: ip

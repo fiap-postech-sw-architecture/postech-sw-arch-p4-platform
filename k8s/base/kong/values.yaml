@@ -37,9 +37,10 @@ ingressController:
 
 proxy:
   type: LoadBalancer
-  # Preserva o IP do cliente (sem o SNAT do kube-proxy): o rate limiting das
-  # rotas publicas conta por IP, e com Cluster todo cliente apareceria com o
-  # endereco do no e dividiria o mesmo limite.
+  # Preserva o IP do cliente (sem o SNAT do kube-proxy): o rate limiting conta
+  # por IP, e com Cluster todo cliente apareceria com o endereco do no e
+  # dividiria o mesmo limite. Proxy ou balanceador na frente: env.trusted_ips
+  # com o CIDR exato dele e env.real_ip_header (README, secao do gateway).
   externalTrafficPolicy: Local
 
 admin:

@@ -10,6 +10,7 @@ resources:
   - metrics-server.yaml
 
 patches:
+  - path: rate-limit-x10.yaml
   # O kind nao tem LoadBalancer: o Kong vira NodePort fixo, e o
   # kind/cluster.yaml mapeia 80 -> 30080 e 443 -> 30443 no host.
   - target:

@@ -162,71 +162,29 @@ Logs: JSON no stdout basta. O Promtail coleta todos os pods dos namespaces `pyts
 
 ### Gateway: como um serviço publica as rotas
 
-O serviço cria os próprios Ingress, no próprio namespace, com `ingressClassName: kong`. Os plugins `correlation-id` e `prometheus` são globais e valem para toda rota sem anotação. O rate limiting (60 requisições por minuto por IP) entra só nas rotas públicas, pela anotação `konghq.com/plugins: rate-limiting-publico`; como os três plugins são `KongClusterPlugin`, o Ingress de qualquer namespace pode usá-los.
+O serviço cria os próprios Ingress, no próprio namespace, com `ingressClassName: kong`, a partir do exemplo [`k8s/exemplos/borda-os-service.yaml`](k8s/exemplos/borda-os-service.yaml), que o `make smoke` aplica no kind como está. Pela borda só saem os caminhos que o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md) permite: `/api/v1/*`, `/docs` e `/openapi.json` de cada serviço, o JWKS (*JSON Web Key Set*, as chaves públicas do JWT) do OS e o checkout do simulador do Billing. `/metrics` e `/api/v1/admin/*` casam um Ingress anotado com o plugin `fora-da-borda`, que responde 404 sem chamar o serviço; como o Kong escolhe o caminho mais longo, esse Ingress vence o de `/api/v1`.
 
-Com `strip-path`, o Kong tira do caminho tudo o que a regra casou. Um Ingress em `/os` entrega `/os/api/v1/...` ao serviço como `/api/v1/...`. Para limitar só as rotas públicas, o segundo Ingress casa `/os/api/v1/publico` e aponta para um Service extra com `konghq.com/path`, que devolve o prefixo `/api/v1/publico` ao caminho. O Kong escolhe a regra de caminho mais longo, então a rota pública não cai na geral.
+Com `strip-path`, o Kong tira do caminho tudo o que a regra casou e põe no lugar o `konghq.com/path` do Service de destino: `/os/api/v1/x` casa a regra `/os/api/v1` e chega ao serviço como `/api/v1` + `/x`. Por isso cada prefixo publicado tem um Service próprio, todos com os mesmos pods; o Service interno do serviço (o do `JWKS_URL` e do `BILLING_URL`) fica sem a anotação.
 
-```yaml
-# Todas as rotas do serviço, sem limite: /os/api/v1/... chega como /api/v1/...
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: os-service
-  namespace: pytstop-os
-  annotations:
-    konghq.com/strip-path: "true"
-spec:
-  ingressClassName: kong
-  rules:
-    - http:
-        paths:
-          - path: /os
-            pathType: Prefix
-            backend:
-              service:
-                name: os-service-api
-                port:
-                  number: 8000
----
-# Mesmos pods; o Kong prefixa /api/v1/publico no que sobrar depois do strip.
-apiVersion: v1
-kind: Service
-metadata:
-  name: os-service-publico
-  namespace: pytstop-os
-  annotations:
-    konghq.com/path: /api/v1/publico
-spec:
-  selector:
-    app: os-service-api
-  ports:
-    - port: 8000
-      targetPort: 8000
----
-# Rotas públicas, com rate limiting: /os/api/v1/publico/x chega como /api/v1/publico/x
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: os-service-publico
-  namespace: pytstop-os
-  annotations:
-    konghq.com/strip-path: "true"
-    konghq.com/plugins: rate-limiting-publico
-spec:
-  ingressClassName: kong
-  rules:
-    - http:
-        paths:
-          - path: /os/api/v1/publico
-            pathType: Prefix
-            backend:
-              service:
-                name: os-service-publico
-                port:
-                  number: 8000
-```
+Os plugins são `KongClusterPlugin`, que o Ingress de qualquer namespace pode usar ([`plugins.yaml`](k8s/base/kong/plugins.yaml)). `correlation-id`, `prometheus` e `rate-limiting-global` são globais e valem para toda rota sem anotação; os outros entram pela anotação `konghq.com/plugins`. O rate limiting conta por IP do cliente, com contador local no pod do Kong. O global usa um balde por IP para todas as rotas que não têm plugin de rate limiting próprio, e cada rota anotada conta num balde só dela.
 
-O Kong informa o trecho tirado no header `X-Forwarded-Prefix` (`/os/` na rota geral); o FastAPI precisa de `root_path="/os"` para o Swagger em `/os/docs` achar o `openapi.json`. O `X-Request-ID` gerado pelo Kong é um UUID simples (`generator: uuid`), aceito como está pelo middleware de request id que os serviços herdaram da fase 3 (`[A-Za-z0-9._=-]{1,128}`); o formato `uuid#counter` seria descartado por ele. Se o cliente mandar um `X-Request-ID`, o Kong o mantém e devolve na resposta. O `kong-proxy` usa `externalTrafficPolicy: Local` para o rate limiting enxergar o IP real do cliente. No k3s, confira no log de acesso do Kong que o IP do cliente chega: dependendo da configuração de rede do nó (por exemplo, com `--node-external-ip`), o ServiceLB pode mascarar o endereço, e aí o limite vira um balde só para todos.
+| Serviço | Caminho na borda | Plugin | Limite por IP |
+|---|---|---|---|
+| OS | `POST /os/api/v1/autenticacao/login` | `rate-limiting-login` | 5/min |
+| OS | `/os/api/v1/autenticacao/*` (refresh, logout e registrar) | `rate-limiting-sessao` | 10/min |
+| OS | `/os/api/v1/publico/*` (acompanhamento) | `rate-limiting-publico` | 10/min |
+| OS | `GET /os/.well-known/jwks.json` | `rate-limiting-jwks` | 60/min |
+| Billing | `/billing/api/v1/publico/*` (link de decisão) | `rate-limiting-publico` | 10/min |
+| Billing | `/billing/simulador/checkout/*` e `/billing/api/v1/simulador/*` | `rate-limiting-publico` | 10/min |
+| Billing | `POST /billing/api/v1/webhooks/mercadopago` | `rate-limiting-webhook` | 120/min |
+| todos | demais rotas de `/api/v1/*`, `/docs` e `/openapi.json` | `rate-limiting-global` (sem anotação) | 60/min |
+| todos | `/metrics` e `/api/v1/admin/*` | `fora-da-borda` | sempre 404 |
+
+No overlay kind os limites são multiplicados por 10 ([`rate-limit-x10.yaml`](k8s/overlays/kind/rate-limit-x10.yaml)), para que o E2E e a demonstração não recebam 429.
+
+IP do cliente: o `kong-proxy` usa `externalTrafficPolicy: Local`, que entrega o pacote sem o SNAT (*source NAT*) do kube-proxy. No kind, o tráfego entra pelo mapeamento de porta do Docker, e todo cliente do host chega com o IP do gateway da rede do Docker: um balde só por limite, o que basta para a demonstração. No k3s, o ServiceLB com `externalTrafficPolicy: Local` entrega o IP de origem. Se um balanceador ou proxy entrar na frente da VM, configure em [`values.yaml`](k8s/base/kong/values.yaml) `env.trusted_ips` com o CIDR exato dele e `env.real_ip_header: X-Forwarded-For` e rode `make kong-render`. Nunca use `0.0.0.0/0`: o cliente escolheria o próprio IP pelo header e escaparia do limite.
+
+O `X-Request-ID` gerado pelo Kong é um UUID simples (`generator: uuid`), aceito como está pelo middleware de request id que os serviços herdaram da fase 3 (`[A-Za-z0-9._=-]{1,128}`); o formato `uuid#counter` seria descartado por ele. Se o cliente mandar um `X-Request-ID`, o Kong o mantém e o devolve na resposta. O FastAPI precisa de `root_path="/os"` fixo para o Swagger em `/os/docs` achar o `/os/openapi.json`; o header `X-Forwarded-Prefix` não serve, porque traz o trecho inteiro que a regra casou.
 
 ### Filas, exchanges e argumentos
 

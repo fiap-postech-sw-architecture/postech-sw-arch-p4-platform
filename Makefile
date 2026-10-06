@@ -33,7 +33,7 @@ KUBECONFORM_FLAGS := -strict -summary -output text \
 	-schema-location default \
 	-schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 
-.PHONY: help kind-up kind-down deploy status port-forward up down test lint manifests check kong-render
+.PHONY: help kind-up kind-down deploy smoke status port-forward up down test lint manifests check kong-render
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -59,6 +59,9 @@ deploy: ## aplica k8s/overlays/kind e espera os rollouts
 	done
 	$(KUBECTL) -n kube-system rollout status deployment/metrics-server --timeout=180s
 	$(KUBECTL) -n $(NAMESPACE) wait --for=condition=Complete job/rabbitmq-usuarios --timeout=180s
+
+smoke: ## borda e rate limiting no cluster implantado (exemplo de Ingress com eco)
+	KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/smoke.sh
 
 status: ## pods, servicos, volumes e filas do RabbitMQ
 	$(KUBECTL) -n $(NAMESPACE) get pods,services,ingresses,pvc
@@ -97,6 +100,11 @@ manifests: ## kustomize + kubeconform nos overlays, compose config e dashboards
 	for overlay in kind k3s; do \
 		echo ">> k8s/overlays/$$overlay"; \
 		kubectl kustomize "k8s/overlays/$$overlay" | docker run --rm -i $(KUBECONFORM_IMAGE) $(KUBECONFORM_FLAGS) -; \
+	done
+	set -euo pipefail; \
+	for exemplo in k8s/exemplos/*.yaml; do \
+		echo ">> $$exemplo"; \
+		docker run --rm -i $(KUBECONFORM_IMAGE) $(KUBECONFORM_FLAGS) - < "$$exemplo"; \
 	done
 	$(COMPOSE) --profile servicos config --quiet
 	set -euo pipefail; \
