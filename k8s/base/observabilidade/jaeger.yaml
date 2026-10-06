@@ -23,10 +23,23 @@ spec:
       labels:
         app: jaeger
     spec:
+      # Uid 10001 da imagem; traces so em memoria.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: jaeger
           image: jaegertracing/all-in-one:1.76.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
             - name: COLLECTOR_OTLP_ENABLED
               value: "true"

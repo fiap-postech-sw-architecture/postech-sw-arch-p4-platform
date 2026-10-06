@@ -14,6 +14,9 @@ KUBE_CONTEXT ?= kind-$(CLUSTER)
 KUBECTL := kubectl --context $(KUBE_CONTEXT)
 # Rotulo que o k8s/base poe em tudo o que a plataforma cria.
 SELETOR := app.kubernetes.io/part-of=pytstop-plataforma
+# O Kong so le Ingress destes namespaces (watchNamespaces) e precisa da Role
+# dele em cada um; o repositorio de cada servico continua dono do namespace.
+NAMESPACES_SERVICOS := pytstop-os pytstop-billing pytstop-execucao
 
 COMPOSE := docker compose -f compose/docker-compose.yml
 
@@ -22,6 +25,8 @@ HELM_IMAGE := alpine/helm:3.22.0
 KUBECONFORM_IMAGE := ghcr.io/yannh/kubeconform:v0.8.0
 # Mesma imagem do DaemonSet e do compose; o make manifests roda o pipeline nela.
 PROMTAIL_IMAGE := grafana/promtail:3.6.11
+# Mesma versao do trivy dos repositorios de servico.
+TRIVY_IMAGE := aquasec/trivy:0.72.0
 # Valida o asyncapi.yaml contra a especificacao AsyncAPI 3.0 (exige Node 24).
 ASYNCAPI_CLI := @asyncapi/cli@6.2.0
 # KongPlugin/KongClusterPlugin sao validados pelo catalogo de CRDs da datree;
@@ -48,11 +53,17 @@ kind-down: ## remove o cluster kind
 
 # As CRDs do Kong vao antes: no mesmo apply o servidor ainda nao conhece
 # KongPlugin quando chega no plugins.yaml. Server-side porque as CRDs passam
-# do limite de tamanho da anotacao last-applied do apply client-side. O Job
-# de usuarios do RabbitMQ e imutavel: sai antes do apply e roda de novo.
+# do limite de tamanho da anotacao last-applied do apply client-side. Os
+# namespaces dos servicos nascem vazios, se ainda nao existirem, para receber
+# a Role do Kong. O Job de usuarios do RabbitMQ e imutavel: sai antes do
+# apply e roda de novo.
 deploy: ## aplica k8s/overlays/kind e espera os rollouts
 	$(KUBECTL) apply --server-side -f k8s/base/kong/crds.yaml
 	$(KUBECTL) wait --for=condition=Established --timeout=60s -f k8s/base/kong/crds.yaml
+	set -euo pipefail; \
+	for ns in $(NAMESPACES_SERVICOS); do \
+		$(KUBECTL) get namespace "$$ns" >/dev/null 2>&1 || $(KUBECTL) create namespace "$$ns"; \
+	done
 	$(KUBECTL) -n $(NAMESPACE) delete job rabbitmq-usuarios --ignore-not-found
 	$(KUBECTL) apply --server-side -k k8s/overlays/kind
 	set -euo pipefail; \
@@ -117,6 +128,17 @@ manifests: ## kustomize + kubeconform nos overlays, compose config e dashboards
 		echo ">> $$exemplo"; \
 		docker run --rm -i $(KUBECONFORM_IMAGE) $(KUBECONFORM_FLAGS) - < "$$exemplo"; \
 	done
+	@# Endurecimento dos pods: nenhum achado HIGH ou CRITICAL nos overlays e
+	@# no exemplo de borda.
+	set -euo pipefail; \
+	for alvo in k8s/overlays/kind k8s/overlays/k3s; do \
+		echo ">> trivy config $$alvo"; \
+		kubectl kustomize "$$alvo" | docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
+			'cat > /tmp/manifests.yaml && trivy config --quiet --severity HIGH,CRITICAL --exit-code 1 /tmp/manifests.yaml'; \
+	done; \
+	echo ">> trivy config k8s/exemplos"; \
+	cat k8s/exemplos/*.yaml | docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
+		'cat > /tmp/manifests.yaml && trivy config --quiet --severity HIGH,CRITICAL --exit-code 1 /tmp/manifests.yaml'
 	$(COMPOSE) --profile servicos config --quiet
 	PROMTAIL_IMAGE=$(PROMTAIL_IMAGE) scripts/promtail-mascara.sh
 	set -euo pipefail; \

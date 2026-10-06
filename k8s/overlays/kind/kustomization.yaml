@@ -36,6 +36,8 @@ patches:
         path: /spec/volumeClaimTemplates/0/spec/storageClassName
         value: standard
   # O certificado do kubelet no kind e autoassinado e nao cobre o IP do no.
+  # O manifest upstream endurece o container; o securityContext do pod fica
+  # aqui (trivy KSV-0118).
   - target:
       kind: Deployment
       name: metrics-server
@@ -44,3 +46,10 @@ patches:
       - op: add
         path: /spec/template/spec/containers/0/args/-
         value: --kubelet-insecure-tls
+      - op: add
+        path: /spec/template/spec/securityContext
+        value:
+          runAsNonRoot: true
+          runAsUser: 1000
+          seccompProfile:
+            type: RuntimeDefault

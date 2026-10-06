@@ -1,0 +1,27 @@
+# Com watchNamespaces o controller so tem Role nos namespaces da fase 4, mas
+# registra no namespace default o evento de objeto de cluster
+# (KongClusterPlugin). Sem esta Role o evento de plugin invalido e recusado
+# (forbidden) e o make kong-check nao o enxerga. So eventos: nada de leitura.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kong-eventos
+  namespace: default
+rules:
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kong-eventos
+  namespace: default
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: kong-eventos
+subjects:
+  - kind: ServiceAccount
+    name: kong
+    namespace: pytstop-plataforma

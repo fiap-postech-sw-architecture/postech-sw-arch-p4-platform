@@ -108,11 +108,20 @@ spec:
         runAsGroup: 999
         runAsNonRoot: true
         fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      # O broker nao fala com a API do Kubernetes.
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: 60
       containers:
         - name: rabbitmq
           image: rabbitmq:4.3.6-management
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: amqp
               containerPort: 5672
@@ -222,10 +231,19 @@ spec:
         runAsUser: 999
         runAsGroup: 999
         runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      # Fala com a API de gerenciamento do broker, nao com a do Kubernetes.
+      automountServiceAccountToken: false
       containers:
         - name: criar-usuarios
           image: rabbitmq:4.3.6-management
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command: ["sh", "/scripts/criar-usuarios.sh"]
           env:
             - name: RABBITMQADMIN_TARGET_HOST

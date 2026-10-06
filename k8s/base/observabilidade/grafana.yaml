@@ -33,14 +33,28 @@ spec:
       labels:
         app: grafana
     spec:
-      # A imagem roda como uid 472; o fsGroup libera escrita no emptyDir.
+      # Uid 472 da imagem; o fsGroup libera escrita no emptyDir.
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 472
         fsGroup: 472
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: grafana
           image: grafana/grafana:11.1.0
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           env:
+            # Log so no stdout: com a raiz somente leitura nao ha onde gravar o
+            # arquivo de log padrao.
+            - name: GF_LOG_MODE
+              value: console
             - name: GF_AUTH_ANONYMOUS_ENABLED
               value: "true"
             - name: GF_AUTH_ANONYMOUS_ORG_ROLE

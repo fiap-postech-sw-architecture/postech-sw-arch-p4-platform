@@ -18,6 +18,15 @@ ingressController:
     repository: kong/kubernetes-ingress-controller
     tag: "3.5.13"
   ingressClass: kong
+  # So os namespaces da fase 4: o chart troca o ClusterRole de Ingress,
+  # Services e Secrets por uma Role em cada um, e o controller, no pod exposto
+  # a internet, deixa de ler os Secrets do cluster inteiro. Os namespaces dos
+  # servicos precisam existir antes do apply (o make deploy os cria vazios).
+  watchNamespaces:
+    - pytstop-plataforma
+    - pytstop-os
+    - pytstop-billing
+    - pytstop-execucao
   # CRDs vem de crds.yaml (helm show crds), aplicadas antes do resto.
   installCRDs: false
   # O webhook de validacao exige certificado gerado na renderizacao; com ele

@@ -17,10 +17,23 @@ spec:
       labels:
         app: mailpit
     spec:
+      # A imagem nao define usuario (rodaria como root): nobody aqui.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: mailpit
           image: axllent/mailpit:v1.30.3
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           ports:
             - name: smtp
               containerPort: 1025
@@ -36,6 +49,11 @@ spec:
               path: /readyz
               port: http
             periodSeconds: 10
+          # O banco SQLite das mensagens fica em /tmp (emptyDir, raiz somente
+          # leitura); some com o pod, como a caixa de entrada de demonstracao.
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           resources:
             requests:
               cpu: 25m
@@ -43,6 +61,10 @@ spec:
             limits:
               cpu: 100m
               memory: 128Mi
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi
 ---
 apiVersion: v1
 kind: Service

@@ -66,10 +66,23 @@ spec:
         - key: node-role.kubernetes.io/control-plane
           operator: Exists
           effect: NoSchedule
+      # Root por necessidade: os arquivos de /var/log/pods sao 0640 do root,
+      # e o positions fica no hostPath do no. Sem capability nenhuma, sem
+      # escalar privilegio e com a raiz somente leitura; a unica excecao a
+      # Pod Security restricted do namespace (hostPath e root).
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: promtail
           image: grafana/promtail:3.6.11
           imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args:
             - -config.file=/etc/promtail/promtail.yaml
           env:
@@ -90,6 +103,8 @@ spec:
             # Posicao de leitura no no: restart do Promtail nao reenvia tudo.
             - name: positions
               mountPath: /run/promtail
+            - name: tmp
+              mountPath: /tmp
           # /ready exige ao menos um arquivo sendo lido; o proprio pod do
           # Promtail esta em pytstop-plataforma, entao todo no com Promtail
           # tem alvo.
@@ -121,3 +136,6 @@ spec:
           hostPath:
             path: /run/promtail
             type: DirectoryOrCreate
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

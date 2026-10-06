@@ -19,13 +19,24 @@ spec:
       labels:
         app: loki
     spec:
-      # A imagem roda como uid 10001; o fsGroup libera escrita em /loki.
+      # Uid 10001 da imagem; o fsGroup libera escrita em /loki.
       securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
         fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: loki
           image: grafana/loki:2.9.8
           imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           args:
             - -config.file=/etc/loki/loki.yaml
           ports:

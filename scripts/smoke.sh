@@ -1,21 +1,31 @@
 #!/usr/bin/env bash
-# Smoke da plataforma num cluster ja implantado (make kind-up deploy smoke).
-# Aplica o exemplo de borda de k8s/exemplos/ com um servidor de eco no lugar
-# da API, num namespace proprio que sai no fim, e confere a borda e o rate
-# limiting. A saida e a evidencia: cada linha diz o que foi pedido e o que
-# voltou.
+# Smoke da plataforma num cluster so com a plataforma implantada (make kind-up
+# deploy smoke). Aplica o exemplo de borda de k8s/exemplos/ com um servidor de
+# eco no lugar da API e confere borda, rate limiting, mascara de token no
+# Loki, policies e redrive do RabbitMQ, fallback do Kong e o endurecimento dos
+# pods. A saida e a evidencia: cada linha diz o que foi pedido e o que voltou.
+#
+# Os objetos de teste vao para o pytstop-plataforma (o Kong so le Ingress dos
+# namespaces da fase 4), com o rotulo part-of=pytstop-smoke, e saem no fim.
 set -euo pipefail
 
 CONTEXTO="${KUBE_CONTEXT:-kind-pytstop-p4}"
 BORDA="${BORDA:-http://localhost}"
-NS_SMOKE=pytstop-smoke
+NS=pytstop-plataforma
+ROTULO=app.kubernetes.io/part-of=pytstop-smoke
 K="kubectl --context $CONTEXTO"
 TMP="$(mktemp -d)"
 limpa() {
   $K delete kongclusterplugin smoke-plugin-invalido --ignore-not-found >/dev/null
-  $K delete namespace "$NS_SMOKE" --ignore-not-found --wait=false >/dev/null
+  $K -n "$NS" delete deployment,service,ingress -l "$ROTULO" --ignore-not-found >/dev/null
   rm -rf "$TMP"
 }
+
+# O exemplo usa os caminhos /os do OS Service de verdade.
+if [ -n "$($K -n pytstop-os get ingress -o name 2>/dev/null)" ]; then
+  echo "pytstop-os ja tem Ingress: o smoke usaria os mesmos caminhos /os. Rode num cluster so com a plataforma." >&2
+  exit 1
+fi
 trap limpa EXIT
 
 titulo() { printf '\n== %s\n' "$*"; }
@@ -34,13 +44,14 @@ pede() {
     "$1" "$2" "$status" "$recebido" "${limite:--}" "${resta:--}"
 }
 
-titulo "borda: k8s/exemplos/borda-os-service.yaml em $NS_SMOKE, com eco no lugar da API"
-$K create namespace "$NS_SMOKE" --dry-run=client -o yaml | $K apply -f - >/dev/null
-$K -n "$NS_SMOKE" apply -f - >/dev/null <<'YAML'
+titulo "borda: k8s/exemplos/borda-os-service.yaml como esta, com eco no lugar da API"
+$K -n "$NS" apply -f - >/dev/null <<'YAML'
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: os-service-api
+  labels:
+    app.kubernetes.io/part-of: pytstop-smoke
 spec:
   selector:
     matchLabels:
@@ -50,6 +61,12 @@ spec:
       labels:
         app: os-service-api
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      automountServiceAccountToken: false
       containers:
         - name: eco
           image: mendhak/http-https-echo:42
@@ -62,9 +79,15 @@ spec:
             httpGet:
               path: /
               port: 8000
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
 YAML
-$K -n "$NS_SMOKE" apply -f k8s/exemplos/borda-os-service.yaml
-$K -n "$NS_SMOKE" rollout status deployment/os-service-api --timeout=180s
+$K -n "$NS" apply -f k8s/exemplos/borda-os-service.yaml
+$K -n "$NS" label -f k8s/exemplos/borda-os-service.yaml "$ROTULO" >/dev/null
+$K -n "$NS" rollout status deployment/os-service-api --timeout=180s
 # O controller leva alguns segundos para empurrar as rotas novas ao Kong.
 for _ in $(seq 60); do
   [ "$(curl -s -o /dev/null -w '%{http_code}' "$BORDA/os/openapi.json")" = 200 ] && break
@@ -166,7 +189,9 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: smoke-quebrado
-  namespace: $NS_SMOKE
+  namespace: $NS
+  labels:
+    app.kubernetes.io/part-of: pytstop-smoke
   annotations:
     konghq.com/strip-path: "true"
     konghq.com/plugins: smoke-plugin-invalido
@@ -185,8 +210,9 @@ spec:
 YAML
 sleep 5
 echo "Ingress valido criado depois do invalido:"
-$K -n "$NS_SMOKE" create ingress smoke-novo --class=kong --rule='/os/novo*=os-service-borda-api:8000' \
+$K -n "$NS" create ingress smoke-novo --class=kong --rule='/os/novo*=os-service-borda-api:8000' \
   --annotation=konghq.com/strip-path=true
+$K -n "$NS" label ingress smoke-novo "$ROTULO" >/dev/null
 sleep 10
 pede GET /os/api/v1/ordens-de-servico
 pede GET /os/novo/x
@@ -196,6 +222,24 @@ if KUBE_CONTEXT="$CONTEXTO" ESPERA=15 scripts/kong-check.sh; then
   echo "ERRO: o kong-check deveria ter falhado"; exit 1
 fi
 $K delete kongclusterplugin smoke-plugin-invalido
-$K -n "$NS_SMOKE" delete ingress smoke-quebrado smoke-novo
+$K -n "$NS" delete ingress smoke-quebrado smoke-novo
 echo "make kong-check depois de apagar o plugin invalido:"
 KUBE_CONTEXT="$CONTEXTO" ESPERA=10 scripts/kong-check.sh
+
+titulo "endurecimento: securityContext efetivo de cada container da plataforma"
+$K -n "$NS" get pods -o json | jq -r '
+  def v(x): if x == null then "-" else (x | tostring) end;
+  ["POD", "CONTAINER", "NAO_ROOT", "ESCALA_PRIV", "RAIZ_SO_LEITURA", "CAP_DROP", "SECCOMP", "TOKEN_SA"],
+  (.items[] | select(.metadata.labels.app != "os-service-api") | . as $p | .spec.containers[]
+    | (.securityContext // {}) as $c | ($p.spec.securityContext // {}) as $ps
+    | [($p.metadata.labels.app // $p.metadata.name), .name,
+       v(if $c.runAsNonRoot != null then $c.runAsNonRoot else $ps.runAsNonRoot end),
+       v($c.allowPrivilegeEscalation), v($c.readOnlyRootFilesystem),
+       (($c.capabilities.drop // []) | join(",") | if . == "" then "-" else . end),
+       v($c.seccompProfile.type // $ps.seccompProfile.type),
+       v(if $p.spec.automountServiceAccountToken == null then true else $p.spec.automountServiceAccountToken end)])
+  | @tsv' | sort -u | column -t
+
+titulo "Pod Security restricted como enforce (dry-run no servidor): so o Promtail fica fora"
+$K label --dry-run=server --overwrite namespace "$NS" pod-security.kubernetes.io/enforce=restricted 2>&1 \
+  | grep -i 'warning' || echo "nenhum pod fora do perfil restricted"

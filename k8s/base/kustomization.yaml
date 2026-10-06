@@ -9,7 +9,17 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: pytstop-plataforma
+# Namespace pytstop-plataforma em todo recurso sem namespace. unsetOnly: o
+# kong.yaml traz a Role do controller nos namespaces dos servicos
+# (watchNamespaces), e o campo namespace: comum moveria todas para ca.
+transformers:
+  - |-
+    apiVersion: builtin
+    kind: NamespaceTransformer
+    metadata:
+      name: namespace-da-plataforma
+      namespace: pytstop-plataforma
+    unsetOnly: true
 
 # Rotulo que o `make deploy` usa para esperar so os rollouts da plataforma.
 labels:
@@ -21,6 +31,7 @@ resources:
   - rabbitmq/rabbitmq.yaml
   - kong/crds.yaml
   - kong/kong.yaml
+  - kong/eventos-de-cluster.yaml
   - kong/plugins.yaml
   - mailpit.yaml
   - observabilidade/prometheus.yaml
