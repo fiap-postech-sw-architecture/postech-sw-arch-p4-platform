@@ -116,9 +116,11 @@ O Promtail está em fim de vida desde 02/03/2026. Ele continua aqui porque o enu
 
 ### Usuário e permissões no RabbitMQ
 
-Cada serviço tem um usuário próprio, criado pelo Job `rabbitmq-usuarios` ([`criar-usuarios.sh`](k8s/base/rabbitmq/criar-usuarios.sh)) com as senhas do Secret `rabbitmq-credenciais` e as permissões de [`permissoes.json`](k8s/base/rabbitmq/permissoes.json). Ninguém tem permissão de configure: a topologia inteira vem do [`definitions.json`](k8s/base/rabbitmq/definitions.json), importado no boot do broker, e o serviço só confere o que precisa com declaração passiva. Assim nenhum comando volta como não roteável porque o consumidor do destino ainda não subiu.
+Cada serviço tem um usuário próprio, criado pelo Job `rabbitmq-usuarios` ([`criar-usuarios.sh`](k8s/base/rabbitmq/criar-usuarios.sh)) com as senhas do Secret `rabbitmq-credenciais` e as permissões de [`permissoes.json`](k8s/base/rabbitmq/permissoes.json). Nenhum serviço tem permissão de configure: a topologia inteira vem do [`definitions.json`](k8s/base/rabbitmq/definitions.json), importado no boot do broker, e o serviço só confere o que precisa com declaração passiva. Assim nenhum comando volta como não roteável porque o consumidor do destino ainda não subiu.
 
 Além do exchange, a permissão de tópico limita as routing keys que cada usuário publica. Sem ela, um serviço poderia publicar evento em nome de outro ou mandar uma cópia ao `pytstop.retry` com a routing key da fila de outro serviço e entregar mensagem lá.
+
+Origem conferida ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): toda publicação leva na propriedade AMQP `user_id` o usuário da conexão, e o broker recusa outro valor (`406 PRECONDITION_FAILED`), porque nenhum usuário de serviço tem a tag `impersonator`. O consumidor confere o `user_id` contra o produtor do tipo da mensagem, o `userId` da operação de envio no [`asyncapi.yaml`](contratos/asyncapi.yaml) (a routing key não serve, porque na cópia de retry ela é o nome da fila). A cópia de retry é republicada pelo próprio consumidor e leva o `user_id` dele, então com `x-tentativa` de 1 em diante ele aceita o próprio usuário; qualquer outro valor é erro permanente e vai para a DLQ. O snippet de [Filas, exchanges e argumentos](#filas-exchanges-e-argumentos) traz as duas regras.
 
 | Usuário | Publica em | Routing keys permitidas | Lê de | Senha (chave do Secret) |
 |---|---|---|---|---|
@@ -197,7 +199,15 @@ O `X-Request-ID` gerado pelo Kong é um UUID simples (`generator: uuid`), aceito
 
 ### Filas, exchanges e argumentos
 
-Toda a topologia está em [`k8s/base/rabbitmq/definitions.json`](k8s/base/rabbitmq/definitions.json), importada pelo RabbitMQ no boot (kind, k3s e compose). Os serviços não declaram nada com efeito: só conferem com declaração passiva (`passive=True`), que não exige permissão. Os argumentos abaixo servem para quem precisar recriar a topologia em outro broker.
+Toda a topologia está em [`k8s/base/rabbitmq/definitions.json`](k8s/base/rabbitmq/definitions.json), importada pelo RabbitMQ no boot (kind, k3s e compose). Os serviços não declaram nada com efeito: só conferem com declaração passiva (`passive=True`). No RabbitMQ 4.3 a declaração passiva também exige permissão no recurso: cada usuário confere a própria fila (permissão de leitura) e os exchanges em que publica (escrita). Fila ou exchange de outro serviço, `.retry` e `.dlq` respondem `403 ACCESS_REFUSED` e fecham o canal, então o check de topologia do boot fica nesta lista:
+
+| Usuário | Pode conferir com declaração passiva |
+|---|---|
+| `os` | fila `os.eventos`; exchanges `pytstop.comandos` e `pytstop.retry` |
+| `billing` | fila `billing.comandos`; exchanges `pytstop.eventos` e `pytstop.retry` |
+| `execucao` | fila `execucao.comandos`; exchanges `pytstop.eventos` e `pytstop.retry` |
+
+As policies abaixo servem também para quem precisar recriar a topologia em outro broker.
 
 | Exchange | Tipo | Para que serve |
 |---|---|---|
@@ -218,16 +228,30 @@ Todas são quorum, duráveis, não exclusivas e sem auto-delete, e o tipo (`x-qu
 
 Tetos: o `message-ttl` de 300 s da `.retry` vale para a cópia que chegar sem `expiration`, que assim não fica parada para sempre; a fila de trabalho cheia (10000 mensagens) recusa a publicação, que o relay do produtor retenta; e o broker recusa mensagem acima de 1 MiB (`max_message_size` no `rabbitmq.conf`).
 
-No consumidor do Billing, com pika:
+No consumidor do Billing, com pika (o `user_id` de toda publicação é o usuário da conexão; o broker recusa outro valor com `406 PRECONDITION_FAILED`, porque nenhum usuário de serviço tem a tag `impersonator`):
 
 ```python
-canal.queue_declare("billing.comandos", passive=True)  # confere, não cria
-canal.basic_qos(prefetch_count=10)  # por consumidor; a fila quorum não aceita global
-canal.confirm_delivery()  # basic_publish espera o broker confirmar
+import os
+
+import pika
+
+USUARIO = "billing"  # o user_id das cópias de retry é o do próprio consumidor
+ATRASOS_MS = ["1000", "5000", "15000", "60000", "300000"]
 
 
-def nova_tentativa(canal, entrega, propriedades, corpo, tentativa):
-    atrasos_ms = ["1000", "5000", "15000", "60000", "300000"]
+def origem_valida(propriedades: pika.BasicProperties, produtor: str) -> bool:
+    """produtor: usuário que publica o tipo (o userId da operação no AsyncAPI)."""
+    tentativa = (propriedades.headers or {}).get("x-tentativa", 0)
+    return propriedades.user_id == produtor or (
+        tentativa >= 1 and propriedades.user_id == USUARIO
+    )
+
+
+def nova_tentativa(canal, entrega, propriedades, corpo) -> None:
+    tentativa = (propriedades.headers or {}).get("x-tentativa", 0) + 1
+    if tentativa > len(ATRASOS_MS):
+        canal.basic_reject(entrega.delivery_tag, requeue=False)  # vai para a DLQ
+        return
     # mandatory + confirm: se a cópia não for roteada ou o broker a recusar,
     # o pika levanta UnroutableError/NackError antes do ack, e a original fica.
     canal.basic_publish(
@@ -238,19 +262,27 @@ def nova_tentativa(canal, entrega, propriedades, corpo, tentativa):
             message_id=propriedades.message_id,
             correlation_id=propriedades.correlation_id,
             type=propriedades.type,
+            user_id=USUARIO,
             content_type="application/json",
             delivery_mode=2,
-            expiration=atrasos_ms[tentativa - 1],
+            expiration=ATRASOS_MS[tentativa - 1],
             headers={**(propriedades.headers or {}), "x-tentativa": tentativa},
         ),
         mandatory=True,
     )
     canal.basic_ack(entrega.delivery_tag)
+
+
+conexao = pika.BlockingConnection(pika.URLParameters(os.environ["AMQP_URL"]))
+canal = conexao.channel()
+canal.queue_declare("billing.comandos", passive=True)  # confere, não cria
+canal.basic_qos(prefetch_count=10)  # por consumidor; a fila quorum não aceita global
+canal.confirm_delivery()  # basic_publish espera o broker confirmar
 ```
 
 Fluxo de uma mensagem que falha no consumidor:
 
-1. Erro transitório: o consumidor publica uma cópia no `pytstop.retry` com a routing key igual ao nome da fila, `expiration` crescente por tentativa (1s, 5s, 15s, 60s, 300s) e o header `x-tentativa`, espera a confirmação do broker (publisher confirms, `mandatory`) e só então dá ack na original. O broker põe a cópia em `<fila>.retry`.
+1. Erro transitório: o consumidor publica uma cópia no `pytstop.retry` com a routing key igual ao nome da fila, o próprio `user_id`, `expiration` crescente por tentativa (1s, 5s, 15s, 60s, 300s) e o header `x-tentativa`, espera a confirmação do broker (publisher confirms, `mandatory`) e só então dá ack na original. O broker põe a cópia em `<fila>.retry`.
 2. Quando o TTL vence, a `.retry` devolve a mensagem para `<fila>` pelo default exchange, com o histórico no header `x-death`. Esse dead-letter é interno ao broker e não pede permissão do serviço.
 3. Depois da 5ª tentativa, ou em erro permanente (validação, schema), o consumidor faz `basic_reject(requeue=False)` e a mensagem vai para `<fila>.dlq` pelo `pytstop.dlx`, onde fica até 7 dias. Corrigida a causa, `make redrive FILA=<fila>` a devolve para `<fila>` (abaixo).
 4. Mensagem que derruba o consumidor sem ack (conexão ou canal fechados) volta para a fila; no RabbitMQ 4 a fila quorum manda para a DLQ depois de 20 reentregas (limite padrão de entregas). `basic_nack` ou `basic_reject` com `requeue=True` não conta para esse limite: a mensagem volta para a fila indefinidamente. Retry é sempre pelo `pytstop.retry`.
