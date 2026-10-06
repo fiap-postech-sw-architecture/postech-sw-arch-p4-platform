@@ -8,6 +8,9 @@ SHELL := bash
 
 CLUSTER ?= pytstop-p4
 NAMESPACE ?= pytstop-plataforma
+# Overlay do make deploy: kind (local) ou k3s (make deploy OVERLAY=k3s
+# KUBE_CONTEXT=<contexto do k3s>).
+OVERLAY ?= kind
 # Contexto explicito: o deploy nunca cai no cluster que estiver ativo no
 # kubeconfig por acaso. Para outro cluster: make status KUBE_CONTEXT=<ctx>.
 KUBE_CONTEXT ?= kind-$(CLUSTER)
@@ -20,25 +23,38 @@ NAMESPACES_SERVICOS := pytstop-os pytstop-billing pytstop-execucao
 
 COMPOSE := docker compose -f compose/docker-compose.yml
 
+# Versoes fixadas das ferramentas. As imagens que tambem rodam na plataforma
+# (Prometheus, Loki, Promtail) tem de ser as do cluster e do compose: o
+# make manifests confere (scripts/versoes.sh).
+KUBERNETES_VERSION := 1.35.0
 KONG_CHART_VERSION := 3.4.1
 HELM_IMAGE := alpine/helm:3.22.0
+YQ_IMAGE := mikefarah/yq:4.54.1
 KUBECONFORM_IMAGE := ghcr.io/yannh/kubeconform:v0.8.0
-# Mesma imagem do DaemonSet e do compose; o make manifests roda o pipeline nela.
+PROMETHEUS_IMAGE := prom/prometheus:v2.54.1
+LOKI_IMAGE := grafana/loki:2.9.8
 PROMTAIL_IMAGE := grafana/promtail:3.6.11
 # Mesma versao do trivy dos repositorios de servico.
 TRIVY_IMAGE := aquasec/trivy:0.72.0
 # Valida o asyncapi.yaml contra a especificacao AsyncAPI 3.0 (exige Node 24).
 ASYNCAPI_CLI := @asyncapi/cli@6.2.0
-# KongPlugin/KongClusterPlugin sao validados pelo catalogo de CRDs da datree;
-# o resto pelo schema oficial do Kubernetes. Sem -ignore-missing-schemas:
-# recurso sem schema reprova. Unica excecao, as definicoes de CRD do Kong: o
-# repositorio de schemas do kubeconform nao publica o de
-# CustomResourceDefinition, e elas vem prontas do chart oficial (o apiserver
-# as valida no make deploy).
-KUBECONFORM_FLAGS := -strict -summary -output text \
-	-skip CustomResourceDefinition \
-	-schema-location default \
-	-schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+
+# Schemas do Kubernetes na versao do no do kind (kind/cluster.yaml) e o do
+# KongClusterPlugin gerado das CRDs do chart (make kong-render), versionado
+# em k8s/base/kong/schemas: o resultado nao muda sem commit aqui. Sem
+# -ignore-missing-schemas: recurso sem schema reprova. Unica excecao, as
+# definicoes de CRD do Kong: o repositorio de schemas do kubeconform nao
+# publica o de CustomResourceDefinition, e elas vem prontas do chart oficial
+# (o apiserver as valida no make deploy).
+KUBECONFORM := docker run --rm -i -v "$(CURDIR)/k8s/base/kong/schemas:/schemas:ro" $(KUBECONFORM_IMAGE) \
+	-strict -summary -output text -kubernetes-version $(KUBERNETES_VERSION) \
+	-skip CustomResourceDefinition -schema-location default \
+	-schema-location '/schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+# Endurecimento dos pods: nenhum achado HIGH ou CRITICAL.
+TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
+	'cat > /tmp/manifests.yaml && trivy config --quiet --severity HIGH,CRITICAL --exit-code 1 /tmp/manifests.yaml'
+KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE) YQ_IMAGE=$(YQ_IMAGE) \
+	NAMESPACE=$(NAMESPACE) scripts/kong-render.sh
 
 .PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint manifests check kong-render
 
@@ -52,12 +68,12 @@ kind-down: ## remove o cluster kind
 	kind delete cluster --name $(CLUSTER)
 
 # As CRDs do Kong vao antes: no mesmo apply o servidor ainda nao conhece
-# KongPlugin quando chega no plugins.yaml. Server-side porque as CRDs passam
-# do limite de tamanho da anotacao last-applied do apply client-side. Os
-# namespaces dos servicos nascem vazios, se ainda nao existirem, para receber
-# a Role do Kong. O Job de usuarios do RabbitMQ e imutavel: sai antes do
-# apply e roda de novo.
-deploy: ## aplica k8s/overlays/kind e espera os rollouts
+# KongClusterPlugin quando chega no plugins.yaml. Server-side porque as CRDs
+# passam do limite de tamanho da anotacao last-applied do apply client-side.
+# Os namespaces dos servicos nascem vazios, se ainda nao existirem, para
+# receber a Role do Kong. O Job de usuarios do RabbitMQ e imutavel: sai antes
+# do apply e roda de novo; se nao terminar, o log dele vai para a saida.
+deploy: ## aplica k8s/overlays/$(OVERLAY) e espera os rollouts
 	$(KUBECTL) apply --server-side -f k8s/base/kong/crds.yaml
 	$(KUBECTL) wait --for=condition=Established --timeout=60s -f k8s/base/kong/crds.yaml
 	set -euo pipefail; \
@@ -65,19 +81,22 @@ deploy: ## aplica k8s/overlays/kind e espera os rollouts
 		$(KUBECTL) get namespace "$$ns" >/dev/null 2>&1 || $(KUBECTL) create namespace "$$ns"; \
 	done
 	$(KUBECTL) -n $(NAMESPACE) delete job rabbitmq-usuarios --ignore-not-found
-	$(KUBECTL) apply --server-side -k k8s/overlays/kind
+	$(KUBECTL) apply --server-side -k k8s/overlays/$(OVERLAY)
 	set -euo pipefail; \
-	for recurso in $$($(KUBECTL) -n $(NAMESPACE) get deployment,statefulset,daemonset -l $(SELETOR) -o name); do \
+	recursos=$$($(KUBECTL) -n $(NAMESPACE) get deployment,statefulset,daemonset -l $(SELETOR) -o name); \
+	test -n "$$recursos" || { echo "nenhum Deployment, StatefulSet ou DaemonSet com $(SELETOR)"; exit 1; }; \
+	for recurso in $$recursos; do \
 		$(KUBECTL) -n $(NAMESPACE) rollout status "$$recurso" --timeout=300s; \
 	done
 	$(KUBECTL) -n kube-system rollout status deployment/metrics-server --timeout=180s
-	$(KUBECTL) -n $(NAMESPACE) wait --for=condition=Complete job/rabbitmq-usuarios --timeout=180s
+	$(KUBECTL) -n $(NAMESPACE) wait --for=condition=Complete job/rabbitmq-usuarios --timeout=180s \
+		|| { $(KUBECTL) -n $(NAMESPACE) logs job/rabbitmq-usuarios --tail=30; exit 1; }
 	@$(MAKE) --no-print-directory kong-check
 
 kong-check: ## falha se o Kong recusou algum Ingress ou plugin (eventos dos ultimos 15 min)
 	@KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/kong-check.sh
 
-smoke: ## borda e rate limiting no cluster implantado (exemplo de Ingress com eco)
+smoke: ## borda, rate limiting, mascara de token, RabbitMQ, fallback do Kong e pods endurecidos
 	KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/smoke.sh
 
 redrive: ## devolve <fila>.dlq para <fila> depois de corrigida a causa (FILA=billing.comandos)
@@ -117,30 +136,41 @@ lint: ## ruff, mypy e bandit nos testes de contrato
 	uv run mypy
 	uv run bandit -c pyproject.toml -r contratos -q
 
-manifests: ## kustomize + kubeconform nos overlays, compose config e dashboards
+manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do Kong, versoes, dashboards
 	set -euo pipefail; \
 	for overlay in kind k3s; do \
-		echo ">> k8s/overlays/$$overlay"; \
-		kubectl kustomize "k8s/overlays/$$overlay" | docker run --rm -i $(KUBECONFORM_IMAGE) $(KUBECONFORM_FLAGS) -; \
+		echo ">> kubeconform e trivy: k8s/overlays/$$overlay"; \
+		kubectl kustomize "k8s/overlays/$$overlay" | $(KUBECONFORM) -; \
+		kubectl kustomize "k8s/overlays/$$overlay" | $(TRIVY_CONFIG); \
 	done
 	set -euo pipefail; \
 	for exemplo in k8s/exemplos/*.yaml; do \
-		echo ">> $$exemplo"; \
-		docker run --rm -i $(KUBECONFORM_IMAGE) $(KUBECONFORM_FLAGS) - < "$$exemplo"; \
+		echo ">> kubeconform e trivy: $$exemplo"; \
+		$(KUBECONFORM) - < "$$exemplo"; \
+		$(TRIVY_CONFIG) < "$$exemplo"; \
 	done
-	@# Endurecimento dos pods: nenhum achado HIGH ou CRITICAL nos overlays e
-	@# no exemplo de borda.
-	set -euo pipefail; \
-	for alvo in k8s/overlays/kind k8s/overlays/k3s; do \
-		echo ">> trivy config $$alvo"; \
-		kubectl kustomize "$$alvo" | docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
-			'cat > /tmp/manifests.yaml && trivy config --quiet --severity HIGH,CRITICAL --exit-code 1 /tmp/manifests.yaml'; \
-	done; \
-	echo ">> trivy config k8s/exemplos"; \
-	cat k8s/exemplos/*.yaml | docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
-		'cat > /tmp/manifests.yaml && trivy config --quiet --severity HIGH,CRITICAL --exit-code 1 /tmp/manifests.yaml'
 	$(COMPOSE) --profile servicos config --quiet
+	@echo ">> configs de Prometheus, Loki e Promtail (cluster e compose)"
+	set -euo pipefail; \
+	for config in k8s/base/observabilidade/config/prometheus.yml compose/prometheus.yml; do \
+		docker run --rm -i --entrypoint sh $(PROMETHEUS_IMAGE) -c \
+			'cat > /tmp/prometheus.yml && promtool check config --syntax-only /tmp/prometheus.yml' < "$$config"; \
+	done; \
+	docker run --rm -i --entrypoint sh $(LOKI_IMAGE) -c \
+		'cat > /tmp/loki.yaml && loki -config.file=/tmp/loki.yaml -verify-config' < k8s/base/observabilidade/config/loki.yaml; \
+	for config in k8s/base/observabilidade/config/promtail.yaml compose/promtail.yml; do \
+		docker run --rm -i --entrypoint sh $(PROMTAIL_IMAGE) -c \
+			'cat > /tmp/promtail.yaml && promtail -check-syntax -config.file=/tmp/promtail.yaml' < "$$config"; \
+	done
 	PROMTAIL_IMAGE=$(PROMTAIL_IMAGE) scripts/promtail-mascara.sh
+	@echo ">> k8s/base/kong igual ao make kong-render"
+	set -euo pipefail; \
+	render=$$(mktemp -d); trap 'rm -rf "$$render"' EXIT; \
+	$(KONG_RENDER) "$$render"; \
+	diff -u k8s/base/kong/kong.yaml "$$render/kong.yaml"; \
+	diff -u k8s/base/kong/crds.yaml "$$render/crds.yaml"; \
+	diff -u k8s/base/kong/schemas/kongclusterplugin_v1.json "$$render/schemas/kongclusterplugin_v1.json"
+	KUBERNETES_VERSION=$(KUBERNETES_VERSION) scripts/versoes.sh $(PROMETHEUS_IMAGE) $(LOKI_IMAGE) $(PROMTAIL_IMAGE)
 	set -euo pipefail; \
 	for painel in observabilidade/dashboards/*.json; do \
 		jq -e '.uid and .title' "$$painel" > /dev/null; \
@@ -150,14 +180,5 @@ manifests: ## kustomize + kubeconform nos overlays, compose config e dashboards
 
 check: lint test manifests ## o mesmo que o CI roda
 
-kong-render: ## regenera k8s/base/kong/{kong,crds}.yaml a partir do chart pinado
-	set -euo pipefail; \
-	{ echo '# Gerado por make kong-render (chart kong/kong $(KONG_CHART_VERSION), valores em values.yaml). Nao edite.'; \
-	  docker run --rm -v "$(CURDIR)/k8s/base/kong:/work" -w /work $(HELM_IMAGE) template kong kong \
-		--repo https://charts.konghq.com --version $(KONG_CHART_VERSION) --namespace $(NAMESPACE) \
-		--values values.yaml --skip-tests --api-versions networking.k8s.io/v1/IngressClass; \
-	} > k8s/base/kong/kong.yaml
-	set -euo pipefail; \
-	{ echo '# Gerado por make kong-render (CRDs do chart kong/kong $(KONG_CHART_VERSION)). Nao edite.'; \
-	  docker run --rm $(HELM_IMAGE) show crds kong --repo https://charts.konghq.com --version $(KONG_CHART_VERSION); \
-	} > k8s/base/kong/crds.yaml
+kong-render: ## regenera k8s/base/kong (kong.yaml, crds.yaml e o schema do plugin) do chart pinado
+	$(KONG_RENDER) k8s/base/kong

@@ -1,5 +1,6 @@
-# Overlay do kind (local e CI). Recursos: os do base, que cabem no runner do
-# GitHub Actions (4 vCPU, 16 GB) junto com os tres servicos e seus bancos.
+# Overlay do kind local (make kind-up deploy): a plataforma completa, com os
+# recursos do base (limites somam ~4,4 GiB). Para o runner do CI o ADR-042
+# preve o overlay kind-ci, sem Loki, Promtail e Grafana.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

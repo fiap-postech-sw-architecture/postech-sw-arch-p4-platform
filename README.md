@@ -54,15 +54,10 @@ Credenciais de demonstração (no compose, os mesmos valores estão em [`compose
 
 ### k3s (VM na Azure)
 
-O overlay `k3s` assume o k3s instalado com `--disable traefik`: o Service `kong-proxy` continua `LoadBalancer` e o ServiceLB do k3s publica as portas 80/443 da VM no Kong. O k3s já traz metrics-server. Com o contexto do k3s:
+O overlay `k3s` assume o k3s instalado com `--disable traefik`: o Service `kong-proxy` continua `LoadBalancer` e o ServiceLB do k3s publica as portas 80/443 da VM no Kong. O k3s já traz metrics-server. O mesmo alvo do kind aplica o overlay, espera os rollouts e confere o Kong:
 
 ```bash
-kubectl apply --server-side -f k8s/base/kong/crds.yaml
-kubectl wait --for=condition=Established -f k8s/base/kong/crds.yaml
-for ns in pytstop-os pytstop-billing pytstop-execucao; do kubectl get namespace $ns || kubectl create namespace $ns; done
-kubectl -n pytstop-plataforma delete job rabbitmq-usuarios --ignore-not-found
-kubectl apply --server-side -k k8s/overlays/k3s
-kubectl -n pytstop-plataforma wait --for=condition=Complete job/rabbitmq-usuarios --timeout=180s
+make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto do k3s>
 ```
 
 A diferença para o kind está no próprio [`kustomization.yaml`](k8s/overlays/k3s/kustomization.yaml): StorageClass `local-path`, volume de 5Gi e mais memória reservada (request) para o RabbitMQ, e sete dias de retenção no Prometheus.
@@ -112,6 +107,9 @@ Todas as imagens têm tag fixa; a mesma versão roda no kind, no k3s e no compos
 | kube-state-metrics | `registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.13.0` | Limites de recursos dos pods, para o alerta de CPU | interno ao Prometheus |
 | metrics-server | `registry.k8s.io/metrics-server/metrics-server:v0.9.0` | Métricas de CPU e memória para o HPA dos serviços e o `kubectl top` (só no kind; o k3s traz o dele) | `kube-system` |
 | Mailpit | `axllent/mailpit:v1.31.4` | SMTP de demonstração e caixa de entrada web das notificações ao cliente | `mailpit.pytstop-plataforma.svc.cluster.local:1025` |
+| Kubernetes do kind | `kindest/node:v1.35.0` (por digest em [`kind/cluster.yaml`](kind/cluster.yaml)) | Nó do cluster local; o `make manifests` valida os manifests contra a mesma versão | - |
+| PostgreSQL (só compose) | `postgres:16.15` | Banco do OS e da Execução no compose; no Kubernetes cada serviço traz o seu | `postgres-os:5432`, `postgres-execucao:5432` |
+| MongoDB (só compose) | `mongo:7.0.43` | Banco do Billing no compose, em replica set de um nó | `mongo-billing:27017` |
 
 Prometheus, Grafana, Loki, Promtail, kube-state-metrics, Mailpit e Jaeger vieram dos manifests da fase 3, ajustados para vários serviços em vários namespaces e com probes de liveness e readiness em todos.
 
@@ -350,7 +348,7 @@ A cobertura de linha do `make test` mede só o arquivo de teste. O que protege o
 
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `main`, sob demanda e quando o CD o chama (`workflow_call`), com dois jobs que são checks obrigatórios da branch protection:
 
-- `manifests`: `make manifests`, ou seja, `kustomize build` dos dois overlays validado pelo kubeconform (schemas do Kubernetes e, para os plugins do Kong, o catálogo de CRDs da datree), `docker compose config` com o profile `servicos` e a checagem de que todo dashboard JSON está no configMapGenerator.
+- `manifests`: `make manifests`, ou seja, os dois overlays e o exemplo de borda validados pelo kubeconform (schemas do Kubernetes 1.35, a versão do nó do kind, e o do `KongClusterPlugin` gerado das CRDs do chart) e pelo `trivy config` (nenhum achado HIGH ou CRITICAL); `docker compose config` com o profile `servicos`; `promtool`, `loki -verify-config` e `promtail -check-syntax` nas configs do cluster e do compose, mais a máscara de token do Promtail (`promtail -dry-run`); o `k8s/base/kong` igual ao que o `make kong-render` gera; a mesma tag de cada imagem em `k8s/`, no compose e na tabela de versões; e todo dashboard JSON no configMapGenerator.
 - `contratos`: `uv lock --check`, `make lint` e `make test`.
 
 `make check` roda os três alvos localmente.
