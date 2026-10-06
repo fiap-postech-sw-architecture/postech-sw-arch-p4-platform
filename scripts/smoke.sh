@@ -222,6 +222,13 @@ KUBE_CONTEXT="$CONTEXTO" ESPERA=10 scripts/kong-check.sh
 titulo "Grafana: dashboards and alert rules loaded from provisioning"
 grafana() { $K get --raw "/api/v1/namespaces/$NS/services/grafana:3000/proxy$1"; }
 grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (folder \(.folderTitle))"'
+# Logo depois do deploy a primeira avaliacao pega o Prometheus ainda sem dado
+# (erro ou sem dado); espera a avaliacao de regime, ate 3 minutos.
+for _ in $(seq 18); do
+  grafana "/api/prometheus/grafana/api/v1/rules" \
+    | jq -e '[.data.groups[].rules[] | select(.health != "ok" or .state != "inactive")] | length == 0' >/dev/null && break
+  sleep 10
+done
 grafana "/api/prometheus/grafana/api/v1/rules" | jq -r '.data.groups[].rules[] | "rule: \(.name) [\(.state), \(.health)]"'
 
 titulo "Prometheus: series returned now by each dashboard and alert query"
