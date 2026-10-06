@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CancelarOrcamento (dados)",
+  "description": "Campo dados da mensagem CancelarOrcamento (comando, os-service -> billing-service). Compensação do passo T3: o Billing cancela o orçamento da OS cancelada.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ordem_id",
+    "orcamento_id",
+    "motivo"
+  ],
+  "properties": {
+    "ordem_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "orcamento_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "motivo": {
+      "$ref": "#/$defs/motivo"
+    }
+  },
+  "$defs": {
+    "motivo": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

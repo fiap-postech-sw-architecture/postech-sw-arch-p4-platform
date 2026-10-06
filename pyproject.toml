@@ -1,0 +1,64 @@
+[project]
+name = "pytstop-plataforma"
+version = "0.1.0"
+description = "Contratos de mensageria e testes da plataforma da fase 4 do PytStop"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = []
+
+# So ferramentas de teste e qualidade: o repositorio nao tem codigo de
+# producao em Python, so os testes de contrato (e, depois, os E2E).
+[dependency-groups]
+dev = [
+    "bandit>=1.9.4,<2",
+    # format-nongpl liga a checagem de date-time e uri do FormatChecker; sem
+    # ela o jsonschema ignora "format" calado.
+    "jsonschema[format-nongpl]>=4.26,<5",
+    "mypy>=2.4,<3",
+    "pytest>=9.1,<10",
+    "pytest-cov>=7.1,<8",
+    "pyyaml>=6.0.3,<7",
+    "referencing>=0.37,<0.38",
+    "ruff>=0.16.10,<0.17",
+    "types-jsonschema>=4.26",
+    "types-pyyaml>=6.0.12",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["contratos/tests"]
+addopts = ["--strict-markers", "--strict-config", "--cov", "--cov-report=term-missing"]
+
+[tool.coverage.run]
+branch = true
+source = ["contratos"]
+
+[tool.coverage.report]
+fail_under = 90
+show_missing = true
+
+[tool.ruff]
+# Mesmo alvo da fase 3: com py314 o formatter tira os parenteses de
+# `except (A, B):` (PEP 758), que parte do tooling ainda nao le.
+target-version = "py313"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "N", "UP", "B", "A", "C4", "SIM", "TC", "RUF", "S", "PT",
+    "PTH", "RET", "FA", "ISC", "TID",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"contratos/tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+files = ["contratos/tests"]
+
+[tool.bandit]
+# assert e o mecanismo do pytest, e aqui so ha codigo de teste.
+skips = ["B101"]

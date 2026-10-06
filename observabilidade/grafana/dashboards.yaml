@@ -1,0 +1,8 @@
+# Carrega todo JSON de /var/lib/grafana/dashboards na pasta PytStop.
+apiVersion: 1
+providers:
+  - name: pytstop
+    folder: PytStop
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards

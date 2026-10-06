@@ -1,0 +1,21 @@
+# Cluster kind da plataforma (make kind-up). Um no so: control-plane tambem
+# roda as cargas, como no runner do CI. O nome pytstop-p4 nao colide com o
+# cluster pytstop que o `make cd-local` da fase 3 cria na mesma maquina.
+#
+# As portas 80/443 do host chegam ao Kong pelos NodePorts fixos 30080/30443
+# (patch do Service kong-proxy em k8s/overlays/kind). Escuta so no loopback:
+# o gateway local nao fica exposto na rede.
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+name: pytstop-p4
+nodes:
+  - role: control-plane
+    extraPortMappings:
+      - containerPort: 30080
+        hostPort: 80
+        listenAddress: "127.0.0.1"
+        protocol: TCP
+      - containerPort: 30443
+        hostPort: 443
+        listenAddress: "127.0.0.1"
+        protocol: TCP

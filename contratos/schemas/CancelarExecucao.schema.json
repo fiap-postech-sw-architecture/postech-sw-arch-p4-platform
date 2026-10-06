@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CancelarExecucao (dados)",
+  "description": "Campo dados da mensagem CancelarExecucao (comando, os-service -> execution-service). Compensação do passo T7: a Execução tira a OS da fila (só antes do início físico, o pivot da saga).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ordem_id",
+    "motivo"
+  ],
+  "properties": {
+    "ordem_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "motivo": {
+      "$ref": "#/$defs/motivo"
+    }
+  },
+  "$defs": {
+    "motivo": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

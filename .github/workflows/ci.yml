@@ -1,0 +1,50 @@
+name: CI
+
+# PR para a main roda aqui; no merge quem chama este workflow e o CD
+# (workflow_call), entao o CI nao roda duas vezes. Sem paths-ignore de
+# proposito: `manifests` e `contratos` sao checks obrigatorios da branch
+# protection e precisam existir em todo PR, inclusive nos so de docs.
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um run por ref; push novo no PR cancela o anterior. Grupo com prefixo
+# proprio para nao colidir com o grupo do workflow que chama este.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      # kubectl (com kustomize), docker, docker compose e jq ja vem no runner;
+      # o kubeconform roda pela imagem pinada no Makefile, igual ao local.
+      - name: Overlays com kubeconform, compose e dashboards (make manifests)
+        run: make manifests
+
+  contratos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: "3.14"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: uv.lock em dia com o pyproject.toml
+        run: uv lock --check
+      - name: Dependencias do lockfile
+        run: uv sync --frozen
+      - name: Ruff, mypy e bandit (make lint)
+        run: make lint
+      - name: Testes de contrato (make test)
+        run: make test

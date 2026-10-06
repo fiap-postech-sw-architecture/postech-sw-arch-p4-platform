@@ -1,0 +1,45 @@
+# Overlay do kind (local e CI). Recursos: os do base, que cabem no runner do
+# GitHub Actions (4 vCPU, 16 GB) junto com os tres servicos e seus bancos.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  # metrics-server (kube-system), pre-requisito do HPA dos servicos. O k3s ja
+  # traz o dele, por isso so o kind o recebe daqui.
+  - metrics-server.yaml
+
+patches:
+  # O kind nao tem LoadBalancer: o Kong vira NodePort fixo, e o
+  # kind/cluster.yaml mapeia 80 -> 30080 e 443 -> 30443 no host.
+  - target:
+      kind: Service
+      name: kong-proxy
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080
+      - op: add
+        path: /spec/ports/1/nodePort
+        value: 30443
+  # StorageClass padrao do kind (local-path-provisioner). Volume do broker
+  # pequeno: cluster efemero.
+  - target:
+      kind: StatefulSet
+      name: rabbitmq
+    patch: |-
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: standard
+  # O certificado do kubelet no kind e autoassinado e nao cobre o IP do no.
+  - target:
+      kind: Deployment
+      name: metrics-server
+      namespace: kube-system
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kubelet-insecure-tls

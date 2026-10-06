@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OrcamentoRecusado (dados)",
+  "description": "Campo dados da mensagem OrcamentoRecusado (evento, billing-service -> os-service). Decisão do cliente recusando o orçamento; o OS cancela a OS e compensa a saga.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ordem_id",
+    "orcamento_id",
+    "decidido_em",
+    "canal"
+  ],
+  "properties": {
+    "ordem_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "orcamento_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "decidido_em": {
+      "$ref": "#/$defs/data_hora"
+    },
+    "canal": {
+      "enum": [
+        "link",
+        "atendente"
+      ]
+    }
+  },
+  "$defs": {
+    "data_hora": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|\\+00:00)$",
+      "description": "Instante em UTC (RFC 3339 com Z ou +00:00)."
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

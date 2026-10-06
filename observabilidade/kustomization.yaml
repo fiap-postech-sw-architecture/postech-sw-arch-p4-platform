@@ -1,0 +1,26 @@
+# Provisioning do Grafana. No Kubernetes estes arquivos viram ConfigMaps
+# (k8s/base inclui este diretorio); o compose monta os mesmos arquivos.
+# Hash no nome do ConfigMap: mudar um dashboard reinicia o pod do Grafana no
+# proximo deploy.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+generatorOptions:
+  labels:
+    app: grafana
+
+configMapGenerator:
+  - name: grafana-datasources
+    files:
+      - grafana/datasources.yaml
+  - name: grafana-dashboards-provider
+    files:
+      - grafana/dashboards.yaml
+  - name: grafana-alerting
+    files:
+      - grafana/alertas.yaml
+  # Um arquivo por dashboard. O `make manifests` (e o CI) reprova JSON de
+  # dashboards/ que nao esteja nesta lista.
+  - name: grafana-dashboards
+    files:
+      - dashboards/pytstop-plataforma.json

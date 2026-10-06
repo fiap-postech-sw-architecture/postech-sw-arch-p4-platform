@@ -1,0 +1,60 @@
+# Plugins do Kong compartilhados pelos tres servicos. Sao KongClusterPlugin
+# (escopo de cluster) porque os Ingress ficam nos namespaces dos servicos e
+# um KongPlugin so pode ser usado por Ingress do proprio namespace.
+#
+# correlation-id e prometheus sao globais (label global: "true"): valem para
+# toda rota do gateway sem anotacao nenhuma. rate-limiting e opt-in: o
+# servico anota o Ingress das rotas publicas com
+#   konghq.com/plugins: rate-limiting-publico
+# (exemplo completo no README).
+#
+# KongClusterPlugin so e lido pelo controller com a anotacao da IngressClass.
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: correlation-id
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    global: "true"
+plugin: correlation-id
+config:
+  header_name: X-Request-ID
+  # uuid puro (sem o sufixo #contador do gerador uuid#counter): o middleware
+  # dos servicos so aceita X-Request-ID externo em [A-Za-z0-9._=-]{1,128} e
+  # trocaria um id com "#" por outro, quebrando a correlacao gateway -> API.
+  generator: uuid
+  # Devolve o id na resposta: o cliente consegue citar o request_id dos logs.
+  echo_downstream: true
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: prometheus
+  annotations:
+    kubernetes.io/ingress.class: kong
+  labels:
+    global: "true"
+plugin: prometheus
+config:
+  # No Kong 3.x essas familias vem desligadas; sem elas o /metrics do status
+  # listener (porta 8100) nao traz contagem por status nem latencia, que sao
+  # o que o dashboard e o alerta de 5xx usam.
+  status_code_metrics: true
+  latency_metrics: true
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-publico
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: rate-limiting
+config:
+  # Mesmo teto da API da fase 3 (60/min por IP; o IP real chega porque o
+  # kong-proxy usa externalTrafficPolicy Local, ver values.yaml). Contador
+  # local, em memoria do pod do Kong: vale por replica do gateway; com mais de
+  # uma, cada replica conta a sua parte (policy redis resolveria).
+  minute: 60
+  policy: local
+  limit_by: ip

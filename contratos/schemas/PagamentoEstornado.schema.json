@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "PagamentoEstornado (dados)",
+  "description": "Campo dados da mensagem PagamentoEstornado (evento, billing-service -> os-service). Confirma a compensação EstornarPagamento.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ordem_id",
+    "pagamento_id",
+    "estornado_em"
+  ],
+  "properties": {
+    "ordem_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "pagamento_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "estornado_em": {
+      "$ref": "#/$defs/data_hora"
+    }
+  },
+  "$defs": {
+    "data_hora": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|\\+00:00)$",
+      "description": "Instante em UTC (RFC 3339 com Z ou +00:00)."
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

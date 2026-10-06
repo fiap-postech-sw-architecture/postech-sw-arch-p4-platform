@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgendarExecucao (dados)",
+  "description": "Campo dados da mensagem AgendarExecucao (comando, os-service -> execution-service). Passo T7: com o pagamento confirmado, a OS entra na fila de execução.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ordem_id",
+    "prioridade"
+  ],
+  "properties": {
+    "ordem_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "prioridade": {
+      "enum": [
+        "normal",
+        "alta"
+      ],
+      "description": "normal por padrão. A fila de execução atende alta antes de normal e, dentro da mesma prioridade, por ordem de agendamento."
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

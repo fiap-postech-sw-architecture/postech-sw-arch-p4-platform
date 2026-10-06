@@ -1,0 +1,23 @@
+# Prometheus do compose. Sem Kubernetes nao ha descoberta por anotacao, entao
+# os alvos sao declarados aqui.
+global:
+  scrape_interval: 15s
+scrape_configs:
+  - job_name: rabbitmq
+    metrics_path: /metrics/per-object
+    static_configs:
+      - targets:
+          - rabbitmq:15692
+  # Servicos do profile `servicos`, por DNS: sem o profile os nomes nao
+  # resolvem e simplesmente nao ha alvo (em vez de tres alvos fora do ar).
+  - job_name: servicos
+    dns_sd_configs:
+      - names:
+          - os-service
+          - billing-service
+          - execution-service
+        type: A
+        port: 8000
+    relabel_configs:
+      - source_labels: [__meta_dns_name]
+        target_label: job

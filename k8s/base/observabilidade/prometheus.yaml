@@ -1,0 +1,184 @@
+# Prometheus da plataforma (veio do k8s/prometheus.yaml da fase 3). A fase 3
+# listava cada alvo; aqui os servicos se registram sozinhos: todo pod de
+# qualquer namespace com as anotacoes abaixo e raspado (os servicos rodam em
+# pytstop-os, pytstop-billing e pytstop-execucao).
+#
+#   prometheus.io/scrape: "true"
+#   prometheus.io/port: "<porta>"     (precisa estar em ports do container)
+#   prometheus.io/path: "/metrics"    (opcional, default /metrics)
+#
+# Na plataforma entram assim o RabbitMQ (15692, /metrics/per-object) e o Kong
+# (8100). Raspagem por pod, nao pelo Service: contadores sao por processo e,
+# com mais de uma replica, o Service balancearia e subcontaria.
+#
+# Sem PVC, como na fase 3: o TSDB fica num emptyDir, que aguenta restart do
+# container mas some com o pod (cluster de demonstracao).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  labels:
+    app: prometheus
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: pods-anotados
+        # Todos os namespaces: a anotacao e o filtro (opt-in por pod).
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            regex: "true"
+            action: keep
+          # Pod de Job concluido continua listado ate ser apagado; raspar
+          # ele so geraria up=0 e alerta falso.
+          - source_labels: [__meta_kubernetes_pod_phase]
+            regex: Pending|Succeeded|Failed
+            action: drop
+          # O discovery gera um alvo por porta declarada; fica so o da porta
+          # anotada.
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            target_label: __meta_kubernetes_pod_annotation_prometheus_io_port
+            action: keepequal
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            regex: (.+)
+            target_label: __metrics_path__
+          # job = label app do pod (os-service-api, rabbitmq, kong...), que e
+          # o nome que aparece nos paineis e alertas.
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            regex: (.+)
+            target_label: job
+          - source_labels: [__meta_kubernetes_pod_label_app]
+            target_label: app
+          - source_labels: [__meta_kubernetes_namespace]
+            target_label: namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod
+      # Estado dos objetos (limites de recursos dos pods) - kube-state-metrics.yaml.
+      - job_name: kube-state-metrics
+        static_configs:
+          - targets:
+              - kube-state-metrics:8080
+      # Uso real de CPU/memoria por container (cAdvisor via kubelet). TLS sem
+      # verificacao porque o certificado do kubelet no kind/k3s e autoassinado
+      # e nao cobre o IP do no.
+      - job_name: kubelet-cadvisor
+        scheme: https
+        metrics_path: /metrics/cadvisor
+        bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+        tls_config:
+          insecure_skip_verify: true
+        kubernetes_sd_configs:
+          - role: node
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+---
+# Leitura pura, no cluster todo: discovery de nodes e de pods de qualquer
+# namespace e GET no /metrics/cadvisor do kubelet (subresource nodes/metrics).
+# Sem nodes/proxy, que abriria o resto da API do kubelet (inclusive exec).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: pytstop-plataforma
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.54.1
+          imagePullPolicy: IfNotPresent
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time=2d
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: dados
+              mountPath: /prometheus
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 768Mi
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        - name: dados
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http

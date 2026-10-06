@@ -1,0 +1,237 @@
+{
+  "vhosts": [
+    {
+      "name": "/"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "pytstop.comandos",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "pytstop.eventos",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "pytstop.retry",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "pytstop.dlx",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "billing.comandos",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "pytstop.dlx",
+        "x-dead-letter-routing-key": "billing.comandos",
+        "x-dead-letter-strategy": "at-least-once",
+        "x-overflow": "reject-publish"
+      }
+    },
+    {
+      "name": "billing.comandos.retry",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "billing.comandos",
+        "x-dead-letter-strategy": "at-least-once",
+        "x-overflow": "reject-publish"
+      }
+    },
+    {
+      "name": "billing.comandos.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 604800000
+      }
+    },
+    {
+      "name": "execucao.comandos",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "pytstop.dlx",
+        "x-dead-letter-routing-key": "execucao.comandos",
+        "x-dead-letter-strategy": "at-least-once",
+        "x-overflow": "reject-publish"
+      }
+    },
+    {
+      "name": "execucao.comandos.retry",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "execucao.comandos",
+        "x-dead-letter-strategy": "at-least-once",
+        "x-overflow": "reject-publish"
+      }
+    },
+    {
+      "name": "execucao.comandos.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 604800000
+      }
+    },
+    {
+      "name": "os.eventos",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "pytstop.dlx",
+        "x-dead-letter-routing-key": "os.eventos",
+        "x-dead-letter-strategy": "at-least-once",
+        "x-overflow": "reject-publish"
+      }
+    },
+    {
+      "name": "os.eventos.retry",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-dead-letter-exchange": "",
+        "x-dead-letter-routing-key": "os.eventos",
+        "x-dead-letter-strategy": "at-least-once",
+        "x-overflow": "reject-publish"
+      }
+    },
+    {
+      "name": "os.eventos.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-queue-type": "quorum",
+        "x-message-ttl": 604800000
+      }
+    }
+  ],
+  "bindings": [
+    {
+      "source": "pytstop.comandos",
+      "vhost": "/",
+      "destination": "billing.comandos",
+      "destination_type": "queue",
+      "routing_key": "comando.billing.#",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.comandos",
+      "vhost": "/",
+      "destination": "execucao.comandos",
+      "destination_type": "queue",
+      "routing_key": "comando.execucao.#",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.eventos",
+      "vhost": "/",
+      "destination": "os.eventos",
+      "destination_type": "queue",
+      "routing_key": "evento.billing.#",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.eventos",
+      "vhost": "/",
+      "destination": "os.eventos",
+      "destination_type": "queue",
+      "routing_key": "evento.execucao.#",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.retry",
+      "vhost": "/",
+      "destination": "billing.comandos.retry",
+      "destination_type": "queue",
+      "routing_key": "billing.comandos",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.retry",
+      "vhost": "/",
+      "destination": "execucao.comandos.retry",
+      "destination_type": "queue",
+      "routing_key": "execucao.comandos",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.retry",
+      "vhost": "/",
+      "destination": "os.eventos.retry",
+      "destination_type": "queue",
+      "routing_key": "os.eventos",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.dlx",
+      "vhost": "/",
+      "destination": "billing.comandos.dlq",
+      "destination_type": "queue",
+      "routing_key": "billing.comandos",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.dlx",
+      "vhost": "/",
+      "destination": "execucao.comandos.dlq",
+      "destination_type": "queue",
+      "routing_key": "execucao.comandos",
+      "arguments": {}
+    },
+    {
+      "source": "pytstop.dlx",
+      "vhost": "/",
+      "destination": "os.eventos.dlq",
+      "destination_type": "queue",
+      "routing_key": "os.eventos",
+      "arguments": {}
+    }
+  ]
+}

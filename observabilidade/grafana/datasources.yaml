@@ -1,0 +1,30 @@
+# Os tres pilares no mesmo Grafana. UIDs fixos porque dashboards e alertas
+# referenciam o datasource pelo UID. Os nomes de host valem no cluster e no
+# compose (mesmos nomes de Service e de servico).
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # Os servicos escrevem trace_id no log JSON; o campo vira link para o
+      # trace no Jaeger. $$ escapa a interpolacao de variavel de ambiente do
+      # provisioning.
+      derivedFields:
+        - name: trace_id
+          matcherRegex: '"trace_id":\s*"([0-9a-f]{32})"'
+          datasourceUid: jaeger
+          url: "$${__value.raw}"
+  - name: Jaeger
+    uid: jaeger
+    type: jaeger
+    access: proxy
+    url: http://jaeger:16686

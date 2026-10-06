@@ -1,0 +1,106 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OrcamentoGerado (dados)",
+  "description": "Campo dados da mensagem OrcamentoGerado (evento, billing-service -> os-service). Orçamento pronto e enviado ao cliente; a OS passa a AGUARDANDO_APROVACAO.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ordem_id",
+    "orcamento_id",
+    "linhas",
+    "total",
+    "moeda",
+    "valido_ate",
+    "link_decisao"
+  ],
+  "properties": {
+    "ordem_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "orcamento_id": {
+      "$ref": "#/$defs/uuid"
+    },
+    "linhas": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/linha"
+      }
+    },
+    "total": {
+      "$ref": "#/$defs/dinheiro"
+    },
+    "moeda": {
+      "const": "BRL",
+      "description": "Código ISO 4217 da moeda."
+    },
+    "valido_ate": {
+      "$ref": "#/$defs/data_hora"
+    },
+    "link_decisao": {
+      "$ref": "#/$defs/uri"
+    }
+  },
+  "$defs": {
+    "codigo": {
+      "type": "string",
+      "maxLength": 50,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$",
+      "description": "Código do serviço ou SKU da peça na tabela de preços do Billing (até 50 caracteres)."
+    },
+    "data_hora": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "(Z|\\+00:00)$",
+      "description": "Instante em UTC (RFC 3339 com Z ou +00:00)."
+    },
+    "dinheiro": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.[0-9]{2}$",
+      "description": "Valor decimal com duas casas, em string (nunca float)."
+    },
+    "linha": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "codigo",
+        "descricao",
+        "quantidade",
+        "preco_unitario",
+        "subtotal"
+      ],
+      "properties": {
+        "codigo": {
+          "$ref": "#/$defs/codigo"
+        },
+        "descricao": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "quantidade": {
+          "$ref": "#/$defs/quantidade"
+        },
+        "preco_unitario": {
+          "$ref": "#/$defs/dinheiro"
+        },
+        "subtotal": {
+          "$ref": "#/$defs/dinheiro"
+        }
+      }
+    },
+    "quantidade": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "uri": {
+      "type": "string",
+      "format": "uri",
+      "maxLength": 2048
+    },
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

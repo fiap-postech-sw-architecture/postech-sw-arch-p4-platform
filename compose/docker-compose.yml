@@ -1,0 +1,279 @@
+# Stack local da plataforma: a mesma infraestrutura compartilhada do
+# Kubernetes (RabbitMQ com as mesmas definitions, observabilidade com o mesmo
+# provisioning do Grafana, Mailpit) mais o banco de cada servico.
+#
+#   make up                   infraestrutura
+#   make up PROFILE=servicos  infraestrutura + os tres servicos, construidos
+#                             a partir dos repositorios irmaos
+#   make down                 derruba tudo (os volumes ficam)
+#
+# Portas publicadas so no loopback e todas sobrescreviveis por variavel de
+# ambiente (ex.: GRAFANA_PORT=3001 make up) para conviver com o compose de
+# cada servico. Senhas abaixo sao valores de demonstracao, sem dado real.
+name: pytstop-plataforma
+
+x-otel: &otel
+  OTEL_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
+
+services:
+  rabbitmq:
+    image: rabbitmq:4.3.6-management
+    # Nome do no Erlang fixo: com o hostname aleatorio do container, cada
+    # recriacao viraria um no novo e o volume ficaria com um broker orfao.
+    hostname: rabbitmq
+    # Mesmo motivo do StatefulSet: healthcheck rodando como root antes do
+    # boot cria o .erlang.cookie com dono root e o broker nao sobe.
+    user: "999:999"
+    ports:
+      - "127.0.0.1:${RABBITMQ_PORT:-5672}:5672"
+      - "127.0.0.1:${RABBITMQ_UI_PORT:-15672}:15672"
+    volumes:
+      - rabbitmq_dados:/var/lib/rabbitmq
+      - ../k8s/base/rabbitmq/rabbitmq.conf:/etc/rabbitmq/conf.d/20-pytstop.conf:ro
+      - ../k8s/base/rabbitmq/definitions.json:/etc/rabbitmq/definitions/definitions.json:ro
+      - ./rabbitmq-admin.json:/etc/rabbitmq/definitions/admin.json:ro
+    healthcheck:
+      # pytstop.retry so existe se o definitions.json entrou (ver o
+      # startupProbe do StatefulSet).
+      test: ["CMD-SHELL", "rabbitmqctl -s list_exchanges name | grep -qx pytstop.retry && rabbitmq-diagnostics -q check_port_connectivity"]
+      interval: 10s
+      timeout: 20s
+      retries: 12
+      start_period: 20s
+
+  # Usuarios dos servicos (os, billing, execucao) com permissao minima, pelo
+  # mesmo script do Job do Kubernetes. Senhas iguais as do Secret
+  # rabbitmq-credenciais do Kubernetes. Depois do script o container fica
+  # parado em vez de sair: o `docker compose up --wait` trata container que
+  # terminou (mesmo com 0) como falha. Saudavel = usuarios criados; script
+  # com erro derruba o container e o `make up`.
+  rabbitmq-usuarios:
+    image: rabbitmq:4.3.6-management
+    user: "999:999"
+    # init: o sleep vira PID 1 e ignoraria o SIGTERM do `make down`.
+    init: true
+    entrypoint: ["sh", "-c", "sh /scripts/criar-usuarios.sh && touch /tmp/usuarios-criados && exec sleep infinity"]
+    volumes:
+      - ../k8s/base/rabbitmq/criar-usuarios.sh:/scripts/criar-usuarios.sh:ro
+      - ../k8s/base/rabbitmq/permissoes.json:/scripts/permissoes.json:ro
+    environment:
+      RABBITMQADMIN_TARGET_HOST: rabbitmq
+      RABBITMQADMIN_TARGET_PORT: "15672"
+      RABBITMQADMIN_NON_INTERACTIVE_MODE: "true"
+      RABBITMQADMIN_USERNAME: admin
+      RABBITMQADMIN_PASSWORD: pytstop-rabbitmq-admin-demo-2026  # gitleaks:allow
+      RABBITMQ_OS_PASSWORD: pytstop-os-demo-2026  # gitleaks:allow
+      RABBITMQ_BILLING_PASSWORD: pytstop-billing-demo-2026  # gitleaks:allow
+      RABBITMQ_EXECUCAO_PASSWORD: pytstop-execucao-demo-2026  # gitleaks:allow
+    healthcheck:
+      test: ["CMD", "test", "-f", "/tmp/usuarios-criados"]
+      interval: 2s
+      timeout: 2s
+      retries: 90
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    restart: "no"
+
+  postgres-os:
+    image: postgres:16.15
+    environment:
+      POSTGRES_DB: os
+      POSTGRES_USER: pytstop
+      POSTGRES_PASSWORD: pytstop  # gitleaks:allow
+    ports:
+      - "127.0.0.1:${POSTGRES_OS_PORT:-5433}:5432"
+    volumes:
+      - postgres_os_dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pytstop -d os"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  postgres-execucao:
+    image: postgres:16.15
+    environment:
+      POSTGRES_DB: execucao
+      POSTGRES_USER: pytstop
+      POSTGRES_PASSWORD: pytstop  # gitleaks:allow
+    ports:
+      - "127.0.0.1:${POSTGRES_EXECUCAO_PORT:-5434}:5432"
+    volumes:
+      - postgres_execucao_dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pytstop -d execucao"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  # Replica set de um no: o Billing grava documento e outbox na mesma
+  # transacao, e transacao no MongoDB exige replica set. Sem autenticacao
+  # (banco de desenvolvimento, porta so no loopback). Do host, conecte com
+  # mongodb://localhost:27017/billing?directConnection=true.
+  mongo-billing:
+    image: mongo:7.0.43
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "127.0.0.1:${MONGO_BILLING_PORT:-27017}:27017"
+    volumes:
+      - mongo_billing_dados:/data/db
+    healthcheck:
+      # Na primeira passada inicia o replica set; fica saudavel quando o no
+      # vira primario.
+      test:
+        - CMD
+        - mongosh
+        - --quiet
+        - --eval
+        - "try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongo-billing:27017'}]}) }; if (!db.hello().isWritablePrimary) quit(1)"
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 10s
+
+  mailpit:
+    image: axllent/mailpit:v1.30.3
+    ports:
+      - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
+      - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.76.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+      MEMORY_MAX_TRACES: "50000"
+    ports:
+      - "127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"
+      - "127.0.0.1:${OTLP_GRPC_PORT:-4317}:4317"
+      - "127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318"
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=2d
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  loki:
+    image: grafana/loki:2.9.8
+    ports:
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+
+  # Le os logs dos containers deste projeto pela API do Docker. O socket da
+  # acesso total ao Docker da maquina: aceitavel so em desenvolvimento local.
+  # Promtail 3.x: o cliente Docker do 2.9 fala a API 1.42 e o Docker 29 exige
+  # no minimo 1.44 (a descoberta falha com "client version 1.42 is too old").
+  promtail:
+    image: grafana/promtail:3.6.11
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - ./promtail.yml:/etc/promtail/promtail.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: pytstop-grafana-demo-2026  # gitleaks:allow
+    volumes:
+      - ../observabilidade/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ../observabilidade/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ../observabilidade/grafana/alertas.yaml:/etc/grafana/provisioning/alerting/alertas.yaml:ro
+      - ../observabilidade/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # Profile `servicos`: a API de cada servico, construida do repositorio
+  # irmao (../../postech-sw-arch-p4-<servico>). Os processos relay e
+  # consumidor entram aqui quando as imagens dos servicos expuserem esses
+  # comandos. Variaveis: o contrato de configuracao descrito no README.
+  os-service:
+    profiles: [servicos]
+    build: ../../postech-sw-arch-p4-os-service
+    image: pytstop-os-service:compose
+    ports:
+      - "127.0.0.1:${OS_SERVICE_PORT:-8001}:8000"
+    environment:
+      <<: *otel
+      OTEL_SERVICE_NAME: os-service
+      DATABASE_URL: postgresql://pytstop:pytstop@postgres-os:5432/os  # gitleaks:allow
+      RUN_MIGRATIONS_ON_STARTUP: "true"
+      AMQP_URL: amqp://os:pytstop-os-demo-2026@rabbitmq:5672/%2F  # gitleaks:allow
+      SMTP_HOST: mailpit
+      SMTP_PORT: "1025"
+    depends_on:
+      postgres-os:
+        condition: service_healthy
+      rabbitmq-usuarios:
+        condition: service_healthy
+
+  billing-service:
+    profiles: [servicos]
+    build: ../../postech-sw-arch-p4-billing-service
+    image: pytstop-billing-service:compose
+    ports:
+      - "127.0.0.1:${BILLING_SERVICE_PORT:-8002}:8000"
+    environment:
+      <<: *otel
+      OTEL_SERVICE_NAME: billing-service
+      MONGODB_URL: mongodb://mongo-billing:27017/billing?replicaSet=rs0
+      AMQP_URL: amqp://billing:pytstop-billing-demo-2026@rabbitmq:5672/%2F  # gitleaks:allow
+      JWKS_URL: http://os-service:8000/.well-known/jwks.json
+      MP_MODE: simulado
+    depends_on:
+      mongo-billing:
+        condition: service_healthy
+      rabbitmq-usuarios:
+        condition: service_healthy
+
+  execution-service:
+    profiles: [servicos]
+    build: ../../postech-sw-arch-p4-execution-service
+    image: pytstop-execution-service:compose
+    ports:
+      - "127.0.0.1:${EXECUTION_SERVICE_PORT:-8003}:8000"
+    environment:
+      <<: *otel
+      OTEL_SERVICE_NAME: execution-service
+      DATABASE_URL: postgresql://pytstop:pytstop@postgres-execucao:5432/execucao  # gitleaks:allow
+      RUN_MIGRATIONS_ON_STARTUP: "true"
+      AMQP_URL: amqp://execucao:pytstop-execucao-demo-2026@rabbitmq:5672/%2F  # gitleaks:allow
+      JWKS_URL: http://os-service:8000/.well-known/jwks.json
+      BILLING_URL: http://billing-service:8000
+    depends_on:
+      postgres-execucao:
+        condition: service_healthy
+      rabbitmq-usuarios:
+        condition: service_healthy
+
+volumes:
+  rabbitmq_dados:
+  postgres_os_dados:
+  postgres_execucao_dados:
+  mongo_billing_dados:

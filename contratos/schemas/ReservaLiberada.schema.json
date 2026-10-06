@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ReservaLiberada (dados)",
+  "description": "Campo dados da mensagem ReservaLiberada (evento, execution-service -> os-service). Confirma a compensação LiberarReserva.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "ordem_id"
+  ],
+  "properties": {
+    "ordem_id": {
+      "$ref": "#/$defs/uuid"
+    }
+  },
+  "$defs": {
+    "uuid": {
+      "type": "string",
+      "format": "uuid"
+    }
+  }
+}

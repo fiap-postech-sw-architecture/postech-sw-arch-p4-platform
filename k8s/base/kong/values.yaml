@@ -1,0 +1,63 @@
+# Valores do chart kong/kong usados para gerar kong.yaml (alvo `make kong-render`).
+# Kong Gateway OSS em modo DB-less com o Kong Ingress Controller como sidecar
+# no mesmo pod: o controller le Ingress/KongPlugin do cluster e empurra a
+# configuracao declarativa para o Admin API local, sem banco do Kong.
+fullnameOverride: kong
+
+image:
+  repository: kong
+  tag: "3.9.3"
+
+env:
+  database: "off"
+  anonymous_reports: "off"
+
+ingressController:
+  enabled: true
+  image:
+    repository: kong/kubernetes-ingress-controller
+    tag: "3.5.13"
+  ingressClass: kong
+  # CRDs vem de crds.yaml (helm show crds), aplicadas antes do resto.
+  installCRDs: false
+  # O webhook de validacao exige certificado gerado na renderizacao; com ele
+  # o kong.yaml versionado carregaria uma chave privada. Sem o webhook, plugin
+  # mal configurado aparece no log do controller em vez de no kubectl apply.
+  admissionWebhook:
+    enabled: false
+  env:
+    anonymous_reports: "false"
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+proxy:
+  type: LoadBalancer
+  # Preserva o IP do cliente (sem o SNAT do kube-proxy): o rate limiting das
+  # rotas publicas conta por IP, e com Cluster todo cliente apareceria com o
+  # endereco do no e dividiria o mesmo limite.
+  externalTrafficPolicy: Local
+
+admin:
+  enabled: false
+
+# Kong Manager e a GUI do Admin API; sem Admin API exposto ela nao tem uso.
+manager:
+  enabled: false
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8100"
+  prometheus.io/path: /metrics
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

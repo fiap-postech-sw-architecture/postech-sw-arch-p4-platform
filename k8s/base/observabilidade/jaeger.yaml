@@ -1,0 +1,80 @@
+# Jaeger all-in-one (veio do k8s/jaeger.yaml da fase 3, agora com tag fixa):
+# recebe OTLP direto do SDK de cada servico, sem Collector no meio.
+#   OTLP gRPC: jaeger:4317 (OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4317)
+#   OTLP HTTP: jaeger:4318
+#   UI e API de consulta (datasource do Grafana): jaeger:16686
+# Traces em memoria, limitados por MEMORY_MAX_TRACES para nao crescer ate o
+# OOMKill num cluster que fica de pe dias (k3s).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  labels:
+    app: jaeger
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: jaeger
+  template:
+    metadata:
+      labels:
+        app: jaeger
+    spec:
+      containers:
+        - name: jaeger
+          image: jaegertracing/all-in-one:1.76.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: COLLECTOR_OTLP_ENABLED
+              value: "true"
+            - name: MEMORY_MAX_TRACES
+              value: "50000"
+          ports:
+            - name: otlp-grpc
+              containerPort: 4317
+            - name: otlp-http
+              containerPort: 4318
+            - name: ui
+              containerPort: 16686
+            - name: admin
+              containerPort: 14269
+          # Porta admin: / responde "Server available" quando o coletor e a
+          # consulta estao no ar.
+          livenessProbe:
+            httpGet:
+              path: /
+              port: admin
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /
+              port: admin
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 512Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  labels:
+    app: jaeger
+spec:
+  selector:
+    app: jaeger
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: otlp-grpc
+    - name: otlp-http
+      port: 4318
+      targetPort: otlp-http
+    - name: ui
+      port: 16686
+      targetPort: ui
