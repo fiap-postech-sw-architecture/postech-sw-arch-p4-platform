@@ -8,6 +8,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Recent decisions
 
+- 2026-10-06 - Alerta do Kong (`pytstop-kong-fora`, sem dado = alerta) so no cluster: arquivo `alertas-cluster.yaml` num grupo proprio, montado so pelo configMapGenerator; o compose monta so `alertas.yaml`, porque sem Kong a regra disparava dois minutos depois de subir (medido no compose) - ADR-043
 - 2026-10-06 - Caminho com `%2F` ou `%5C` e barrado na borda por um `pre-function` global (`bloqueia-barra-codificada`, 404 igual ao de rota inexistente, antes do rate limit e sem gastar balde); so o caminho conta, a query string passa - ADR-038
 - 2026-10-06 - Correcao da entrada "branch protection na `main` desde o commit inicial" (mais abaixo): o unico commit fora de PR e o `Initial commit` do GitHub (auto_init); a protecao e o ruleset entraram logo depois, e desde entao tudo entra por PR com squash - ADR-042
 - 2026-10-06 - Controller do Kong le Ingress, Services e Secrets so dos quatro namespaces `pytstop-*` (watchNamespaces, Role por namespace); o `make deploy` cria vazios os namespaces dos servicos que faltarem; Ingress de outro namespace nao chega ao Kong - README, Decisoes e limites

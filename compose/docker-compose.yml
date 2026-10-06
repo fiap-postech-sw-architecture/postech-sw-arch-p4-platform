@@ -232,6 +232,8 @@ services:
     volumes:
       - ../observabilidade/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - ../observabilidade/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      # So alertas.yaml: alertas-cluster.yaml depende do Kong, que o compose nao
+      # tem (a regra dispararia para sempre).
       - ../observabilidade/grafana/alertas.yaml:/etc/grafana/provisioning/alerting/alertas.yaml:ro
       - ../observabilidade/dashboards:/var/lib/grafana/dashboards:ro
     ports:

@@ -2,7 +2,9 @@
 # arquivo). Cada regra: consulta no Prometheus (A) e limiar (C). Notificacao
 # pela policy default do Grafana, sem canal externo, como na fase 3. Os
 # alertas de saga do ADR-043 (compensacoes, saga parada, circuito aberto)
-# dependem das metricas dos servicos e nao estao neste arquivo.
+# dependem das metricas dos servicos e nao estao neste arquivo. Este arquivo
+# vale no Kubernetes e no compose; o que depende do Kong, que o compose nao
+# tem, fica em alertas-cluster.yaml.
 apiVersion: 1
 groups:
   - orgId: 1
@@ -96,8 +98,9 @@ groups:
               conditions:
                 - evaluator: {type: gt, params: [0.01]}
       # Alvo anotado que o Prometheus nao alcanca (up = 0). Pod que some da
-      # descoberta deixa a serie sem dado e nao dispara esta regra: broker e
-      # gateway tem regra propria abaixo, e cada servico traz a dele.
+      # descoberta deixa a serie sem dado e nao dispara esta regra: o broker
+      # tem regra propria abaixo, o gateway tambem (so no cluster, em
+      # alertas-cluster.yaml) e cada servico traz a dele.
       - uid: pytstop-alvo-fora
         title: Alvo de métricas fora do ar (2min)
         condition: C
@@ -148,34 +151,6 @@ groups:
               refId: A
               instant: true
               expr: up{job="rabbitmq"}
-          - refId: C
-            relativeTimeRange: {from: 0, to: 0}
-            datasourceUid: __expr__
-            model:
-              refId: C
-              type: threshold
-              expression: A
-              conditions:
-                - evaluator: {type: lt, params: [1]}
-      # Gateway fora do ar ou sem alvo, pela mesma regra.
-      - uid: pytstop-kong-fora
-        title: Kong fora do ar ou sem alvo de métricas (2min)
-        condition: C
-        for: 2m
-        noDataState: Alerting
-        execErrState: Error
-        labels:
-          severity: critical
-        annotations:
-          summary: O Prometheus não raspa o Kong há 2 minutos (pod fora do ar ou ausente da descoberta); a borda pode estar sem rota.
-        data:
-          - refId: A
-            relativeTimeRange: {from: 300, to: 0}
-            datasourceUid: prometheus
-            model:
-              refId: A
-              instant: true
-              expr: up{job="kong"}
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__

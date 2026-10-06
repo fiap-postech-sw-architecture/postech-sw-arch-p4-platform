@@ -2,9 +2,10 @@
 
 O ADR-043 pede cada painel com descricao e documentado, no formato da fase 3;
 este teste e a trava: painel sem descricao, painel ou consulta fora do
-observabilidade/README.md, ou regra de alerta sem UID, titulo e consulta na
-tabela de alertas, ou com severidade, janela ou "sem dado" diferentes dos da
-tabela, reprovam.
+observabilidade/README.md, ou regra de alerta com UID, titulo, consulta,
+severidade, janela, "sem dado" ou "onde" diferentes dos da tabela de alertas
+reprovam. Tambem reprova arquivo de alerta que o Grafana do cluster nao monta
+ou que o compose monta sem poder usar (as regras do Kong).
 """
 
 from __future__ import annotations
@@ -17,18 +18,24 @@ from typing import Any
 import pytest
 import yaml
 
-OBSERVABILIDADE = Path(__file__).resolve().parents[1] / "observabilidade"
+RAIZ = Path(__file__).resolve().parents[1]
+OBSERVABILIDADE = RAIZ / "observabilidade"
 DOC_CRU = (OBSERVABILIDADE / "README.md").read_text(encoding="utf-8")
 # Tabela Markdown escapa o | das consultas.
 DOC = DOC_CRU.replace("\\|", "|")
 DASHBOARDS = sorted((OBSERVABILIDADE / "dashboards").glob("*.json"))
-REGRAS: list[dict[str, Any]] = [
-    regra
-    for grupo in yaml.safe_load(
-        (OBSERVABILIDADE / "grafana" / "alertas.yaml").read_text(encoding="utf-8")
-    )["groups"]
+ALERTAS = sorted((OBSERVABILIDADE / "grafana").glob("alertas*.yaml"))
+# Onde cada arquivo de alertas e provisionado: alertas.yaml no cluster e no
+# compose; alertas-cluster.yaml so no cluster (depende do Kong).
+ONDE = {"alertas.yaml": "cluster e compose", "alertas-cluster.yaml": "só cluster"}
+# (arquivo, regra) de todas as regras de alerta.
+REGRAS: list[tuple[str, dict[str, Any]]] = [
+    (arquivo.name, regra)
+    for arquivo in ALERTAS
+    for grupo in yaml.safe_load(arquivo.read_text(encoding="utf-8"))["groups"]
     for regra in grupo["rules"]
 ]
+IDS_DAS_REGRAS = [regra["uid"] for _, regra in REGRAS]
 
 
 def linhas_de_alerta() -> dict[str, dict[str, str]]:
@@ -68,7 +75,7 @@ def test_painel_tem_descricao_e_esta_na_tabela_com_as_consultas(
         assert f"`{alvo['expr']}`" in DOC, alvo["expr"]
 
 
-@pytest.mark.parametrize("regra", REGRAS, ids=lambda r: r["uid"])
+@pytest.mark.parametrize("regra", [regra for _, regra in REGRAS], ids=IDS_DAS_REGRAS)
 def test_regra_de_alerta_esta_na_tabela_com_a_consulta(regra: dict[str, Any]) -> None:
     (consulta,) = [d["model"]["expr"] for d in regra["data"] if "expr" in d["model"]]
 
@@ -76,10 +83,37 @@ def test_regra_de_alerta_esta_na_tabela_com_a_consulta(regra: dict[str, Any]) ->
     assert f"`{consulta}`" in DOC
 
 
-@pytest.mark.parametrize("regra", REGRAS, ids=lambda r: r["uid"])
-def test_tabela_de_alertas_diz_o_que_a_regra_faz(regra: dict[str, Any]) -> None:
+@pytest.mark.parametrize(("arquivo", "regra"), REGRAS, ids=IDS_DAS_REGRAS)
+def test_tabela_de_alertas_diz_o_que_a_regra_faz(
+    arquivo: str, regra: dict[str, Any]
+) -> None:
     linha = linhas_de_alerta()[regra["uid"]]
 
     assert linha["Sem dado"] == regra["noDataState"]
     assert linha["Severidade"] == regra["labels"]["severity"]
     assert linha["Janela"] == f"{int(regra['for'].removesuffix('m'))} min"
+    assert linha["Onde"] == ONDE[arquivo]
+
+
+def test_tabela_de_alertas_nao_tem_regra_que_nenhum_arquivo_define() -> None:
+    assert set(linhas_de_alerta()) == set(IDS_DAS_REGRAS)
+
+
+def test_grafana_do_cluster_monta_todos_os_alertas_e_o_compose_so_os_comuns() -> None:
+    kustomization = yaml.safe_load(
+        (OBSERVABILIDADE / "kustomization.yaml").read_text(encoding="utf-8")
+    )
+    arquivos = {
+        gerador["name"]: gerador["files"]
+        for gerador in kustomization["configMapGenerator"]
+    }
+    compose = yaml.safe_load(
+        (RAIZ / "compose" / "docker-compose.yml").read_text(encoding="utf-8")
+    )
+    montados = " ".join(compose["services"]["grafana"]["volumes"])
+
+    assert sorted(arquivos["grafana-alerting"]) == [
+        f"grafana/{a.name}" for a in ALERTAS
+    ]
+    assert "grafana/alertas.yaml:" in montados
+    assert "alertas-cluster" not in montados
