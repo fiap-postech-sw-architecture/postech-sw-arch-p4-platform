@@ -14,7 +14,6 @@ BORDA="${BORDA:-http://localhost}"
 NS=pytstop-plataforma
 ROTULO=app.kubernetes.io/part-of=pytstop-smoke
 K="kubectl --context $CONTEXTO"
-TMP="$(mktemp -d)"
 limpa() {
   $K delete kongclusterplugin smoke-plugin-invalido --ignore-not-found >/dev/null
   $K -n "$NS" delete deployment,service,ingress -l "$ROTULO" --ignore-not-found >/dev/null
@@ -26,6 +25,7 @@ if [ -n "$($K -n pytstop-os get ingress -o name 2>/dev/null)" ]; then
   echo "pytstop-os already has Ingresses: the smoke would reuse the /os paths. Run it on a platform-only cluster." >&2
   exit 1
 fi
+TMP="$(mktemp -d)"
 trap limpa EXIT
 
 titulo() { printf '\n== %s\n' "$*"; }
@@ -166,13 +166,6 @@ sleep 7
 make --no-print-directory redrive FILA=billing.comandos KUBE_CONTEXT="$CONTEXTO"
 $R rabbitmqctl -q purge_queue billing.comandos
 
-titulo "policies converge on boot: change the DLQ policy at runtime and restart the broker"
-$R rabbitmqctl -q set_policy --apply-to queues dlq '\.dlq$' '{"message-ttl":60000}'
-printf 'before restart: '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
-$K -n pytstop-plataforma delete pod rabbitmq-0 --wait=true >/dev/null
-$K -n pytstop-plataforma wait --for=condition=Ready pod/rabbitmq-0 --timeout=300s >/dev/null
-printf 'after restart:  '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
-
 titulo "an invalid object from one service does not take the others down (FallbackConfiguration)"
 $K apply -f - <<YAML
 apiVersion: configuration.konghq.com/v1
@@ -258,3 +251,11 @@ $K -n "$NS" get pods -o json | jq -r '
 titulo "Pod Security restricted as enforce (server dry-run): only Promtail falls outside"
 $K label --dry-run=server --overwrite namespace "$NS" pod-security.kubernetes.io/enforce=restricted 2>&1 \
   | grep -i 'warning' || echo "no pod outside the restricted profile"
+
+# Por ultimo: reinicia o broker, e as consultas acima precisam dele de pe.
+titulo "policies converge on boot: change the DLQ policy at runtime and restart the broker"
+$R rabbitmqctl -q set_policy --apply-to queues dlq '\.dlq$' '{"message-ttl":60000}'
+printf 'before restart: '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
+$K -n pytstop-plataforma delete pod rabbitmq-0 --wait=true >/dev/null
+$K -n pytstop-plataforma wait --for=condition=Ready pod/rabbitmq-0 --timeout=300s >/dev/null
+printf 'after restart:  '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'

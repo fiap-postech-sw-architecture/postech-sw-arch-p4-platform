@@ -15,7 +15,7 @@ sleep "${ESPERA:-10}"
 recusas=$($K get events -A -o json | jq -r '.items[]
   | select(.reason == "KongConfigurationApplyFailed" or .reason == "KongConfigurationTranslationFailed")
   | select(.involvedObject.kind != "Pod")
-  | ((.lastTimestamp // .eventTime) | sub("\\.[0-9]+"; "") | fromdateiso8601) as $quando
+  | ((.lastTimestamp // .eventTime // .firstTimestamp // "1970-01-01T00:00:00Z") | sub("\\.[0-9]+"; "") | fromdateiso8601) as $quando
   | select($quando > now - 900)
   | [.involvedObject.namespace // "-", .involvedObject.kind, .involvedObject.name, ($quando | tostring), .message]
   | @tsv' | sort -u)
