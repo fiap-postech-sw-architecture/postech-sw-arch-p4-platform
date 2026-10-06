@@ -31,6 +31,8 @@ package = false
 testpaths = ["contratos/tests"]
 addopts = ["--strict-markers", "--strict-config", "--cov", "--cov-report=term-missing"]
 
+# Mede so o codigo de teste: o repositorio nao tem Python de producao. Quem
+# protege os schemas sao os negativos gerados dos exemplos (test_contratos.py).
 [tool.coverage.run]
 branch = true
 source = ["contratos"]

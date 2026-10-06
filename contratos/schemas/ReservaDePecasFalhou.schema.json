@@ -3,7 +3,6 @@
   "title": "ReservaDePecasFalhou (dados)",
   "description": "Campo dados da mensagem ReservaDePecasFalhou (evento, execution-service -> os-service). Estoque insuficiente para ao menos uma peça; o OS compensa a saga.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "faltantes"
@@ -17,7 +16,8 @@
       "minItems": 1,
       "items": {
         "$ref": "#/$defs/faltante"
-      }
+      },
+      "maxItems": 50
     }
   },
   "$defs": {
@@ -29,7 +29,6 @@
     },
     "faltante": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "sku",
         "solicitado",
@@ -40,14 +39,18 @@
           "$ref": "#/$defs/codigo"
         },
         "solicitado": {
-          "type": "integer",
-          "minimum": 1
+          "$ref": "#/$defs/quantidade"
         },
         "disponivel": {
           "type": "integer",
           "minimum": 0
         }
       }
+    },
+    "quantidade": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 1000
     },
     "uuid": {
       "type": "string",

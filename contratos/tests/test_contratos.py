@@ -1,9 +1,13 @@
 """Contratos de mensageria: catalogo, AsyncAPI, JSON Schemas, exemplos e topologia.
 
-O catalogo abaixo e a secao 4 do design brief da fase 4, mais AnonimizarVeiculo
-e PagamentoCancelado, decididos na revisao de arquitetura. Os testes amarram as
-quatro fontes que os servicos copiam (asyncapi.yaml, schemas/, exemplos/ e o
-definitions.json do RabbitMQ) para que nenhuma divirja das outras.
+O catalogo e os campos abaixo sao os da RFC-004, secao 5.3
+(docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md). Os testes amarram
+as quatro fontes que os servicos copiam (asyncapi.yaml, schemas/, exemplos/ e o
+definitions.json do RabbitMQ) para que nenhuma divirja das outras nem da RFC.
+
+O criterio de qualidade do contrato e a bateria de negativos gerados dos
+exemplos (test_todo_defeito_gerado_do_exemplo_e_rejeitado), nao a cobertura de
+linha: o pytest-cov mede so este arquivo, nunca os schemas.
 """
 
 from __future__ import annotations
@@ -13,13 +17,16 @@ import json
 import re
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import yaml
 from jsonschema import Draft202012Validator, FormatChecker
 from jsonschema.exceptions import ValidationError
 from referencing import Registry, Resource
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 RAIZ = Path(__file__).resolve().parents[2]
 CONTRATOS = RAIZ / "contratos"
@@ -65,6 +72,87 @@ CATALOGO: dict[str, tuple[str, str, str]] = {
     "ExecucaoFinalizada": ("evento", "execucao", "os"),
     "AnonimizarVeiculo": ("comando", "os", "execucao"),
 }
+# Campos de `dados` na RFC-004 5.3: obrigatorios e opcionais. Sem
+# additionalProperties: false (leitor tolerante, RFC 5.5), quem pega campo com
+# nome errado ou esquecido e este teste.
+CAMPOS: dict[str, str] = {
+    "SolicitarDiagnostico": "ordem_id veiculo_id veiculo descricao_problema",
+    "DiagnosticoIniciado": "ordem_id mecanico_id iniciado_em",
+    "DiagnosticoConcluido": "ordem_id itens observacoes concluido_em",
+    "DescartarDiagnostico": "ordem_id motivo",
+    "DiagnosticoDescartado": "ordem_id",
+    "GerarOrcamento": "ordem_id itens",
+    "OrcamentoGerado": (
+        "ordem_id orcamento_id linhas total moeda valido_ate link_decisao"
+    ),
+    "GeracaoDeOrcamentoFalhou": "ordem_id motivo codigos_invalidos",
+    "OrcamentoAprovado": "ordem_id orcamento_id decidido_em canal",
+    "OrcamentoRecusado": "ordem_id orcamento_id decidido_em canal",
+    "OrcamentoExpirado": "ordem_id orcamento_id",
+    "CancelarOrcamento": "ordem_id motivo",
+    "OrcamentoCancelado": "ordem_id orcamento_id",
+    "ReservarPecas": "ordem_id pecas",
+    "PecasReservadas": "ordem_id reserva_id",
+    "ReservaDePecasFalhou": "ordem_id faltantes",
+    "LiberarReserva": "ordem_id motivo",
+    "ReservaLiberada": "ordem_id",
+    "SolicitarPagamento": "ordem_id orcamento_id",
+    "PagamentoSolicitado": "ordem_id pagamento_id valor moeda checkout_url expira_em",
+    "PagamentoConfirmado": (
+        "ordem_id pagamento_id valor moeda confirmado_em referencia_provedor"
+    ),
+    "PagamentoRecusado": "ordem_id pagamento_id motivo",
+    "PagamentoExpirado": "ordem_id pagamento_id motivo",
+    "EstornarPagamento": "ordem_id motivo",
+    "PagamentoEstornado": "ordem_id pagamento_id estornado_em motivo",
+    "EstornoDePagamentoFalhou": "ordem_id pagamento_id motivo",
+    "PagamentoCancelado": "ordem_id pagamento_id cancelado_em",
+    "AgendarExecucao": "ordem_id prioridade",
+    "ExecucaoAgendada": "ordem_id posicao_na_fila",
+    "CancelarExecucao": "ordem_id motivo",
+    "ExecucaoCancelada": "ordem_id",
+    "ExecucaoIniciada": "ordem_id mecanico_id iniciada_em",
+    "ExecucaoFinalizada": "ordem_id finalizada_em pecas_consumidas",
+    "AnonimizarVeiculo": "veiculo_id",
+}
+# Ids do passo em voo (o participante localiza pelo ordem_id) e o autor da
+# decisao, que so existe com canal=atendente.
+OPCIONAIS: dict[str, set[str]] = {
+    "CancelarOrcamento": {"orcamento_id"},
+    "EstornarPagamento": {"pagamento_id"},
+    "OrcamentoAprovado": {"decidido_por"},
+    "OrcamentoRecusado": {"decidido_por"},
+}
+# Objetos aninhados (propriedade objeto ou itens de lista), todos obrigatorios.
+ANINHADOS: dict[str, str] = {
+    "veiculo": "placa marca modelo ano",
+    "itens": "tipo codigo quantidade",
+    "linhas": "codigo descricao quantidade preco_unitario subtotal",
+    "pecas": "sku quantidade",
+    "faltantes": "sku solicitado disponivel",
+    "pecas_consumidas": "sku quantidade",
+}
+# Texto livre (aceita qualquer string curta); motivo so e livre nos eventos de
+# falha: nos comandos de compensacao e codigo e em PagamentoEstornado, enum.
+LIVRES = {
+    "descricao_problema",
+    "observacoes",
+    "descricao",
+    "marca",
+    "modelo",
+    "referencia_provedor",
+}
+FALHAS = {
+    "GeracaoDeOrcamentoFalhou",
+    "PagamentoRecusado",
+    "PagamentoExpirado",
+    "EstornoDePagamentoFalhou",
+}
+# Listas que a RFC deixa vazias: orcamento so de servicos e nenhum codigo invalido.
+VAZIAS_OK = {"pecas", "pecas_consumidas", "codigos_invalidos"}
+# LGPD (RFC 5.3): mensagem nao leva nome, documento nem contato; placa so no
+# retrato do veiculo que a Execucao guarda.
+PII = re.compile(r"nome|cpf|cnpj|documento|e_?mail|telefone|celular|contato")
 ORIGEM = {
     "os": "os-service",
     "billing": "billing-service",
@@ -102,6 +190,33 @@ def casa_topico(padrao: list[str], chave: list[str]) -> bool:
     if cabeca == "#":
         return any(casa_topico(resto, chave[i:]) for i in range(len(chave) + 1))
     return bool(chave) and cabeca in ("*", chave[0]) and casa_topico(resto, chave[1:])
+
+
+def objeto_aninhado(schema: dict[str, Any], no: dict[str, Any]) -> Any:
+    """Schema do objeto de uma propriedade objeto ou lista de objetos, ou None."""
+    no = no.get("items", no)
+    if "$ref" in no:
+        no = schema["$defs"][no["$ref"].rsplit("/", 1)[-1]]
+    return no if no.get("type") == "object" else None
+
+
+def nomes_de_campo(no: Any) -> set[str]:
+    """Todas as chaves de objeto de um exemplo, em qualquer nivel."""
+    if isinstance(no, dict):
+        return set(no) | {c for v in no.values() for c in nomes_de_campo(v)}
+    if isinstance(no, list):
+        return {c for item in no for c in nomes_de_campo(item)}
+    return set()
+
+
+def propriedades(no: Any) -> set[str]:
+    """Nomes declarados em qualquer `properties` de um schema."""
+    if isinstance(no, dict):
+        proprios = set(no.get("properties", {}))
+        return proprios | {c for v in no.values() for c in propriedades(v)}
+    if isinstance(no, list):
+        return {c for item in no for c in propriedades(item)}
+    return set()
 
 
 def resolver_ponteiro(documento: Any, ponteiro: str) -> Any:
@@ -198,6 +313,54 @@ def test_exemplo_valido_contra_envelope_e_schema_do_tipo(tipo: str) -> None:
 
 
 @pytest.mark.parametrize("tipo", CATALOGO)
+def test_campos_do_schema_sao_os_da_rfc(tipo: str) -> None:
+    schema = ler_json(SCHEMAS / f"{tipo}.schema.json")
+    obrigatorios = set(CAMPOS[tipo].split())
+
+    assert set(schema["required"]) == obrigatorios
+    assert set(schema["properties"]) == obrigatorios | OPCIONAIS.get(tipo, set())
+    for nome, propriedade in schema["properties"].items():
+        aninhado = objeto_aninhado(schema, propriedade)
+        if aninhado is not None:
+            campos = set(ANINHADOS[nome].split())
+            assert set(aninhado["required"]) == set(aninhado["properties"]) == campos
+
+
+def com_campo_novo(no: Any) -> Any:
+    if isinstance(no, dict):
+        return {**{k: com_campo_novo(v) for k, v in no.items()}, "campo_novo": "x"}
+    if isinstance(no, list):
+        return [com_campo_novo(item) for item in no]
+    return no
+
+
+@pytest.mark.parametrize("tipo", CATALOGO)
+def test_campo_opcional_novo_e_tolerado_em_qualquer_nivel(
+    asyncapi: dict[str, Any], tipo: str
+) -> None:
+    # RFC 5.5: mudanca aditiva mantem a versao, e o consumidor ignora o campo
+    # que nao conhece; um schema estrito mandaria a mensagem para a DLQ durante
+    # o Rolling Update.
+    exemplo = com_campo_novo(ler_json(EXEMPLOS / f"{tipo}.json"))
+
+    validador(asyncapi["components"]["messages"][tipo]["payload"]["schema"]).validate(
+        exemplo
+    )
+
+
+def test_mensagens_nao_levam_dado_pessoal_alem_da_placa() -> None:
+    for arquivo in sorted(SCHEMAS.glob("*.json")):
+        tipo = arquivo.name.removesuffix(".schema.json")
+        campos = propriedades(ler_json(arquivo))
+        exemplo = EXEMPLOS / f"{tipo}.json"
+        if exemplo.exists():
+            campos |= nomes_de_campo(ler_json(exemplo))
+
+        assert not {c for c in campos if PII.search(c)}, tipo
+        assert "placa" not in campos or tipo == "SolicitarDiagnostico", tipo
+
+
+@pytest.mark.parametrize("tipo", CATALOGO)
 def test_exemplo_valido_contra_payload_da_mensagem_no_asyncapi(
     asyncapi: dict[str, Any], tipo: str
 ) -> None:
@@ -210,6 +373,42 @@ def test_exemplo_valido_contra_payload_da_mensagem_no_asyncapi(
 def test_referencias_do_asyncapi_resolvem(asyncapi: dict[str, Any]) -> None:
     assert refs(asyncapi), "o documento deveria ter referencias"
     assert refs_quebradas(asyncapi) == []
+
+
+@pytest.mark.parametrize("tipo", CATALOGO)
+def test_mensagem_do_asyncapi_amarra_o_proprio_tipo(
+    asyncapi: dict[str, Any], tipo: str
+) -> None:
+    kind, emissor, _ = CATALOGO[tipo]
+    mensagem = asyncapi["components"]["messages"][tipo]
+    envelope, especifico = mensagem["payload"]["schema"]["allOf"]
+    chave = routing_key_esperada(tipo)
+    operacao = asyncapi["operations"][f"publicar{tipo}"]
+    componente = {"$ref": f"#/components/messages/{tipo}"}
+    topico = {
+        (p["user"], p["exchange"]): p["write"]
+        for p in ler_json(PERMISSOES)["topic_permissions"]
+    }
+
+    assert envelope == {"$ref": "./schemas/envelope.schema.json"}
+    assert especifico["properties"] == {
+        "tipo": {"const": tipo},
+        "versao": {"const": 1},
+        "origem": {"const": ORIGEM[emissor]},
+        "dados": {"$ref": f"./schemas/{tipo}.schema.json"},
+    }
+    assert mensagem["bindings"]["amqp"]["messageType"] == tipo
+    assert asyncapi["channels"][chave]["messages"] == {tipo: componente}
+    assert asyncapi["channels"][fila_do_consumidor(tipo)]["messages"][tipo] == (
+        componente
+    )
+    assert operacao["channel"] == {"$ref": f"#/channels/{chave}"}
+    assert operacao["messages"] == [{"$ref": f"#/channels/{chave}/messages/{tipo}"}]
+    # user_id do produtor: o broker confere contra a conexao, e a permissao de
+    # topico do usuario tem de aceitar a routing key do tipo.
+    assert operacao["bindings"]["amqp"]["deliveryMode"] == 2
+    assert operacao["bindings"]["amqp"]["userId"] == emissor
+    assert re.search(topico[emissor, EXCHANGE[kind]], chave)
 
 
 def test_referencia_quebrada_e_apontada(asyncapi: dict[str, Any]) -> None:
@@ -384,26 +583,84 @@ def test_casa_topico(padrao: str, chave: str, esperado: bool) -> None:
 def _mudar(exemplo: dict[str, Any], caminho: str, valor: Any) -> dict[str, Any]:
     mudado = copy.deepcopy(exemplo)
     *pais, ultimo = caminho.split("/")
-    resolver_ponteiro(mudado, "/".join(pais))[ultimo] = valor
+    pai = resolver_ponteiro(mudado, "/".join(pais))
+    pai[int(ultimo) if isinstance(pai, list) else ultimo] = valor
     return mudado
+
+
+ITEM = {"tipo": "servico", "codigo": "SRV-X", "quantidade": 1}
+ATENDENTE = "2f4e8c1a-7b3d-4e5f-9a6b-1c2d3e4f5a6b"
 
 
 @pytest.mark.parametrize(
     ("tipo", "caminho", "valor"),
     [
-        ("PagamentoConfirmado", "dados/valor", 820.0),
-        ("PagamentoConfirmado", "dados/valor", "820"),
-        ("OrcamentoGerado", "dados/moeda", "USD"),
-        ("SolicitarDiagnostico", "dados/veiculo/placa", "ABC-1234"),
-        ("OrcamentoAprovado", "dados/canal", "email"),
-        ("DiagnosticoConcluido", "dados/itens", []),
-        ("GerarOrcamento", "dados/itens/0/codigo", "X" * 51),
-        ("DiagnosticoConcluido", "dados/campo_novo", "x"),
-        ("GerarOrcamento", "correlation_id", "123"),
-        ("GerarOrcamento", "ocorrido_em", "2026-10-06T12:00:00"),
-        ("GerarOrcamento", "ocorrido_em", "2026-10-06T09:00:00-03:00"),
-        ("GerarOrcamento", "ocorrido_em", "2026-13-45T12:00:00Z"),
-        ("PagamentoSolicitado", "dados/checkout_url", "nao e uma url"),
+        pytest.param("PagamentoConfirmado", "dados/valor", 820.0, id="dinheiro-float"),
+        pytest.param(
+            "PagamentoConfirmado", "dados/valor", "820", id="dinheiro-sem-casas"
+        ),
+        pytest.param(
+            "PagamentoConfirmado",
+            "dados/valor",
+            "10000000000.00",
+            id="dinheiro-11-digitos",
+        ),
+        pytest.param("OrcamentoGerado", "dados/moeda", "USD", id="moeda-usd"),
+        pytest.param(
+            "SolicitarDiagnostico",
+            "dados/veiculo/placa",
+            "ABC-1234",
+            id="placa-com-hifen",
+        ),
+        pytest.param("OrcamentoAprovado", "dados/canal", "email", id="canal-email"),
+        pytest.param(
+            "OrcamentoAprovado", "dados/decidido_por", ATENDENTE, id="link-com-autor"
+        ),
+        pytest.param("DiagnosticoConcluido", "dados/itens", [], id="itens-vazio"),
+        pytest.param("GerarOrcamento", "dados/itens", [ITEM] * 51, id="itens-51"),
+        pytest.param(
+            "GerarOrcamento", "dados/itens/0/quantidade", 1001, id="quantidade-1001"
+        ),
+        pytest.param(
+            "GerarOrcamento", "dados/itens/0/codigo", "X" * 51, id="codigo-51-chars"
+        ),
+        pytest.param(
+            "CancelarOrcamento", "dados/motivo", "Cliente desistiu", id="motivo-livre"
+        ),
+        pytest.param(
+            "PagamentoEstornado", "dados/motivo", "outro", id="motivo-estorno-fora"
+        ),
+        pytest.param("GerarOrcamento", "correlation_id", "123", id="correlation-123"),
+        pytest.param(
+            "GerarOrcamento", "ocorrido_em", "2026-10-06T12:00:00", id="data-sem-fuso"
+        ),
+        pytest.param(
+            "GerarOrcamento",
+            "ocorrido_em",
+            "2026-10-06T09:00:00-03:00",
+            id="data-fora-de-utc",
+        ),
+        pytest.param(
+            "GerarOrcamento", "ocorrido_em", "2026-13-45T12:00:00Z", id="data-invalida"
+        ),
+        pytest.param(
+            "PagamentoSolicitado", "dados/checkout_url", "nao e uma url", id="url-texto"
+        ),
+        pytest.param(
+            "PagamentoSolicitado",
+            "dados/checkout_url",
+            "javascript:alert(1)",
+            id="url-javascript",
+        ),
+        pytest.param(
+            "PagamentoSolicitado", "dados/checkout_url", "ftp://x/y", id="url-ftp"
+        ),
+        pytest.param(
+            "OrcamentoGerado",
+            "dados/link_decisao",
+            "https://billing.local@evil.example/",
+            id="url-com-userinfo",
+        ),
     ],
 )
 def test_contrato_rejeita_dado_invalido(
@@ -415,6 +672,135 @@ def test_contrato_rejeita_dado_invalido(
         validador(
             asyncapi["components"]["messages"][tipo]["payload"]["schema"]
         ).validate(invalido)
+
+
+def test_decisao_do_atendente_exige_o_autor(asyncapi: dict[str, Any]) -> None:
+    exemplo = ler_json(EXEMPLOS / "OrcamentoRecusado.json")
+    schema = validador(
+        asyncapi["components"]["messages"]["OrcamentoRecusado"]["payload"]["schema"]
+    )
+    del exemplo["dados"]["decidido_por"]
+
+    assert schema.is_valid(_mudar(exemplo, "dados/canal", "link"))
+    assert not schema.is_valid(exemplo)
+
+
+@pytest.mark.parametrize(
+    ("tipo", "campo"),
+    [("CancelarOrcamento", "orcamento_id"), ("EstornarPagamento", "pagamento_id")],
+)
+def test_compensacao_do_passo_em_voo_vai_sem_o_id(
+    asyncapi: dict[str, Any], tipo: str, campo: str
+) -> None:
+    exemplo = ler_json(EXEMPLOS / f"{tipo}.json")
+    del exemplo["dados"][campo]
+
+    validador(asyncapi["components"]["messages"][tipo]["payload"]["schema"]).validate(
+        exemplo
+    )
+
+
+def test_envelope_limita_o_tipo() -> None:
+    envelope = validador(ler_json(SCHEMAS / "envelope.schema.json"))
+    exemplo = ler_json(EXEMPLOS / "GerarOrcamento.json")
+
+    assert envelope.is_valid(_mudar(exemplo, "tipo", "A" * 64))
+    assert not envelope.is_valid(_mudar(exemplo, "tipo", "A" * 65))
+
+
+def caminhos(no: Any, prefixo: str = "") -> Iterator[str]:
+    """Ponteiro de cada chave e de cada item de lista do exemplo."""
+    filhos = no.items() if isinstance(no, dict) else enumerate(no)
+    for chave, valor in filhos:
+        caminho = f"{prefixo}{chave}"
+        yield caminho
+        if isinstance(valor, dict | list):
+            yield from caminhos(valor, f"{caminho}/")
+
+
+def defeitos(tipo: str) -> Iterator[tuple[str, dict[str, Any]]]:
+    """Variacoes invalidas de cada campo do exemplo, com a descricao do defeito."""
+    exemplo = ler_json(EXEMPLOS / f"{tipo}.json")
+    for onde in caminhos(exemplo):
+        pais, _, nome = onde.rpartition("/")
+        pai = resolver_ponteiro(exemplo, pais)
+        valor = pai[int(nome)] if isinstance(pai, list) else pai[nome]
+        livre = nome in LIVRES or (nome == "motivo" and tipo in FALHAS)
+        if isinstance(pai, dict) and nome not in OPCIONAIS.get(tipo, set()):
+            sem = copy.deepcopy(exemplo)
+            del resolver_ponteiro(sem, pais)[nome]
+            yield f"sem {onde}", sem
+        if isinstance(valor, str) and not livre:
+            yield f"{onde} fora do dominio", _mudar(exemplo, onde, "§")
+        if isinstance(valor, str):
+            yield f"{onde} gigante", _mudar(exemplo, onde, "x" * 100_000)
+        if isinstance(valor, int):
+            yield f"{onde} abaixo do minimo", _mudar(exemplo, onde, -1)
+        yield f"{onde} com tipo errado", _mudar(exemplo, onde, 3.5)
+        if isinstance(valor, list) and nome not in VAZIAS_OK:
+            yield f"{onde} vazia", _mudar(exemplo, onde, [])
+
+
+@pytest.mark.parametrize("tipo", CATALOGO)
+def test_todo_defeito_gerado_do_exemplo_e_rejeitado(
+    asyncapi: dict[str, Any], tipo: str
+) -> None:
+    schema = validador(asyncapi["components"]["messages"][tipo]["payload"]["schema"])
+
+    aceitos = [
+        defeito for defeito, envelope in defeitos(tipo) if schema.is_valid(envelope)
+    ]
+
+    assert aceitos == []
+
+
+# Enumeracoes fechadas da RFC-004 (5.3 e secao 9): mudar um valor e mudanca de
+# contrato, nao ajuste de schema.
+ENUMERACOES: dict[str, list[str]] = {
+    "canal": ["link", "atendente"],
+    "prioridade": ["normal", "alta"],
+    "tipo_item": ["servico", "peca"],
+    "motivo_estorno": ["compensacao", "pagamento_apos_encerramento"],
+    "motivo_compensacao": [
+        "orcamento_recusado",
+        "orcamento_expirado",
+        "geracao_falhou",
+        "reserva_falhou",
+        "pagamento_recusado",
+        "pagamento_expirado",
+        "cancelamento",
+        "prazo_tecnico",
+    ],
+}
+
+
+def test_enumeracoes_sao_as_da_rfc() -> None:
+    for arquivo in sorted(SCHEMAS.glob("*.json")):
+        definicoes = ler_json(arquivo).get("$defs", {})
+        for nome, valores in ENUMERACOES.items():
+            if nome in definicoes:
+                assert definicoes[nome]["enum"] == valores, (arquivo.name, nome)
+        if "moeda" in definicoes:
+            assert definicoes["moeda"]["const"] == "BRL", arquivo.name
+
+
+def test_toda_mensagem_declara_os_headers_do_envelope(
+    asyncapi: dict[str, Any],
+) -> None:
+    trait = asyncapi["components"]["messageTraits"]["envelope"]
+    headers = trait["headers"]["properties"]
+
+    assert set(headers) == {"traceparent", "tracestate", "x-tentativa"}
+    assert headers["x-tentativa"] | {"description": ""} == {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 5,
+        "description": "",
+    }
+    for tipo, mensagem in asyncapi["components"]["messages"].items():
+        assert mensagem["traits"] == [
+            {"$ref": "#/components/messageTraits/envelope"}
+        ], tipo
 
 
 def test_definicoes_compartilhadas_sao_iguais_em_todos_os_schemas() -> None:
@@ -429,7 +815,21 @@ def test_definicoes_compartilhadas_sao_iguais_em_todos_os_schemas() -> None:
     def sem_descricao(definicao: dict[str, Any]) -> dict[str, Any]:
         return {k: v for k, v in definicao.items() if k != "description"}
 
-    assert {"uuid", "data_hora", "dinheiro", "codigo", "motivo"} <= set(vistos)
+    assert {
+        "uuid",
+        "data_hora",
+        "dinheiro",
+        "moeda",
+        "codigo",
+        "quantidade",
+        "tipo_item",
+        "uri",
+        "canal",
+        "prioridade",
+        "motivo",
+        "motivo_compensacao",
+        "motivo_estorno",
+    } <= set(vistos)
     assert sem_descricao(envelope["ocorrido_em"]) == sem_descricao(vistos["data_hora"])
 
 

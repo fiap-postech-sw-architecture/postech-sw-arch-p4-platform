@@ -1,13 +1,13 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PagamentoEstornado (dados)",
-  "description": "Campo dados da mensagem PagamentoEstornado (evento, billing-service -> os-service). Confirma a compensação EstornarPagamento.",
+  "description": "Campo dados da mensagem PagamentoEstornado (evento, billing-service -> os-service). Confirma a compensação EstornarPagamento.) Pagamento estornado no provedor: em resposta ao EstornarPagamento (motivo compensacao) ou por iniciativa do Billing, quando a aprovação chega depois do cancelamento, da expiração ou da recusa (motivo pagamento_apos_encerramento, que a saga encerrada ignora).",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "pagamento_id",
-    "estornado_em"
+    "estornado_em",
+    "motivo"
   ],
   "properties": {
     "ordem_id": {
@@ -18,6 +18,9 @@
     },
     "estornado_em": {
       "$ref": "#/$defs/data_hora"
+    },
+    "motivo": {
+      "$ref": "#/$defs/motivo_estorno"
     }
   },
   "$defs": {
@@ -26,6 +29,13 @@
       "format": "date-time",
       "pattern": "(Z|\\+00:00)$",
       "description": "Instante em UTC (RFC 3339 com Z ou +00:00)."
+    },
+    "motivo_estorno": {
+      "enum": [
+        "compensacao",
+        "pagamento_apos_encerramento"
+      ],
+      "description": "compensacao: resposta ao EstornarPagamento; pagamento_apos_encerramento: aprovação que chegou depois do cancelamento, da expiração ou da recusa, estornada pelo próprio Billing."
     },
     "uuid": {
       "type": "string",

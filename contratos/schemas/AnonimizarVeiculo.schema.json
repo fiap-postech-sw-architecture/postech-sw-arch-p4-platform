@@ -3,7 +3,6 @@
   "title": "AnonimizarVeiculo (dados)",
   "description": "Campo dados da mensagem AnonimizarVeiculo (comando, os-service -> execution-service). LGPD, fora da saga: a Execução troca a placa guardada do veículo pelo marcador ANONIMIZADO:{veiculo_id}.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "veiculo_id"
   ],

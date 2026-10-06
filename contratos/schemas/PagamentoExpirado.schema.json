@@ -3,7 +3,6 @@
   "title": "PagamentoExpirado (dados)",
   "description": "Campo dados da mensagem PagamentoExpirado (evento, billing-service -> os-service). O prazo de pagamento (PAGAMENTO_VALIDADE_MINUTOS) venceu; o OS compensa a saga.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "pagamento_id",
@@ -24,7 +23,8 @@
     "motivo": {
       "type": "string",
       "minLength": 1,
-      "maxLength": 500
+      "maxLength": 500,
+      "description": "Texto do participante sobre a falha; nunca vai para log."
     },
     "uuid": {
       "type": "string",

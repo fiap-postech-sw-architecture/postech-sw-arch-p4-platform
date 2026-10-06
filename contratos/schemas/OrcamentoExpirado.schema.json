@@ -3,7 +3,6 @@
   "title": "OrcamentoExpirado (dados)",
   "description": "Campo dados da mensagem OrcamentoExpirado (evento, billing-service -> os-service). O prazo de decisão (ORCAMENTO_VALIDADE_HORAS) venceu sem resposta do cliente.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "orcamento_id"

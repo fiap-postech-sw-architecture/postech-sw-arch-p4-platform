@@ -3,7 +3,6 @@
   "title": "ExecucaoFinalizada (dados)",
   "description": "Campo dados da mensagem ExecucaoFinalizada (evento, execution-service -> os-service). Serviço concluído e peças baixadas do estoque; a OS passa a FINALIZADA.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "finalizada_em",
@@ -20,7 +19,8 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/peca"
-      }
+      },
+      "maxItems": 50
     }
   },
   "$defs": {
@@ -38,7 +38,6 @@
     },
     "peca": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "sku",
         "quantidade"
@@ -54,7 +53,8 @@
     },
     "quantidade": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "maximum": 1000
     },
     "uuid": {
       "type": "string",

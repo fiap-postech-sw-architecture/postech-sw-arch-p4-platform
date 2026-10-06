@@ -11,7 +11,7 @@
     "pagamento_id": "8b7fdbea-b573-47c6-8654-df9ea01818c8",
     "valor": "820.00",
     "moeda": "BRL",
-    "checkout_url": "http://localhost/billing/simulador/checkout/8b7fdbea-b573-47c6-8654-df9ea01818c8",
+    "checkout_url": "http://localhost/billing/simulador/checkout/8b7fdbea-b573-47c6-8654-df9ea01818c8?token=eyJwIjoiOGI3ZiJ9.Q2hlY2tvdXQ",
     "expira_em": "2026-10-06T14:32:00Z"
   }
 }

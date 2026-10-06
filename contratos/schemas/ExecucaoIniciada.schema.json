@@ -3,7 +3,6 @@
   "title": "ExecucaoIniciada (dados)",
   "description": "Campo dados da mensagem ExecucaoIniciada (evento, execution-service -> os-service). Pivot da saga (T8): o mecânico começou o serviço e não há mais compensação; a OS passa a EM_EXECUCAO.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "mecanico_id",

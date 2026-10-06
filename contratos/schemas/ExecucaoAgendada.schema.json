@@ -1,9 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ExecucaoAgendada (dados)",
-  "description": "Campo dados da mensagem ExecucaoAgendada (evento, execution-service -> os-service). OS na fila de execução; a OS passa a AGUARDANDO_EXECUCAO.",
+  "description": "Campo dados da mensagem ExecucaoAgendada (evento, execution-service -> os-service). OS na fila de execução; a OS passa a AGUARDANDO_EXECUCAO.) OS na fila de execução; o OS guarda a posição (a OS já está em AGUARDANDO_EXECUCAO desde PagamentoConfirmado).",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "posicao_na_fila"

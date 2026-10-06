@@ -9,6 +9,6 @@
   "dados": {
     "ordem_id": "495db021-ac8d-4a7e-94d1-734c7eab475c",
     "pagamento_id": "8b7fdbea-b573-47c6-8654-df9ea01818c8",
-    "motivo": "Pagamento ainda pendente: cobrança cancelada no provedor."
+    "cancelado_em": "2026-10-06T14:13:00Z"
   }
 }

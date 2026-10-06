@@ -3,7 +3,6 @@
   "title": "ExecucaoCancelada (dados)",
   "description": "Campo dados da mensagem ExecucaoCancelada (evento, execution-service -> os-service). Confirma a compensação CancelarExecucao.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id"
   ],

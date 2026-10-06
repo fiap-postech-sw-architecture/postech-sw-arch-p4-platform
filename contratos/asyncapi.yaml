@@ -17,6 +17,12 @@ info:
     fila; a <fila>.retry devolve a mensagem para a fila
     quando o TTL da mensagem vence. Falha definitiva vai para <fila>.dlq pelo
     pytstop.dlx. Topologia completa em k8s/base/rabbitmq/definitions.json.
+
+    Origem: o produtor preenche a propriedade AMQP user_id com o próprio usuário
+    (o userId de cada operação de envio), e o broker recusa valor diferente do
+    usuário da conexão. O consumidor aceita user_id igual ao produtor do tipo;
+    na cópia de retry (header x-tentativa de 1 a 5), aceita o próprio usuário,
+    porque quem republica é ele. Qualquer outro valor é erro permanente (DLQ).
 defaultContentType: application/json
 servers:
   kubernetes:
@@ -734,6 +740,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarDiagnosticoIniciado:
     action: send
@@ -747,6 +754,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarDiagnosticoConcluido:
     action: send
@@ -760,6 +768,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarDescartarDiagnostico:
     action: send
@@ -773,6 +782,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarDiagnosticoDescartado:
     action: send
@@ -786,6 +796,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarGerarOrcamento:
     action: send
@@ -799,6 +810,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarOrcamentoGerado:
     action: send
@@ -812,6 +824,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarGeracaoDeOrcamentoFalhou:
     action: send
@@ -825,6 +838,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarOrcamentoAprovado:
     action: send
@@ -838,6 +852,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarOrcamentoRecusado:
     action: send
@@ -851,6 +866,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarOrcamentoExpirado:
     action: send
@@ -864,6 +880,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarCancelarOrcamento:
     action: send
@@ -877,6 +894,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarOrcamentoCancelado:
     action: send
@@ -890,6 +908,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarReservarPecas:
     action: send
@@ -903,6 +922,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarPecasReservadas:
     action: send
@@ -916,6 +936,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarReservaDePecasFalhou:
     action: send
@@ -929,6 +950,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarLiberarReserva:
     action: send
@@ -942,6 +964,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarReservaLiberada:
     action: send
@@ -955,6 +978,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarSolicitarPagamento:
     action: send
@@ -968,6 +992,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarPagamentoSolicitado:
     action: send
@@ -981,6 +1006,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarPagamentoConfirmado:
     action: send
@@ -994,6 +1020,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarPagamentoRecusado:
     action: send
@@ -1007,6 +1034,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarPagamentoExpirado:
     action: send
@@ -1020,6 +1048,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarEstornarPagamento:
     action: send
@@ -1033,6 +1062,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarPagamentoEstornado:
     action: send
@@ -1046,6 +1076,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarEstornoDePagamentoFalhou:
     action: send
@@ -1059,6 +1090,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarPagamentoCancelado:
     action: send
@@ -1072,6 +1104,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: billing
         bindingVersion: 0.3.0
   publicarAgendarExecucao:
     action: send
@@ -1085,6 +1118,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarExecucaoAgendada:
     action: send
@@ -1098,6 +1132,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarCancelarExecucao:
     action: send
@@ -1111,6 +1146,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   publicarExecucaoCancelada:
     action: send
@@ -1124,6 +1160,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarExecucaoIniciada:
     action: send
@@ -1137,6 +1174,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarExecucaoFinalizada:
     action: send
@@ -1150,6 +1188,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: execucao
         bindingVersion: 0.3.0
   publicarAnonimizarVeiculo:
     action: send
@@ -1163,6 +1202,7 @@ operations:
     bindings:
       amqp:
         deliveryMode: 2
+        userId: os
         bindingVersion: 0.3.0
   consumirExecucaoComandos:
     action: receive
@@ -1389,7 +1429,7 @@ components:
     OrcamentoGerado:
       name: OrcamentoGerado
       title: "Orçamento gerado"
-      summary: "Orçamento pronto e enviado ao cliente; a OS passa a AGUARDANDO_APROVACAO."
+      summary: "Orçamento pronto, com o link de decisão; a OS passa a AGUARDANDO_APROVACAO, e o OS avisa o cliente por e-mail."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1464,7 +1504,7 @@ components:
     OrcamentoRecusado:
       name: OrcamentoRecusado
       title: "Orçamento recusado"
-      summary: "Decisão do cliente recusando o orçamento; o OS cancela a OS e compensa a saga."
+      summary: "Decisão do cliente (pelo link ou pelo atendente) recusando o orçamento; o OS compensa a saga e cancela a OS."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1514,7 +1554,7 @@ components:
     CancelarOrcamento:
       name: CancelarOrcamento
       title: "Cancelar orçamento"
-      summary: "Compensação do passo T3: o Billing cancela o orçamento da OS cancelada."
+      summary: "Compensação do passo T3: o Billing cancela o orçamento da OS; sem orcamento_id (GerarOrcamento em voo), localiza pelo ordem_id."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1589,7 +1629,7 @@ components:
     PecasReservadas:
       name: PecasReservadas
       title: "Peças reservadas"
-      summary: "Reserva feita; o OS segue para o pagamento."
+      summary: "Reserva feita; a OS passa a AGUARDANDO_PAGAMENTO, e o OS pede o pagamento ao Billing."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1714,7 +1754,7 @@ components:
     PagamentoSolicitado:
       name: PagamentoSolicitado
       title: "Pagamento solicitado"
-      summary: "Cobrança criada, com o link de checkout para o cliente; a OS passa a AGUARDANDO_PAGAMENTO."
+      summary: "Cobrança criada, com o link de checkout; o OS guarda o resumo e avisa o cliente por e-mail (a OS já está em AGUARDANDO_PAGAMENTO desde PecasReservadas)."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1739,7 +1779,7 @@ components:
     PagamentoConfirmado:
       name: PagamentoConfirmado
       title: "Pagamento confirmado"
-      summary: "Pagamento aprovado pelo provedor (confirmado por consulta, nunca só pelo corpo do webhook)."
+      summary: "Pagamento aprovado pelo provedor (confirmado por consulta, nunca só pelo corpo do webhook); a OS passa a AGUARDANDO_EXECUCAO, e o OS agenda a execução."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1764,7 +1804,7 @@ components:
     PagamentoRecusado:
       name: PagamentoRecusado
       title: "Pagamento recusado"
-      summary: "O provedor recusou o pagamento; o OS compensa a saga."
+      summary: "Esgotadas as recusas permitidas, o pagamento passou a RECUSADO; o OS compensa a saga."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1814,7 +1854,7 @@ components:
     EstornarPagamento:
       name: EstornarPagamento
       title: "Estornar pagamento"
-      summary: "Compensação do passo T6: o Billing estorna o pagamento no provedor. O id desta mensagem é a chave de idempotência do estorno."
+      summary: "Compensação do passo T6, em qualquer estado do pagamento: com a cobrança em aberto, o Billing a cancela e responde PagamentoCancelado; com o pagamento confirmado, estorna no provedor com a chave de idempotência estorno-{pagamento_id} e responde PagamentoEstornado. O id da mensagem só deduplica a entrega."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1839,7 +1879,7 @@ components:
     PagamentoEstornado:
       name: PagamentoEstornado
       title: "Pagamento estornado"
-      summary: "Confirma a compensação EstornarPagamento."
+      summary: "Pagamento estornado no provedor: em resposta ao EstornarPagamento (motivo compensacao) ou por iniciativa do Billing, quando a aprovação chega depois do cancelamento, da expiração ou da recusa (motivo pagamento_apos_encerramento, que a saga encerrada ignora)."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1889,7 +1929,7 @@ components:
     PagamentoCancelado:
       name: PagamentoCancelado
       title: "Pagamento cancelado"
-      summary: "Resposta ao EstornarPagamento quando o pagamento ainda estava pendente: o Billing cancela a cobrança no provedor em vez de estornar."
+      summary: "Resposta ao EstornarPagamento quando o pagamento ainda estava SOLICITADO: o Billing cancela a cobrança (o checkout deixa de valer) em vez de estornar."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -1939,7 +1979,7 @@ components:
     ExecucaoAgendada:
       name: ExecucaoAgendada
       title: "Execução agendada"
-      summary: "OS na fila de execução; a OS passa a AGUARDANDO_EXECUCAO."
+      summary: "OS na fila de execução; o OS guarda a posição (a OS já está em AGUARDANDO_EXECUCAO desde PagamentoConfirmado)."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
@@ -2104,4 +2144,5 @@ components:
           x-tentativa:
             type: integer
             minimum: 1
-            description: "Número da republicação na fila .retry (1 a 5); ausente na primeira entrega."
+            maximum: 5
+            description: "Número da republicação na fila .retry (1 a 5); ausente na primeira entrega. A cópia leva o user_id do consumidor que a republicou."

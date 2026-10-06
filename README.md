@@ -298,7 +298,7 @@ Limite conhecido: TTL por mensagem só vence quando a mensagem chega à cabeça 
 | `contratos/exemplos/<Mensagem>.json` | Envelope completo de exemplo; juntos contam uma saga do pedido de diagnóstico até a compensação |
 | [`contratos/tests/test_contratos.py`](contratos/tests/test_contratos.py) | Testes que amarram catálogo, AsyncAPI, schemas, exemplos e a topologia do RabbitMQ |
 
-O catálogo é o da seção 4 do design brief, mais `AnonimizarVeiculo` (comando do OS para a Execução, LGPD: a Execução troca a placa guardada pelo marcador `ANONIMIZADO:{veiculo_id}`) e `PagamentoCancelado` (resposta do Billing ao `EstornarPagamento` quando o pagamento ainda estava pendente); `SolicitarDiagnostico` leva também o `veiculo_id`. `AnonimizarVeiculo` é o único comando sem evento de resposta: se falhar de vez, o sinal é a mensagem na `execucao.comandos.dlq` e o alerta "DLQ com mensagens", e ela some da DLQ em 7 dias.
+O catálogo e os campos de cada mensagem são os da [RFC-004, seção 5.3](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#53-catálogo-de-comandos-e-eventos), e o teste confere campo a campo cada schema contra uma cópia dessa tabela. `AnonimizarVeiculo` (LGPD: a Execução troca a placa guardada pelo marcador `ANONIMIZADO:{veiculo_id}`) é o único comando sem evento de resposta: se falhar de vez, o sinal é a mensagem na `execucao.comandos.dlq` e o alerta "DLQ com mensagens", e ela some da DLQ em 7 dias.
 
 Envelope de toda mensagem:
 
@@ -308,25 +308,33 @@ Envelope de toda mensagem:
  "ocorrido_em": "2026-10-06T12:45:00Z", "dados": {}}
 ```
 
-Propriedades AMQP: `message_id` = `id`, `correlation_id`, `type` = `tipo`, `content_type=application/json`, `delivery_mode=2` e os headers `traceparent`/`tracestate` (W3C), mais `x-tentativa` nas republicações. `correlation_id` é o id da OS (a instância da saga); fora da saga, o id do agregado tratado (`AnonimizarVeiculo`: `veiculo_id`).
+Propriedades AMQP (Advanced Message Queuing Protocol): `message_id` = `id`, `correlation_id`, `type` = `tipo`, `user_id` (o usuário do serviço que publica), `content_type=application/json`, `delivery_mode=2` e os headers `traceparent`/`tracestate` (W3C Trace Context), mais `x-tentativa` nas republicações. `correlation_id` é o id da OS (ordem de serviço, a instância da saga); fora da saga, o id do agregado tratado (`AnonimizarVeiculo`: `veiculo_id`). `causation_id` é o `id` da mensagem que causou esta (a resposta a um comando leva o `id` do comando) e só fica `null` quando a causa é uma requisição HTTP, um webhook ou um prazo.
 
 Regras que os schemas impõem:
 
 - Routing key `comando.<serviço de destino>.<ação>` ou `evento.<serviço de origem>.<fato>`, com o nome da mensagem em snake_case: `GerarOrcamento` vai em `comando.billing.gerar_orcamento`, `PecasReservadas` em `evento.execucao.pecas_reservadas`.
-- Valor monetário em string decimal com duas casas (`"820.00"`) e `moeda: "BRL"`; número em ponto flutuante é rejeitado.
+- Valor monetário em string decimal com duas casas e até 10 dígitos inteiros (`"820.00"`, no máximo `"9999999999.99"`) e `moeda: "BRL"`; número em ponto flutuante é rejeitado.
 - Data e hora em RFC 3339 e em UTC (`Z` ou `+00:00`).
-- Ids (`ordem_id`, `veiculo_id`, `orcamento_id`, `pagamento_id`, `reserva_id`, `mecanico_id`) são UUID; placa normalizada sem hífen (`ABC1234` ou `ABC1D23`).
-- `codigo` de serviço e `sku` de peça: até 50 caracteres entre letras, dígitos, `.`, `_` e `-`, começando por letra ou dígito.
+- Ids (`ordem_id`, `veiculo_id`, `orcamento_id`, `pagamento_id`, `reserva_id`, `mecanico_id`, `decidido_por`) são UUID; placa normalizada sem hífen (`ABC1234` ou `ABC1D23`).
+- `codigo` de serviço e `sku` de peça: até 50 caracteres entre letras, dígitos, `.`, `_` e `-`, começando por letra ou dígito. `quantidade` de 1 a 1000, e cada lista com no máximo 50 itens.
 - Diagnóstico concluído, pedido de orçamento e orçamento gerado têm ao menos um item; `ReservarPecas` e `ExecucaoFinalizada` aceitam lista vazia (orçamento só de serviços).
 - `prioridade` do `AgendarExecucao`: `normal` (padrão) ou `alta`; a fila de execução atende `alta` antes e, dentro da mesma prioridade, por ordem de agendamento.
-- Nenhum campo além dos definidos (`additionalProperties: false`).
+- `motivo` dos cinco comandos de compensação é um código da enumeração de `pytstop_saga_compensacoes_total` (`orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento`, `prazo_tecnico`); o texto que o atendente escreve fica só no histórico da OS. Texto livre (até 500 caracteres) só nos eventos de falha, e nunca vai para log.
+- `CancelarOrcamento` e `EstornarPagamento` vão sem `orcamento_id` ou `pagamento_id` quando o passo estava em voo; o participante localiza o recurso pelo `ordem_id`. O estorno usa no provedor a chave de idempotência `estorno-{pagamento_id}`; o `id` da mensagem só deduplica a entrega.
+- `PagamentoEstornado` diz o `motivo` (`compensacao` ou `pagamento_apos_encerramento`), e `PagamentoCancelado`, o `cancelado_em`.
+- `OrcamentoAprovado` e `OrcamentoRecusado` com `canal=atendente` exigem `decidido_por` (o `sub` do atendente); com `canal=link`, ele não vai.
+- `link_decisao` e `checkout_url` são `http` ou `https`, sem usuário na URL, e contêm o token do link: nunca vão para log nem para span.
+- Mensagens sem nome, documento nem contato do cliente; a placa só aparece no `SolicitarDiagnostico`.
+- Leitor tolerante: o schema aceita campo desconhecido, em qualquer nível, e o consumidor o ignora.
 
-Mudança de contrato começa por um PR aqui. Campo novo opcional: atualiza o schema e o exemplo, depois os consumidores copiam o schema e só então o produtor passa a enviar. Mudança incompatível vira `versao: 2` do tipo. Cada serviço copia os schemas que produz e consome e os valida no próprio teste de contrato.
+Mudança de contrato começa por um PR aqui. Campo novo opcional mantém a `versao`: atualiza o schema, o exemplo e a tabela da RFC copiada no teste, e o produtor pode enviá-lo antes de os consumidores o conhecerem. Mudança incompatível vira `versao: 2` do tipo, com o consumidor implantado antes do produtor. Cada serviço copia os schemas que produz e consome e os valida no próprio teste de contrato.
 
 ```bash
-make test   # exemplos contra schemas, referências do AsyncAPI, convenção de routing key, topologia
+make test   # exemplos e negativos gerados contra os schemas, campos da RFC, AsyncAPI, routing key e topologia
 make lint   # ruff, mypy strict e bandit
 ```
+
+A cobertura de linha do `make test` mede só o arquivo de teste. O que protege os schemas é a bateria de negativos gerados de cada exemplo (campo removido, tipo errado, valor fora do domínio, texto gigante, lista vazia), que precisa ser toda rejeitada, mais os limites e as regras condicionais testados um a um.
 
 ## CI
 

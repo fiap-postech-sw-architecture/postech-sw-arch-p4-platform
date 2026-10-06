@@ -3,7 +3,6 @@
   "title": "Envelope de mensagem do PytStop",
   "description": "Corpo JSON de todo comando e evento publicado no RabbitMQ. O campo dados segue o schema <tipo>.schema.json.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "id",
     "tipo",
@@ -22,6 +21,7 @@
     },
     "tipo": {
       "type": "string",
+      "maxLength": 64,
       "pattern": "^[A-Z][A-Za-z]+$",
       "description": "Nome da mensagem no catálogo (ex.: GerarOrcamento). Vai também na propriedade AMQP type."
     },
@@ -49,7 +49,7 @@
         "null"
       ],
       "format": "uuid",
-      "description": "Id da mensagem que causou esta; null quando a causa é uma requisição HTTP, um webhook ou um prazo."
+      "description": "Id da mensagem que causou esta: a resposta a um comando leva o id do comando; null só quando a causa é uma requisição HTTP, um webhook ou um prazo."
     },
     "ocorrido_em": {
       "type": "string",

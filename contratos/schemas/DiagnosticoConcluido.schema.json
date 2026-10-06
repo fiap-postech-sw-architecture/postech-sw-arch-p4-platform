@@ -3,7 +3,6 @@
   "title": "DiagnosticoConcluido (dados)",
   "description": "Campo dados da mensagem DiagnosticoConcluido (evento, execution-service -> os-service). Diagnóstico registrado com os serviços e peças necessários; o OS pede o orçamento ao Billing.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "itens",
@@ -19,7 +18,8 @@
       "minItems": 1,
       "items": {
         "$ref": "#/$defs/item"
-      }
+      },
+      "maxItems": 50
     },
     "observacoes": {
       "type": "string",
@@ -44,7 +44,6 @@
     },
     "item": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "tipo",
         "codigo",
@@ -52,10 +51,7 @@
       ],
       "properties": {
         "tipo": {
-          "enum": [
-            "servico",
-            "peca"
-          ]
+          "$ref": "#/$defs/tipo_item"
         },
         "codigo": {
           "$ref": "#/$defs/codigo"
@@ -67,7 +63,14 @@
     },
     "quantidade": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "maximum": 1000
+    },
+    "tipo_item": {
+      "enum": [
+        "servico",
+        "peca"
+      ]
     },
     "uuid": {
       "type": "string",

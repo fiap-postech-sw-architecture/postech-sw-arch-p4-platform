@@ -3,7 +3,6 @@
   "title": "ReservarPecas (dados)",
   "description": "Campo dados da mensagem ReservarPecas (comando, os-service -> execution-service). Passo T5: a Execução reserva no estoque as peças do orçamento aprovado. Lista vazia vale (orçamento só de serviços).",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "pecas"
@@ -16,7 +15,8 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/peca"
-      }
+      },
+      "maxItems": 50
     }
   },
   "$defs": {
@@ -28,7 +28,6 @@
     },
     "peca": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "sku",
         "quantidade"
@@ -44,7 +43,8 @@
     },
     "quantidade": {
       "type": "integer",
-      "minimum": 1
+      "minimum": 1,
+      "maximum": 1000
     },
     "uuid": {
       "type": "string",

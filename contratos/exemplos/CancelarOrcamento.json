@@ -9,6 +9,6 @@
   "dados": {
     "ordem_id": "495db021-ac8d-4a7e-94d1-734c7eab475c",
     "orcamento_id": "8605886c-3bb2-4165-8f1d-2368c87022e9",
-    "motivo": "Cliente desistiu do serviço antes do início."
+    "motivo": "cancelamento"
   }
 }

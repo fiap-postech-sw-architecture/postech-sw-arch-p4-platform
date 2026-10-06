@@ -1,13 +1,12 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PagamentoCancelado (dados)",
-  "description": "Campo dados da mensagem PagamentoCancelado (evento, billing-service -> os-service). Resposta ao EstornarPagamento quando o pagamento ainda estava pendente: o Billing cancela a cobrança no provedor em vez de estornar.",
+  "description": "Campo dados da mensagem PagamentoCancelado (evento, billing-service -> os-service). Resposta ao EstornarPagamento quando o pagamento ainda estava pendente: o Billing cancela a cobrança no provedor em vez de estornar.) Resposta ao EstornarPagamento quando o pagamento ainda estava SOLICITADO: o Billing cancela a cobrança (o checkout deixa de valer) em vez de estornar.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "pagamento_id",
-    "motivo"
+    "cancelado_em"
   ],
   "properties": {
     "ordem_id": {
@@ -16,15 +15,16 @@
     "pagamento_id": {
       "$ref": "#/$defs/uuid"
     },
-    "motivo": {
-      "$ref": "#/$defs/motivo"
+    "cancelado_em": {
+      "$ref": "#/$defs/data_hora"
     }
   },
   "$defs": {
-    "motivo": {
+    "data_hora": {
       "type": "string",
-      "minLength": 1,
-      "maxLength": 500
+      "format": "date-time",
+      "pattern": "(Z|\\+00:00)$",
+      "description": "Instante em UTC (RFC 3339 com Z ou +00:00)."
     },
     "uuid": {
       "type": "string",

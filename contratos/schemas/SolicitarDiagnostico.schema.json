@@ -3,7 +3,6 @@
   "title": "SolicitarDiagnostico (dados)",
   "description": "Campo dados da mensagem SolicitarDiagnostico (comando, os-service -> execution-service). Abre o passo T2 da saga: coloca o veículo na fila de diagnóstico da Execução.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "veiculo_id",
@@ -19,7 +18,6 @@
     },
     "veiculo": {
       "type": "object",
-      "additionalProperties": false,
       "required": [
         "placa",
         "marca",

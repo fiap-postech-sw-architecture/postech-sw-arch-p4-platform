@@ -3,7 +3,6 @@
   "title": "DiagnosticoIniciado (dados)",
   "description": "Campo dados da mensagem DiagnosticoIniciado (evento, execution-service -> os-service). Um mecânico pegou a OS na fila de diagnóstico; a OS passa a EM_DIAGNOSTICO.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "mecanico_id",

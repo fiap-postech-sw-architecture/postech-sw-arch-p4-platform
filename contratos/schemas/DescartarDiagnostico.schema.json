@@ -3,7 +3,6 @@
   "title": "DescartarDiagnostico (dados)",
   "description": "Campo dados da mensagem DescartarDiagnostico (comando, os-service -> execution-service). Compensação do passo T2: a Execução descarta o diagnóstico da OS cancelada.",
   "type": "object",
-  "additionalProperties": false,
   "required": [
     "ordem_id",
     "motivo"
@@ -13,14 +12,22 @@
       "$ref": "#/$defs/uuid"
     },
     "motivo": {
-      "$ref": "#/$defs/motivo"
+      "$ref": "#/$defs/motivo_compensacao"
     }
   },
   "$defs": {
-    "motivo": {
-      "type": "string",
-      "minLength": 1,
-      "maxLength": 500
+    "motivo_compensacao": {
+      "enum": [
+        "orcamento_recusado",
+        "orcamento_expirado",
+        "geracao_falhou",
+        "reserva_falhou",
+        "pagamento_recusado",
+        "pagamento_expirado",
+        "cancelamento",
+        "prazo_tecnico"
+      ],
+      "description": "Código da compensação, o mesmo label motivo de pytstop_saga_compensacoes_total; o texto do atendente fica só no histórico da OS."
     },
     "uuid": {
       "type": "string",
