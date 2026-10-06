@@ -1,0 +1,79 @@
+name: CI
+
+# PR para a main roda aqui; no merge quem chama este workflow e o CD
+# (workflow_call), entao o CI nao roda duas vezes. Sem paths-ignore de
+# proposito: `manifests` e `contratos` sao checks obrigatorios da branch
+# protection e precisam existir em todo PR, inclusive nos so de docs.
+on:
+  pull_request:
+    branches: [main]
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um run por ref; push novo no PR cancela o anterior. Grupo com prefixo
+# proprio para nao colidir com o grupo do workflow que chama este.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  manifests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # kubectl (com kustomize), docker, docker compose e jq ja vem no runner;
+      # kubeconform, trivy, helm, promtool, loki e promtail rodam pelas imagens
+      # pinadas no Makefile, igual ao local.
+      - name: Manifests, configs, render do Kong e versoes (make manifests)
+        run: make manifests
+
+  contratos:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Sem python-version: o uv le o .python-version do repositorio.
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      # O @asyncapi/cli do make test exige Node 24.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: uv.lock em dia com o pyproject.toml
+        run: uv lock --check
+      - name: Dependencias do lockfile
+        run: uv sync --frozen
+      - name: Ruff, mypy e bandit (make lint)
+        run: make lint
+      - name: Testes de contrato e de observabilidade, validacao do AsyncAPI (make test)
+        run: make test
+
+  gitleaks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # Historico inteiro: segredo commitado e apagado depois tambem conta.
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      # Binario direto, como nos repositorios de servico: o gitleaks-action
+      # exige licenca em repositorio de organizacao.
+      - name: Instala gitleaks (versao e sha256 fixados)
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
+          echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz -C /usr/local/bin gitleaks
+      - name: gitleaks (historico do repositorio, regras do .gitleaks.toml)
+        run: gitleaks git . --config .gitleaks.toml --redact --no-banner --verbose

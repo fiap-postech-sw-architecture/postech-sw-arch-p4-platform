@@ -1,0 +1,145 @@
+# Prometheus da plataforma (veio do k8s/prometheus.yaml da fase 3). A fase 3
+# listava cada alvo; aqui os servicos se registram sozinhos: todo pod dos
+# namespaces pytstop-* com as anotacoes abaixo e raspado, com os labels app
+# (vira o job) e processo do pod (contrato no README).
+#
+#   prometheus.io/scrape: "true"
+#   prometheus.io/port: "<porta>"     (precisa estar em ports do container)
+#   prometheus.io/path: "/metrics"    (opcional, default /metrics)
+#
+# Na plataforma entram assim o RabbitMQ (15692, /metrics/per-object) e o Kong
+# (8100). Raspagem por pod, nao pelo Service: contadores sao por processo e,
+# com mais de uma replica, o Service balancearia e subcontaria.
+#
+# Sem PVC, como na fase 3: o TSDB fica num emptyDir, que aguenta restart do
+# container mas some com o pod (cluster de demonstracao).
+#
+# Configuracao em config/prometheus.yml (configMapGenerator do k8s/base).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+---
+# Leitura pura, no cluster todo: discovery de nodes e de pods (o filtro de
+# namespace e do relabel) e GET no /metrics/cadvisor do kubelet (subresource
+# nodes/metrics).
+# Sem nodes/proxy, que abriria o resto da API do kubelet (inclusive exec).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["nodes/metrics"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prometheus
+subjects:
+  - kind: ServiceAccount
+    name: prometheus
+    namespace: pytstop-plataforma
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      serviceAccountName: prometheus
+      # nobody (65534) da imagem; o fsGroup libera escrita no TSDB.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        fsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: prometheus
+          image: prom/prometheus:v2.54.1
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.retention.time=2d
+            - --storage.tsdb.retention.size=1GB
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - name: config
+              mountPath: /etc/prometheus
+              readOnly: true
+            - name: dados
+              mountPath: /prometheus
+          livenessProbe:
+            httpGet:
+              path: /-/healthy
+              port: http
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /-/ready
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 192Mi
+            # Os valores da fase 3 e do orcamento do ADR-042.
+            limits:
+              cpu: 250m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: prometheus-config
+        # retention.size (args) abaixo do sizeLimit: o Prometheus apaga os
+        # blocos antigos antes de o kubelet despejar o pod pelo disco.
+        - name: dados
+          emptyDir:
+            sizeLimit: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels:
+    app: prometheus
+spec:
+  selector:
+    app: prometheus
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http

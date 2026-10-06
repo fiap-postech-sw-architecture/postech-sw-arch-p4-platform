@@ -1,0 +1,141 @@
+# Promtail (veio do k8s/promtail.yaml da fase 3, agora na linha 3.x, a mesma
+# do compose, onde o 2.9 nao conversa com o Docker 29): DaemonSet que le os logs
+# dos pods em /var/log/pods e envia ao Loki. Coleta de todo namespace que
+# comeca com pytstop- (plataforma e os tres servicos); kube-system e afins
+# ficam de fora para nao encher o Loki de ruido do cluster.
+#
+# Labels de baixa cardinalidade (app, namespace, pod, container). Campos dos
+# logs JSON como request_id, trace_id e correlation_id NAO viram label (cada
+# valor criaria um stream novo no Loki); a busca e por filtro de linha:
+#   {namespace="pytstop-os"} |= "<correlation_id>"
+#   {namespace=~"pytstop-.+"} | json | trace_id="<id>"
+#
+# Configuracao em config/promtail.yaml (configMapGenerator do k8s/base).
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: promtail
+  labels:
+    app: promtail
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: promtail
+  labels:
+    app: promtail
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: promtail
+  labels:
+    app: promtail
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: promtail
+subjects:
+  - kind: ServiceAccount
+    name: promtail
+    namespace: pytstop-plataforma
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail
+  labels:
+    app: promtail
+spec:
+  selector:
+    matchLabels:
+      app: promtail
+  template:
+    metadata:
+      labels:
+        app: promtail
+    spec:
+      serviceAccountName: promtail
+      # Roda tambem no control-plane: no kind e no k3s de um no so e ele que
+      # hospeda as cargas.
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      # Root por necessidade: os arquivos de /var/log/pods sao 0640 do root,
+      # e o positions fica no hostPath do no. Sem capability nenhuma, sem
+      # escalar privilegio e com a raiz somente leitura; a unica excecao a
+      # Pod Security restricted do namespace (hostPath e root).
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: promtail
+          image: grafana/promtail:3.6.11
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          args:
+            - -config.file=/etc/promtail/promtail.yaml
+          env:
+            - name: HOSTNAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          ports:
+            - name: http
+              containerPort: 9080
+          volumeMounts:
+            - name: config
+              mountPath: /etc/promtail
+              readOnly: true
+            - name: pods-logs
+              mountPath: /var/log/pods
+              readOnly: true
+            # Posicao de leitura no no: restart do Promtail nao reenvia tudo.
+            - name: positions
+              mountPath: /run/promtail
+            - name: tmp
+              mountPath: /tmp
+          # /ready exige ao menos um arquivo sendo lido; o proprio pod do
+          # Promtail esta em pytstop-plataforma, entao todo no com Promtail
+          # tem alvo.
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: http
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 100m
+              memory: 128Mi
+      volumes:
+        - name: config
+          configMap:
+            name: promtail-config
+        - name: pods-logs
+          hostPath:
+            path: /var/log/pods
+        - name: positions
+          hostPath:
+            path: /run/promtail
+            type: DirectoryOrCreate
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

@@ -1,0 +1,12 @@
+# Pod Security restricted em warn e audit: o apply avisa e o audit log
+# registra pod fora do perfil. Sem enforce, porque o Promtail precisa de
+# hostPath e root para ler os logs do no (unica excecao, ver promtail.yaml).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pytstop-plataforma
+  labels:
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest

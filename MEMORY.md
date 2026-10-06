@@ -8,14 +8,92 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Recent decisions
 
+- 2026-10-06 - Alerta do Kong (`pytstop-kong-fora`, sem dado = alerta) so no cluster: arquivo `alertas-cluster.yaml` num grupo proprio, montado so pelo configMapGenerator; o compose monta so `alertas.yaml`, porque sem Kong a regra disparava dois minutos depois de subir (medido no compose) - ADR-043
+- 2026-10-06 - Caminho com `%2F` ou `%5C` e barrado na borda por um `pre-function` global (`bloqueia-barra-codificada`, 404 igual ao de rota inexistente, antes do rate limit e sem gastar balde); so o caminho conta, a query string passa - ADR-038
+- 2026-10-06 - Correcao da entrada "branch protection na `main` desde o commit inicial" (mais abaixo): o unico commit fora de PR e o `Initial commit` do GitHub (auto_init); a protecao e o ruleset entraram logo depois, e desde entao tudo entra por PR com squash - ADR-042
+- 2026-10-06 - Controller do Kong le Ingress, Services e Secrets so dos quatro namespaces `pytstop-*` (watchNamespaces, Role por namespace); o `make deploy` cria vazios os namespaces dos servicos que faltarem; Ingress de outro namespace nao chega ao Kong - README, Decisoes e limites
+- 2026-10-06 - Borda so com `/api/v1/*`, `/docs`, `/openapi.json`, JWKS e checkout do simulador; `/metrics` e `/api/v1/admin` barrados pelo `fora-da-borda` (404); um KongClusterPlugin de rate limit por classe mais o global de 60/min, x10 no kind; exemplo versionado em `k8s/exemplos/` - ADR-038
+- 2026-10-06 - Kong com o gate `FallbackConfiguration` (objeto invalido de um servico nao derruba a config dos outros) e `make kong-check` no fim do deploy, que falha com objeto recusado - ADR-038
+- 2026-10-06 - Contratos com leitor tolerante (sem `additionalProperties: false`); a protecao contra campo errado e a tabela da RFC-004 5.3 copiada no teste mais os negativos gerados dos exemplos - ADR-036, RFC-004
+- 2026-10-06 - Topologia do RabbitMQ so no `definitions.json`: argumento de fila so `x-queue-type`, TTL, dead-letter, overflow e tamanho em policies (regravadas a cada boot); servicos so conferem com declaracao passiva, nenhum tem configure; um usuario por servico, criado pelo Job `rabbitmq-usuarios` - ADR-036
+- 2026-10-06 - `pytstop.retry` e topic com bindings de chave exata: o RabbitMQ so aplica permissao de topico em exchange topic, e num direct qualquer servico com escrita entregaria mensagem na fila de outro - ADR-036
+- 2026-10-06 - Filas quorum com dead-letter at-least-once, que exige `overflow: reject-publish`; na classic o dead-letter e at-most-once - ADR-036
+- 2026-10-06 - Infra compartilhada no namespace `pytstop-plataforma`; cada servico no proprio (`pytstop-os`, `pytstop-billing`, `pytstop-execucao`), dono do namespace e criado pelo repositorio dele - ADR-042
+- 2026-10-06 - Kong por `helm template` versionado (chart kong/kong 3.4.1, Kong 3.9.3, KIC 3.5.13), plugins como KongClusterPlugin, webhook de admissao desligado (o chart gera a chave privada dele na renderizacao) - ADR-038
+- 2026-10-06 - Provisioning do Grafana e configs de Prometheus, Loki e Promtail por configMapGenerator (o hash troca o pod quando o arquivo muda); o compose monta os mesmos arquivos - ADR-043
+- 2026-10-06 - `ci.yml` em pull_request, workflow_call e workflow_dispatch (sem push, sem paths-ignore); jobs `manifests`, `contratos` e `gitleaks`, os dois primeiros checks obrigatorios do ruleset - ADR-042
 - 2026-10-06 - Repo criado na fase 4 com branch protection na `main` desde o commit inicial (PR obrigatorio, admins incluidos, historico linear, conversas resolvidas, squash only). Motivo: a fase 3 perdeu ponto por commits diretos na main (29 no app, 11 na lambda) - spec `postech-sw-arch-p4/docs/superpowers/specs/2026-10-06-fase-4-bootstrap-design.md`
 
 ## Discovered conventions
 
+- 2026-10-06 - `make smoke` sai com status 1 quando uma prova nao vale (linha `CHECK FAILED`, o script segue ate o fim e resume no final): borda e admin em 404, `%2F` em 404, login chegando a 429, nenhuma linha com o token no Loki, regras do Grafana todas carregadas e saudaveis; as linhas do Loki desta execucao se acham por `run=<marca>` na requisicao
+- 2026-10-06 - Exemplos de borda em `k8s/exemplos/`: `borda-os-service.yaml` e `borda-billing-service.yaml` (webhook com balde proprio, simulador do checkout fora de `/api/v1`); o smoke aplica os dois e um servico novo parte de um deles
+- 2026-10-06 - Todo limite de schema (itens, tamanho, quantidade, valor, formato) tem no `test_contratos.py` o valor na fronteira aceito e o seguinte rejeitado (`FRONTEIRAS`, lista de 1 a 50 itens, regra do `decidido_por` nos dois sentidos); limite novo ou mudado entra na tabela, e o que os negativos gerados nao alcancam fica nela
+- 2026-10-06 - `make smoke` aplica o exemplo de borda com um eco no lugar da API e prova rate limit, mascara de token no Loki, policies e redrive do RabbitMQ, fallback do Kong, Grafana provisionado e pods endurecidos; rodar so num cluster sem os servicos (usa os caminhos `/os`)
+- 2026-10-06 - Versoes: cada imagem com uma tag so entre `k8s/`, compose e as imagens de ferramenta do Makefile, e citada na tabela do README; o no do kind e o kubeconform no mesmo Kubernetes (`scripts/versoes.sh`, no make manifests)
+- 2026-10-06 - Mudou `k8s/base/kong/values.yaml`: `make kong-render` (kong.yaml, crds.yaml e o schema do KongClusterPlugin); o make manifests reprova render divergente
+- 2026-10-06 - `make deploy` aplica as CRDs do Kong (server-side) antes do overlay e recria o Job `rabbitmq-usuarios` (Job e imutavel; o script e idempotente); `make deploy OVERLAY=k3s KUBE_CONTEXT=<ctx>` serve o k3s
+- 2026-10-06 - Contrato de metricas: Prometheus raspa pod anotado dos namespaces `pytstop-*`; a porta anotada precisa estar em `ports` do container, o label `app` vira o `job` e o label `processo` vai para a serie - ADR-043
+- 2026-10-06 - Dashboard novo: JSON em `observabilidade/dashboards/`, entrada no configMapGenerator e linha por painel no `observabilidade/README.md`; o teste de consistencia (`tests/`) reprova painel sem descricao ou sem documentacao
+- 2026-10-06 - Catalogo de mensagens: `CATALOGO` e `CAMPOS` em `contratos/tests/test_contratos.py` amarram AsyncAPI, schemas, exemplos, `definitions.json` e a RFC-004 5.3; schemas autocontidos, e o teste garante `$defs` iguais entre eles
+
 ## Gotchas
 
+- 2026-10-06 - Kong normaliza o caminho antes de casar a rota e repassa o normalizado (barras repetidas, `.` e `..`, letra codificada como `%61`); so `%2F` e `%5C` ficam como chegaram. Em 17 variantes no kind so `%2F` escapava do fora-da-borda; `%252F`, `;x=1`, `ADMIN` e `%41dmin` passam pelo Kong, e o FastAPI as roteia como outro caminho (verificado com uvicorn)
+- 2026-10-06 - O access log do Kong guarda o caminho como chegou, tambem o do pedido que um plugin barra com 404: o token em `publico%2Forcamentos/<token>` escapava da mascara do Promtail, que so olhava `/`; a mascara aceita `%2F` e o dry-run do `make manifests` roda nos dois arquivos, cluster e compose (`scripts/promtail-mascara.sh`)
+- 2026-10-06 - Kong casa rota por segmento e nao trata `%2F` como `/`, e o uvicorn decodifica o `%2F` do caminho que o FastAPI roteia: `/os/api/v1/admin%2Foutbox` escapava do fora-da-borda e `autenticacao%2Flogin`, do limite do login (o `%5C` o uvicorn deixa literal); rota por prefixo nao protege sozinha - ADR-038
+- 2026-10-06 - Kustomize com `namespace:` sobrescreve o namespace de todo recurso, inclusive as Roles que o chart do Kong poe nos namespaces dos servicos (watchNamespaces): NamespaceTransformer com `unsetOnly: true`
+- 2026-10-06 - Com watchNamespaces o KIC registra o evento de KongClusterPlugin no namespace `default`, onde nao tem Role: sem a Role so de eventos, plugin invalido some sem sinal (log "events is forbidden")
+- 2026-10-06 - Evento de recusa do KIC sai uma vez por mudanca e dura 1 hora: o kong-check ignora evento mais velho que a ultima mudanca do objeto
+- 2026-10-06 - RabbitMQ 4.3.6: declaracao passiva exige permissao no recurso (403 em fila ou exchange de outro servico, `.retry` e `.dlq`); copia de retry com o `user_id` do produtor recebe 406, so vale o da conexao
+- 2026-10-06 - Importacao de definitions no boot ignora em silencio argumento novo de fila que ja existe: o que precisa convergir vai em policy
+- 2026-10-06 - Shovel dinamico criado por `rabbitmqctl set_parameter` move mensagem preservando o `user_id` do produtor, sem a tag impersonator: e o caminho do redrive
+- 2026-10-06 - Contagem `messages` de fila quorum no `list_queues` atualiza a cada ~5 s: esperar antes de conferir
+- 2026-10-06 - colima tambem nao compartilha `/var/folders` (TMPDIR do macOS): checagem em `docker run` recebe o arquivo por stdin (`sh -c 'cat > /tmp/x && ...'`)
+- 2026-10-06 - `kubectl label --local -o yaml -f` com varios documentos sai sem `---` e so o ultimo sobrevive ao apply: rotular depois do apply
+- 2026-10-06 - `read` do bash com IFS de tab junta campos vazios seguidos (tab conta como espaco em branco): campo vazio vira placeholder
+- 2026-10-06 - `promtool check config` exige que o `bearer_token_file` exista: `--syntax-only` fora do cluster
+- 2026-10-06 - @asyncapi/cli 6.x exige Node 24 e envia telemetria fora de CI: `CI=true` no make test
+- 2026-10-06 - rabbitmqadmin 2.35 (da imagem do RabbitMQ) nao tem comando de permissao de topico: permissoes num JSON importado com `rabbitmqadmin definitions import` depois de declarar os usuarios
+- 2026-10-06 - RabbitMQ com definitions no boot nao cria o usuario de `RABBITMQ_DEFAULT_USER` (log "Will not seed default virtual host and user"): o admin vem no `admin.json` do diretorio de definitions
+- 2026-10-06 - RabbitMQ importa o diretorio de definitions em ordem alfabetica e aborta o boot se uma permissao cita vhost que ainda nao existe: `admin.json` declara o vhost `/`
+- 2026-10-06 - Volume inteiro de ConfigMap/Secret como diretorio de definitions faz o RabbitMQ ler `..data`/`..<timestamp>` e falhar com eisdir (sobe vazio): montar arquivo a arquivo com subPath
+- 2026-10-06 - `definitions.skip_if_unchanged` grava o hash mesmo quando a importacao falha e o boot seguinte sobe vazio: nao usar
+- 2026-10-06 - Probe exec ou healthcheck do RabbitMQ como root antes do boot cria `.erlang.cookie` de root e o broker nao sobe (eacces): rodar como uid 999
+- 2026-10-06 - RabbitMQ calcula o limite de memoria sobre a RAM do host, nao do cgroup: `vm_memory_high_watermark.absolute` acoplado ao limite do container
+- 2026-10-06 - Fila quorum no RabbitMQ 4: `nack`/`reject` com requeue nao conta no delivery-limit (volta para sempre); so queda sem ack conta (20 e vai para a DLQ). TTL por mensagem so vence na cabeca da fila (ambos testados no kind)
+- 2026-10-06 - StatefulSet com pod que nunca fica Ready nao e trocado quando o template muda (forced rollback): apagar o pod
+- 2026-10-06 - colima nao compartilha `/private/tmp` com a VM: bind mount de la vira diretorio vazio; usar caminho sob `$HOME`
+- 2026-10-06 - make 3.81 do macOS ignora `.SHELLFLAGS`: recipe com laco ou pipe abre com `set -euo pipefail` na propria linha
+- 2026-10-06 - Promtail 2.9 nao conversa com o Docker 29 (cliente na API 1.42, minimo 1.44): Promtail 3.6
+- 2026-10-06 - `docker compose up --wait` trata container que saiu com 0 como falha: servico de init fica parado com healthcheck
+- 2026-10-06 - kubeconform: o repositorio de schemas nao tem `CustomResourceDefinition` (`-skip CustomResourceDefinition`), e schema de CRD sem `additionalProperties: false` nao barra campo errado mesmo com `-strict`: o do KongClusterPlugin e gerado do crds.yaml com o campo
+- 2026-10-06 - KIC 3.x nao publica manifests all-in-one; o `helm template` so gera a IngressClass com `--api-versions networking.k8s.io/v1/IngressClass`
+- 2026-10-06 - KongPlugin e namespaced e Ingress de outro namespace nao o enxerga: KongClusterPlugin
+- 2026-10-06 - `strip-path` do Kong tira o caminho casado inteiro: cada prefixo publicado usa um Service com `konghq.com/path`
+- 2026-10-06 - Grafana 11.1: `/api/datasources/uid/jaeger/health` responde 500 (plugin so de frontend); testar pelo proxy `/api/datasources/proxy/uid/jaeger/api/services`
+- 2026-10-06 - ruff 0.16 formata blocos python dentro de Markdown: `ruff format --check .` pega snippet do README
+- 2026-10-06 - Cluster kind da fase 4 e `pytstop-p4`: `pytstop` e o do `make cd-local` da fase 3 na mesma maquina
 - 2026-10-06 - PyJWT 2.13.x acumulou 27 advisories em out/2026: comecar em `pyjwt>=2.15.1` e `anyio>=4.15.1`. PyJWT 2.15 exige base64url valido na assinatura mesmo com `verify_signature=False` (JWT falso de teste precisa de segmento valido)
 
 ## Tech debt / TODO
 
+- 2026-10-06 - MEDIUM - O controller do Kong, no pod exposto a internet, ainda tem `list` e `watch` em Secrets dos quatro namespaces (chave RSA do JWT, segredo do webhook, credenciais de banco): risco aceito com a `watchNamespaces`; avaliar tirar a regra de Secrets das Roles (a plataforma nao usa Secret em Ingress nem em plugin) e conferir se o controller sobe sem ela - README, Decisoes e limites
+- 2026-10-06 - MEDIUM - IP real do cliente no k3s (ServiceLB com `externalTrafficPolicy: Local`) ainda a conferir com dois clientes: o rate limit por IP la e esperado, nao verificado - README, secao do gateway
+- 2026-10-06 - MEDIUM - Prometheus v2.54.1, Loki 2.9.8 e kube-state-metrics v2.13.0 com CVE HIGH/CRITICAL sem correcao na propria linha (trivy, out/2026): aceito porque rodam so dentro do cluster, sem Ingress; sair delas e trocar de linha (Prometheus 3, Loki 3) com mudanca de config - README, Decisoes e limites
+- 2026-10-06 - MEDIUM - Senhas de demonstracao versionadas (RabbitMQ, Grafana), iguais no kind e no k3s; o ADR-042 preve senhas geradas no cluster a cada deploy
+- 2026-10-06 - LOW - Overlay `kind-ci` do ADR-042 (sem Loki, Promtail e Grafana), exportadores de banco do ADR-043 e runbook da saga do ADR-036 ainda fora do repositorio
+- 2026-10-06 - LOW - Retry com TTL por mensagem numa fila so tem head-of-line (300s segura 1s) - fila de retry por atraso se o volume crescer
+- 2026-10-06 - LOW - Promtail em fim de vida desde 02/03/2026 - migrar para Grafana Alloy; Jaeger 1.x e Grafana 11.1 herdados da fase 3
+- 2026-10-06 - LOW - Profile `servicos` do compose sobe so a API de cada servico (relay, consumidor e `prazos` rodam no Kubernetes)
+
 ## Review lessons
+
+- 2026-10-06 - O smoke so imprimia e saia 0 com `/os/metrics` aberto, sem 429 ou com token no Loki, e o README e o MEMORY diziam que ele "prova": script de verificacao tem de sair com status diferente de zero quando a prova nao vale, e cada prova se confirma sabotando o alvo (desligar o plugin, subir o limite, quebrar a mascara, derrubar o Prometheus) e vendo o `CHECK FAILED` certo; contar linha no Loki sem esperar as desta execucao deixa um vazamento a caminho passar calado - PR #2
+- 2026-10-06 - `noDataState` das regras de alerta nao tinha guarda: trocar `Alerting` por `OK` na regra de alvo ausente passava em todos os testes, e foi essa a regra que disparou sozinha no compose; propriedade de config que muda o comportamento e vem documentada em tabela ganha teste que compara a tabela com o arquivo (`test_tabela_de_alertas_diz_o_que_a_regra_faz`) - PR #2
+- 2026-10-06 - "22 de 22 mutantes mortos" valia so para os mutantes escolhidos a mao: o conjunto sistematico (cada palavra-chave de cada schema removida ou deslocada em 1, 996 variacoes) deixava 118 vivos, entre eles `maxItems` de seis das sete listas e o `then` de OrcamentoAprovado; afirmacao de cobertura de contrato so entra depois de mutacao sistematica - PR #2
+- 2026-10-06 - Substituicao em lote deixou o texto antigo colado ao novo na descricao de 11 schemas, e o registro da correcao disse "aplicado" sem conferir: texto que mora em duas fontes (schema e AsyncAPI) ganha teste que compare as duas - PR #2
+- 2026-10-06 - Afirmacao sobre o comportamento do broker no README ("passiva nao exige permissao") estava errada e passou pela revisao do autor: afirmacao sobre RabbitMQ ou Kong so entra depois de executada no broker ou no gateway real - PR #2
+- 2026-10-06 - Schema estrito contrariava o leitor tolerante do ADR-036, e 203 testes verdes nao viam divergencia de campos com a RFC: teste de contrato precisa de oraculo externo (tabela da RFC) e de negativos gerados, nao so de exemplos validos - PR #2
+- 2026-10-06 - Config de runtime em ConfigMap puro nao troca o pod no deploy: configMapGenerator para todo arquivo que o processo so le no start - PR #2
+- 2026-10-06 - Exemplo de Ingress do README com strip-path num caminho mais longo que o prefixo do servico apagava o `/api/v1` - a revisao nao pegou; exemplo de manifest em doc so entra depois de aplicado no kind
