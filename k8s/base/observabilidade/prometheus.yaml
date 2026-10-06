@@ -1,7 +1,7 @@
 # Prometheus da plataforma (veio do k8s/prometheus.yaml da fase 3). A fase 3
-# listava cada alvo; aqui os servicos se registram sozinhos: todo pod de
-# qualquer namespace com as anotacoes abaixo e raspado (os servicos rodam em
-# pytstop-os, pytstop-billing e pytstop-execucao).
+# listava cada alvo; aqui os servicos se registram sozinhos: todo pod dos
+# namespaces pytstop-* com as anotacoes abaixo e raspado, com os labels app
+# (vira o job) e processo do pod (contrato no README).
 #
 #   prometheus.io/scrape: "true"
 #   prometheus.io/port: "<porta>"     (precisa estar em ports do container)
@@ -22,8 +22,9 @@ metadata:
   labels:
     app: prometheus
 ---
-# Leitura pura, no cluster todo: discovery de nodes e de pods de qualquer
-# namespace e GET no /metrics/cadvisor do kubelet (subresource nodes/metrics).
+# Leitura pura, no cluster todo: discovery de nodes e de pods (o filtro de
+# namespace e do relabel) e GET no /metrics/cadvisor do kubelet (subresource
+# nodes/metrics).
 # Sem nodes/proxy, que abriria o resto da API do kubelet (inclusive exec).
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole

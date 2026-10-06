@@ -99,7 +99,7 @@ Todas as imagens têm tag fixa; a mesma versão roda no kind, no k3s e no compos
 | RabbitMQ | `rabbitmq:4.3.6-management` | Broker da saga: comandos do OS para Billing e Execução, eventos de volta | `rabbitmq.pytstop-plataforma.svc.cluster.local:5672` |
 | Kong Gateway | `kong:3.9.3` (chart `kong/kong` 3.4.1) | Gateway único (`/os`, `/billing`, `/execucao`), X-Request-ID, rate limit, métricas | `kong-proxy` (portas 80/443 do host no kind) |
 | Kong Ingress Controller | `kong/kubernetes-ingress-controller:3.5.13` | Lê os Ingress de todos os namespaces (IngressClass `kong`) e configura o Kong sem banco | sidecar do pod do Kong |
-| Prometheus | `prom/prometheus:v2.54.1` | Métricas: pods anotados de qualquer namespace, cAdvisor e kube-state-metrics | `prometheus.pytstop-plataforma.svc.cluster.local:9090` |
+| Prometheus | `prom/prometheus:v2.54.1` | Métricas: pods anotados dos namespaces `pytstop-*`, cAdvisor e kube-state-metrics | `prometheus.pytstop-plataforma.svc.cluster.local:9090` |
 | Grafana | `grafana/grafana:11.1.0` | Dashboards, logs, traces e alertas provisionados de `observabilidade/` | `grafana.pytstop-plataforma.svc.cluster.local:3000` |
 | Loki | `grafana/loki:2.9.8` | Armazena e consulta os logs | `loki.pytstop-plataforma.svc.cluster.local:3100` |
 | Promtail | `grafana/promtail:3.6.11` | Coleta os logs de todos os pods dos namespaces `pytstop-*` | DaemonSet |
@@ -146,16 +146,23 @@ São as variáveis que o profile `servicos` do compose passa aos serviços; nos 
 | `BILLING_URL` | Execução | `http://<svc>.pytstop-billing.svc.cluster.local:8000` | `http://billing-service:8000` |
 | `MP_MODE` | Billing | `simulado` | `simulado` |
 
-Métricas: o Prometheus raspa sozinho qualquer pod, de qualquer namespace, com estas anotações no template do pod. A porta anotada precisa estar declarada em `ports` do container; o label `app` do pod vira o `job` nos painéis.
+Métricas, o contrato do [ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md): cada processo do serviço (`api`, `relay`, `consumidor`, `prazos`) roda no seu Deployment e serve `/metrics` numa porta declarada em `ports` do container, com o nome `metrics` (a API serve na própria porta HTTP). O Prometheus raspa sozinho, por pod, todo pod dos namespaces `pytstop-*` com as anotações abaixo no template; a porta anotada precisa estar em `ports`. O label `app` do pod vira o `job` nos painéis, e o label `processo` vai para a série como `processo`.
 
 ```yaml
 metadata:
   labels:
-    app: os-service-api
+    app: os-service-relay
+    processo: relay
   annotations:
     prometheus.io/scrape: "true"
-    prometheus.io/port: "8000"
+    prometheus.io/port: "9100"
     prometheus.io/path: /metrics
+spec:
+  containers:
+    - name: relay
+      ports:
+        - name: metrics
+          containerPort: 9100
 ```
 
 Logs: JSON no stdout basta. O Promtail coleta todos os pods dos namespaces `pytstop-*` com os labels `namespace`, `app`, `pod` e `container`; o campo `trace_id` do JSON vira link para o trace no Jaeger dentro do Grafana. `request_id` e `correlation_id` se buscam por filtro de linha (`{namespace="pytstop-os"} |= "<correlation_id>"`), nunca por label.

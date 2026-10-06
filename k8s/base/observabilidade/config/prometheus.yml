@@ -2,10 +2,15 @@ global:
   scrape_interval: 15s
 scrape_configs:
   - job_name: pods-anotados
-    # Todos os namespaces: a anotacao e o filtro (opt-in por pod).
+    # Contrato do ADR-043 (README, "Endereços e variáveis"): pods anotados dos
+    # namespaces pytstop-* (plataforma e os tres servicos); fora deles, nem
+    # pod anotado entra.
     kubernetes_sd_configs:
       - role: pod
     relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace]
+        regex: pytstop-.+
+        action: keep
       - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
         regex: "true"
         action: keep
@@ -29,6 +34,10 @@ scrape_configs:
         target_label: job
       - source_labels: [__meta_kubernetes_pod_label_app]
         target_label: app
+      # processo = label do pod (api, relay, consumidor, prazos): separa os
+      # Deployments de um mesmo servico nos paineis de saga e mensageria.
+      - source_labels: [__meta_kubernetes_pod_label_processo]
+        target_label: processo
       - source_labels: [__meta_kubernetes_namespace]
         target_label: namespace
       - source_labels: [__meta_kubernetes_pod_name]
