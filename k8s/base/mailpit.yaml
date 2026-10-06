@@ -27,7 +27,7 @@ spec:
       automountServiceAccountToken: false
       containers:
         - name: mailpit
-          image: axllent/mailpit:v1.30.3
+          image: axllent/mailpit:v1.31.4
           imagePullPolicy: IfNotPresent
           securityContext:
             allowPrivilegeEscalation: false

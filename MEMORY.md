@@ -50,6 +50,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Tech debt / TODO
 
+- 2026-10-06 - MEDIUM - Prometheus v2.54.1, Loki 2.9.8 e kube-state-metrics v2.13.0 com CVE HIGH/CRITICAL sem correcao na propria linha (trivy, out/2026): aceito porque rodam so dentro do cluster, sem Ingress; sair delas e trocar de linha (Prometheus 3, Loki 3) com mudanca de config - README, secao Decisoes e limites
 - 2026-10-06 - MEDIUM - Senhas de demonstracao versionadas (RabbitMQ, Grafana), iguais no kind e no k3s - gerar no deploy (onda D)
 - 2026-10-06 - LOW - Retry com TTL por mensagem numa fila so tem head-of-line (300s segura 1s) - fila de retry por atraso se o volume crescer
 - 2026-10-06 - LOW - Promtail em fim de vida desde 02/03/2026 - migrar para Grafana Alloy; Jaeger 1.x e Grafana 11.1 herdados da fase 3
