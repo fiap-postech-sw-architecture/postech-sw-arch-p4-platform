@@ -23,7 +23,7 @@ limpa() {
 
 # O exemplo usa os caminhos /os do OS Service de verdade.
 if [ -n "$($K -n pytstop-os get ingress -o name 2>/dev/null)" ]; then
-  echo "pytstop-os ja tem Ingress: o smoke usaria os mesmos caminhos /os. Rode num cluster so com a plataforma." >&2
+  echo "pytstop-os already has Ingresses: the smoke would reuse the /os paths. Run it on a platform-only cluster." >&2
   exit 1
 fi
 trap limpa EXIT
@@ -40,11 +40,11 @@ pede() {
   recebido=$(jq -r '.path // "-"' "$TMP/b" 2>/dev/null || echo -)
   limite=$(cabecalho x-ratelimit-limit-minute)
   resta=$(cabecalho x-ratelimit-remaining-minute)
-  printf '%-4s %-37s -> %s  servico recebeu: %-30s balde: %s/min, resta %s\n' \
+  printf '%-4s %-37s -> %s  upstream got: %-30s bucket: %s/min, %s left\n' \
     "$1" "$2" "$status" "$recebido" "${limite:--}" "${resta:--}"
 }
 
-titulo "borda: k8s/exemplos/borda-os-service.yaml como esta, com eco no lugar da API"
+titulo "edge: k8s/exemplos/borda-os-service.yaml as is, with an echo server in place of the API"
 $K -n "$NS" apply -f - >/dev/null <<'YAML'
 apiVersion: apps/v1
 kind: Deployment
@@ -94,7 +94,7 @@ for _ in $(seq 60); do
   sleep 2
 done
 
-titulo "caminhos publicados e bloqueados"
+titulo "published and blocked paths"
 pede GET /os/api/v1/ordens-de-servico
 pede GET /os/docs
 pede GET /os/openapi.json
@@ -106,23 +106,23 @@ pede GET /os/metrics
 pede GET /os/api/v1/admin/outbox
 pede GET /os/saude
 
-titulo "X-Request-ID: o mesmo id na resposta e no que o servico recebeu"
+titulo "X-Request-ID: same id in the response and in what the upstream got"
 curl -s -D "$TMP/h" -o "$TMP/b" "$BORDA/os/api/v1/ordens-de-servico"
-printf 'resposta:          %s\n' "$(cabecalho x-request-id)"
-printf 'servico recebeu:   %s\n' "$(jq -r '.headers["x-request-id"]' "$TMP/b")"
+printf 'response:       %s\n' "$(cabecalho x-request-id)"
+printf 'upstream got:   %s\n' "$(jq -r '.headers["x-request-id"]' "$TMP/b")"
 
-titulo "rate limiting do login (5/min, x10 no kind): 51 POSTs seguidos (o POST da lista acima conta se cair no mesmo minuto)"
+titulo "login rate limit (5/min, x10 on kind): 51 POSTs in a row (the POST above counts if it fell in the same minute)"
 # Janela fixa por minuto: comeca longe da virada para a rajada caber nela.
 while [ "$((10#$(date +%S)))" -ge 50 ]; do sleep 1; done
 for _ in $(seq 51); do
   curl -s -o /dev/null -w '%{http_code}\n' -X POST "$BORDA/os/api/v1/autenticacao/login"
 done | sort | uniq -c
-echo "balde proprio: o refresh continua respondendo"
+echo "separate bucket: refresh still answers"
 pede POST /os/api/v1/autenticacao/refresh
-printf 'IP que o Kong viu (ultima linha do access log): '
+printf 'client IP seen by Kong (last access log line): '
 $K -n pytstop-plataforma logs deployment/kong -c proxy --tail=1 | awk '{print $1}'
 
-titulo "token do link de decisao e do checkout fora do Loki (Promtail mascara antes de enviar)"
+titulo "decision link and checkout tokens kept out of Loki (Promtail masks before pushing)"
 segredo="tokensmoke$(date +%s)"
 pede GET "/billing/api/v1/publico/orcamentos/$segredo"
 pede GET "/billing/simulador/checkout/123?token=$segredo"
@@ -135,11 +135,11 @@ for _ in $(seq 30); do
   [ -n "$(loki '{app="kong"} |= "/billing/simulador/checkout/***"')" ] && break
   sleep 2
 done
-printf 'linhas do Kong no Loki com o token %s: %s\n' "$segredo" "$(loki "{app=\"kong\"} |= \"$segredo\"" | grep -c . || true)"
-echo "as mesmas requisicoes como o Loki guardou:"
+printf 'Kong lines in Loki with token %s: %s\n' "$segredo" "$(loki "{app=\"kong\"} |= \"$segredo\"" | grep -c . || true)"
+echo "the same requests as stored in Loki:"
 loki '{app="kong"} |~ "/billing/(api/v1/publico/orcamentos|simulador/checkout)/"' | head -2
 
-titulo "RabbitMQ: argumento so x-queue-type; TTL, dead-letter, overflow e tamanho por policy"
+titulo "RabbitMQ: x-queue-type is the only argument; TTL, dead-letter, overflow and length come from policies"
 R="$K -n pytstop-plataforma exec -i rabbitmq-0 -c rabbitmq --"
 # rabbitmqadmin como admin, com a senha lida no proprio pod (admin.json).
 adm() {
@@ -149,31 +149,31 @@ filas() { $R rabbitmqctl -q list_queues --no-table-headers name messages | grep 
 $R rabbitmqctl -q list_queues --no-table-headers name arguments policy | sort
 $R rabbitmqctl -q list_policies --no-table-headers | cut -f2,5 | sort
 printf 'max_message_size: '; $R rabbitmqctl -q eval 'application:get_env(rabbit, max_message_size).'
-printf 'mensagem de 1,1 MiB: '
+printf '1.1 MiB message: '
 head -c 1153434 /dev/zero | tr '\0' x \
   | { adm publish message --exchange pytstop.dlx --routing-key billing.comandos --payload-file - 2>&1 || true; } \
   | grep -m1 PRECONDITION
 
-titulo "retry: copia com expiration de 1 s no pytstop.retry volta para billing.comandos"
+titulo "retry: copy with 1 s expiration on pytstop.retry comes back to billing.comandos"
 adm publish message --exchange pytstop.retry --routing-key billing.comandos --payload '{"smoke":"retry"}' --properties '{"expiration":"1000","headers":{"x-tentativa":1}}'
 sleep 7  # a contagem das filas quorum e atualizada a cada 5 s
 filas
 $R rabbitmqctl -q purge_queue billing.comandos
 
-titulo "make redrive FILA=billing.comandos: a DLQ volta para a fila"
+titulo "make redrive FILA=billing.comandos: the DLQ goes back to the queue"
 adm publish message --exchange pytstop.dlx --routing-key billing.comandos --payload '{"smoke":"dlq"}' --properties '{"message_id":"smoke-dlq","headers":{"x-tentativa":5}}'
 sleep 7
 make --no-print-directory redrive FILA=billing.comandos KUBE_CONTEXT="$CONTEXTO"
 $R rabbitmqctl -q purge_queue billing.comandos
 
-titulo "policies convergem no boot: muda a da DLQ em tempo de execucao e reinicia o broker"
+titulo "policies converge on boot: change the DLQ policy at runtime and restart the broker"
 $R rabbitmqctl -q set_policy --apply-to queues dlq '\.dlq$' '{"message-ttl":60000}'
-printf 'antes do restart: '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
+printf 'before restart: '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
 $K -n pytstop-plataforma delete pod rabbitmq-0 --wait=true >/dev/null
 $K -n pytstop-plataforma wait --for=condition=Ready pod/rabbitmq-0 --timeout=300s >/dev/null
-printf 'depois do restart: '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
+printf 'after restart:  '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
 
-titulo "configuracao invalida de um servico nao derruba as outras (FallbackConfiguration)"
+titulo "an invalid object from one service does not take the others down (FallbackConfiguration)"
 $K apply -f - <<YAML
 apiVersion: configuration.konghq.com/v1
 kind: KongClusterPlugin
@@ -209,7 +209,7 @@ spec:
                   number: 8000
 YAML
 sleep 5
-echo "Ingress valido criado depois do invalido:"
+echo "valid Ingress created after the invalid one:"
 $K -n "$NS" create ingress smoke-novo --class=kong --rule='/os/novo*=os-service-borda-api:8000' \
   --annotation=konghq.com/strip-path=true
 $K -n "$NS" label ingress smoke-novo "$ROTULO" >/dev/null
@@ -217,21 +217,21 @@ sleep 10
 pede GET /os/api/v1/ordens-de-servico
 pede GET /os/novo/x
 pede GET /os/quebrado/x
-echo "make kong-check com o plugin invalido no cluster:"
+echo "make kong-check with the invalid plugin in the cluster:"
 if KUBE_CONTEXT="$CONTEXTO" ESPERA=15 scripts/kong-check.sh; then
-  echo "ERRO: o kong-check deveria ter falhado"; exit 1
+  echo "ERROR: kong-check should have failed"; exit 1
 fi
 $K delete kongclusterplugin smoke-plugin-invalido
 $K -n "$NS" delete ingress smoke-quebrado smoke-novo
-echo "make kong-check depois de apagar o plugin invalido:"
+echo "make kong-check after deleting the invalid plugin:"
 KUBE_CONTEXT="$CONTEXTO" ESPERA=10 scripts/kong-check.sh
 
-titulo "Grafana: dashboards e regras de alerta carregados do provisioning"
+titulo "Grafana: dashboards and alert rules loaded from provisioning"
 grafana() { $K get --raw "/api/v1/namespaces/$NS/services/grafana:3000/proxy$1"; }
-grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (pasta \(.folderTitle))"'
-grafana "/api/prometheus/grafana/api/v1/rules" | jq -r '.data.groups[].rules[] | "regra: \(.name) [\(.state), \(.health)]"'
+grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (folder \(.folderTitle))"'
+grafana "/api/prometheus/grafana/api/v1/rules" | jq -r '.data.groups[].rules[] | "rule: \(.name) [\(.state), \(.health)]"'
 
-titulo "Prometheus: series que cada consulta do dashboard e dos alertas devolve agora"
+titulo "Prometheus: series returned now by each dashboard and alert query"
 prometheus() {
   $K get --raw "/api/v1/namespaces/$NS/services/prometheus:9090/proxy/api/v1/query?query=$(jq -rn --arg q "$1" '$q|@uri')" \
     | jq '.data.result | length'
@@ -241,10 +241,10 @@ prometheus() {
     printf '%3s series  %s\n' "$(prometheus "$consulta")" "$consulta"
   done
 
-titulo "endurecimento: securityContext efetivo de cada container da plataforma"
+titulo "hardening: effective securityContext of each platform container"
 $K -n "$NS" get pods -o json | jq -r '
   def v(x): if x == null then "-" else (x | tostring) end;
-  ["POD", "CONTAINER", "NAO_ROOT", "ESCALA_PRIV", "RAIZ_SO_LEITURA", "CAP_DROP", "SECCOMP", "TOKEN_SA"],
+  ["POD", "CONTAINER", "NON_ROOT", "PRIV_ESC", "RO_ROOTFS", "CAP_DROP", "SECCOMP", "SA_TOKEN"],
   (.items[] | select(.metadata.labels.app != "os-service-api") | . as $p | .spec.containers[]
     | (.securityContext // {}) as $c | ($p.spec.securityContext // {}) as $ps
     | [($p.metadata.labels.app // $p.metadata.name), .name,
@@ -255,6 +255,6 @@ $K -n "$NS" get pods -o json | jq -r '
        v(if $p.spec.automountServiceAccountToken == null then true else $p.spec.automountServiceAccountToken end)])
   | @tsv' | sort -u | column -t
 
-titulo "Pod Security restricted como enforce (dry-run no servidor): so o Promtail fica fora"
+titulo "Pod Security restricted as enforce (server dry-run): only Promtail falls outside"
 $K label --dry-run=server --overwrite namespace "$NS" pod-security.kubernetes.io/enforce=restricted 2>&1 \
-  | grep -i 'warning' || echo "nenhum pod fora do perfil restricted"
+  | grep -i 'warning' || echo "no pod outside the restricted profile"

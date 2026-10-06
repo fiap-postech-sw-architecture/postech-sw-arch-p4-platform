@@ -37,8 +37,8 @@ while IFS=$'\t' read -r ns tipo nome quando mensagem; do
 done <<< "$recusas"
 
 if [ -n "$encontradas" ]; then
-  echo "Kong recusou configuracao (o resto foi aplicado pelo fallback):"
+  echo "Kong rejected configuration (the fallback applied the rest):"
   printf '%s' "$encontradas"
   exit 1
 fi
-echo "kong-check: nenhum objeto com configuracao recusada pelo Kong nos ultimos 15 minutos"
+echo "kong-check: no object with configuration rejected by Kong in the last 15 minutes"

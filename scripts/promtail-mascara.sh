@@ -5,7 +5,7 @@
 # arquivo local; os estagios de pipeline sao os do arquivo, sem copia.
 set -euo pipefail
 
-IMAGEM="${PROMTAIL_IMAGE:?defina PROMTAIL_IMAGE}"
+IMAGEM="${PROMTAIL_IMAGE:?set PROMTAIL_IMAGE}"
 CONFIG=k8s/base/observabilidade/config/promtail.yaml
 
 saida=$(docker run --rm -i --entrypoint sh "$IMAGEM" -c '
@@ -24,7 +24,7 @@ timeout 5 promtail -dry-run -config.file=/tmp/teste.yaml 2>/dev/null || true
 
 echo "$saida" | cut -f2-
 if echo "$saida" | grep -q SEGREDO || [ "$(echo "$saida" | grep -c '\*\*\*')" -ne 3 ]; then
-  echo "promtail-mascara: token sem mascara (ou linha perdida) no pipeline de $CONFIG" >&2
+  echo "promtail-mask: unmasked token (or lost line) in the $CONFIG pipeline" >&2
   exit 1
 fi
-echo "promtail-mascara: tokens mascarados nas 3 linhas que os traziam"
+echo "promtail-mask: tokens masked in the 3 lines that carried them"

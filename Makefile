@@ -84,7 +84,7 @@ deploy: ## aplica k8s/overlays/$(OVERLAY) e espera os rollouts
 	$(KUBECTL) apply --server-side -k k8s/overlays/$(OVERLAY)
 	set -euo pipefail; \
 	recursos=$$($(KUBECTL) -n $(NAMESPACE) get deployment,statefulset,daemonset -l $(SELETOR) -o name); \
-	test -n "$$recursos" || { echo "nenhum Deployment, StatefulSet ou DaemonSet com $(SELETOR)"; exit 1; }; \
+	test -n "$$recursos" || { echo "no Deployment, StatefulSet or DaemonSet labeled $(SELETOR)"; exit 1; }; \
 	for recurso in $$recursos; do \
 		$(KUBECTL) -n $(NAMESPACE) rollout status "$$recurso" --timeout=300s; \
 	done
@@ -101,7 +101,7 @@ smoke: ## borda, rate limiting, mascara de token, RabbitMQ, fallback do Kong e p
 
 redrive: ## devolve <fila>.dlq para <fila> depois de corrigida a causa (FILA=billing.comandos)
 	@case "$(FILA)" in billing.comandos|execucao.comandos|os.eventos) ;; \
-		*) echo "uso: make redrive FILA=billing.comandos|execucao.comandos|os.eventos"; exit 1;; esac
+		*) echo "usage: make redrive FILA=billing.comandos|execucao.comandos|os.eventos"; exit 1;; esac
 	@KUBE_CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) scripts/redrive.sh $(FILA)
 
 status: ## pods, servicos, volumes e filas do RabbitMQ
@@ -139,18 +139,18 @@ lint: ## ruff, mypy e bandit nos testes
 manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do Kong, versoes, dashboards
 	set -euo pipefail; \
 	for overlay in kind k3s; do \
-		echo ">> kubeconform e trivy: k8s/overlays/$$overlay"; \
+		echo ">> kubeconform and trivy: k8s/overlays/$$overlay"; \
 		kubectl kustomize "k8s/overlays/$$overlay" | $(KUBECONFORM) -; \
 		kubectl kustomize "k8s/overlays/$$overlay" | $(TRIVY_CONFIG); \
 	done
 	set -euo pipefail; \
 	for exemplo in k8s/exemplos/*.yaml; do \
-		echo ">> kubeconform e trivy: $$exemplo"; \
+		echo ">> kubeconform and trivy: $$exemplo"; \
 		$(KUBECONFORM) - < "$$exemplo"; \
 		$(TRIVY_CONFIG) < "$$exemplo"; \
 	done
 	$(COMPOSE) --profile servicos config --quiet
-	@echo ">> configs de Prometheus, Loki e Promtail (cluster e compose)"
+	@echo ">> Prometheus, Loki and Promtail configs (cluster and compose)"
 	set -euo pipefail; \
 	for config in k8s/base/observabilidade/config/prometheus.yml compose/prometheus.yml; do \
 		docker run --rm -i --entrypoint sh $(PROMETHEUS_IMAGE) -c \
@@ -163,7 +163,7 @@ manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do
 			'cat > /tmp/promtail.yaml && promtail -check-syntax -config.file=/tmp/promtail.yaml' < "$$config"; \
 	done
 	PROMTAIL_IMAGE=$(PROMTAIL_IMAGE) scripts/promtail-mascara.sh
-	@echo ">> k8s/base/kong igual ao make kong-render"
+	@echo ">> k8s/base/kong matches make kong-render"
 	set -euo pipefail; \
 	render=$$(mktemp -d); trap 'rm -rf "$$render"' EXIT; \
 	$(KONG_RENDER) "$$render"; \
@@ -175,7 +175,7 @@ manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do
 	for painel in observabilidade/dashboards/*.json; do \
 		jq -e '.uid and .title' "$$painel" > /dev/null; \
 		grep -q "dashboards/$$(basename "$$painel")" observabilidade/kustomization.yaml \
-			|| { echo "$$painel fora do configMapGenerator de observabilidade/kustomization.yaml"; exit 1; }; \
+			|| { echo "$$painel missing from the configMapGenerator in observabilidade/kustomization.yaml"; exit 1; }; \
 	done
 
 check: lint test manifests ## o mesmo que o CI roda

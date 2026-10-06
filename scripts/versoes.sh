@@ -18,19 +18,19 @@ imagens=$(
 erro=0
 duplicadas=$(sed 's/:[^:/]*$//' <<< "$imagens" | sort | uniq -d)
 if [ -n "$duplicadas" ]; then
-  echo "imagem com mais de uma tag entre k8s, compose e Makefile:"
+  echo "image with more than one tag across k8s, compose and Makefile:"
   grep -F "$duplicadas" <<< "$imagens"
   erro=1
 fi
 while read -r imagem; do
   if ! grep -qF "\`$imagem\`" README.md; then
-    echo "$imagem nao esta na tabela de versoes do README"
+    echo "$imagem missing from the README versions table"
     erro=1
   fi
 done <<< "$imagens"
 if ! grep -q "image: kindest/node:v$KUBERNETES_VERSION@sha256:" kind/cluster.yaml; then
-  echo "kind/cluster.yaml nao fixa kindest/node:v$KUBERNETES_VERSION por digest (o kubeconform valida contra $KUBERNETES_VERSION)"
+  echo "kind/cluster.yaml does not pin kindest/node:v$KUBERNETES_VERSION by digest (kubeconform validates against $KUBERNETES_VERSION)"
   erro=1
 fi
-[ "$erro" = 0 ] && echo "versoes: $(wc -l <<< "$imagens" | tr -d ' ') imagens com tag unica e no README; kind em v$KUBERNETES_VERSION"
+[ "$erro" = 0 ] && echo "versions: $(wc -l <<< "$imagens" | tr -d ' ') images, one tag each, all in the README; kind node v$KUBERNETES_VERSION"
 exit "$erro"
