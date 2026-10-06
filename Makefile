@@ -20,6 +20,8 @@ COMPOSE := docker compose -f compose/docker-compose.yml
 KONG_CHART_VERSION := 3.4.1
 HELM_IMAGE := alpine/helm:3.22.0
 KUBECONFORM_IMAGE := ghcr.io/yannh/kubeconform:v0.8.0
+# Mesma imagem do DaemonSet e do compose; o make manifests roda o pipeline nela.
+PROMTAIL_IMAGE := grafana/promtail:3.6.11
 # Valida o asyncapi.yaml contra a especificacao AsyncAPI 3.0 (exige Node 24).
 ASYNCAPI_CLI := @asyncapi/cli@6.2.0
 # KongPlugin/KongClusterPlugin sao validados pelo catalogo de CRDs da datree;
@@ -111,6 +113,7 @@ manifests: ## kustomize + kubeconform nos overlays, compose config e dashboards
 		docker run --rm -i $(KUBECONFORM_IMAGE) $(KUBECONFORM_FLAGS) - < "$$exemplo"; \
 	done
 	$(COMPOSE) --profile servicos config --quiet
+	PROMTAIL_IMAGE=$(PROMTAIL_IMAGE) scripts/promtail-mascara.sh
 	set -euo pipefail; \
 	for painel in observabilidade/dashboards/*.json; do \
 		jq -e '.uid and .title' "$$painel" > /dev/null; \

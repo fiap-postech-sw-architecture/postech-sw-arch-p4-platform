@@ -12,6 +12,16 @@ scrape_configs:
       # Tira o envelope CRI do containerd e entrega a linha crua; o JSON
       # do servico fica intacto para o `| json` do LogQL.
       - cri: {}
+      # O token do link de decisao e o do checkout do simulador sao
+      # credenciais (RFC-004 secao 8): o access log do Kong e o log dos
+      # servicos trazem o caminho inteiro, e o Loki e lido pelo Viewer
+      # anonimo do Grafana. Cada grupo capturado vira ***, antes de sair do no.
+      - replace:
+          expression: '/(?:publico/orcamentos|simulador/checkout)/([^\s/?&"]+)'
+          replace: "***"
+      - replace:
+          expression: 'token=([^\s&"]+)'
+          replace: "***"
     relabel_configs:
       - source_labels: [__meta_kubernetes_namespace]
         regex: pytstop-.+

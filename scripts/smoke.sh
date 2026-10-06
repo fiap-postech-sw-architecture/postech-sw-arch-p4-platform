@@ -99,6 +99,23 @@ pede POST /os/api/v1/autenticacao/refresh
 printf 'IP que o Kong viu (ultima linha do access log): '
 $K -n pytstop-plataforma logs deployment/kong -c proxy --tail=1 | awk '{print $1}'
 
+titulo "token do link de decisao e do checkout fora do Loki (Promtail mascara antes de enviar)"
+segredo="tokensmoke$(date +%s)"
+pede GET "/billing/api/v1/publico/orcamentos/$segredo"
+pede GET "/billing/simulador/checkout/123?token=$segredo"
+# loki <LogQL>: linhas dos ultimos 5 minutos, pela API do Kubernetes (sem port-forward).
+loki() {
+  $K get --raw "/api/v1/namespaces/pytstop-plataforma/services/loki:3100/proxy/loki/api/v1/query_range?limit=10&since=5m&query=$(jq -rn --arg q "$1" '$q|@uri')" \
+    | jq -r '.data.result[].values[][1]'
+}
+for _ in $(seq 30); do
+  [ -n "$(loki '{app="kong"} |= "/billing/simulador/checkout/***"')" ] && break
+  sleep 2
+done
+printf 'linhas do Kong no Loki com o token %s: %s\n' "$segredo" "$(loki "{app=\"kong\"} |= \"$segredo\"" | grep -c . || true)"
+echo "as mesmas requisicoes como o Loki guardou:"
+loki '{app="kong"} |~ "/billing/(api/v1/publico/orcamentos|simulador/checkout)/"' | head -2
+
 titulo "configuracao invalida de um servico nao derruba as outras (FallbackConfiguration)"
 $K apply -f - <<YAML
 apiVersion: configuration.konghq.com/v1
