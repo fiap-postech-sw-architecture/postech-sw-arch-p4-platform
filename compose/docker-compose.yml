@@ -1,6 +1,9 @@
-# Stack local da plataforma: a mesma infraestrutura compartilhada do
-# Kubernetes (RabbitMQ com as mesmas definitions, observabilidade com o mesmo
-# provisioning do Grafana, Mailpit) mais o banco de cada servico.
+# Stack local da plataforma para desenvolver um servico: RabbitMQ com as
+# mesmas definitions do Kubernetes, observabilidade com o mesmo provisioning
+# do Grafana e a mesma config do Loki, Mailpit e o banco de cada servico. Nao
+# tem o Kong (sem /os, X-Request-ID nem rate limit; os servicos respondem
+# direto nas portas abaixo), nem kube-state-metrics e metrics-server (sem
+# alerta de CPU e sem HPA).
 #
 #   make up                   infraestrutura
 #   make up PROFILE=servicos  infraestrutura + os tres servicos, construidos
@@ -12,12 +15,18 @@
 # cada servico. Senhas abaixo sao valores de demonstracao, sem dado real.
 name: pytstop-plataforma
 
+# Rotulo que o Promtail usa para escolher os containers: vale com qualquer
+# nome de projeto (-p ou COMPOSE_PROJECT_NAME).
+x-logs: &logs
+  pytstop.logs: "true"
+
 x-otel: &otel
   OTEL_ENABLED: "true"
   OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4317
 
 services:
   rabbitmq:
+    labels: *logs
     image: rabbitmq:4.3.6-management
     # Nome do no Erlang fixo: com o hostname aleatorio do container, cada
     # recriacao viraria um no novo e o volume ficaria com um broker orfao.
@@ -56,6 +65,7 @@ services:
   # terminou (mesmo com 0) como falha. Saudavel = usuarios criados; script
   # com erro derruba o container e o `make up`.
   rabbitmq-usuarios:
+    labels: *logs
     image: rabbitmq:4.3.6-management
     user: "999:999"
     # init: o sleep vira PID 1 e ignoraria o SIGTERM do `make down`.
@@ -84,6 +94,7 @@ services:
     restart: "no"
 
   postgres-os:
+    labels: *logs
     image: postgres:16.15
     environment:
       POSTGRES_DB: os
@@ -100,6 +111,7 @@ services:
       retries: 12
 
   postgres-execucao:
+    labels: *logs
     image: postgres:16.15
     environment:
       POSTGRES_DB: execucao
@@ -120,6 +132,7 @@ services:
   # (banco de desenvolvimento, porta so no loopback). Do host, conecte com
   # mongodb://localhost:27017/billing?directConnection=true.
   mongo-billing:
+    labels: *logs
     image: mongo:7.0.43
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
     ports:
@@ -141,12 +154,14 @@ services:
       start_period: 10s
 
   mailpit:
+    labels: *logs
     image: axllent/mailpit:v1.31.4
     ports:
       - "127.0.0.1:${MAILPIT_UI_PORT:-8025}:8025"
       - "127.0.0.1:${MAILPIT_SMTP_PORT:-1025}:1025"
 
   jaeger:
+    labels: *logs
     image: jaegertracing/all-in-one:1.76.0
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
@@ -158,6 +173,7 @@ services:
       - "127.0.0.1:${OTLP_HTTP_PORT:-4318}:4318"
 
   prometheus:
+    labels: *logs
     image: prom/prometheus:v2.54.1
     command:
       - --config.file=/etc/prometheus/prometheus.yml
@@ -172,8 +188,13 @@ services:
       timeout: 5s
       retries: 6
 
+  # Mesma config do Loki do Kubernetes (retencao de 7 dias, tsdb).
   loki:
+    labels: *logs
     image: grafana/loki:2.9.8
+    command: ["-config.file=/etc/loki/loki.yaml"]
+    volumes:
+      - ../k8s/base/observabilidade/config/loki.yaml:/etc/loki/loki.yaml:ro
     ports:
       - "127.0.0.1:${LOKI_PORT:-3100}:3100"
     healthcheck:
@@ -183,11 +204,14 @@ services:
       retries: 12
       start_period: 15s
 
-  # Le os logs dos containers deste projeto pela API do Docker. O socket da
-  # acesso total ao Docker da maquina: aceitavel so em desenvolvimento local.
+  # Le os logs dos containers com o rotulo pytstop.logs pela API do Docker.
+  # O socket da acesso total ao Docker da maquina, e o :ro do volume nao
+  # muda isso (vale para o arquivo do socket, nao para a API): aceitavel so
+  # em desenvolvimento local.
   # Promtail 3.x: o cliente Docker do 2.9 fala a API 1.42 e o Docker 29 exige
   # no minimo 1.44 (a descoberta falha com "client version 1.42 is too old").
   promtail:
+    labels: *logs
     image: grafana/promtail:3.6.11
     command: ["-config.file=/etc/promtail/promtail.yml"]
     volumes:
@@ -198,6 +222,7 @@ services:
         condition: service_healthy
 
   grafana:
+    labels: *logs
     image: grafana/grafana:11.1.0
     environment:
       GF_AUTH_ANONYMOUS_ENABLED: "true"
@@ -222,6 +247,7 @@ services:
   # consumidor entram aqui quando as imagens dos servicos expuserem esses
   # comandos. Variaveis: o contrato de configuracao descrito no README.
   os-service:
+    labels: *logs
     profiles: [servicos]
     build: ../../postech-sw-arch-p4-os-service
     image: pytstop-os-service:compose
@@ -242,6 +268,7 @@ services:
         condition: service_healthy
 
   billing-service:
+    labels: *logs
     profiles: [servicos]
     build: ../../postech-sw-arch-p4-billing-service
     image: pytstop-billing-service:compose
@@ -261,6 +288,7 @@ services:
         condition: service_healthy
 
   execution-service:
+    labels: *logs
     profiles: [servicos]
     build: ../../postech-sw-arch-p4-execution-service
     image: pytstop-execution-service:compose

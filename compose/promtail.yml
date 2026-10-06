@@ -1,6 +1,7 @@
-# Promtail do compose: logs dos containers deste projeto (label
-# com.docker.compose.project) pela API do Docker. app = nome do servico no
-# compose, para as mesmas consultas do cluster ({app="rabbitmq"} etc.).
+# Promtail do compose: logs dos containers com o rotulo pytstop.logs=true
+# (todos os servicos do docker-compose.yml, com qualquer nome de projeto) pela
+# API do Docker. app = nome do servico no compose, para as mesmas consultas do
+# cluster ({app="rabbitmq"} etc.).
 server:
   http_listen_port: 9080
 positions:
@@ -14,7 +15,16 @@ scrape_configs:
         refresh_interval: 10s
         filters:
           - name: label
-            values: ["com.docker.compose.project=pytstop-plataforma"]
+            values: ["pytstop.logs=true"]
+    # Mesma mascara de token do Promtail do Kubernetes
+    # (k8s/base/observabilidade/config/promtail.yaml).
+    pipeline_stages:
+      - replace:
+          expression: '/(?:publico/orcamentos|simulador/checkout)/([^\s/?&"]+)'
+          replace: "***"
+      - replace:
+          expression: 'token=([^\s&"]+)'
+          replace: "***"
     relabel_configs:
       - source_labels: [__meta_docker_container_label_com_docker_compose_service]
         target_label: app
