@@ -1,39 +1,8 @@
 # Loki single-binary (veio do k8s/loki.yaml da fase 3): recebe os logs JSON
 # dos pods via Promtail e atende o Grafana (datasource loki). Armazenamento
 # em emptyDir: os logs somem com o pod, aceitavel no cluster de demonstracao;
-# producao usaria PVC ou object storage.
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: loki-config
-  labels:
-    app: loki
-data:
-  loki.yaml: |
-    auth_enabled: false
-    server:
-      http_listen_port: 3100
-    common:
-      instance_addr: 127.0.0.1
-      path_prefix: /loki
-      storage:
-        filesystem:
-          chunks_directory: /loki/chunks
-          rules_directory: /loki/rules
-      replication_factor: 1
-      ring:
-        kvstore:
-          store: inmemory
-    schema_config:
-      configs:
-        - from: "2024-01-01"
-          store: tsdb
-          object_store: filesystem
-          schema: v13
-          index:
-            prefix: index_
-            period: 24h
----
+# producao usaria PVC ou object storage. Configuracao em config/loki.yaml
+# (configMapGenerator do k8s/base).
 apiVersion: apps/v1
 kind: Deployment
 metadata:

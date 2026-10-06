@@ -32,9 +32,29 @@ resources:
   # Datasources, alertas e dashboards do Grafana (compartilhados com o compose).
   - ../../observabilidade
 
-# Topologia, configuracao e script de usuarios do RabbitMQ; o compose monta
-# os mesmos arquivos.
+# Configuracao por arquivo, com hash no nome do ConfigMap: mudar o arquivo
+# troca o pod no proximo deploy (Prometheus, Loki e o broker so leem a config
+# no start). Topologia, configuracao e script de usuarios do RabbitMQ e a
+# config do Loki sao os mesmos arquivos que o compose monta.
 configMapGenerator:
+  - name: prometheus-config
+    files:
+      - observabilidade/config/prometheus.yml
+    options:
+      labels:
+        app: prometheus
+  - name: loki-config
+    files:
+      - observabilidade/config/loki.yaml
+    options:
+      labels:
+        app: loki
+  - name: promtail-config
+    files:
+      - observabilidade/config/promtail.yaml
+    options:
+      labels:
+        app: promtail
   - name: rabbitmq-config
     files:
       - rabbitmq/definitions.json
