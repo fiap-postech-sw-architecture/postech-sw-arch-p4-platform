@@ -24,11 +24,11 @@ metadata:
     app: rabbitmq
 type: Opaque
 stringData:
-  # VALORES DE DEMONSTRACAO: cluster kind/k3s de avaliacao, sem dado real. A
-  # geracao das senhas no deploy vem depois. Copias: a senha do admin aparece
-  # aqui duas vezes (admin-senha e admin.json) e em compose/rabbitmq-admin.json;
-  # a de cada servico, aqui, no compose e no Secret do servico, que monta a
-  # AMQP_URL no proprio namespace. O admin.json so e lido no boot: trocou a
+  # VALORES DE DEMONSTRACAO: cluster kind/k3s de avaliacao, sem dado real (o
+  # ADR-042 preve senhas geradas no cluster a cada deploy). Copias: a senha
+  # do admin aparece aqui duas vezes (admin-senha e admin.json) e em
+  # compose/rabbitmq-admin.json; a de cada servico, aqui, no compose e no
+  # Secret do servico, que monta a AMQP_URL no proprio namespace. O admin.json so e lido no boot: trocou a
   # senha do admin, rode o make deploy, reinicie o broker
   # (kubectl -n pytstop-plataforma rollout restart statefulset/rabbitmq) e
   # rode o make deploy de novo.

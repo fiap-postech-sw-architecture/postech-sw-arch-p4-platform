@@ -243,9 +243,9 @@ services:
       retries: 6
 
   # Profile `servicos`: a API de cada servico, construida do repositorio
-  # irmao (../../postech-sw-arch-p4-<servico>). Os processos relay e
-  # consumidor entram aqui quando as imagens dos servicos expuserem esses
-  # comandos. Variaveis: o contrato de configuracao descrito no README.
+  # irmao (../../postech-sw-arch-p4-<servico>); relay, consumidor e prazos
+  # rodam so no Kubernetes. Variaveis: o contrato de configuracao descrito no
+  # README.
   os-service:
     labels: *logs
     profiles: [servicos]

@@ -1,8 +1,8 @@
 # Regras de alerta da plataforma (Grafana alerting, provisionadas por
 # arquivo). Cada regra: consulta no Prometheus (A) e limiar (C). Notificacao
-# pela policy default do Grafana, sem canal externo, como na fase 3. Alertas
-# de saga (compensacoes, saga parada, circuito aberto) entram com os
-# dashboards de saga.
+# pela policy default do Grafana, sem canal externo, como na fase 3. Os
+# alertas de saga do ADR-043 (compensacoes, saga parada, circuito aberto)
+# dependem das metricas dos servicos e nao estao neste arquivo.
 apiVersion: 1
 groups:
   - orgId: 1
