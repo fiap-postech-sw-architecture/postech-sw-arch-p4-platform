@@ -67,4 +67,4 @@ Avaliadas a cada minuto e notificadas pela política padrão do Grafana, sem can
 
 ## Evidências
 
-O `make smoke` mostra, no kind, o dashboard e as regras carregados pelo Grafana e quantas séries cada consulta acima devolve; a saída de uma execução está no corpo do PR que introduziu este documento.
+O `make smoke` mostra, no kind, o dashboard e as regras carregados pelo Grafana e quantas séries cada consulta acima devolve, e sai com status 1 se faltar regra (a conta vem dos arquivos de `grafana/`) ou se alguma não estiver saudável; a saída de uma execução está no corpo do PR que introduziu este documento.

@@ -26,6 +26,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Discovered conventions
 
+- 2026-10-06 - `make smoke` sai com status 1 quando uma prova nao vale (linha `CHECK FAILED`, o script segue ate o fim e resume no final): borda e admin em 404, `%2F` em 404, login chegando a 429, nenhuma linha com o token no Loki, regras do Grafana todas carregadas e saudaveis; as linhas do Loki desta execucao se acham por `run=<marca>` na requisicao
 - 2026-10-06 - Exemplos de borda em `k8s/exemplos/`: `borda-os-service.yaml` e `borda-billing-service.yaml` (webhook com balde proprio, simulador do checkout fora de `/api/v1`); o smoke aplica os dois e um servico novo parte de um deles
 - 2026-10-06 - Todo limite de schema (itens, tamanho, quantidade, valor, formato) tem no `test_contratos.py` o valor na fronteira aceito e o seguinte rejeitado (`FRONTEIRAS`, lista de 1 a 50 itens, regra do `decidido_por` nos dois sentidos); limite novo ou mudado entra na tabela, e o que os negativos gerados nao alcancam fica nela
 - 2026-10-06 - `make smoke` aplica o exemplo de borda com um eco no lugar da API e prova rate limit, mascara de token no Loki, policies e redrive do RabbitMQ, fallback do Kong, Grafana provisionado e pods endurecidos; rodar so num cluster sem os servicos (usa os caminhos `/os`)
@@ -85,6 +86,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Review lessons
 
+- 2026-10-06 - O smoke so imprimia e saia 0 com `/os/metrics` aberto, sem 429 ou com token no Loki, e o README e o MEMORY diziam que ele "prova": script de verificacao tem de sair com status diferente de zero quando a prova nao vale, e cada prova se confirma sabotando o alvo (desligar o plugin, subir o limite, quebrar a mascara, derrubar o Prometheus) e vendo o `CHECK FAILED` certo; contar linha no Loki sem esperar as desta execucao deixa um vazamento a caminho passar calado - PR #2
 - 2026-10-06 - `noDataState` das regras de alerta nao tinha guarda: trocar `Alerting` por `OK` na regra de alvo ausente passava em todos os testes, e foi essa a regra que disparou sozinha no compose; propriedade de config que muda o comportamento e vem documentada em tabela ganha teste que compara a tabela com o arquivo (`test_tabela_de_alertas_diz_o_que_a_regra_faz`) - PR #2
 - 2026-10-06 - "22 de 22 mutantes mortos" valia so para os mutantes escolhidos a mao: o conjunto sistematico (cada palavra-chave de cada schema removida ou deslocada em 1, 996 variacoes) deixava 118 vivos, entre eles `maxItems` de seis das sete listas e o `then` de OrcamentoAprovado; afirmacao de cobertura de contrato so entra depois de mutacao sistematica - PR #2
 - 2026-10-06 - Substituicao em lote deixou o texto antigo colado ao novo na descricao de 11 schemas, e o registro da correcao disse "aplicado" sem conferir: texto que mora em duas fontes (schema e AsyncAPI) ganha teste que compare as duas - PR #2

@@ -96,7 +96,7 @@ deploy: ## aplica k8s/overlays/$(OVERLAY) e espera os rollouts
 kong-check: ## falha se o Kong recusou algum Ingress ou plugin (eventos dos ultimos 15 min)
 	@KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/kong-check.sh
 
-smoke: ## borda, rate limiting, mascara de token, RabbitMQ, fallback do Kong e pods endurecidos
+smoke: ## borda, barra codificada, rate limiting, mascara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos (status 1 se uma prova falha)
 	KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/smoke.sh
 
 redrive: ## devolve <fila>.dlq para <fila> depois de corrigida a causa (FILA=billing.comandos)
