@@ -667,7 +667,9 @@ A routing key deriva do nome, em snake_case: `GerarOrcamento` → `comando.billi
 | `ExecucaoFinalizada` | Execução → OS | `ordem_id`, `finalizada_em`, `pecas_consumidas[{sku, quantidade}]` |
 | `AnonimizarVeiculo` | OS → Execução, fora da saga e sem resposta | `veiculo_id` |
 
-- Dinheiro trafega como string decimal (`"350.00"`) com `moeda: "BRL"`, nunca em ponto flutuante.
+- Dinheiro trafega como string decimal (`"350.00"`), com até 10 dígitos inteiros e `moeda: "BRL"`, nunca em ponto flutuante. Quantidades vão de 1 a 1000 e as listas têm no máximo 50 itens.
+- O `correlation_id` é o `ordem_id`, exceto em `AnonimizarVeiculo`, que não pertence a uma saga e leva o `veiculo_id`.
+- `link_decisao` e `checkout_url` são URLs `http` ou `https` sem usuário embutido e carregam token: nunca vão para log nem para atributo de span.
 - Para peça, o `codigo` de `itens[]` e de `linhas[]` é o `sku`; serviço usa o código da tabela de preços. Código de serviço e `sku` têm no máximo 50 caracteres nos três serviços e nos schemas de `contratos/`. O OS guarda os itens do `DiagnosticoConcluido` na instância da saga e monta `ReservarPecas` com os de tipo `peca`.
 - O participante localiza o recurso a compensar pelo `ordem_id` quando o comando chega sem `orcamento_id` ou `pagamento_id`, o caso do passo em voo.
 - Nos comandos de compensação, `motivo` é um código da enumeração de `pytstop_saga_compensacoes_total` ([seção 9](#9-observabilidade)); o texto que o atendente escreve no cancelamento fica só no histórico da OS.
