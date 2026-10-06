@@ -226,6 +226,21 @@ $K -n "$NS" delete ingress smoke-quebrado smoke-novo
 echo "make kong-check depois de apagar o plugin invalido:"
 KUBE_CONTEXT="$CONTEXTO" ESPERA=10 scripts/kong-check.sh
 
+titulo "Grafana: dashboards e regras de alerta carregados do provisioning"
+grafana() { $K get --raw "/api/v1/namespaces/$NS/services/grafana:3000/proxy$1"; }
+grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (pasta \(.folderTitle))"'
+grafana "/api/prometheus/grafana/api/v1/rules" | jq -r '.data.groups[].rules[] | "regra: \(.name) [\(.state), \(.health)]"'
+
+titulo "Prometheus: series que cada consulta do dashboard e dos alertas devolve agora"
+prometheus() {
+  $K get --raw "/api/v1/namespaces/$NS/services/prometheus:9090/proxy/api/v1/query?query=$(jq -rn --arg q "$1" '$q|@uri')" \
+    | jq '.data.result | length'
+}
+{ jq -r '.panels[].targets[].expr' observabilidade/dashboards/*.json; sed -n 's/^ *expr: //p' observabilidade/grafana/alertas.yaml; } \
+  | sed 's/\$__rate_interval/5m/g' | sort -u | while read -r consulta; do
+    printf '%3s series  %s\n' "$(prometheus "$consulta")" "$consulta"
+  done
+
 titulo "endurecimento: securityContext efetivo de cada container da plataforma"
 $K -n "$NS" get pods -o json | jq -r '
   def v(x): if x == null then "-" else (x | tostring) end;

@@ -126,15 +126,15 @@ down: ## derruba a stack compose (os volumes ficam; docker compose down -v apaga
 	$(COMPOSE) --profile servicos down
 
 # CI=true desliga a telemetria anonima do @asyncapi/cli.
-test: ## testes dos contratos de mensageria e validacao do asyncapi.yaml
+test: ## testes dos contratos e da observabilidade, validacao do asyncapi.yaml
 	uv run pytest
 	CI=true npx --yes $(ASYNCAPI_CLI) validate contratos/asyncapi.yaml
 
-lint: ## ruff, mypy e bandit nos testes de contrato
+lint: ## ruff, mypy e bandit nos testes
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy
-	uv run bandit -c pyproject.toml -r contratos -q
+	uv run bandit -c pyproject.toml -r contratos tests -q
 
 manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do Kong, versoes, dashboards
 	set -euo pipefail; \

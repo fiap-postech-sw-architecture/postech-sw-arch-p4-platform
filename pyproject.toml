@@ -28,14 +28,15 @@ dev = [
 package = false
 
 [tool.pytest.ini_options]
-testpaths = ["contratos/tests"]
+testpaths = ["contratos/tests", "tests"]
 addopts = ["--strict-markers", "--strict-config", "--cov", "--cov-report=term-missing"]
 
 # Mede so o codigo de teste: o repositorio nao tem Python de producao. Quem
-# protege os schemas sao os negativos gerados dos exemplos (test_contratos.py).
+# protege os schemas sao os negativos gerados dos exemplos (test_contratos.py)
+# e a observabilidade, o teste de consistencia (tests/).
 [tool.coverage.run]
 branch = true
-source = ["contratos"]
+source = ["contratos", "tests"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -55,11 +56,12 @@ select = [
 
 [tool.ruff.lint.per-file-ignores]
 "contratos/tests/**" = ["S101"]
+"tests/**" = ["S101"]
 
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["contratos/tests"]
+files = ["contratos/tests", "tests"]
 
 [tool.bandit]
 # assert e o mecanismo do pytest, e aqui so ha codigo de teste.

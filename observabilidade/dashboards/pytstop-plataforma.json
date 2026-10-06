@@ -1,7 +1,7 @@
 {
   "uid": "pytstop-plataforma",
-  "title": "PytStop - Plataforma",
-  "description": "Infraestrutura compartilhada da fase 4: filas, mensagens e DLQ do RabbitMQ, alvos do Prometheus e tráfego do gateway Kong. Documentação painel a painel em observabilidade/README.md.",
+  "title": "PytStop - Mensageria e Serviços (infraestrutura)",
+  "description": "Parte de infraestrutura de dois dashboards do ADR-043: Mensageria (painéis 1 a 8: filas, DLQ e dead-letter do RabbitMQ) e Serviços (painéis 9 a 11: alvos do Prometheus e tráfego do gateway Kong). Documentação painel a painel em observabilidade/README.md.",
   "tags": [
     "pytstop",
     "plataforma"
@@ -425,7 +425,7 @@
     {
       "id": 9,
       "title": "Alvos raspados pelo Prometheus",
-      "description": "Um quadro por job (label app do pod anotado, mais kube-state-metrics). Vermelho quando o Prometheus não alcança o /metrics: serviço, broker ou gateway fora do ar.",
+      "description": "Um quadro por job (label app do pod anotado, mais kube-state-metrics). Vermelho quando o Prometheus não alcança o /metrics: serviço, broker ou gateway fora do ar. Pod que some da descoberta deixa de aparecer aqui; para o broker e o gateway, os alertas de alvo ausente cobrem esse caso.",
       "type": "stat",
       "gridPos": {
         "h": 8,
@@ -498,7 +498,7 @@
     {
       "id": 10,
       "title": "Gateway: requisições por status (req/s)",
-      "description": "Requisições que passaram pelo Kong, por código HTTP. 5xx acima de 1% do total dispara o alerta do gateway.",
+      "description": "Requisições que passaram pelo Kong, por código HTTP. 429 é o rate limiting do gateway; 5xx acima de 1% do total dispara o alerta do gateway.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
