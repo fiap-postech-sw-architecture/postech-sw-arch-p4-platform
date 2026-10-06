@@ -104,7 +104,8 @@ spec:
           configMap:
             name: grafana-dashboards
         - name: storage
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 256Mi
 ---
 apiVersion: v1
 kind: Service

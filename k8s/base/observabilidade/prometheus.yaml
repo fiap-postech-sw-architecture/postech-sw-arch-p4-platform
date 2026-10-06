@@ -79,6 +79,7 @@ spec:
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.retention.time=2d
+            - --storage.tsdb.retention.size=1GB
           ports:
             - name: http
               containerPort: 9090
@@ -102,15 +103,19 @@ spec:
             requests:
               cpu: 50m
               memory: 192Mi
+            # Os valores da fase 3 e do orcamento do ADR-042.
             limits:
-              cpu: 500m
-              memory: 768Mi
+              cpu: 250m
+              memory: 512Mi
       volumes:
         - name: config
           configMap:
             name: prometheus-config
+        # retention.size (args) abaixo do sizeLimit: o Prometheus apaga os
+        # blocos antigos antes de o kubelet despejar o pod pelo disco.
         - name: dados
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 2Gi
 ---
 apiVersion: v1
 kind: Service

@@ -21,3 +21,14 @@ schema_config:
       index:
         prefix: index_
         period: 24h
+# Retencao de 7 dias, a mesma da DLQ (ADR-036), e o compactor que apaga os
+# chunks vencidos; sem ele o emptyDir so cresce ate o sizeLimit do Deployment
+# e o pod e despejado, perdendo os logs.
+compactor:
+  working_directory: /loki/compactor
+  compaction_interval: 10m
+  retention_enabled: true
+  retention_delete_delay: 2h
+  delete_request_store: filesystem
+limits_config:
+  retention_period: 168h

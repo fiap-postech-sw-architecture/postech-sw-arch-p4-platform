@@ -62,8 +62,11 @@ spec:
         - name: config
           configMap:
             name: loki-config
+        # Teto de disco no no (que guarda tambem os volumes do broker e dos
+        # bancos); a retencao de 7 dias do loki.yaml fica bem abaixo dele.
         - name: storage
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 2Gi
 ---
 apiVersion: v1
 kind: Service
