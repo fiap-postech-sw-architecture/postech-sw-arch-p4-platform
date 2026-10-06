@@ -1,0 +1,44 @@
+# Limites do rate limiting multiplicados por 10 no kind (ADR-038): o E2E e a
+# demonstracao fazem rajadas de um IP so (no kind todo cliente chega com o IP
+# da bridge do Docker) e nao podem tomar 429.
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-global
+config:
+  minute: 600
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-login
+config:
+  minute: 50
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-sessao
+config:
+  minute: 100
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-publico
+config:
+  minute: 100
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-jwks
+config:
+  minute: 600
+---
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: rate-limiting-webhook
+config:
+  minute: 1200

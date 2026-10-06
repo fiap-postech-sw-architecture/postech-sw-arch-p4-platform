@@ -1,0 +1,46 @@
+server:
+  http_listen_port: 9080
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+positions:
+  filename: /run/promtail/positions.yaml
+scrape_configs:
+  - job_name: pytstop-pods
+    kubernetes_sd_configs:
+      - role: pod
+    pipeline_stages:
+      # Tira o envelope CRI do containerd e entrega a linha crua; o JSON
+      # do servico fica intacto para o `| json` do LogQL.
+      - cri: {}
+      # O token do link de decisao e o do checkout do simulador sao
+      # credenciais (RFC-004 secao 8): o access log do Kong e o log dos
+      # servicos trazem o caminho inteiro, e o Loki e lido pelo Viewer
+      # anonimo do Grafana. Cada grupo capturado vira ***, antes de sair do no.
+      # A barra tambem vale como %2F: o Kong loga o caminho como chegou, inclusive
+      # o do pedido que ele barra com 404.
+      - replace:
+          expression: '(?:/|%2[Ff])(?:publico(?:/|%2[Ff])orcamentos|simulador(?:/|%2[Ff])checkout)(?:/|%2[Ff])([^\s/?&"]+)'
+          replace: "***"
+      - replace:
+          expression: 'token=([^\s&"]+)'
+          replace: "***"
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_namespace]
+        regex: pytstop-.+
+        action: keep
+      # Cada Promtail so le os pods do proprio no (HOSTNAME = nome do no).
+      - source_labels: [__meta_kubernetes_pod_node_name]
+        target_label: __host__
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        target_label: app
+      - source_labels: [__meta_kubernetes_namespace]
+        target_label: namespace
+      - source_labels: [__meta_kubernetes_pod_name]
+        target_label: pod
+      - source_labels: [__meta_kubernetes_pod_container_name]
+        target_label: container
+      # /var/log/pods/<ns>_<pod>_<uid>/<container>/N.log
+      - source_labels: [__meta_kubernetes_pod_uid, __meta_kubernetes_pod_container_name]
+        separator: /
+        target_label: __path__
+        replacement: /var/log/pods/*$1/*.log

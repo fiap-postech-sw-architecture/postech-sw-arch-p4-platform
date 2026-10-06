@@ -1,0 +1,56 @@
+# Overlay do kind local (make kind-up deploy): a plataforma completa, com os
+# recursos do base (limites somam ~4,4 GiB). Para o runner do CI o ADR-042
+# preve o overlay kind-ci, sem Loki, Promtail e Grafana.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  # metrics-server (kube-system), pre-requisito do HPA dos servicos. O k3s ja
+  # traz o dele, por isso so o kind o recebe daqui.
+  - metrics-server.yaml
+
+patches:
+  - path: rate-limit-x10.yaml
+  # O kind nao tem LoadBalancer: o Kong vira NodePort fixo, e o
+  # kind/cluster.yaml mapeia 80 -> 30080 e 443 -> 30443 no host.
+  - target:
+      kind: Service
+      name: kong-proxy
+    patch: |-
+      - op: replace
+        path: /spec/type
+        value: NodePort
+      - op: add
+        path: /spec/ports/0/nodePort
+        value: 30080
+      - op: add
+        path: /spec/ports/1/nodePort
+        value: 30443
+  # StorageClass padrao do kind (local-path-provisioner). Volume do broker
+  # pequeno: cluster efemero.
+  - target:
+      kind: StatefulSet
+      name: rabbitmq
+    patch: |-
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: standard
+  # O certificado do kubelet no kind e autoassinado e nao cobre o IP do no.
+  # O manifest upstream endurece o container; o securityContext do pod fica
+  # aqui (trivy KSV-0118).
+  - target:
+      kind: Deployment
+      name: metrics-server
+      namespace: kube-system
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kubelet-insecure-tls
+      - op: add
+        path: /spec/template/spec/securityContext
+        value:
+          runAsNonRoot: true
+          runAsUser: 1000
+          seccompProfile:
+            type: RuntimeDefault

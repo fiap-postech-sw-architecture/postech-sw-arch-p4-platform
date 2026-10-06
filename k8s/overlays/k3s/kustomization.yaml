@@ -1,0 +1,44 @@
+# Overlay do k3s (VM na Azure, ambiente que fica de pe durante a janela de
+# evidencias e do video).
+#
+# Pressupoe o k3s instalado com --disable traefik: o Service kong-proxy fica
+# LoadBalancer (como no base) e o ServiceLB do k3s publica as portas 80/443
+# da VM direto no Kong.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  # StorageClass do k3s (local-path), mais disco e mais memoria reservada
+  # (request) para o broker, que aqui fica de pe por dias. O limite (1Gi) e o
+  # vm_memory_high_watermark do rabbitmq.conf continuam os do base.
+  - target:
+      kind: StatefulSet
+      name: rabbitmq
+    patch: |-
+      - op: add
+        path: /spec/volumeClaimTemplates/0/spec/storageClassName
+        value: local-path
+      - op: replace
+        path: /spec/volumeClaimTemplates/0/spec/resources/requests/storage
+        value: 5Gi
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests
+        value:
+          cpu: 250m
+          memory: 512Mi
+  # Uma semana de metricas para as evidencias (no kind, 2 dias bastam). O
+  # TSDB fica no emptyDir do pod: sobrevive a restart do container, nao a
+  # recriacao do pod.
+  - target:
+      kind: Deployment
+      name: prometheus
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args/1
+        value: --storage.tsdb.retention.time=7d
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 1Gi

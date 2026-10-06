@@ -1,0 +1,83 @@
+# Infraestrutura compartilhada da fase 4 no namespace pytstop-plataforma:
+# RabbitMQ, Kong (gateway e IngressClass), Mailpit e a stack de
+# observabilidade. Cada servico tem namespace proprio (pytstop-os,
+# pytstop-billing, pytstop-execucao), criado pelo repositorio do servico junto
+# com os seus manifests.
+#
+# Nao aplique este diretorio direto: use um overlay (kind ou k3s) pelo
+# `make deploy`, que aplica as CRDs do Kong antes do resto.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace pytstop-plataforma em todo recurso sem namespace. unsetOnly: o
+# kong.yaml traz a Role do controller nos namespaces dos servicos
+# (watchNamespaces), e o campo namespace: comum moveria todas para ca.
+transformers:
+  - |-
+    apiVersion: builtin
+    kind: NamespaceTransformer
+    metadata:
+      name: namespace-da-plataforma
+      namespace: pytstop-plataforma
+    unsetOnly: true
+
+# Rotulo que o `make deploy` usa para esperar so os rollouts da plataforma.
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: pytstop-plataforma
+
+resources:
+  - namespace.yaml
+  - rabbitmq/rabbitmq.yaml
+  - kong/crds.yaml
+  - kong/kong.yaml
+  - kong/eventos-de-cluster.yaml
+  - kong/plugins.yaml
+  - mailpit.yaml
+  - observabilidade/prometheus.yaml
+  - observabilidade/grafana.yaml
+  - observabilidade/loki.yaml
+  - observabilidade/promtail.yaml
+  - observabilidade/jaeger.yaml
+  - observabilidade/kube-state-metrics.yaml
+  # Datasources, alertas e dashboards do Grafana (compartilhados com o compose).
+  - ../../observabilidade
+
+# Configuracao por arquivo, com hash no nome do ConfigMap: mudar o arquivo
+# troca o pod no proximo deploy (Prometheus, Loki e o broker so leem a config
+# no start). Topologia, configuracao e script de usuarios do RabbitMQ e a
+# config do Loki sao os mesmos arquivos que o compose monta.
+configMapGenerator:
+  - name: prometheus-config
+    files:
+      - observabilidade/config/prometheus.yml
+    options:
+      labels:
+        app: prometheus
+  - name: loki-config
+    files:
+      - observabilidade/config/loki.yaml
+    options:
+      labels:
+        app: loki
+  - name: promtail-config
+    files:
+      - observabilidade/config/promtail.yaml
+    options:
+      labels:
+        app: promtail
+  - name: rabbitmq-config
+    files:
+      - rabbitmq/definitions.json
+      - rabbitmq/rabbitmq.conf
+      - rabbitmq/enabled_plugins
+    options:
+      labels:
+        app: rabbitmq
+  - name: rabbitmq-scripts
+    files:
+      - rabbitmq/criar-usuarios.sh
+      - rabbitmq/permissoes.json
+    options:
+      labels:
+        app: rabbitmq-usuarios

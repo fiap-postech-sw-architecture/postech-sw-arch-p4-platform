@@ -1,0 +1,294 @@
+# RabbitMQ 4 da plataforma: broker da saga (comandos do OS Service para
+# Billing e Execucao, eventos de volta para o OS). Um no, filas quorum.
+#
+# Por que quorum e nao classic duravel: a fila quorum grava em log replicado
+# (Raft) com fsync antes do confirm, aceita TTL por mensagem (usado nas filas
+# .retry) e permite dead-lettering at-least-once, o que garante que a
+# mensagem que expira na .retry volta para a fila original e a que e
+# rejeitada chega na .dlq sem perda. Na classic o dead-lettering e
+# at-most-once. Com um no so nao ha replicacao, mas os clientes nao mudam se o
+# broker virar cluster de 3. Custo: mais disco e memoria por fila (irrelevante
+# para 9 filas) e nada de prefetch global (os consumidores usam prefetch por
+# consumidor, que e o default do pika).
+#
+# Usuarios: o admin (operacao e management) entra junto com a topologia no
+# boot, porque com definitions no boot o RabbitMQ nao cria usuario nenhum e o
+# Job abaixo precisa de alguem para falar com a API. Os usuarios dos servicos
+# (os, billing, execucao) sao criados pelo Job rabbitmq-usuarios
+# (criar-usuarios.sh) a cada deploy, com as permissoes de permissoes.json.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rabbitmq-credenciais
+  labels:
+    app: rabbitmq
+type: Opaque
+stringData:
+  # VALORES DE DEMONSTRACAO: cluster kind/k3s de avaliacao, sem dado real (o
+  # ADR-042 preve senhas geradas no cluster a cada deploy). Copias: a senha
+  # do admin aparece aqui duas vezes (admin-senha e admin.json) e em
+  # compose/rabbitmq-admin.json; a de cada servico, aqui, no compose e no
+  # Secret do servico, que monta a AMQP_URL no proprio namespace. O admin.json so e lido no boot: trocou a
+  # senha do admin, rode o make deploy, reinicie o broker
+  # (kubectl -n pytstop-plataforma rollout restart statefulset/rabbitmq) e
+  # rode o make deploy de novo.
+  admin-usuario: admin
+  admin-senha: pytstop-rabbitmq-admin-demo-2026  # gitleaks:allow
+  senha-os: pytstop-os-demo-2026  # gitleaks:allow
+  senha-billing: pytstop-billing-demo-2026  # gitleaks:allow
+  senha-execucao: pytstop-execucao-demo-2026  # gitleaks:allow
+  # admin.json declara o vhost / tambem: o RabbitMQ importa o diretorio em
+  # ordem alfabetica, admin.json antes de definitions.json, e permissao em
+  # vhost que ainda nao existe derruba o boot.
+  admin.json: |
+    {
+      "vhosts": [{"name": "/"}],
+      "users": [
+        {"name": "admin", "password": "pytstop-rabbitmq-admin-demo-2026", "tags": ["administrator"]}
+      ],
+      "permissions": [
+        {"user": "admin", "vhost": "/", "configure": ".*", "write": ".*", "read": ".*"}
+      ]
+    }
+---
+# Headless: da nome estavel ao pod do StatefulSet (rabbitmq-0, que e o nome
+# do no Erlang e do diretorio de dados) e serve aos clientes como
+# rabbitmq.pytstop-plataforma.svc.cluster.local:5672.
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  labels:
+    app: rabbitmq
+spec:
+  clusterIP: None
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: amqp
+    - name: management
+      port: 15672
+      targetPort: management
+    - name: prometheus
+      port: 15692
+      targetPort: prometheus
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  labels:
+    app: rabbitmq
+spec:
+  serviceName: rabbitmq
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+      annotations:
+        # /metrics/per-object traz metricas por fila (profundidade,
+        # consumidores, DLQ); o /metrics padrao so agrega o broker inteiro.
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "15692"
+        prometheus.io/path: /metrics/per-object
+    spec:
+      # Roda direto como o usuario rabbitmq da imagem (uid 999). Alem de nao
+      # rodar como root, evita uma corrida real: as probes exec rodam como o
+      # usuario do container, e um rabbitmq-diagnostics como root antes do
+      # boot cria o .erlang.cookie com dono root e o servidor nao sobe
+      # (eacces).
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault
+      # O broker nao fala com a API do Kubernetes.
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:4.3.6-management
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          ports:
+            - name: amqp
+              containerPort: 5672
+            - name: management
+              containerPort: 15672
+            - name: prometheus
+              containerPort: 15692
+          volumeMounts:
+            - name: dados
+              mountPath: /var/lib/rabbitmq
+            - name: config
+              mountPath: /etc/rabbitmq/conf.d/20-pytstop.conf
+              subPath: rabbitmq.conf
+              readOnly: true
+            # Os plugins da imagem (management e prometheus) mais o shovel,
+            # que o make redrive usa para devolver a DLQ a fila.
+            - name: config
+              mountPath: /etc/rabbitmq/enabled_plugins
+              subPath: enabled_plugins
+              readOnly: true
+            # Arquivo a arquivo (subPath) de proposito: montado como volume
+            # inteiro, o diretorio traz as entradas internas do kubelet
+            # (..data, ..<timestamp>), o RabbitMQ tenta importa-las, falha
+            # com eisdir e sobe sem fila e sem usuario.
+            - name: config
+              mountPath: /etc/rabbitmq/definitions/definitions.json
+              subPath: definitions.json
+              readOnly: true
+            - name: credenciais
+              mountPath: /etc/rabbitmq/definitions/admin.json
+              subPath: admin.json
+              readOnly: true
+          # Probes com o CLI do proprio broker, como recomenda a documentacao
+          # de health checks do RabbitMQ. Cada chamada sobe uma VM Erlang
+          # curta, dai os timeouts folgados.
+          # startup: so passa com as definitions importadas. O exchange
+          # pytstop.retry so existe se o definitions.json entrou, e o admin so
+          # se o admin.json entrou (com definitions no boot o RabbitMQ nao cria
+          # usuario padrao). Se a importacao falhar o pod reinicia em vez de
+          # ficar pronto e vazio.
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - rabbitmqctl -s list_exchanges name | grep -qx pytstop.retry && rabbitmqctl -s list_users | grep -q .
+            periodSeconds: 10
+            timeoutSeconds: 20
+            failureThreshold: 30
+          # liveness: no Erlang de pe e respondendo ao CLI.
+          livenessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "ping"]
+            periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 3
+          # readiness: listeners AMQP, management e prometheus aceitando conexao.
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+            periodSeconds: 10
+            timeoutSeconds: 15
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            # Limite de memoria acoplado ao vm_memory_high_watermark do
+            # rabbitmq.conf (metade deste valor).
+            limits:
+              cpu: "1"
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap:
+            name: rabbitmq-config
+        - name: credenciais
+          secret:
+            secretName: rabbitmq-credenciais
+  volumeClaimTemplates:
+    - metadata:
+        name: dados
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+# Cria os usuarios dos servicos depois que o broker sobe. Job e imutavel: o
+# `make deploy` apaga o anterior antes do apply, e ele roda de novo a cada
+# deploy (o script e idempotente).
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: rabbitmq-usuarios
+  labels:
+    app: rabbitmq-usuarios
+spec:
+  backoffLimit: 4
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-usuarios
+    spec:
+      restartPolicy: OnFailure
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      # Fala com a API de gerenciamento do broker, nao com a do Kubernetes.
+      automountServiceAccountToken: false
+      containers:
+        - name: criar-usuarios
+          image: rabbitmq:4.3.6-management
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          command: ["sh", "/scripts/criar-usuarios.sh"]
+          env:
+            - name: RABBITMQADMIN_TARGET_HOST
+              value: rabbitmq
+            - name: RABBITMQADMIN_TARGET_PORT
+              value: "15672"
+            - name: RABBITMQADMIN_NON_INTERACTIVE_MODE
+              value: "true"
+            - name: RABBITMQADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credenciais
+                  key: admin-usuario
+            - name: RABBITMQADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credenciais
+                  key: admin-senha
+            - name: RABBITMQ_OS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credenciais
+                  key: senha-os
+            - name: RABBITMQ_BILLING_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credenciais
+                  key: senha-billing
+            - name: RABBITMQ_EXECUCAO_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: rabbitmq-credenciais
+                  key: senha-execucao
+          volumeMounts:
+            - name: scripts
+              mountPath: /scripts
+              readOnly: true
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 128Mi
+      volumes:
+        - name: scripts
+          configMap:
+            name: rabbitmq-scripts

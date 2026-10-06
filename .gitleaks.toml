@@ -1,7 +1,20 @@
 title = "PytStop fase 4 gitleaks config"
 
-# Herda as regras padrao do gitleaks 8.x. Valores de demonstracao, quando
-# existirem, entram na allowlist com comentario explicando por que nao sao
-# segredo (mesmo padrao da fase 3).
+# Herda as regras padrao do gitleaks 8.x.
 [extend]
 useDefault = true
+
+# Valores de demonstracao, sem dado real. Linhas em YAML levam tambem o
+# marcador gitleaks:allow; JSON nao aceita comentario, entao a regra vale para
+# a linha inteira:
+# - senhas pytstop-<componente>-demo-2026 (Secrets do kind/k3s e compose; o
+#   ADR-042 preve senhas geradas no deploy);
+# - link de decisao e checkout dos exemplos de contrato, que apontam para
+#   http://localhost e carregam um token ilustrativo.
+[allowlist]
+description = "Valores de demonstracao e exemplos de contrato"
+regexTarget = "line"
+regexes = [
+  '''pytstop-[a-z-]+-demo-2026''',
+  '''"(link_decisao|checkout_url)": "http://localhost/''',
+]

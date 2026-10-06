@@ -1,0 +1,80 @@
+# Valores do chart kong/kong usados para gerar kong.yaml (alvo `make kong-render`).
+# Kong Gateway OSS em modo DB-less com o Kong Ingress Controller como sidecar
+# no mesmo pod: o controller le Ingress/KongPlugin do cluster e empurra a
+# configuracao declarativa para o Admin API local, sem banco do Kong.
+fullnameOverride: kong
+
+image:
+  repository: kong
+  tag: "3.9.3"
+
+env:
+  database: "off"
+  anonymous_reports: "off"
+
+ingressController:
+  enabled: true
+  image:
+    repository: kong/kubernetes-ingress-controller
+    tag: "3.5.13"
+  ingressClass: kong
+  # So os namespaces da fase 4: o chart troca o ClusterRole de Ingress,
+  # Services e Secrets por uma Role em cada um, e o controller, no pod exposto
+  # a internet, deixa de ler os Secrets do cluster inteiro. Os namespaces dos
+  # servicos precisam existir antes do apply (o make deploy os cria vazios).
+  watchNamespaces:
+    - pytstop-plataforma
+    - pytstop-os
+    - pytstop-billing
+    - pytstop-execucao
+  # CRDs vem de crds.yaml (helm show crds), aplicadas antes do resto.
+  installCRDs: false
+  # O webhook de validacao exige certificado gerado na renderizacao; com ele
+  # o kong.yaml versionado carregaria uma chave privada. Sem o webhook, plugin
+  # mal configurado aparece no log do controller em vez de no kubectl apply;
+  # o make deploy confere (alvo kong-check).
+  admissionWebhook:
+    enabled: false
+  env:
+    anonymous_reports: "false"
+    # Sem o gate, um Ingress ou plugin invalido de um servico faz o Kong DB-less
+    # recusar a configuracao inteira: nada novo entra, e um Kong reiniciado
+    # sobe sem rota nenhuma. Com ele o controller tira o objeto com erro (e o
+    # que depende dele), aplica o resto e registra evento no objeto. Alpha no
+    # KIC 3.5, desligado por padrao.
+    feature_gates: FallbackConfiguration=true
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+proxy:
+  type: LoadBalancer
+  # Preserva o IP do cliente (sem o SNAT do kube-proxy): o rate limiting conta
+  # por IP, e com Cluster todo cliente apareceria com o endereco do no e
+  # dividiria o mesmo limite. Proxy ou balanceador na frente: env.trusted_ips
+  # com o CIDR exato dele e env.real_ip_header (README, secao do gateway).
+  externalTrafficPolicy: Local
+
+admin:
+  enabled: false
+
+# Kong Manager e a GUI do Admin API; sem Admin API exposto ela nao tem uso.
+manager:
+  enabled: false
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8100"
+  prometheus.io/path: /metrics
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi

@@ -1,0 +1,43 @@
+# Regras de alerta que so valem no cluster (Kubernetes). Dependem do Kong, que
+# o compose nao tem: la o alvo nunca existe e, com "sem dado" como alerta, a
+# regra ficaria disparada para sempre. Por isso mora a parte: o
+# configMapGenerator de kustomization.yaml monta este arquivo no Grafana do
+# cluster, e o compose monta so alertas.yaml. Mesmo formato e mesma pasta, em
+# grupo proprio (pytstop-cluster).
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: pytstop-cluster
+    folder: PytStop
+    interval: 1m
+    rules:
+      # Gateway fora do ar: up = 0 dispara pela condicao; pod apagado, Pending ou
+      # em falha some da descoberta e deixa o up sem serie, que a regra generica
+      # (pytstop-alvo-fora) nao enxerga, e aqui sem dado tambem e alerta.
+      - uid: pytstop-kong-fora
+        title: Kong fora do ar ou sem alvo de métricas (2min)
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O Prometheus não raspa o Kong há 2 minutos (pod fora do ar ou ausente da descoberta); a borda pode estar sem rota.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: up{job="kong"}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}

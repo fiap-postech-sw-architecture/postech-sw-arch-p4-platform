@@ -1,0 +1,190 @@
+# Regras de alerta da plataforma (Grafana alerting, provisionadas por
+# arquivo). Cada regra: consulta no Prometheus (A) e limiar (C). Notificacao
+# pela policy default do Grafana, sem canal externo, como na fase 3. Os
+# alertas de saga do ADR-043 (compensacoes, saga parada, circuito aberto)
+# dependem das metricas dos servicos e nao estao neste arquivo. Este arquivo
+# vale no Kubernetes e no compose; o que depende do Kong, que o compose nao
+# tem, fica em alertas-cluster.yaml.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: pytstop-plataforma
+    folder: PytStop
+    interval: 1m
+    rules:
+      # Mensagem na DLQ = esgotou os retries ou falhou de forma permanente.
+      # A saga daquela OS esta parada ate alguem olhar.
+      - uid: pytstop-dlq-com-mensagens
+        title: DLQ com mensagens
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Há mensagem em uma fila .dlq (o label queue diz qual); veja o painel "Mensagens nas DLQs".
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum by (queue) (rabbitmq_queue_messages{queue=~".+[.]dlq"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      # Alarme de memoria ou disco: o RabbitMQ bloqueia todos os publishers.
+      - uid: pytstop-rabbitmq-alarme
+        title: RabbitMQ com alarme de memória ou disco
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O broker está bloqueando publicações (memória acima do vm_memory_high_watermark ou disco livre abaixo do limite).
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(rabbitmq_alarms_memory_used_watermark) + max(rabbitmq_alarms_free_disk_space_watermark)
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      # Mais de 1% das requisicoes do gateway com 5xx (servico ou Kong).
+      - uid: pytstop-gateway-5xx
+        title: Gateway com mais de 1% de 5xx (5min)
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Mais de 1% das requisições que passam pelo Kong responderam 5xx nos últimos 5 minutos.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(rate(kong_http_requests_total{code=~"5.."}[5m])) / sum(rate(kong_http_requests_total[5m]))
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.01]}
+      # Alvo anotado que o Prometheus nao alcanca (up = 0). Pod que some da
+      # descoberta deixa a serie sem dado e nao dispara esta regra: o broker
+      # tem regra propria abaixo, o gateway tambem (so no cluster, em
+      # alertas-cluster.yaml) e cada servico traz a dele.
+      - uid: pytstop-alvo-fora
+        title: Alvo de métricas fora do ar (2min)
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O Prometheus não consegue raspar um dos alvos (o label job diz qual).
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: min by (job) (up{job!="kubelet-cadvisor"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+      # Broker fora do ar: up = 0 dispara pela condicao; pod apagado, Pending
+      # ou em falha some da descoberta e deixa o up sem serie, que a regra
+      # generica acima nao enxerga, e aqui sem dado tambem e alerta. Com o
+      # broker de pe, up = 1 e a regra fica OK. (absent() nao serve com
+      # noDataState Alerting: sem dado com o broker de pe, dispararia sempre.)
+      - uid: pytstop-rabbitmq-fora
+        title: RabbitMQ fora do ar ou sem alvo de métricas (2min)
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O Prometheus não raspa o RabbitMQ há 2 minutos (pod fora do ar ou ausente da descoberta); comandos e eventos da saga não andam.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: up{job="rabbitmq"}
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+      # CPU real (cAdvisor) acima de 80% do limite do pod por 10 minutos.
+      - uid: pytstop-cpu-pod-alta
+        title: CPU de pod acima de 80% do limite (10min)
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Pod da plataforma ou de um serviço (namespaces pytstop-*) com CPU acima de 80% do limite por 10 minutos.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 600, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~"pytstop-.+", container!=""}[5m])) / sum by (namespace, pod) (kube_pod_container_resource_limits{namespace=~"pytstop-.+", resource="cpu"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.8]}
