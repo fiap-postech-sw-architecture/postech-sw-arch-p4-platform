@@ -822,6 +822,8 @@ spec:
           value: "false"
         - name: CONTROLLER_ELECTION_ID
           value: "kong-ingress-controller-leader-kong"
+        - name: CONTROLLER_FEATURE_GATES
+          value: "FallbackConfiguration=true"
         - name: CONTROLLER_INGRESS_CLASS
           value: "kong"
         - name: CONTROLLER_KONG_ADMIN_TLS_SKIP_VERIFY

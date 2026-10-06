@@ -11,7 +11,12 @@ BORDA="${BORDA:-http://localhost}"
 NS_SMOKE=pytstop-smoke
 K="kubectl --context $CONTEXTO"
 TMP="$(mktemp -d)"
-trap '$K delete namespace "$NS_SMOKE" --ignore-not-found --wait=false >/dev/null; rm -rf "$TMP"' EXIT
+limpa() {
+  $K delete kongclusterplugin smoke-plugin-invalido --ignore-not-found >/dev/null
+  $K delete namespace "$NS_SMOKE" --ignore-not-found --wait=false >/dev/null
+  rm -rf "$TMP"
+}
+trap limpa EXIT
 
 titulo() { printf '\n== %s\n' "$*"; }
 
@@ -93,3 +98,53 @@ echo "balde proprio: o refresh continua respondendo"
 pede POST /os/api/v1/autenticacao/refresh
 printf 'IP que o Kong viu (ultima linha do access log): '
 $K -n pytstop-plataforma logs deployment/kong -c proxy --tail=1 | awk '{print $1}'
+
+titulo "configuracao invalida de um servico nao derruba as outras (FallbackConfiguration)"
+$K apply -f - <<YAML
+apiVersion: configuration.konghq.com/v1
+kind: KongClusterPlugin
+metadata:
+  name: smoke-plugin-invalido
+  annotations:
+    kubernetes.io/ingress.class: kong
+plugin: rate-limiting
+config:
+  minute: -5
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: smoke-quebrado
+  namespace: $NS_SMOKE
+  annotations:
+    konghq.com/strip-path: "true"
+    konghq.com/plugins: smoke-plugin-invalido
+spec:
+  ingressClassName: kong
+  rules:
+    - http:
+        paths:
+          - path: /os/quebrado
+            pathType: Prefix
+            backend:
+              service:
+                name: os-service-borda-api
+                port:
+                  number: 8000
+YAML
+sleep 5
+echo "Ingress valido criado depois do invalido:"
+$K -n "$NS_SMOKE" create ingress smoke-novo --class=kong --rule='/os/novo*=os-service-borda-api:8000' \
+  --annotation=konghq.com/strip-path=true
+sleep 10
+pede GET /os/api/v1/ordens-de-servico
+pede GET /os/novo/x
+pede GET /os/quebrado/x
+echo "make kong-check com o plugin invalido no cluster:"
+if KUBE_CONTEXT="$CONTEXTO" ESPERA=15 scripts/kong-check.sh; then
+  echo "ERRO: o kong-check deveria ter falhado"; exit 1
+fi
+$K delete kongclusterplugin smoke-plugin-invalido
+$K -n "$NS_SMOKE" delete ingress smoke-quebrado smoke-novo
+echo "make kong-check depois de apagar o plugin invalido:"
+KUBE_CONTEXT="$CONTEXTO" ESPERA=10 scripts/kong-check.sh

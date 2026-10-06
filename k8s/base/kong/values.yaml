@@ -22,11 +22,18 @@ ingressController:
   installCRDs: false
   # O webhook de validacao exige certificado gerado na renderizacao; com ele
   # o kong.yaml versionado carregaria uma chave privada. Sem o webhook, plugin
-  # mal configurado aparece no log do controller em vez de no kubectl apply.
+  # mal configurado aparece no log do controller em vez de no kubectl apply;
+  # o make deploy confere (alvo kong-check).
   admissionWebhook:
     enabled: false
   env:
     anonymous_reports: "false"
+    # Sem o gate, um Ingress ou plugin invalido de um servico faz o Kong DB-less
+    # recusar a configuracao inteira: nada novo entra, e um Kong reiniciado
+    # sobe sem rota nenhuma. Com ele o controller tira o objeto com erro (e o
+    # que depende dele), aplica o resto e registra evento no objeto. Alpha no
+    # KIC 3.5, desligado por padrao.
+    feature_gates: FallbackConfiguration=true
   resources:
     requests:
       cpu: 50m
