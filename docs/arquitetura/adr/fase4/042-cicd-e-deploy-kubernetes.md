@@ -91,7 +91,7 @@ Nenhum segredo de aplicação fica no GitHub, e o inevitável fica na organizaç
 | Registry (GHCR) | `GITHUB_TOKEN` do workflow |
 | `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `K3S_HABILITADO` | variáveis da organização, visíveis só aos repositórios da fase 4 |
 | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | segredos da organização, visíveis só ao Billing e lidos só pelo `deploy-k3s` |
-| Chave RSA do JSON Web Token (JWT) e chave HMAC (código de autenticação de mensagem com hash) do link de decisão | geradas no cluster; sem estado, giram apagando o Secret e reimplantando ([ADR-039](039-autenticacao-entre-servicos.md)) |
+| Chave RSA do JSON Web Token (JWT) e chave HMAC (código de autenticação de mensagem com hash) do link de decisão | geradas no cluster; a HMAC gira apagando o Secret e reimplantando, a RSA em duas etapas, com a chave anterior publicada no JWKS ([ADR-039](039-autenticacao-entre-servicos.md)) |
 | `ENCRYPTION_KEY`, que cifra os dados pessoais no OS Service | gerada uma vez e nunca regenerada; girá-la exige recifrar os dados e recalcular o hash do documento |
 | Senhas dos bancos e dos usuários do RabbitMQ, um por serviço | geradas no cluster; giram com `ALTER ROLE` e `rabbitmqctl change_password`, porque banco e broker só aplicam a senha do Secret na primeira inicialização do volume |
 | Senhas dos usuários semeados (`admin`, `atendente`, `mecanico`) e do Grafana | geradas no cluster; o E2E lê as dos usuários no Secret |

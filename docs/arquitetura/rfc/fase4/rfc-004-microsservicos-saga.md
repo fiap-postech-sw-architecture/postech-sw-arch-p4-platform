@@ -1106,6 +1106,9 @@ Nomes em maiúsculas são variáveis de ambiente, definidas no ConfigMap ou no S
 | `SIMULADOR_PERMITIDO` | `false` | | Billing | aceita `MP_MODE=simulado` com `ENVIRONMENT=production` |
 | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | sem padrão | | Billing | credenciais do Mercado Pago, exigidas com `MP_MODE=mercadopago` |
 | `ENVIRONMENT` | definido por overlay | | todos | com `production`, o boot recusa valores de demonstração |
+| `JWT_PRIVATE_KEY` | sem padrão (Secret) | | OS | chave RSA de 2048 bits ou mais que assina os tokens |
+| `JWT_PREVIOUS_PUBLIC_KEY` | vazio (Secret) | | OS | chave pública extra no JWKS durante a rotação em duas etapas |
+| `JWKS_URL` | URL interna do OS | | Billing e Execução | endereço do `/.well-known/jwks.json` do OS |
 | `JWT_EXPIRATION_MINUTES` | 15 | min | OS | validade do access token |
 | `JWT_REFRESH_EXPIRATION_MINUTES` | 10080 | min | OS | validade do refresh, como no p3 |
 | atrasos da fila de retry | 1, 5, 15, 60 e 300 | s | todos (consumidor) | espera de cada tentativa na `.retry`; depois da quinta, DLQ |

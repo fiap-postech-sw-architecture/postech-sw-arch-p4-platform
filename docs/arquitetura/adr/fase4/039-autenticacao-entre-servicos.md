@@ -81,7 +81,7 @@ Na chamada síncrona de negócio, a Execução repassa ao Billing o `Authorizati
 
 ### Segredos
 
-Nenhum segredo de aplicação fica no GitHub, por onde o `JWT_SECRET` do p3 passava ([ADR-033](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase3/033-cicd-multi-repo.md), adendo d). A chave RSA e a chave HMAC do link são geradas no cluster pelo deploy, aleatórias a cada execução no kind e criadas uma única vez no k3s, só se ausentes. Por não terem estado, giram apagando o Secret e reimplantando; senhas de banco e de broker e a chave que cifra os dados pessoais seguem as regras do [ADR-042](042-cicd-e-deploy-kubernetes.md). A guarda de boot do p3 contra literal de demonstração fora do ambiente de desenvolvimento passa a cobrir também a chave RSA.
+Nenhum segredo de aplicação fica no GitHub, por onde o `JWT_SECRET` do p3 passava ([ADR-033](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase3/033-cicd-multi-repo.md), adendo d). A chave RSA e a chave HMAC do link são geradas no cluster pelo deploy, aleatórias a cada execução no kind e criadas uma única vez no k3s, só se ausentes. A chave HMAC, sem estado, gira apagando o Secret e reimplantando; a chave RSA gira em duas etapas (consequências negativas abaixo); senhas de banco e de broker e a chave que cifra os dados pessoais seguem as regras do [ADR-042](042-cicd-e-deploy-kubernetes.md). A guarda de boot do p3 contra literal de demonstração fora do ambiente de desenvolvimento passa a cobrir também a chave RSA.
 
 ## Alternativas Consideradas
 
@@ -139,7 +139,7 @@ Nenhum segredo de aplicação fica no GitHub, por onde o `JWT_SECRET` do p3 pass
 
 * Token revogado no logout continua aceito por Billing e Execução por até 15 min
 * Com o OS Service fora do ar por mais tempo que o cache, Billing e Execução respondem 503 nas rotas autenticadas até ele voltar
-* Girar a chave RSA pede duas etapas: primeiro o JWKS publica a chave nova ao lado da atual (`JWT_PREVIOUS_PUBLIC_KEY` guarda a que sai), depois a nova passa a assinar; com várias réplicas, trocar de uma vez faria um pod antigo recusar os tokens de um pod novo durante o rollout
+* Girar a chave RSA pede duas etapas: primeiro o JWKS publica a chave nova ao lado da atual (`JWT_PREVIOUS_PUBLIC_KEY` guarda a chave que entra), depois a nova passa a assinar e a variável guarda a que sai, até os tokens antigos vencerem; com várias réplicas, trocar de uma vez faria um pod antigo recusar os tokens de um pod novo durante o rollout
 * Com `aud` único, um token vale nos três serviços, o que a propagação exige, mas amplia o alcance de um token roubado durante os 15 min
 * O tráfego interno, inclusive o `Authorization` propagado e a busca do JWKS, corre sem TLS dentro do cluster: risco aceito do ambiente de demonstração, limitado pela NetworkPolicy do [ADR-042](042-cicd-e-deploy-kubernetes.md)
 * O 401 uniforme torna o diagnóstico menos direto para quem chama; o motivo da recusa fica no log, ligado ao identificador da requisição (`id_requisicao` na resposta, `request_id` no log)
