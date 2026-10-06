@@ -370,6 +370,23 @@ def test_exemplo_valido_contra_payload_da_mensagem_no_asyncapi(
     validador(payload["schema"]).validate(ler_json(EXEMPLOS / f"{tipo}.json"))
 
 
+@pytest.mark.parametrize("tipo", CATALOGO)
+def test_descricao_do_schema_e_o_summary_da_mensagem_no_asyncapi(
+    asyncapi: dict[str, Any], tipo: str
+) -> None:
+    # O texto que o servico le no schema e o que le no AsyncAPI e o mesmo: a
+    # frase de identificacao (tipo, emissor e consumidor) mais o summary, sem
+    # sobra do texto anterior.
+    kind, emissor, consumidor = CATALOGO[tipo]
+    summary = asyncapi["components"]["messages"][tipo]["summary"]
+    esperada = (
+        f"Campo dados da mensagem {tipo} "
+        f"({kind}, {ORIGEM[emissor]} -> {ORIGEM[consumidor]}). {summary}"
+    )
+
+    assert ler_json(SCHEMAS / f"{tipo}.schema.json")["description"] == esperada
+
+
 def test_referencias_do_asyncapi_resolvem(asyncapi: dict[str, Any]) -> None:
     assert refs(asyncapi), "o documento deveria ter referencias"
     assert refs_quebradas(asyncapi) == []

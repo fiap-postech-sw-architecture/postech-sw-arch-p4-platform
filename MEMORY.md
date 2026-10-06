@@ -79,6 +79,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Review lessons
 
+- 2026-10-06 - Substituicao em lote deixou o texto antigo colado ao novo na descricao de 11 schemas, e o registro da correcao disse "aplicado" sem conferir: texto que mora em duas fontes (schema e AsyncAPI) ganha teste que compare as duas - PR #2
 - 2026-10-06 - Afirmacao sobre o comportamento do broker no README ("passiva nao exige permissao") estava errada e passou pela revisao do autor: afirmacao sobre RabbitMQ ou Kong so entra depois de executada no broker ou no gateway real - PR #2
 - 2026-10-06 - Schema estrito contrariava o leitor tolerante do ADR-036, e 203 testes verdes nao viam divergencia de campos com a RFC: teste de contrato precisa de oraculo externo (tabela da RFC) e de negativos gerados, nao so de exemplos validos - PR #2
 - 2026-10-06 - Config de runtime em ConfigMap puro nao troca o pod no deploy: configMapGenerator para todo arquivo que o processo so le no start - PR #2
