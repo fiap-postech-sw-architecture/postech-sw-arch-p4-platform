@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CancelarOrcamento (dados)",
-  "description": "Campo dados da mensagem CancelarOrcamento (comando, os-service -> billing-service). Compensação do passo T3: o Billing cancela o orçamento da OS cancelada.) Compensação do passo T3: o Billing cancela o orçamento da OS; sem orcamento_id (GerarOrcamento em voo), localiza pelo ordem_id.",
+  "description": "Campo dados da mensagem CancelarOrcamento (comando, os-service -> billing-service). Compensação do passo T3: o Billing cancela o orçamento da OS; sem orcamento_id (GerarOrcamento em voo), localiza pelo ordem_id.",
   "type": "object",
   "required": [
     "ordem_id",

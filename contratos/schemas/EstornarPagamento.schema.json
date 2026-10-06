@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "EstornarPagamento (dados)",
-  "description": "Campo dados da mensagem EstornarPagamento (comando, os-service -> billing-service). Compensação do passo T6: o Billing estorna o pagamento no provedor. O id desta mensagem é a chave de idempotência do estorno.) Compensação do passo T6, em qualquer estado do pagamento: com a cobrança em aberto, o Billing a cancela e responde PagamentoCancelado; com o pagamento confirmado, estorna no provedor com a chave de idempotência estorno-{pagamento_id} e responde PagamentoEstornado. O id da mensagem só deduplica a entrega.",
+  "description": "Campo dados da mensagem EstornarPagamento (comando, os-service -> billing-service). Compensação do passo T6, em qualquer estado do pagamento: com a cobrança em aberto, o Billing a cancela e responde PagamentoCancelado; com o pagamento confirmado, estorna no provedor com a chave de idempotência estorno-{pagamento_id} e responde PagamentoEstornado. O id da mensagem só deduplica a entrega.",
   "type": "object",
   "required": [
     "ordem_id",
