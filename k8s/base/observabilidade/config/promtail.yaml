@@ -16,8 +16,10 @@ scrape_configs:
       # credenciais (RFC-004 secao 8): o access log do Kong e o log dos
       # servicos trazem o caminho inteiro, e o Loki e lido pelo Viewer
       # anonimo do Grafana. Cada grupo capturado vira ***, antes de sair do no.
+      # A barra tambem vale como %2F: o Kong loga o caminho como chegou, inclusive
+      # o do pedido que ele barra com 404.
       - replace:
-          expression: '/(?:publico/orcamentos|simulador/checkout)/([^\s/?&"]+)'
+          expression: '(?:/|%2[Ff])(?:publico(?:/|%2[Ff])orcamentos|simulador(?:/|%2[Ff])checkout)(?:/|%2[Ff])([^\s/?&"]+)'
           replace: "***"
       - replace:
           expression: 'token=([^\s&"]+)'

@@ -37,6 +37,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
+- 2026-10-06 - O access log do Kong guarda o caminho como chegou, tambem o do pedido que um plugin barra com 404: o token em `publico%2Forcamentos/<token>` escapava da mascara do Promtail, que so olhava `/`; a mascara aceita `%2F` e o dry-run do `make manifests` roda nos dois arquivos, cluster e compose (`scripts/promtail-mascara.sh`)
 - 2026-10-06 - Kong casa rota por segmento e nao trata `%2F` como `/`, e o uvicorn decodifica o `%2F` do caminho que o FastAPI roteia: `/os/api/v1/admin%2Foutbox` escapava do fora-da-borda e `autenticacao%2Flogin`, do limite do login (o `%5C` o uvicorn deixa literal); rota por prefixo nao protege sozinha - ADR-038
 - 2026-10-06 - Kustomize com `namespace:` sobrescreve o namespace de todo recurso, inclusive as Roles que o chart do Kong poe nos namespaces dos servicos (watchNamespaces): NamespaceTransformer com `unsetOnly: true`
 - 2026-10-06 - Com watchNamespaces o KIC registra o evento de KongClusterPlugin no namespace `default`, onde nao tem Role: sem a Role so de eventos, plugin invalido some sem sinal (log "events is forbidden")

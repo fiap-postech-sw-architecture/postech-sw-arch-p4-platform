@@ -203,7 +203,7 @@ spec:
 
 Logs: JSON no stdout basta. O Promtail coleta todos os pods dos namespaces `pytstop-*` com os labels `namespace`, `app`, `pod` e `container`; o campo `trace_id` do JSON vira link para o trace no Jaeger dentro do Grafana. `request_id` e `correlation_id` se buscam por filtro de linha (`{namespace="pytstop-os"} |= "<correlation_id>"`), nunca por label.
 
-Antes de enviar ao Loki, o Promtail troca por `***` o token de `/publico/orcamentos/<token>`, de `/simulador/checkout/<token>` e de `token=<valor>`, em qualquer linha: no access log do Kong e no log dos serviços ([RFC-004, seção 8](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#8-segurança)). O `make manifests` roda o pipeline real com `promtail -dry-run` sobre linhas de exemplo e reprova token sem máscara. O `kubectl logs` do pod continua com a linha original, por isso o serviço não deve logar o token.
+Antes de enviar ao Loki, o Promtail troca por `***` o token de `/publico/orcamentos/<token>`, de `/simulador/checkout/<token>` e de `token=<valor>`, em qualquer linha, com a barra também como `%2F` (o Kong loga o caminho como chegou, inclusive o do pedido que ele barra com 404): no access log do Kong e no log dos serviços ([RFC-004, seção 8](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#8-segurança)). O `make manifests` roda o pipeline real, o do cluster e o do compose, com `promtail -dry-run` sobre linhas de exemplo e reprova token sem máscara em qualquer um dos dois. O `kubectl logs` do pod continua com a linha original, por isso o serviço não deve logar o token.
 
 ### Gateway: como um serviço publica as rotas
 

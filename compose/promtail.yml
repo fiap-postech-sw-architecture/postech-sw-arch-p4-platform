@@ -20,7 +20,7 @@ scrape_configs:
     # (k8s/base/observabilidade/config/promtail.yaml).
     pipeline_stages:
       - replace:
-          expression: '/(?:publico/orcamentos|simulador/checkout)/([^\s/?&"]+)'
+          expression: '(?:/|%2[Ff])(?:publico(?:/|%2[Ff])orcamentos|simulador(?:/|%2[Ff])checkout)(?:/|%2[Ff])([^\s/?&"]+)'
           replace: "***"
       - replace:
           expression: 'token=([^\s&"]+)'
