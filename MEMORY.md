@@ -84,6 +84,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Review lessons
 
+- 2026-10-06 - `noDataState` das regras de alerta nao tinha guarda: trocar `Alerting` por `OK` na regra de alvo ausente passava em todos os testes, e foi essa a regra que disparou sozinha no compose; propriedade de config que muda o comportamento e vem documentada em tabela ganha teste que compara a tabela com o arquivo (`test_tabela_de_alertas_diz_o_que_a_regra_faz`) - PR #2
 - 2026-10-06 - "22 de 22 mutantes mortos" valia so para os mutantes escolhidos a mao: o conjunto sistematico (cada palavra-chave de cada schema removida ou deslocada em 1, 996 variacoes) deixava 118 vivos, entre eles `maxItems` de seis das sete listas e o `then` de OrcamentoAprovado; afirmacao de cobertura de contrato so entra depois de mutacao sistematica - PR #2
 - 2026-10-06 - Substituicao em lote deixou o texto antigo colado ao novo na descricao de 11 schemas, e o registro da correcao disse "aplicado" sem conferir: texto que mora em duas fontes (schema e AsyncAPI) ganha teste que compare as duas - PR #2
 - 2026-10-06 - Afirmacao sobre o comportamento do broker no README ("passiva nao exige permissao") estava errada e passou pela revisao do autor: afirmacao sobre RabbitMQ ou Kong so entra depois de executada no broker ou no gateway real - PR #2

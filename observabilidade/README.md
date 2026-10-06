@@ -15,7 +15,7 @@ Dashboards, alertas e datasources do Grafana da infraestrutura compartilhada, no
 | ConfigMaps do Kubernetes, gerados dos arquivos acima | [`kustomization.yaml`](kustomization.yaml) (configMapGenerator) |
 | Teste de consistência | [`tests/test_observabilidade.py`](../tests/test_observabilidade.py) |
 
-Os arquivos são a fonte única. No Kubernetes viram ConfigMaps com hash no nome, então mudar um dashboard troca o pod do Grafana no próximo `make deploy`; o compose monta os mesmos arquivos. Um dashboard novo entra também no `configMapGenerator`, e o `make manifests` reprova o que ficar de fora. O teste de consistência falha se um painel ficar sem descrição, se o título ou alguma consulta de um painel não estiver neste documento, ou se uma regra de alerta não estiver na tabela de alertas com UID, título e consulta.
+Os arquivos são a fonte única. No Kubernetes viram ConfigMaps com hash no nome, então mudar um dashboard troca o pod do Grafana no próximo `make deploy`; o compose monta os mesmos arquivos. Um dashboard novo entra também no `configMapGenerator`, e o `make manifests` reprova o que ficar de fora. O teste de consistência falha se um painel ficar sem descrição, se o título ou alguma consulta de um painel não estiver neste documento, ou se uma regra de alerta não estiver na tabela de alertas com UID, título e consulta, ou se severidade, janela ou "sem dado" da tabela forem diferentes dos da regra.
 
 Para ver no kind: `make port-forward` e `http://localhost:3000/d/pytstop-plataforma`. O acesso anônimo entra como Viewer; o admin usa a senha de demonstração do Secret `grafana-admin`.
 
