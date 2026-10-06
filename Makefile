@@ -20,6 +20,8 @@ COMPOSE := docker compose -f compose/docker-compose.yml
 KONG_CHART_VERSION := 3.4.1
 HELM_IMAGE := alpine/helm:3.22.0
 KUBECONFORM_IMAGE := ghcr.io/yannh/kubeconform:v0.8.0
+# Valida o asyncapi.yaml contra a especificacao AsyncAPI 3.0 (exige Node 24).
+ASYNCAPI_CLI := @asyncapi/cli@6.2.0
 # KongPlugin/KongClusterPlugin sao validados pelo catalogo de CRDs da datree;
 # o resto pelo schema oficial do Kubernetes. Sem -ignore-missing-schemas:
 # recurso sem schema reprova. Unica excecao, as definicoes de CRD do Kong: o
@@ -79,8 +81,10 @@ up: ## sobe a stack compose (com os servicos: make up PROFILE=servicos)
 down: ## derruba a stack compose (os volumes ficam; docker compose down -v apaga)
 	$(COMPOSE) --profile servicos down
 
-test: ## testes dos contratos de mensageria
+# CI=true desliga a telemetria anonima do @asyncapi/cli.
+test: ## testes dos contratos de mensageria e validacao do asyncapi.yaml
 	uv run pytest
+	CI=true npx --yes $(ASYNCAPI_CLI) validate contratos/asyncapi.yaml
 
 lint: ## ruff, mypy e bandit nos testes de contrato
 	uv run ruff check .
