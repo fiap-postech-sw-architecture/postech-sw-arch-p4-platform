@@ -99,7 +99,7 @@ metadata:
   namespace: $servico
 type: Opaque
 stringData:
-  RABBITMQ_URL: "amqp://$usuario:$senha_usuario@rabbitmq.$NS.svc.cluster.local:5672/"
+  RABBITMQ_URL: "amqp://$usuario:$senha_usuario@rabbitmq.$NS.svc.cluster.local:5672/%2F"
 YAML
   echo "secret $servico/rabbitmq created (RABBITMQ_URL of user $usuario)"
 done

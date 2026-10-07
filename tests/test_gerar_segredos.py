@@ -126,7 +126,7 @@ def existentes() -> Segredos:
         GRAFANA: {"GF_SECURITY_ADMIN_PASSWORD": "grafana-" + "2" * 40},
         **{
             f"pytstop-{usuario}/rabbitmq": {
-                "RABBITMQ_URL": f"amqp://{usuario}:{senha[usuario]}@{BROKER}/"
+                "RABBITMQ_URL": f"amqp://{usuario}:{senha[usuario]}@{BROKER}/%2F"
             }
             for usuario in USUARIOS
         },
@@ -158,7 +158,7 @@ def test_cluster_novo_recebe_todos_os_secrets_com_senhas_geradas(
     ]
     for usuario in USUARIOS:
         assert segredos[f"pytstop-{usuario}/rabbitmq"] == {
-            "RABBITMQ_URL": f"amqp://{usuario}:{credenciais[f'senha-{usuario}']}@{BROKER}/"
+            "RABBITMQ_URL": f"amqp://{usuario}:{credenciais[f'senha-{usuario}']}@{BROKER}/%2F"
         }
     assert len(segredos) == 5
     # Nenhuma senha em argumento de processo ou na saida; contexto explicito.

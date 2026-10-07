@@ -260,7 +260,7 @@ services:
       OTEL_SERVICE_NAME: os-service
       DATABASE_URL: postgresql://pytstop:pytstop@postgres-os:5432/os  # gitleaks:allow
       RUN_MIGRATIONS_ON_STARTUP: "true"
-      RABBITMQ_URL: amqp://os:pytstop-os-demo-2026@rabbitmq:5672/  # gitleaks:allow
+      RABBITMQ_URL: amqp://os:pytstop-os-demo-2026@rabbitmq:5672/%2F  # gitleaks:allow
       SMTP_HOST: mailpit
       SMTP_PORT: "1025"
     depends_on:
@@ -280,7 +280,7 @@ services:
       <<: *otel
       OTEL_SERVICE_NAME: billing-service
       MONGODB_URL: mongodb://mongo-billing:27017/billing?replicaSet=rs0
-      RABBITMQ_URL: amqp://billing:pytstop-billing-demo-2026@rabbitmq:5672/  # gitleaks:allow
+      RABBITMQ_URL: amqp://billing:pytstop-billing-demo-2026@rabbitmq:5672/%2F  # gitleaks:allow
       JWKS_URL: http://os-service:8000/.well-known/jwks.json
       MP_MODE: simulado
     depends_on:
@@ -301,7 +301,7 @@ services:
       OTEL_SERVICE_NAME: execution-service
       DATABASE_URL: postgresql://pytstop:pytstop@postgres-execucao:5432/execucao  # gitleaks:allow
       RUN_MIGRATIONS_ON_STARTUP: "true"
-      RABBITMQ_URL: amqp://execucao:pytstop-execucao-demo-2026@rabbitmq:5672/  # gitleaks:allow
+      RABBITMQ_URL: amqp://execucao:pytstop-execucao-demo-2026@rabbitmq:5672/%2F  # gitleaks:allow
       JWKS_URL: http://os-service:8000/.well-known/jwks.json
       BILLING_URL: http://billing-service:8000
     depends_on:
