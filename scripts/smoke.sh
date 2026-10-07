@@ -27,6 +27,8 @@ limpa() {
   rm -rf "$TMP"
 }
 
+# A prova do retry roda com o uv: sem ele, o smoke so falharia no fim.
+command -v uv >/dev/null || { echo "uv not found: the retry proof (scripts/prova_retry.py) runs with it, see https://docs.astral.sh/uv/" >&2; exit 1; }
 # Os exemplos usam os caminhos /os e /billing dos servicos de verdade.
 for ns in pytstop-os pytstop-billing; do
   if [ -n "$($K -n "$ns" get ingress -o name 2>/dev/null)" ]; then
@@ -229,7 +231,8 @@ adm() {
   $R sh -c 'export RABBITMQADMIN_USERNAME=admin RABBITMQADMIN_PASSWORD="$(sed -n "s/.*\"password\": \"\([^\"]*\)\".*/\1/p" /etc/rabbitmq/definitions/admin.json)"; exec rabbitmqadmin "$@"' rabbitmqadmin "$@"
 }
 filas() { $R rabbitmqctl -q list_queues --no-table-headers name messages | grep "^billing" | tr '\n' ' '; echo; }
-mensagens() { $R rabbitmqctl -q list_queues --no-table-headers name messages | awk -v fila="$1" '$1 == fila {print $2}'; }
+# mensagens <regex>: soma das mensagens das filas cujo nome casa a regex (awk).
+mensagens() { $R rabbitmqctl -q list_queues --no-table-headers name messages | awk -v padrao="$1" '$1 ~ padrao {soma += $2} END {print soma + 0}'; }
 $R rabbitmqctl -q list_queues --no-table-headers name arguments policy | sort
 $R rabbitmqctl -q list_policies --no-table-headers | cut -f2,5 | sort
 printf 'max_message_size: '; $R rabbitmqctl -q eval 'application:get_env(rabbit, max_message_size).'
@@ -264,10 +267,14 @@ kill "$port_forward" 2>/dev/null || true
 wait "$port_forward" 2>/dev/null || true  # sem o aviso "Terminated" do bash
 port_forward=""
 confere "retry proofs (scripts/prova_retry.py)" held "$prova_retry"
-sleep 7  # a contagem das filas quorum e atualizada a cada 5 s
+# A contagem das filas quorum no list_queues atualiza a cada ~5 s: espera as
+# filas de retry do billing zerarem, por ate 30 s.
+for _ in $(seq 15); do
+  retidas=$(mensagens '^billing[.]comandos[.]retry[.]')
+  [ "$retidas" = 0 ] && break
+  sleep 2
+done
 filas
-retidas=$($R rabbitmqctl -q list_queues --no-table-headers name messages \
-  | awk '$1 ~ /^billing[.]comandos[.]retry[.]/ {soma += $2} END {print soma + 0}')
 confere "billing.comandos retry queues drained" 0 "$retidas"
 $R rabbitmqctl -q purge_queue billing.comandos
 
