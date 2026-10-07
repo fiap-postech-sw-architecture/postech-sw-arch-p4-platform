@@ -118,7 +118,41 @@ As fontes nascem no primeiro deploy de cada cluster, com senhas do `openssl rand
 
 Nenhuma senha passa por argumento de processo, pela saída ou pelo repositório: os Secrets chegam ao `kubectl` pela entrada padrão, e no GitHub Actions cada senha, gerada ou lida da fonte, é registrada com `::add-mask::` antes do uso, então o log do job a mostra como `***`. O derivado é gravado por apply server-side, que não guarda o Secret inteiro, com a senha em claro, na anotação `last-applied-configuration`. No kind do CI as senhas morrem com o runner. O [`test_gerar_segredos.py`](tests/test_gerar_segredos.py) roda o script contra um `kubectl` falso, que recusa o que o apiserver recusaria: cluster novo, fontes que já existem, serviço novo, Secret de serviço com a senha antiga, erro ao ler e ao gravar no cluster, chave ausente, senha fora de letras e dígitos, senha só de dígitos e a máscara do GitHub Actions.
 
-Troca de senha do RabbitMQ, executada no kind: a de um usuário de serviço vai para a chave `senha-<usuario>` do `rabbitmq-credenciais` (sem caractere que precise de escape na URL, como a do `openssl rand -hex 24`); depois de apagar o Secret `rabbitmq` do namespace do serviço, o `make deploy` o recria com a URL nova e o Job `rabbitmq-usuarios` aplica a senha no broker, e os pods do serviço precisam reiniciar para ler a variável. A do admin vai para `admin-senha` e para o `admin.json`, no mesmo formato (o `make smoke` lê a senha do arquivo montado no pod); o broker a aplica no boot (`kubectl -n pytstop-plataforma rollout restart statefulset/rabbitmq`), e o `make deploy` seguinte roda o Job com ela.
+#### Troca de senha do RabbitMQ
+
+A senha nova tem só letras e dígitos, porque entra crua na URL; a do `openssl rand -hex 24` serve. Os comandos usam o contexto do kind (no k3s, troque o `--context`), e a senha vai do shell ao `jq` por variável de ambiente, não por argumento.
+
+Usuário de serviço (`os`, `billing` ou `execucao`; o exemplo troca a do `billing`):
+
+1. Grave a senha nova na chave `senha-billing` do `rabbitmq-credenciais`:
+
+   ```bash
+   senha=$(openssl rand -hex 24)
+   kubectl --context kind-pytstop-p4 -n pytstop-plataforma get secret rabbitmq-credenciais -o json \
+     | SENHA="$senha" jq '.data["senha-billing"] = (env.SENHA | @base64)' \
+     | kubectl --context kind-pytstop-p4 replace -f -
+   ```
+
+2. `make deploy`: o Job `rabbitmq-usuarios` aplica a senha no broker, e o `gerar-segredos.sh` regrava com ela a `RABBITMQ_URL` do Secret `rabbitmq` do `pytstop-billing`.
+3. Reinicie os Deployments do serviço, que leem a variável só no start: `kubectl --context kind-pytstop-p4 -n pytstop-billing rollout restart deployment`.
+
+Admin:
+
+1. Grave a senha nova em `admin-senha` e dentro do `admin.json`, que mantém o formato `"password": "<senha>"` (o `make smoke` lê a senha do arquivo montado no pod por esse padrão):
+
+   ```bash
+   senha=$(openssl rand -hex 24)
+   kubectl --context kind-pytstop-p4 -n pytstop-plataforma get secret rabbitmq-credenciais -o json \
+     | SENHA="$senha" jq '.data["admin-senha"] = (env.SENHA | @base64)
+         | .data["admin.json"] = (.data["admin.json"] | @base64d
+             | sub("\"password\": \"[^\"]*\""; "\"password\": \"\(env.SENHA)\"") | @base64)' \
+     | kubectl --context kind-pytstop-p4 replace -f -
+   ```
+
+2. Reinicie o broker, que aplica o `admin.json` só no boot, e espere: `kubectl --context kind-pytstop-p4 -n pytstop-plataforma rollout restart statefulset/rabbitmq` e, em seguida, `rollout status statefulset/rabbitmq`.
+3. `make deploy`: o Job `rabbitmq-usuarios` volta a falar com a API, agora com a senha nova.
+
+Um cluster criado antes das senhas geradas ainda tem as de demonstração, que têm hífen: o `make deploy` para na conferência da senha, e `make kind-down kind-up deploy` recria o cluster com senhas geradas.
 
 ### k3s (VM na Azure)
 
