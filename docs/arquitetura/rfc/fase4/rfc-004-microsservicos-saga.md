@@ -726,7 +726,7 @@ Papel exigido em cada rota: matriz única do [ADR-039](../../adr/fase4/039-auten
 | `GET /api/v1/ordens-de-servico/{id}` (com resumo de orçamento, pagamento e etapa); `GET .../{id}/historico` (status, passos da saga, ator e motivo) | JWT |
 | `GET /api/v1/ordens-de-servico/metricas` (tempo médio por status, calculado do histórico; RF-008 da fase 1) | JWT (admin) |
 | `POST /api/v1/ordens-de-servico/{id}/cancelamento` (202 com a etapa; 409 depois do pivot; respostas abaixo); `POST .../{id}/entrega` (T10) | JWT |
-| `GET /api/v1/sagas/{ordem_id}`; `POST /api/v1/sagas/{ordem_id}/compensacao` (retoma a compensação suspensa; respostas abaixo) | JWT (admin) |
+| `GET /api/v1/sagas/{ordem_id}` (etapa, motivo, falha, plano restante com a compensação pendente primeiro, comando em voo com tipo e hora do envio, reenvios, prazo e passos); `POST /api/v1/sagas/{ordem_id}/compensacao` (retoma a compensação suspensa; respostas abaixo) | JWT (admin) |
 | `POST /api/v1/publico/acompanhamento` (placa e documento no corpo, nunca na URL; documento validado pelo módulo 11 e placa pelo formato antes da consulta, com o mesmo 404 para dado inválido e para OS não encontrada) | sem JWT |
 
 Respostas do cancelamento e da retomada, conforme a etapa da saga. O 409 usa o código `TRANSICAO_STATUS_INVALIDA`, o mesmo que o OS já devolve às transições de status recusadas, com mensagem própria:
@@ -1195,12 +1195,14 @@ Os limites de rate limit por rota estão no ADR-038, e os requests e limits por 
 | 13 | Tráfego interno sem TLS | NetworkPolicy por namespace; risco aceito do ambiente de demonstração |
 | 14 | Placa fora do OS, na Execução | necessária ao mecânico; `AnonimizarVeiculo` na eliminação LGPD e retenção limitada de mensagens |
 | 15 | Promtail em fim de vida desde 02/03/2026 | mantido porque o enunciado exige as ferramentas da fase 3 (l. 102); a saída é o Grafana Alloy (ADR-043) |
+| 16 | A pausa do `prazos` só vê `os.eventos` sem consumidor ou o broker fora: com o consumidor do OS vivo e lento, ou com a fila acumulada, o `prazos` reenvia e, em 12 minutos, pode esgotar com a resposta esperando na fila | aceito: a janela de 12 minutos fica muito acima do atraso normal da fila, o reenvio é idempotente, e a resposta que chega depois do esgotamento cai em etapa passada, com o passo em voo desfeito pela compensação; o acúmulo aparece no painel de mensagens prontas por fila |
 
 Também aceitos:
 
 - revogação de JWT só no OS: um token roubado vale até 15 minutos nos outros serviços, e o evento de revogação fica como evolução;
 - cluster, broker e gateway compartilhados no `platform`, enquanto banco, manifestos e pipeline ficam em cada repositório;
 - o peso do kind: o CI usa o `kind-ci`, e a máquina local precisa de pelo menos 10 GB no colima;
+- `AgendarExecucao` sempre com prioridade `normal`: a fila da Execução já atende `alta`, mas nenhuma rota a escolhe ([seção 5.3](#53-catálogo-de-comandos-e-eventos));
 - a base técnica copiada, em que uma correção comum vira três PRs.
 
 ### 11.2 Pontos em aberto
