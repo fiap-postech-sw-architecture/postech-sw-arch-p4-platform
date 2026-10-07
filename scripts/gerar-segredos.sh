@@ -60,12 +60,16 @@ ausente() {
   fi
 }
 
-# cria <namespace> <secret>: cria a fonte com as chaves do stringData que
-# chegam pela entrada padrao, indentadas em dois espacos. Sem o rotulo
-# part-of do servico: um prune por ele apagaria chaves que nao se regeneram.
+# cria <namespace> <secret> [<app>]: cria a fonte com as chaves do stringData
+# que chegam pela entrada padrao, indentadas em dois espacos. Com <app>, leva os
+# rotulos app e part-of da plataforma, como os manifests dela. As fontes dos
+# servicos vao sem rotulo: o part-of de um servico marca o que os manifests
+# dele aplicam, e estas o servico so le.
 cria() {
   {
-    printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n  namespace: %s\ntype: Opaque\nstringData:\n' "$2" "$1"
+    printf 'apiVersion: v1\nkind: Secret\nmetadata:\n  name: %s\n  namespace: %s\n' "$2" "$1"
+    [ -z "${3:-}" ] || printf '  labels:\n    app: %s\n    app.kubernetes.io/part-of: pytstop-plataforma\n' "$3"
+    printf 'type: Opaque\nstringData:\n'
     cat
   } | $K create -f - >/dev/null
   echo "secret $1/$2 created"
@@ -84,9 +88,7 @@ sem_volume() {
   exit 1
 }
 
-if existe "$NS" rabbitmq-credenciais; then
-  echo "secret $NS/rabbitmq-credenciais already exists: kept"
-else
+if ausente "$NS" rabbitmq-credenciais; then
   admin=$(senha)
   os=$(senha)
   billing=$(senha)
@@ -95,17 +97,7 @@ else
   # admin.json declara o vhost / tambem: o RabbitMQ importa o diretorio de
   # definitions em ordem alfabetica, admin.json antes de definitions.json, e
   # permissao em vhost que ainda nao existe derruba o boot.
-  $K create -f - >/dev/null <<YAML
-apiVersion: v1
-kind: Secret
-metadata:
-  name: rabbitmq-credenciais
-  namespace: $NS
-  labels:
-    app: rabbitmq
-    app.kubernetes.io/part-of: pytstop-plataforma
-type: Opaque
-stringData:
+  cria "$NS" rabbitmq-credenciais rabbitmq <<YAML
   admin-usuario: admin
   admin-senha: "$admin"
   senha-os: "$os"
@@ -122,7 +114,6 @@ stringData:
       ]
     }
 YAML
-  echo "secret $NS/rabbitmq-credenciais created"
 fi
 
 for usuario in os billing execucao; do
@@ -158,25 +149,12 @@ YAML
   echo "secret $servico/rabbitmq applied (RABBITMQ_URL of user $usuario)"
 done
 
-if existe "$NS" grafana-admin; then
-  echo "secret $NS/grafana-admin already exists: kept"
-else
+if ausente "$NS" grafana-admin; then
   grafana=$(senha)
   mascara "$grafana"
-  $K create -f - >/dev/null <<YAML
-apiVersion: v1
-kind: Secret
-metadata:
-  name: grafana-admin
-  namespace: $NS
-  labels:
-    app: grafana
-    app.kubernetes.io/part-of: pytstop-plataforma
-type: Opaque
-stringData:
+  cria "$NS" grafana-admin grafana <<YAML
   GF_SECURITY_ADMIN_PASSWORD: "$grafana"
 YAML
-  echo "secret $NS/grafana-admin created"
 fi
 
 # Fontes dos servicos. O billing-mercadopago (MP_ACCESS_TOKEN e

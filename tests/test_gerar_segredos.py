@@ -1,18 +1,19 @@
 """scripts/gerar-segredos.sh contra um kubectl falso.
 
 O kubectl falso guarda os Secrets num JSON, registra os argumentos de cada
-chamada e recusa manifesto que o apiserver recusaria. O teste confere o que o
-script cria num cluster novo, com o formato de cada chave dos servicos (o
-contrato da tabela "Segredos gerados" do README, que o teste tambem le); que
-dois deploys seguidos mantem os valores; que as fontes que ja existem, da
-plataforma e dos servicos, ficam como estao, e a que falta nasce sozinha; que
-o Secret rabbitmq de cada servico, derivado da fonte, e regravado a cada
-deploy, inclusive quando tem a senha antiga; que erro ao ler ou gravar no
-cluster, openssl que falha, chave ausente e senha com caractere fora de letras
-e digitos param o script; que KUBE_CONTEXT e NAMESPACE do ambiente (make
-deploy KUBE_CONTEXT=<contexto>) valem no lugar dos padroes; e que nenhuma
-senha ou chave passa por argumento de processo ou pela saida (no GitHub
-Actions, so pelo ::add-mask::, a chave PEM uma linha por vez).
+chamada e recusa manifesto que o apiserver recusaria ou com rotulo fora do
+previsto (os da plataforma com os dela, os dos servicos sem nenhum). O teste
+confere o que o script cria num cluster novo, com o formato de cada chave dos
+servicos (o contrato da tabela "Segredos gerados" do README, que o teste
+tambem le); que dois deploys seguidos mantem os valores; que as fontes que ja
+existem, da plataforma e dos servicos, ficam como estao, e a que falta nasce
+sozinha; que o Secret rabbitmq de cada servico, derivado da fonte, e regravado
+a cada deploy, inclusive quando tem a senha antiga; que erro ao ler ou gravar
+no cluster, openssl que falha, chave ausente e senha com caractere fora de
+letras e digitos param o script; que KUBE_CONTEXT e NAMESPACE do ambiente
+(make deploy KUBE_CONTEXT=<contexto>) valem no lugar dos padroes; e que
+nenhuma senha ou chave passa por argumento de processo ou pela saida (no
+GitHub Actions, so pelo ::add-mask::, a chave PEM uma linha por vez).
 """
 
 from __future__ import annotations
@@ -127,6 +128,17 @@ def manifesto():
         sys.exit(f"manifesto que nao e Secret v1 Opaque: {doc}")
     if not all(isinstance(v, str) for v in doc["stringData"].values()):
         sys.exit("stringData com valor que nao e string")
+    # Rotulos: os da plataforma levam app e part-of dela; os dos servicos,
+    # nenhum.
+    rotulos = doc["metadata"].get("labels")
+    servicos = {"pytstop-os", "pytstop-billing", "pytstop-execucao"}
+    if doc["metadata"]["namespace"] in servicos:
+        if rotulos is not None:
+            sys.exit(f"Secret de servico com rotulo: {rotulos}")
+    elif set(rotulos or {}) != {"app", "app.kubernetes.io/part-of"} or (
+        rotulos["app.kubernetes.io/part-of"] != "pytstop-plataforma"
+    ):
+        sys.exit(f"Secret da plataforma sem os rotulos dela: {rotulos}")
     return f"{doc['metadata']['namespace']}/{doc['metadata']['name']}", doc
 
 
