@@ -43,17 +43,23 @@ mascara() {
   for valor in "$@"; do echo "::add-mask::$valor"; done
 }
 
-# ausente <namespace> <secret> <chave>...: status 0 se a fonte ainda nao
-# existe. A que existe com todas as chaves fica como esta; sem uma delas, o
+# As fontes que ainda nao existem, "<namespace>/<secret>" entre espacos.
+faltam=" "
+
+# confere <namespace> <secret> <chave>...: anota em faltam a fonte que ainda
+# nao existe. A que existe com todas as chaves fica como esta; sem uma delas, o
 # script para, porque nunca reescreve uma fonte e o pod que a le nao subiria.
 # Erro ao falar com o cluster aborta, em vez de virar "nao existe" e trocar
 # senhas que nao foram lidas.
-ausente() {
+confere() {
   local ns=$1 nome=$2 atual chave
   shift 2
   atual=$($K -n "$ns" get secret "$nome" --ignore-not-found \
     -o "go-template={{.metadata.name}}:{{range \$chave, \$valor := .data}} {{\$chave}}{{end}}") || exit 1
-  [ -n "$atual" ] || return 0
+  if [ -z "$atual" ]; then
+    faltam="$faltam$ns/$nome "
+    return 0
+  fi
   for chave in "$@"; do
     case "$atual " in
       *" $chave "*) ;;
@@ -65,6 +71,13 @@ ausente() {
     esac
   done
   echo "secret $ns/$nome already exists: kept"
+}
+
+# falta <namespace> <secret>: status 0 se a conferencia anotou a fonte.
+falta() {
+  case "$faltam" in
+    *" $1/$2 "*) return 0 ;;
+  esac
   return 1
 }
 
@@ -83,21 +96,44 @@ cria() {
   echo "secret $1/$2 created"
 }
 
-# sem_volume <namespace> <secret>: a fonte que falta guarda estado no banco do
-# servico (a senha do volume, o hash da senha do admin, o que a ENCRYPTION_KEY
-# cifrou). Com o volume do banco de pe, um valor novo nao valeria para ele, e
-# a ENCRYPTION_KEY nova perderia os dados cifrados: para em vez de gerar.
+# sem_volume <namespace> <secret>: a fonte que falta e guarda estado no banco
+# do servico (a senha do volume, o hash da senha do admin, o que a
+# ENCRYPTION_KEY cifrou) nao nasce de novo com o volume do banco de pe: um
+# valor novo nao valeria para ele, e a ENCRYPTION_KEY nova perderia os dados
+# cifrados. Erro ao listar os volumes tambem para o script, em vez de virar
+# "sem volume".
 sem_volume() {
+  falta "$1" "$2" || return 0
   local volumes
-  volumes=$($K -n "$1" get pvc -o name)
-  [ -z "$volumes" ] && return
-  echo "secret $1/$2 is missing but $1 already has a database volume:" \
-    "restore the secret, or delete the volume to start the database from scratch" >&2
+  volumes=$($K -n "$1" get pvc -o name) || exit 1
+  [ -n "$volumes" ] || return 0
+  echo "secret $1/$2 is missing but $1 has database volumes (${volumes//$'\n'/ }):" \
+    "restore the secret (README, Segredos gerados). Deleting the volumes destroys the" \
+    "database; only on a demo cluster: $K -n $1 delete pvc --all" >&2
   exit 1
 }
 
-if ausente "$NS" rabbitmq-credenciais admin-usuario admin-senha senha-os senha-billing \
-  senha-execucao admin.json; then
+# Todas as fontes conferidas antes de gerar qualquer valor: a que existe sem
+# uma das chaves e a do banco que falta com o volume de pe param o script sem
+# gravar nada.
+confere "$NS" rabbitmq-credenciais admin-usuario admin-senha senha-os senha-billing \
+  senha-execucao admin.json
+confere "$NS" grafana-admin GF_SECURITY_ADMIN_PASSWORD
+for banco in os execucao; do
+  confere "pytstop-$banco" "$banco-postgres" POSTGRES_PASSWORD
+  sem_volume "pytstop-$banco" "$banco-postgres"
+done
+confere pytstop-os os-jwt JWT_PRIVATE_KEY JWT_PREVIOUS_PUBLIC_KEY
+confere pytstop-os os-cripto ENCRYPTION_KEY
+sem_volume pytstop-os os-cripto
+confere pytstop-os os-admin ADMIN_PASSWORD
+sem_volume pytstop-os os-admin
+confere pytstop-billing billing-mongo MONGO_INITDB_ROOT_PASSWORD MONGO_BILLING_PASSWORD \
+  MONGO_EXPORTER_PASSWORD MONGO_KEYFILE
+sem_volume pytstop-billing billing-mongo
+confere pytstop-billing billing-link ORCAMENTO_LINK_SECRET
+
+if falta "$NS" rabbitmq-credenciais; then
   admin=$(senha)
   os=$(senha)
   billing=$(senha)
@@ -154,7 +190,7 @@ YAML
   echo "secret $servico/rabbitmq applied (RABBITMQ_URL of user $usuario)"
 done
 
-if ausente "$NS" grafana-admin GF_SECURITY_ADMIN_PASSWORD; then
+if falta "$NS" grafana-admin; then
   grafana=$(senha)
   mascara "$grafana"
   cria "$NS" grafana-admin grafana <<YAML
@@ -166,8 +202,7 @@ fi
 # MP_WEBHOOK_SECRET) nao sai daqui: sao credenciais do provedor, e o simulador
 # assina o checkout com o ORCAMENTO_LINK_SECRET.
 for banco in os execucao; do
-  if ausente "pytstop-$banco" "$banco-postgres" POSTGRES_PASSWORD; then
-    sem_volume "pytstop-$banco" "$banco-postgres"
+  if falta "pytstop-$banco" "$banco-postgres"; then
     postgres=$(senha)
     mascara "$postgres"
     cria "pytstop-$banco" "$banco-postgres" <<YAML
@@ -176,7 +211,7 @@ YAML
   fi
 done
 
-if ausente pytstop-os os-jwt JWT_PRIVATE_KEY JWT_PREVIOUS_PUBLIC_KEY; then
+if falta pytstop-os os-jwt; then
   # PKCS#8. Os pontos que o genpkey escreve no stderr sao so o progresso.
   pem=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048)
   # O runner mascara uma linha por vez.
@@ -190,8 +225,7 @@ if ausente pytstop-os os-jwt JWT_PRIVATE_KEY JWT_PREVIOUS_PUBLIC_KEY; then
 YAML
 fi
 
-if ausente pytstop-os os-cripto ENCRYPTION_KEY; then
-  sem_volume pytstop-os os-cripto
+if falta pytstop-os os-cripto; then
   # Chave Fernet: 32 bytes em base64 url-safe, com o "=" do fim (44
   # caracteres). Nunca regenerada (ADR-042).
   fernet=$(openssl rand -base64 32 | tr '+/' '-_')
@@ -203,8 +237,7 @@ fi
 
 # O admin e o unico usuario semeado; atendente e mecanico se cadastram pela
 # API, com o token dele.
-if ausente pytstop-os os-admin ADMIN_PASSWORD; then
-  sem_volume pytstop-os os-admin
+if falta pytstop-os os-admin; then
   admin_os=$(senha)
   mascara "$admin_os"
   cria pytstop-os os-admin <<YAML
@@ -212,9 +245,7 @@ if ausente pytstop-os os-admin ADMIN_PASSWORD; then
 YAML
 fi
 
-if ausente pytstop-billing billing-mongo MONGO_INITDB_ROOT_PASSWORD MONGO_BILLING_PASSWORD \
-  MONGO_EXPORTER_PASSWORD MONGO_KEYFILE; then
-  sem_volume pytstop-billing billing-mongo
+if falta pytstop-billing billing-mongo; then
   root=$(senha)
   billing_mongo=$(senha)
   exporter=$(senha)
@@ -230,7 +261,7 @@ if ausente pytstop-billing billing-mongo MONGO_INITDB_ROOT_PASSWORD MONGO_BILLIN
 YAML
 fi
 
-if ausente pytstop-billing billing-link ORCAMENTO_LINK_SECRET; then
+if falta pytstop-billing billing-link; then
   # 32 bytes aleatorios em 64 caracteres hexadecimais: o boot do Billing
   # exige ao menos 32 bytes.
   link=$(openssl rand -hex 32)

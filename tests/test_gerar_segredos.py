@@ -96,8 +96,9 @@ NAMESPACE_OUTRO = "outro"
 type Segredos = dict[str, dict[str, str]]
 
 # kubectl falso: so as formas que o script usa. KUBECTL_FALSO_FALHA=<comando>
-# (get, create ou apply) faz esse comando falhar como um cluster fora do ar, e
-# KUBECTL_FALSO_VOLUMES ("<namespace>/<pvc> ...") lista os volumes de pe.
+# faz falhar, como um cluster fora do ar, a chamada que comeca pelas palavras
+# dele ("get", "get pvc", "create", "apply"), e KUBECTL_FALSO_VOLUMES
+# ("<namespace>/<pvc> ...") lista os volumes de pe.
 KUBECTL_FALSO = r"""
 import base64
 import json
@@ -121,7 +122,8 @@ resto = args[2:]  # depois do --context, que o teste confere no log
 ns = ""
 if resto[:1] == ["-n"]:
     ns, resto = resto[1], resto[2:]
-if resto[:1] and resto[0] == os.environ.get("KUBECTL_FALSO_FALHA"):
+falha = os.environ.get("KUBECTL_FALSO_FALHA", "").split()
+if falha and resto[: len(falha)] == falha:
     sys.exit("The connection to the server localhost:8080 was refused")
 
 
@@ -448,13 +450,62 @@ def test_fonte_do_banco_que_falta_com_o_volume_de_pe_para_sem_gerar(
     del antes[fonte]
     ns = fonte.split("/")[0]
 
-    processo, segredos, _ = roda(tmp_path, antes, KUBECTL_FALSO_VOLUMES=f"{ns}/dados-0")
+    processo, segredos, chamadas = roda(
+        tmp_path, antes, KUBECTL_FALSO_VOLUMES=f"{ns}/dados-0"
+    )
 
     assert processo.returncode != 0
-    assert f"secret {fonte} is missing but {ns} already has a database volume" in (
-        processo.stderr
-    )
+    assert (
+        f"secret {fonte} is missing but {ns} has database volumes"
+        " (persistentvolumeclaim/dados-0)"
+    ) in processo.stderr
+    assert "restore the secret" in processo.stderr
+    assert "Deleting the volumes destroys the database" in processo.stderr
     assert segredos == antes
+    assert gravacoes(chamadas) == []
+
+
+@pytest.mark.parametrize("fonte", sorted(FONTES_DO_BANCO))
+def test_erro_ao_listar_os_volumes_para_o_script_sem_gravar_nada(
+    tmp_path: Path, fonte: str
+) -> None:
+    # Erro do cluster nao vira "sem volume": com o banco de pe, a fonte nova
+    # perderia os dados.
+    antes = existentes()
+    del antes[fonte]
+
+    processo, segredos, chamadas = roda(tmp_path, antes, KUBECTL_FALSO_FALHA="get pvc")
+
+    assert processo.returncode != 0
+    assert "connection to the server" in processo.stderr
+    assert segredos == antes
+    assert gravacoes(chamadas) == []
+
+
+@pytest.mark.parametrize(
+    ("faltam", "volume"),
+    [
+        (["pytstop-os/os-jwt", "pytstop-os/os-cripto"], "pytstop-os/dados-0"),
+        (None, "pytstop-billing/dados-0"),
+    ],
+    ids=["os-jwt-antes-da-os-cripto", "cluster-novo"],
+)
+def test_guarda_de_volume_para_antes_de_gerar_qualquer_fonte(
+    tmp_path: Path, faltam: list[str] | None, volume: str
+) -> None:
+    # A os-jwt, que nasce de novo com o volume de pe, vem antes da os-cripto,
+    # que a guarda barra; e, num cluster novo, as fontes da plataforma vem
+    # antes da do banco do Billing: nenhuma nasce.
+    antes = existentes() if faltam else {}
+    for fonte in faltam or []:
+        del antes[fonte]
+
+    processo, segredos, chamadas = roda(tmp_path, antes, KUBECTL_FALSO_VOLUMES=volume)
+
+    assert processo.returncode != 0
+    assert "has database volumes" in processo.stderr
+    assert segredos == antes
+    assert gravacoes(chamadas) == []
 
 
 @pytest.mark.parametrize("fonte", sorted(set(FONTES_DOS_SERVICOS) - FONTES_DO_BANCO))
@@ -573,15 +624,15 @@ def test_erro_ao_gravar_no_cluster_para_o_script(
 def test_erro_ao_criar_a_fonte_de_um_servico_para_o_script(tmp_path: Path) -> None:
     antes = existentes()
     del antes["pytstop-os/os-admin"]
+    del antes["pytstop-billing/billing-link"]
 
     processo, segredos, _ = roda(tmp_path, antes, KUBECTL_FALSO_FALHA="create")
 
     assert processo.returncode != 0
     assert "connection to the server" in processo.stderr
+    # Para ali: nem a mensagem de criada, nem a fonte que vem depois.
     assert segredos == antes
-    # Para ali: nem a mensagem de criada, nem as fontes que vem depois.
-    assert "os-admin created" not in processo.stdout
-    assert "billing-link" not in processo.stdout
+    assert "created" not in processo.stdout
 
 
 @pytest.mark.parametrize(
@@ -590,15 +641,20 @@ def test_erro_ao_criar_a_fonte_de_um_servico_para_o_script(tmp_path: Path) -> No
         ("genpkey", "pytstop-os/os-jwt"),
         ("rand -base64 32", "pytstop-os/os-cripto"),
         ("rand -base64 756", "pytstop-billing/billing-mongo"),
+        ("rand -hex 24", "pytstop-os/os-postgres"),
+        ("rand -hex 32", "pytstop-billing/billing-link"),
     ],
-    ids=["chave-rsa", "chave-fernet-no-pipe", "keyfile-no-pipe"],
+    ids=["chave-rsa", "chave-fernet-no-pipe", "keyfile-no-pipe", "senha", "chave-hmac"],
 )
 def test_openssl_que_falha_para_o_script_sem_gravar_a_fonte(
     tmp_path: Path, falha: str, fonte: str
 ) -> None:
+    antes = existentes()
+    del antes[fonte]
+
     processo, segredos, _ = roda(
         tmp_path,
-        {},
+        antes,
         openssl=OPENSSL_DESVIADO,
         OPENSSL_SUBCOMANDO=falha,
         OPENSSL_REAL=OPENSSL,
@@ -606,9 +662,7 @@ def test_openssl_que_falha_para_o_script_sem_gravar_a_fonte(
 
     assert processo.returncode != 0
     assert "falha simulada" in processo.stderr
-    # Nem a fonte, nem a ultima do script, que vem depois de todas.
-    assert fonte not in segredos
-    assert "pytstop-billing/billing-link" not in segredos
+    assert segredos == antes
 
 
 @pytest.mark.parametrize(
@@ -634,7 +688,7 @@ def test_fonte_que_existe_sem_uma_chave_para_o_script_sem_gravar_nada(
     assert f"secret {fonte} has no key {chave}" in processo.stderr
     assert f"secret {fonte} already exists: kept" not in processo.stdout
     assert segredos == antes
-    assert [chamada for chamada in chamadas if "create" in chamada] == []
+    assert gravacoes(chamadas) == []
 
 
 @pytest.mark.parametrize(
