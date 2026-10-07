@@ -53,11 +53,16 @@ confere() {
 titulo() { printf '\n== %s\n' "$*"; }
 
 # implantado <componente>: falso so no kind-ci, que nao tem Loki, Promtail e
-# Grafana; la a prova pula com aviso. Nos outros overlays a prova roda, e
-# componente ausente ou quebrado e CHECK FAILED.
+# Grafana; la a prova pula com aviso, e a linha final diz quantas pulou. Nos
+# outros overlays a prova roda, e componente ausente ou quebrado e CHECK
+# FAILED.
+PULADAS=0
+PULADOS=""
 implantado() {
   [ "$OVERLAY" = kind-ci ] || return 0
   echo "skipped: no $1 in the kind-ci overlay"
+  PULADAS=$((PULADAS + 1))
+  PULADOS="${PULADOS:+$PULADOS; }$1"
   return 1
 }
 
@@ -67,10 +72,11 @@ cabecalho() { tr -d '\r' < "$TMP/h" | awk -v nome="$1:" 'tolower($1) == nome {pr
 # receber>]]: status, o caminho que o eco recebeu e o balde de rate limiting da
 # rota (limite por minuto e quanto sobra nele). Com o status esperado, confere
 # o status e o caminho recebido; sem o ultimo, o esperado e que o servico nao
-# tenha sido chamado ("-").
+# tenha sido chamado ("-"). Todo curl do smoke tem --max-time: pedido
+# pendurado falha em segundos, em vez de gastar o timeout do job.
 pede() {
   local status recebido limite resta
-  status=$(curl -s --path-as-is -X "$1" -D "$TMP/h" -o "$TMP/b" -w '%{http_code}' "$BORDA$2")
+  status=$(curl -s --max-time 10 --path-as-is -X "$1" -D "$TMP/h" -o "$TMP/b" -w '%{http_code}' "$BORDA$2")
   recebido=$(jq -r '.path // "-"' "$TMP/b" 2>/dev/null || echo -)
   limite=$(cabecalho x-ratelimit-limit-minute)
   resta=$(cabecalho x-ratelimit-remaining-minute)
@@ -146,8 +152,8 @@ $K -n "$NS" rollout status deployment/os-service-api --timeout=180s
 $K -n "$NS" rollout status deployment/billing-service-api --timeout=180s
 # O controller leva alguns segundos para empurrar as rotas novas ao Kong.
 for _ in $(seq 60); do
-  [ "$(curl -s -o /dev/null -w '%{http_code}' "$BORDA/os/openapi.json")" = 200 ] \
-    && [ "$(curl -s -o /dev/null -w '%{http_code}' "$BORDA/billing/openapi.json")" = 200 ] && break
+  [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA/os/openapi.json")" = 200 ] \
+    && [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA/billing/openapi.json")" = 200 ] && break
   sleep 2
 done
 
@@ -184,7 +190,7 @@ pede GET /os/api/v1/./admin/outbox 404
 pede GET /os/api/v1/%61dmin/outbox 404
 
 titulo "X-Request-ID: same id in the response and in what the upstream got"
-curl -s -D "$TMP/h" -o "$TMP/b" "$BORDA/os/api/v1/ordens-de-servico"
+curl -s --max-time 10 -D "$TMP/h" -o "$TMP/b" "$BORDA/os/api/v1/ordens-de-servico"
 id_resposta=$(cabecalho x-request-id)
 id_servico=$(jq -r '.headers["x-request-id"]' "$TMP/b")
 printf 'response:       %s\n' "$id_resposta"
@@ -197,7 +203,7 @@ titulo "login rate limit (5/min, x10 on kind): POSTs in a row until the first 42
 # 429 vem um pouco depois; 120 POSTs sempre passam do limite de duas janelas.
 primeiro_429=""
 for n in $(seq 120); do
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BORDA/os/api/v1/autenticacao/login")" = 429 ]; then
+  if [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' -X POST "$BORDA/os/api/v1/autenticacao/login")" = 429 ]; then
     primeiro_429=$n
     break
   fi
@@ -382,8 +388,10 @@ depois=$($R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == 
 printf 'after restart:  %s\n' "$depois"
 confere "DLQ policy back to the file value after the restart" '{"message-ttl":604800000}' "$depois"
 
+pulados=""
+[ "$PULADAS" -eq 0 ] || pulados=" ($PULADAS group(s) of checks skipped: $PULADOS)"
 if [ "$FALHAS" -gt 0 ]; then
-  printf '\nsmoke FAILED: %s check(s) did not hold:\n%s' "$FALHAS" "$RESUMO" >&2
+  printf '\nsmoke FAILED: %s check(s) did not hold%s:\n%s' "$FALHAS" "$pulados" "$RESUMO" >&2
   exit 1
 fi
-printf '\nsmoke OK: every check held\n'
+printf '\nsmoke OK: every check held%s\n' "$pulados"
