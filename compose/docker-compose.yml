@@ -279,7 +279,7 @@ services:
     environment:
       <<: *otel
       OTEL_SERVICE_NAME: billing-service
-      MONGODB_URL: mongodb://mongo-billing:27017/billing?replicaSet=rs0
+      MONGODB_URI: mongodb://mongo-billing:27017/billing?replicaSet=rs0
       RABBITMQ_URL: amqp://billing:pytstop-billing-demo-2026@rabbitmq:5672/%2F  # gitleaks:allow
       JWKS_URL: http://os-service:8000/.well-known/jwks.json
       MP_MODE: simulado
