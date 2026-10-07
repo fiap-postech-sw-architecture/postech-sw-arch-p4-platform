@@ -75,7 +75,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
-      # Historico inteiro: segredo commitado e apagado depois tambem conta.
+      # Historico inteiro do HEAD (no PR, o merge do PR na main): segredo
+      # commitado e apagado depois tambem conta. Sem --log-opts o gitleaks
+      # usa `git log --all` e varre as branches dos outros PRs abertos: um
+      # falso positivo de outra branch reprovaria este PR. Cada branch e
+      # varrida no proprio PR.
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
@@ -91,6 +95,6 @@ jobs:
           echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz -C /usr/local/bin gitleaks
       - name: gitleaks (historico do repositorio, regras do .gitleaks.toml)
-        run: gitleaks git . --config .gitleaks.toml --redact --no-banner --verbose
+        run: gitleaks git . --log-opts="HEAD" --config .gitleaks.toml --redact --no-banner --verbose
       - name: Regras do .gitleaks.toml reprovam senha num manifesto (teste negativo)
         run: scripts/ci/testa-gitleaks.sh
