@@ -5,7 +5,8 @@ este teste e a trava: painel sem descricao, painel ou consulta fora do
 observabilidade/README.md, ou regra de alerta com UID, titulo, consulta,
 severidade, janela, "sem dado" ou "onde" diferentes dos da tabela de alertas
 reprovam. Tambem reprova arquivo de alerta que o Grafana do cluster nao monta
-ou que o compose monta sem poder usar (as regras do Kong).
+ou que o compose monta sem poder usar (as regras do Kong), e filtro por fila
+que nao seleciona o grupo certo de filas do definitions.json do RabbitMQ.
 """
 
 from __future__ import annotations
@@ -36,6 +37,33 @@ REGRAS: list[tuple[str, dict[str, Any]]] = [
     for regra in grupo["rules"]
 ]
 IDS_DAS_REGRAS = [regra["uid"] for _, regra in REGRAS]
+DEFINITIONS = json.loads(
+    (RAIZ / "k8s" / "base" / "rabbitmq" / "definitions.json").read_text(
+        encoding="utf-8"
+    )
+)
+FILAS = {fila["name"] for fila in DEFINITIONS["queues"]}
+
+
+def ligadas_a(*exchanges: str) -> set[str]:
+    return {
+        b["destination"] for b in DEFINITIONS["bindings"] if b["source"] in exchanges
+    }
+
+
+# Grupos de filas pela topologia, nao pelo nome: e o oraculo dos filtros.
+TRABALHO = ligadas_a("pytstop.comandos", "pytstop.eventos")
+RETRY = ligadas_a("pytstop.retry")
+DLQ = ligadas_a("pytstop.dlx")
+# Painel ou regra com filtro no label queue -> filas que ele deve mostrar.
+FILTRO_DE_FILA = {
+    "Mensagens nas DLQs": DLQ,
+    "Consumidores por fila": TRABALHO,
+    "Mensagens prontas por fila": TRABALHO,
+    "Mensagens em processamento (sem ack)": TRABALHO,
+    "Aguardando retry e DLQ": RETRY | DLQ,
+    "pytstop-dlq-com-mensagens": DLQ,
+}
 
 
 def linhas_de_alerta() -> dict[str, dict[str, str]]:
@@ -117,3 +145,37 @@ def test_grafana_do_cluster_monta_todos_os_alertas_e_o_compose_so_os_comuns() ->
     ]
     assert "grafana/alertas.yaml:" in montados
     assert "alertas-cluster" not in montados
+
+
+def consultas_com_filtro_de_fila() -> list[Any]:
+    consultas = [
+        (painel["title"], alvo["expr"])
+        for arquivo in DASHBOARDS
+        for painel in json.loads(arquivo.read_text(encoding="utf-8"))["panels"]
+        for alvo in painel["targets"]
+    ] + [
+        (regra["uid"], dado["model"]["expr"])
+        for _, regra in REGRAS
+        for dado in regra["data"]
+        if "expr" in dado["model"]
+    ]
+    return [
+        pytest.param(nome, expr, id=nome)
+        for nome, expr in consultas
+        if re.search(r"queue[=!]~", expr)
+    ]
+
+
+@pytest.mark.parametrize(("nome", "expr"), consultas_com_filtro_de_fila())
+def test_filtro_de_fila_seleciona_o_grupo_certo_da_topologia(
+    nome: str, expr: str
+) -> None:
+    # Matcher do PromQL e RE2 ancorado nas duas pontas (re.fullmatch). Uma fila
+    # nova no definitions.json com nome fora do padrao, ou um padrao que ficou
+    # para tras quando a topologia mudou, reprova aqui.
+    (operador, padrao), *outros = re.findall(r'queue(=~|!~)"([^"]*)"', expr)
+    casam = {fila for fila in FILAS if re.fullmatch(padrao, fila)}
+
+    assert outros == []
+    assert FILAS == TRABALHO | RETRY | DLQ
+    assert (casam if operador == "=~" else FILAS - casam) == FILTRO_DE_FILA[nome]
