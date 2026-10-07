@@ -629,15 +629,16 @@ def test_permissoes_do_usuario_cobrem_so_o_que_o_catalogo_manda(
     fila = FILA_DO_USUARIO[usuario]
 
     # O RabbitMQ procura o padrao em qualquer posicao do nome (re.search):
-    # padrao sem ^ ou $ casaria tambem as filas de retry e a .dlq e reprovaria
-    # aqui.
+    # padrao sem ^ ou \z casaria tambem as filas de retry e a .dlq e
+    # reprovaria aqui. O fim e \z, nao $: o $ do PCRE casa tambem antes de
+    # um \n final.
     def casam(padrao: str, nomes: set[str]) -> set[str]:
         return {n for n in nomes if re.search(padrao, n)}
 
     exchanges = {e["name"] for e in definitions["exchanges"]}
     filas = {q["name"] for q in definitions["queues"]}
     chaves = {routing_key_esperada(t) for t in CATALOGO}
-    assert geral["configure"] == "^$"
+    assert geral["configure"] == "^\\z"
     assert casam(geral["write"], exchanges) == {exchange, "pytstop.retry"}
     assert casam(geral["read"], filas) == {fila}
     assert set(topico) == {exchange, "pytstop.retry"}
@@ -663,7 +664,8 @@ def test_permissao_no_retry_aceita_so_as_cinco_chaves_da_propria_fila(
         for chave in filas_de_retry(outra)
     ]
     # A chave antiga (o nome da fila de trabalho), o prefixo sem atraso,
-    # atrasos fora da lista e sobras antes ou depois do nome.
+    # atrasos fora da lista e sobras antes ou depois do nome (o \n final passa
+    # por um padrao terminado em $).
     fora_da_lista = [
         fila,
         f"{fila}.retry",
@@ -676,6 +678,8 @@ def test_permissao_no_retry_aceita_so_as_cinco_chaves_da_propria_fila(
         f"{fila}.retry.3000s",
         f"{fila}.retry.1s.x",
         f"{fila}.retry.300sx",
+        f"{fila}.retry.1s\n",
+        f"{fila}.retry.300s\n",
         f"x{fila}.retry.1s",
         f"{fila}.dlq",
     ]
