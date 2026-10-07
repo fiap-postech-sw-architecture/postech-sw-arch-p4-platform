@@ -121,7 +121,9 @@ elif resto == ["get", "deployment,statefulset", "-o", "name"]:
         print(f"{o['kind'].lower()}.apps/{o['nome']}")
 elif resto == ["get", "pods", "-o", "json"]:
     items([
-        {"metadata": {"name": p["nome"], "annotations": anotacoes(p)},
+        {"metadata": {"name": p["nome"], "annotations": anotacoes(p),
+                      **({"deletionTimestamp": "2026-10-07T10:00:00Z"}
+                         if p.get("saindo") else {})},
          "status": {"phase": p["fase"]}}
         for p in estado[ns]["pods"]
     ])
@@ -162,7 +164,14 @@ with (dir_ / "curl.jsonl").open("a") as log:
     log.write(json.dumps(args) + "\n")
 url = args[-1]
 caminho = "/" + url.split("://", 1)[1].split("/", 1)[1]
-print(estado["curl"].get(caminho, "000"), end="")
+# Uma lista e a resposta de cada chamada, em ordem; a ultima se repete.
+resposta = estado["curl"].get(caminho, "000")
+if isinstance(resposta, list):
+    contador = dir_ / ("curl-" + caminho.replace("/", "_"))
+    n = int(contador.read_text()) if contador.exists() else 0
+    contador.write_text(str(n + 1))
+    resposta = resposta[min(n, len(resposta) - 1)]
+print(resposta, end="")
 """
 
 SLEEP_FALSO = r"""
@@ -398,6 +407,44 @@ def test_erro_do_cluster_vira_failed_e_o_smoke_segue(smoke: Smoke) -> None:
         ("os-service", "up = 1 in Prometheus"),
     }
     assert len(smoke.linhas()) == ETAPAS * len(SERVICOS)
+
+
+def test_saude_ganha_tempo_ate_o_kong_ter_o_alvo(smoke: Smoke) -> None:
+    estado = cluster_saudavel()
+    estado["curl"]["/billing/api/v1/saude"] = ["503", "404", "503", "200"]
+
+    processo = smoke.roda(estado)
+
+    assert processo.returncode == 0, processo.stderr
+    assert len(smoke.chamadas("sleep")) == 3
+
+
+def test_saude_que_nunca_responde_esgota_a_espera_de_1_min(smoke: Smoke) -> None:
+    estado = cluster_saudavel()
+    estado["curl"]["/os/api/v1/saude"] = "503"
+
+    processo = smoke.roda(estado, "os-service")
+
+    assert processo.returncode == 1
+    assert len(smoke.chamadas("sleep")) == 30
+    assert ("os-service", "GET /os/api/v1/saude", "FAILED: 503") in smoke.linhas()
+
+
+def test_pod_saindo_de_um_rollout_nao_conta_no_prometheus(smoke: Smoke) -> None:
+    estado = cluster_saudavel()
+    estado["pytstop-billing"]["pods"].append(
+        {
+            "nome": "billing-service-api-0",
+            "anotado": True,
+            "fase": "Running",
+            "saindo": True,
+        }
+    )
+
+    processo = smoke.roda(estado)
+
+    assert processo.returncode == 0, processo.stderr
+    assert ("billing-service", "up = 1 in Prometheus", "ok: 3 pods") in smoke.linhas()
 
 
 def test_prometheus_ganha_tempo_ate_os_pods_aparecerem(smoke: Smoke) -> None:

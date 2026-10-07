@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Smoke dos servicos implantados no kind (scripts/ci/implantar-servicos.sh),
 # por namespace: o Job de inicializacao completo; os Deployments e o banco com
-# todas as replicas prontas e atualizadas; pela borda, a saude em 200 e o
-# /metrics em 404; cada pod anotado com up = 1 no Prometheus (ate 45 s); e a
+# todas as replicas prontas e atualizadas; pela borda, a saude em 200 (ate 1
+# min) e o /metrics em 404; cada pod anotado com up = 1 no Prometheus (ate 45
+# s); e a
 # NetworkPolicy barrando o banco a quem vem de outro namespace, numa conexao do
 # rabbitmq-0 da plataforma que tem de esgotar o prazo (recusa ou nome que nao
 # resolve nao provam a regra). README, "Contrato com os servicos".
@@ -88,14 +89,23 @@ for nome in "$@"; do
   registra "$nome" "rollouts" "$(junta <<< "${pendentes:-$total ready}")" \
     "$([ "$total" -gt 0 ] && [ -z "$pendentes" ] && echo sim)"
 
-  obtido=$(status "$prefixo/api/v1/saude")
+  # O Kong recebe a rota de um Service novo antes do alvo, que so chega com os
+  # endpoints dele: ate la a rota responde 503 (ou 404, sem rota). Espera a
+  # saude por ate 1 min antes de reprovar.
+  for _ in $(seq 30); do
+    obtido=$(status "$prefixo/api/v1/saude")
+    [ "$obtido" = 200 ] && break
+    sleep 2
+  done
   registra "$nome" "GET $prefixo/api/v1/saude" "$obtido" "$([ "$obtido" = 200 ] && echo sim)"
   obtido=$(status "$prefixo/metrics")
   registra "$nome" "GET $prefixo/metrics" "$obtido" "$([ "$obtido" = 404 ] && echo sim)"
 
   # O Prometheus raspa a cada 15 s: pod que acabou de subir ainda pode faltar.
+  # Pod saindo (o de antes de um rollout) nao conta.
   esperados=$($K -n "$ns" get pods -o json | jq -r '.items[]
-    | select(.metadata.annotations["prometheus.io/scrape"] == "true" and .status.phase == "Running")
+    | select(.metadata.annotations["prometheus.io/scrape"] == "true" and .status.phase == "Running"
+        and .metadata.deletionTimestamp == null)
     | .metadata.name' | sort -u || true)
   faltam=$esperados
   for _ in $(seq 9); do

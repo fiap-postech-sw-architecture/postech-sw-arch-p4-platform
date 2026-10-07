@@ -524,8 +524,8 @@ O que o repositório de cada serviço precisa ter para o CD dele subir os três 
 - A imagem do serviço com o nome fixo `pytstop-<nome>` e `imagePullPolicy: IfNotPresent`. A tag de verdade vem na implantação: o script gera `k8s/overlays/execucao/`, o overlay pedido com a imagem trocada pelo `images:` do kustomize, aplica e o apaga no fim; o diretório não pode existir no repositório. Toda outra imagem dos manifests (banco, exporter, initContainers) tem de estar na [tabela de versões](#componentes-e-versões), com a mesma tag: o script confere antes de construir e para nomeando a imagem que falta.
 - Nenhum `Secret` nos manifests: os do serviço vêm do `make deploy` e entram por `secretKeyRef`, com os nomes e as chaves da tabela [Segredos gerados](#segredos-gerados).
 - Um Job de inicialização (a migração ou a preparação do banco) com o rótulo `app.kubernetes.io/component: inicializacao`, idempotente: o script apaga os Jobs com esse rótulo antes do apply (Job é imutável), aplica com `apply --server-side`, espera o banco (StatefulSet, 180 s), o Job completar (300 s; no erro, o log dele vai para a saída) e cada Deployment (300 s).
-- Pela borda, `GET <prefixo>/api/v1/saude` com 200 e `<prefixo>/metrics` com 404 (o Ingress `fora-da-borda` dos exemplos).
-- Todo pod de processo (API, relay, consumidor, `prazos` e o banco, pelo exporter) anotado para o Prometheus e com `up = 1`; o pod do Job não é raspado.
+- Pela borda, `GET <prefixo>/api/v1/saude` com 200 e `<prefixo>/metrics` com 404 (o Ingress `fora-da-borda` dos exemplos). O smoke espera a saúde por até 1 min: o Kong recebe a rota de um Service novo antes do alvo, e até lá responde 503.
+- Todo pod de processo (API, relay, consumidor, `prazos` e o banco, pelo exporter) anotado para o Prometheus e com `up = 1`; o pod do Job e o que está saindo de um rollout não contam.
 - NetworkPolicy que deixa só o próprio namespace chegar ao banco. O smoke prova pelo pod `rabbitmq-0` da plataforma: a conexão à porta do banco tem de esgotar o prazo de 3 s, porque o kindnet descarta o pacote barrado; conexão aceita, recusada ou nome que não resolve reprovam.
 
 O smoke escreve a tabela `serviço | etapa | resultado` na saída e, no GitHub Actions, no summary do job, e sai com status 1 nomeando os serviços que falharam. A chamada do CD de um serviço leva a imagem dele pelo arquivo do `docker save` e a ref gravada nele; no exemplo, a do OS, no commit `5f2a9c1`, com os vizinhos clonados ao lado:
@@ -547,7 +547,7 @@ scripts/ci/implantar-servicos.sh --overlay kind \
 scripts/ci/smoke-servicos.sh
 ```
 
-Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl` e `sleep` falsos: builds em paralelo e com o commit, a carga no kind, o overlay gerado e apagado, a ordem de cada namespace, falha de build, apply, banco, Job e Deployment, e erro do cluster ao listar o banco e os Deployments, nomeando o serviço e o commit, imagem fora da tabela e argumentos recusados; e cada etapa do smoke reprovando o que deve, erro do cluster sem parar o smoke, a espera do Prometheus, o prazo de cada chamada e o certificado sem verificação só no `localhost`.
+Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl` e `sleep` falsos: builds em paralelo e com o commit, a carga no kind, o overlay gerado e apagado, a ordem de cada namespace, falha de build, apply, banco, Job e Deployment, e erro do cluster ao listar o banco e os Deployments, nomeando o serviço e o commit, imagem fora da tabela e argumentos recusados; e cada etapa do smoke reprovando o que deve, erro do cluster sem parar o smoke, as esperas da borda e do Prometheus, o prazo de cada chamada e o certificado sem verificação só no `localhost`.
 
 ## Contratos de mensageria
 
