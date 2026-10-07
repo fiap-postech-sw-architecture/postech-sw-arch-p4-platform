@@ -2,8 +2,10 @@
 # Smoke da plataforma num cluster so com a plataforma implantada (make kind-up
 # deploy smoke). Aplica os exemplos de borda de k8s/exemplos/ (OS e Billing)
 # com um servidor de eco no lugar de cada API e confere borda, rate limiting,
-# barra codificada, mascara de token no Loki, policies e redrive do RabbitMQ,
-# fallback do Kong, regras do Grafana e o endurecimento dos pods.
+# barra codificada, mascara de token no Loki, policies, retry por atraso e
+# redrive do RabbitMQ, fallback do Kong, regras do Grafana e o endurecimento dos
+# pods. A prova do retry (scripts/prova_retry.py) roda com o uv, por um
+# port-forward ao broker.
 #
 # A saida e a evidencia: cada linha diz o que foi pedido e o que voltou. Prova
 # que nao vale vira uma linha CHECK FAILED; o script segue ate o fim, para a
@@ -19,6 +21,7 @@ NS=pytstop-plataforma
 ROTULO=app.kubernetes.io/part-of=pytstop-smoke
 K="kubectl --context $CONTEXTO"
 limpa() {
+  [ -z "${port_forward:-}" ] || kill "$port_forward" 2>/dev/null || true
   $K delete kongclusterplugin smoke-plugin-invalido --ignore-not-found >/dev/null
   $K -n "$NS" delete deployment,service,ingress -l "$ROTULO" --ignore-not-found >/dev/null
   rm -rf "$TMP"
@@ -219,7 +222,7 @@ loki "$linhas_da_execucao" | sed -n 1,4p
 confere "Kong lines in Loki with the token" 0 "$com_token"
 confere "Kong lines in Loki of the 4 requests with the token masked" 4 "$mascaradas"
 
-titulo "RabbitMQ: x-queue-type is the only argument; TTL, dead-letter, overflow and length come from policies"
+titulo "RabbitMQ: arguments are x-queue-type, plus x-message-ttl on the retry queues; dead-letter, overflow and length come from policies"
 R="$K -n pytstop-plataforma exec -i rabbitmq-0 -c rabbitmq --"
 # rabbitmqadmin como admin, com a senha lida no proprio pod (admin.json).
 adm() {
@@ -235,12 +238,31 @@ head -c 1153434 /dev/zero | tr '\0' x \
   | { adm publish message --exchange pytstop.dlx --routing-key billing.comandos --payload-file - 2>&1 || true; } \
   | grep -m1 PRECONDITION
 
-titulo "retry: copy with 1 s expiration on pytstop.retry comes back to billing.comandos"
-adm publish message --exchange pytstop.retry --routing-key billing.comandos --payload '{"smoke":"retry"}' --properties '{"expiration":"1000","headers":{"x-tentativa":1}}'
+titulo "retry: one queue per delay; copies published as the billing user (scripts/prova_retry.py, through a port-forward)"
+# Publica pelo AMQP com o usuario do servico, nao pelo admin: so assim valem a
+# permissao de topico e a conferencia do user_id. Porta local livre, lida da
+# saida do port-forward.
+senha_billing=$($K -n "$NS" get secret rabbitmq-credenciais -o jsonpath='{.data.senha-billing}' | base64 -d)
+$K -n "$NS" port-forward svc/rabbitmq :5672 > "$TMP/port-forward" 2>&1 &
+port_forward=$!
+porta=""
+for _ in $(seq 30); do
+  porta=$(sed -n 's/^Forwarding from 127\.0\.0\.1:\([0-9]*\) .*/\1/p' "$TMP/port-forward")
+  [ -n "$porta" ] && break
+  sleep 1
+done
+[ -n "$porta" ] || cat "$TMP/port-forward" >&2
+if AMQP_URL="amqp://billing:$senha_billing@127.0.0.1:${porta:-0}/%2F" uv run --frozen python scripts/prova_retry.py; then
+  prova_retry=held
+else
+  prova_retry=failed
+fi
+kill "$port_forward" 2>/dev/null || true
+wait "$port_forward" 2>/dev/null || true  # sem o aviso "Terminated" do bash
+port_forward=""
+confere "retry proofs (scripts/prova_retry.py)" held "$prova_retry"
 sleep 7  # a contagem das filas quorum e atualizada a cada 5 s
 filas
-confere "retry copy back in billing.comandos" 1 "$(mensagens billing.comandos)"
-confere "retry queue billing.comandos.retry drained" 0 "$(mensagens billing.comandos.retry)"
 $R rabbitmqctl -q purge_queue billing.comandos
 
 titulo "make redrive FILA=billing.comandos: the DLQ goes back to the queue"

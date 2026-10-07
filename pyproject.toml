@@ -7,7 +7,8 @@ requires-python = ">=3.14"
 dependencies = []
 
 # So ferramentas de teste e qualidade: o repositorio nao tem codigo de
-# producao em Python, so os testes de contrato (e, depois, os E2E).
+# producao em Python, so os testes de contrato (e, depois, os E2E) e a prova
+# do retry no broker (scripts/prova_retry.py, rodada pelo make smoke).
 [dependency-groups]
 dev = [
     "bandit>=1.9.4,<2",
@@ -15,6 +16,8 @@ dev = [
     # ela o jsonschema ignora "format" calado.
     "jsonschema[format-nongpl]>=4.26,<5",
     "mypy>=2.4,<3",
+    # Mesmo cliente AMQP dos servicos: a prova publica como o consumidor.
+    "pika>=1.4.4,<2",
     "pytest>=9.1,<10",
     "pytest-cov>=7.1,<8",
     "pyyaml>=6.0.3,<7",
@@ -61,7 +64,12 @@ select = [
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["contratos/tests", "tests"]
+files = ["contratos/tests", "tests", "scripts"]
+
+# pika nao publica tipos (sem py.typed nem stubs mantidos).
+[[tool.mypy.overrides]]
+module = ["pika", "pika.*"]
+ignore_missing_imports = true
 
 [tool.bandit]
 # assert e o mecanismo do pytest, e aqui so ha codigo de teste.
