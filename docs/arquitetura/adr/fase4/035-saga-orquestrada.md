@@ -63,7 +63,7 @@ A saga é ACD (atomicidade, consistência e durabilidade, sem o isolamento; Aula
 
 A `Saga` é um process manager da camada de aplicação do OS Service, persistido como agregado próprio na tabela `sagas`, no PostgreSQL da outbox ([ADR-037](037-banco-por-servico.md)). OS e saga mudam na mesma transação: etapa e status não podem divergir, e mudança de etapa e comando seguinte entram no mesmo commit. Etapas: uma `AGUARDANDO_*` por espera (de `AGUARDANDO_DIAGNOSTICO` a `AGUARDANDO_INICIO`), `EM_EXECUCAO`, `CONCLUIDA`, `COMPENSANDO`, `COMPENSADA` e `FALHA_NA_COMPENSACAO`. Etapa e status da OS são campos diferentes, alguns com o mesmo nome; o mapa entre os dois está na RFC-004.
 
-Evento que não corresponde à etapa atual tem dois tratamentos. Evento de passo já passado, ou que chega com a saga em compensação ou encerrada, é ignorado com log. Evento de passo à frente, como um `ExecucaoIniciada` que ultrapassou o `ExecucaoAgendada` no retry ou entre consumidores concorrentes, é erro transitório: volta pela fila de retry até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta. A exceção é a corrida do pivot: se `ExecucaoIniciada` chega com só `CancelarExecucao` pendente, nada foi desfeito, e a saga volta a `EM_EXECUCAO`, com "cancelamento recusado: execução já iniciada" no histórico. Reentrega não repete efeito (RN-028, [ADR-036](036-mensageria-rabbitmq.md)).
+Evento que não corresponde à etapa atual tem dois tratamentos. Evento de passo já passado, ou que chega com a saga em compensação ou encerrada, é ignorado com log. Evento de passo à frente, como um `ExecucaoIniciada` que ultrapassou o `ExecucaoAgendada` no retry ou entre consumidores concorrentes, é erro transitório: volta pelas filas de retry até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta. A exceção é a corrida do pivot: se `ExecucaoIniciada` chega com só `CancelarExecucao` pendente, nada foi desfeito, e a saga volta a `EM_EXECUCAO`, com "cancelamento recusado: execução já iniciada" no histórico. Reentrega não repete efeito (RN-028, [ADR-036](036-mensageria-rabbitmq.md)).
 
 ### Prazos
 
@@ -153,7 +153,7 @@ O `prazos` do OS Service venceria também orçamento e pagamento e mandaria o Bi
 * Consistência eventual: a OS pode mostrar `AGUARDANDO_APROVACAO` com o orçamento já vencido no Billing, até o evento chegar
 * Compensação sequencial: cancelar depois do pagamento custa várias idas e voltas pelo broker e depende de o Mercado Pago aceitar o estorno
 * `FALHA_NA_COMPENSACAO` deixa recursos parcialmente compensados até a intervenção manual
-* Evento adiantado ocupa a fila de retry até a saga alcançá-lo, e, se o evento anterior parar na DLQ, ele também acaba lá
+* Evento adiantado passa pelas filas de retry até a saga alcançá-lo, e, se o evento anterior parar na DLQ, ele também acaba lá
 
 ### Neutras
 

@@ -1246,6 +1246,24 @@ def test_atrasos_do_retry_sao_os_da_rfc_e_os_do_asyncapi(
     assert [int(n) for n in re.findall(r"\.retry\.(\d+)s", tentativa)] == list(ATRASOS)
 
 
+def test_asyncapi_lista_as_filas_de_retry_e_a_dlq_de_cada_fila(
+    asyncapi: dict[str, Any], definitions: dict[str, Any]
+) -> None:
+    # O consumidor le no contrato para onde vai a copia: o info.description
+    # cita os atrasos das filas de retry, e a descricao de cada canal de fila,
+    # as filas de retry e a DLQ dela que o definitions.json declara, nem mais
+    # nem menos.
+    filas = [q["name"] for q in definitions["queues"]]
+    atrasos = {int(m[1]) for f in filas if (m := re.fullmatch(r".+\.retry\.(\d+)s", f))}
+    info = asyncapi["info"]["description"]
+
+    assert {int(n) for n in re.findall(r"\.retry\.(\d+)s", info)} == atrasos
+    for fila in FILAS_DE_TRABALHO:
+        descricao = asyncapi["channels"][fila]["description"]
+        citadas = re.findall(rf"{re.escape(fila)}\.(?:retry\.\d+s|dlq)\b", descricao)
+        assert sorted(citadas) == sorted(f for f in filas if f.startswith(f"{fila}."))
+
+
 def test_definicoes_compartilhadas_sao_iguais_em_todos_os_schemas() -> None:
     # Cada schema e autocontido (o servico copia so os que usa), entao uuid,
     # data_hora, dinheiro etc. se repetem; aqui nenhuma copia diverge.
