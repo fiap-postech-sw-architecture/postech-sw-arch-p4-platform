@@ -1,10 +1,12 @@
 # Regras de alerta da plataforma (Grafana alerting, provisionadas por
 # arquivo). Cada regra: consulta no Prometheus (A) e limiar (C). Notificacao
 # pela policy default do Grafana, sem canal externo, como na fase 3. Os
-# alertas de saga do ADR-043 (compensacoes, saga parada, circuito aberto)
-# dependem das metricas dos servicos e nao estao neste arquivo. Este arquivo
-# vale no Kubernetes e no compose; o que depende do Kong, que o compose nao
-# tem, fica em alertas-cluster.yaml.
+# alertas do ADR-043 sobre metricas que os servicos ainda nao exportam
+# (compensacoes acima do normal, circuito aberto, outbox parada, assinatura
+# invalida no webhook e falha na busca do JWKS) entram com elas; a saga
+# parada ja esta aqui e fica em OK ate o OS Service exportar as metricas da
+# saga. Este arquivo vale no Kubernetes e no compose; o que depende do Kong,
+# que o compose nao tem, fica em alertas-cluster.yaml.
 apiVersion: 1
 groups:
   - orgId: 1
@@ -188,3 +190,38 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: gt, params: [0.8]}
+      # Saga parada (ADR-043): prazo tecnico vencido e nao tratado ha mais de
+      # 60 s, duas vezes o PRAZOS_INTERVALO_SEGUNDOS padrao (o 60 e literal aqui
+      # e na summary: quem muda a variavel muda os dois), ou alguma instancia em
+      # falha_na_compensacao. Uma consulta so: com o or, a serie que falta numa
+      # condicao nao esconde a outra, e o vector(0) deixa a regra com valor
+      # quando nenhuma vale. O make manifests prova cada condicao no promtool
+      # (scripts/alerta-saga-parada.sh).
+      - uid: pytstop-saga-parada
+        title: Saga parada
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Alguma saga está com o prazo técnico vencido e não tratado há mais de 60 s, ou parada em falha_na_compensacao; siga o runbook da saga.
+          runbook_url: https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/blob/main/docs/operacao/runbook-saga.md
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or vector(0)
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
