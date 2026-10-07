@@ -18,8 +18,9 @@ status 2.
     AMQP_URL=amqp://billing:<senha>@127.0.0.1:<porta>/%2F \\
         uv run python scripts/prova_retry.py
 
-O make smoke roda o script no kind, por um port-forward. Prova que nao vale
-vira uma linha CHECK FAILED, e o status de saida e 1.
+O make smoke roda o script no kind, por um port-forward, e o make prova-retry
+num RabbitMQ avulso (scripts/prova-retry-avulso.sh, tambem no CI). Prova que
+nao vale vira uma linha CHECK FAILED, e o status de saida e 1.
 """
 
 from __future__ import annotations

@@ -34,6 +34,8 @@ KUBECONFORM_IMAGE := ghcr.io/yannh/kubeconform:v0.8.0
 PROMETHEUS_IMAGE := prom/prometheus:v2.54.1
 LOKI_IMAGE := grafana/loki:2.9.8
 PROMTAIL_IMAGE := grafana/promtail:3.6.11
+# Broker avulso do make prova-retry, a mesma imagem do StatefulSet e do compose.
+RABBITMQ_IMAGE := rabbitmq:4.3.6-management
 # Mesma versao do trivy dos repositorios de servico.
 TRIVY_IMAGE := aquasec/trivy:0.72.0
 # Valida o asyncapi.yaml contra a especificacao AsyncAPI 3.0 (exige Node 24).
@@ -56,7 +58,7 @@ TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
 KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE) YQ_IMAGE=$(YQ_IMAGE) \
 	NAMESPACE=$(NAMESPACE) scripts/kong-render.sh
 
-.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint manifests check kong-render
+.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint prova-retry manifests check kong-render
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -136,6 +138,9 @@ lint: ## ruff, mypy e bandit nos testes e na prova do retry
 	uv run mypy
 	uv run bandit -c pyproject.toml -r contratos tests scripts -q
 
+prova-retry: ## prova do retry num RabbitMQ avulso com as definitions e as permissoes daqui (Docker e uv)
+	RABBITMQ_IMAGE=$(RABBITMQ_IMAGE) scripts/prova-retry-avulso.sh
+
 manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do Kong, versoes, dashboards
 	set -euo pipefail; \
 	for overlay in kind k3s; do \
@@ -170,7 +175,7 @@ manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do
 	diff -u k8s/base/kong/kong.yaml "$$render/kong.yaml"; \
 	diff -u k8s/base/kong/crds.yaml "$$render/crds.yaml"; \
 	diff -u k8s/base/kong/schemas/kongclusterplugin_v1.json "$$render/schemas/kongclusterplugin_v1.json"
-	KUBERNETES_VERSION=$(KUBERNETES_VERSION) scripts/versoes.sh $(PROMETHEUS_IMAGE) $(LOKI_IMAGE) $(PROMTAIL_IMAGE)
+	KUBERNETES_VERSION=$(KUBERNETES_VERSION) scripts/versoes.sh $(PROMETHEUS_IMAGE) $(LOKI_IMAGE) $(PROMTAIL_IMAGE) $(RABBITMQ_IMAGE)
 	set -euo pipefail; \
 	for painel in observabilidade/dashboards/*.json; do \
 		jq -e '.uid and .title' "$$painel" > /dev/null; \
@@ -178,7 +183,7 @@ manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do
 			|| { echo "$$painel missing from the configMapGenerator in observabilidade/kustomization.yaml"; exit 1; }; \
 	done
 
-check: lint test manifests ## o mesmo que o CI roda
+check: lint test prova-retry manifests ## o mesmo que o CI roda
 
 kong-render: ## regenera k8s/base/kong (kong.yaml, crds.yaml e o schema do plugin) do chart pinado
 	$(KONG_RENDER) k8s/base/kong

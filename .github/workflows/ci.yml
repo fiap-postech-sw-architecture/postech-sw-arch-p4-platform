@@ -57,6 +57,11 @@ jobs:
         run: make lint
       - name: Testes de contrato e de observabilidade, validacao do AsyncAPI (make test)
         run: make test
+      # RabbitMQ avulso no Docker do runner com o definitions.json e as
+      # permissoes deste commit, e a prova do retry como o billing: JSON que
+      # derruba o boot ou permissao frouxa reprovam aqui, antes do kind.
+      - name: Prova do retry num RabbitMQ avulso (make prova-retry)
+        run: make prova-retry
 
   gitleaks:
     runs-on: ubuntu-latest
