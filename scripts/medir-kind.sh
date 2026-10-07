@@ -4,9 +4,9 @@
 #
 #   scripts/medir-kind.sh etapa <nome>   marca o inicio de uma etapa; a primeira
 #                                        liga a amostragem (a cada 5 s)
-#   scripts/medir-kind.sh resumo         para a amostragem e escreve o resumo em
+#   scripts/medir-kind.sh resumo         para a amostragem, escreve o resumo em
 #                                        Markdown na saida e, no GitHub Actions,
-#                                        no summary do job
+#                                        no summary do job, e zera as marcas
 #
 # Memoria do no do kind, o container onde rodam todos os pods: o memory.peak do
 # cgroup dele, o maior uso que o kernel registrou, inclusive o cache de
@@ -78,6 +78,8 @@ case "${1:-}" in
       awk '$2 > 0 && $2 > maior[$1] {maior[$1] = $2} END {for (pod in maior) print maior[pod], pod}' "$DIR/pods" \
         | sort -rn | awk '{printf "| %s | %d |\n", $2, $1}'
     } | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
+    # A proxima etapa comeca outra medicao.
+    rm -f "$DIR/etapas"
     ;;
   *)
     echo "usage: medir-kind.sh etapa <name> | resumo" >&2
