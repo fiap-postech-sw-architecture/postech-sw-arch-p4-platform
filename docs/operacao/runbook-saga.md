@@ -83,21 +83,24 @@ As métricas não levam o `ordem_id`, porque os labels são fechados. Para chega
 
 1. No Explore do Grafana, com o datasource Loki, `{namespace="pytstop-os"} |= "falha_na_compensacao" | json` traz as linhas do OS Service que citam essa etapa; o campo `correlation_id` de cada linha é o `ordem_id`.
 2. Na mensagem parada numa DLQ, a propriedade `correlation_id` ([seção 4](#4-mensagem-na-dlq-e-redrive)).
-3. No banco do OS Service, a lista completa, com uma consulta só de leitura. O comando acha o pod e o container do PostgreSQL pela imagem, sem depender do nome que o manifesto lhes der:
+3. No banco do OS Service, a lista completa, com uma consulta só de leitura. O comando acha o pod e o container do PostgreSQL pela imagem, sem depender do nome que o manifesto lhes der. A consulta junta cada instância à linha da outbox do envio mais recente do comando em voo (o último de `mensagem_ids`) e lista as instâncias em `falha_na_compensacao` e as com o prazo vencido há mais de 60 s, contado do `entregue_em` mais 120 s, o `SAGA_PRAZO_RESPOSTA_SEGUNDOS` padrão; se a configuração mudou, troque os dois números:
 
    ```bash
    kos() { kubectl --context kind-pytstop-p4 -n pytstop-os "$@"; }
    read -r PG_POD PG_CONTAINER < <(kos get pods -o json | jq -r 'first(.items[] | .metadata.name as $pod
      | .spec.containers[] | select(.image | test("(^|/)postgres:")) | "\($pod) \(.name)")')
    kos exec -i "$PG_POD" -c "$PG_CONTAINER" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
-   SELECT ordem_id, etapa, falha, comando_em_voo->>'tipo' AS comando, reenvios, prazo_resposta_em
-     FROM sagas
-    WHERE etapa = 'falha_na_compensacao' OR prazo_resposta_em < now() - interval '60 seconds'
-    ORDER BY prazo_resposta_em NULLS FIRST;
+   SELECT s.ordem_id, s.etapa, s.falha, s.comando_em_voo->>'tipo' AS comando, s.reenvios,
+          o.entregue_em, o.entregue_em + interval '120 seconds' AS venceu_em
+     FROM sagas s
+     LEFT JOIN outbox o ON o.mensagem_id = (s.comando_em_voo->'mensagem_ids'->> -1)::uuid
+    WHERE s.etapa = 'falha_na_compensacao'
+       OR (o.status = 'entregue' AND o.entregue_em + interval '120 seconds' < now() - interval '60 seconds')
+    ORDER BY o.entregue_em NULLS FIRST;
    SQL
    ```
 
-   `prazo_resposta_em` fica nulo enquanto o comando está na outbox ([RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16)), então comando preso ali não entra nesta lista ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)).
+   O comando que o relay ainda não entregou não entra na lista, porque o prazo dele não começou: o sinal é `outbox_pendentes` ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)). `entregue_em` e `venceu_em` vazios são de instância sem comando em voo, como a que está em `falha_na_compensacao`. O significado das colunas está na [RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16).
 
 Guarde o `ordem_id` achado:
 
