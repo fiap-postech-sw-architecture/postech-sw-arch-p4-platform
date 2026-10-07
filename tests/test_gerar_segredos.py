@@ -485,7 +485,8 @@ def test_fonte_do_banco_que_falta_com_o_volume_de_pe_para_sem_gerar(
         " (persistentvolumeclaim/dados-0)"
     ) in processo.stderr
     assert "restore the secret" in processo.stderr
-    assert "Deleting the volumes destroys the database" in processo.stderr
+    assert "deleting the namespace destroys the database" in processo.stderr
+    assert f"delete namespace {ns}," in processo.stderr
     assert segredos == antes
     assert gravacoes(chamadas) == []
 

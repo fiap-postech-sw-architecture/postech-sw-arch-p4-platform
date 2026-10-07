@@ -116,8 +116,9 @@ sem_volume() {
   volumes=$($K -n "$1" get pvc -o name) || exit 1
   [ -n "$volumes" ] || return 0
   echo "secret $1/$2 is missing but $1 has database volumes (${volumes//$'\n'/ }):" \
-    "restore the secret (README, Segredos gerados). Deleting the volumes destroys the" \
-    "database; only on a demo cluster: $K -n $1 delete pvc --all" >&2
+    "restore the secret (README, Segredos gerados). Only on a demo cluster, deleting the" \
+    "namespace destroys the database and lets it start from scratch: $K delete namespace $1," \
+    "then make deploy and the deploy of the service" >&2
   exit 1
 }
 
