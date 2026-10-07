@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Smoke da plataforma num cluster so com a plataforma implantada (make kind-up
-# deploy smoke). Aplica os exemplos de borda de k8s/exemplos/ (OS e Billing)
+# deploy smoke). Aplica os exemplos de borda de k8s/exemplos/ (OS, Billing e
+# Execucao)
 # com um servidor de eco no lugar de cada API e confere borda, rate limiting,
 # barra codificada, mascara de token no Loki, policies, retry por atraso e
 # redrive do RabbitMQ, fallback do Kong, regras do Grafana e o endurecimento dos
@@ -34,8 +35,8 @@ limpa() {
 
 # A prova do retry roda com o uv: sem ele, o smoke so falharia no fim.
 command -v uv >/dev/null || { echo "uv not found: the retry proof (scripts/prova_retry.py) runs with it, see https://docs.astral.sh/uv/" >&2; exit 1; }
-# Os exemplos usam os caminhos /os e /billing dos servicos de verdade.
-for ns in pytstop-os pytstop-billing; do
+# Os exemplos usam os caminhos /os, /billing e /execucao dos servicos de verdade.
+for ns in pytstop-os pytstop-billing pytstop-execucao; do
   if [ -n "$($K -n "$ns" get ingress -o name 2>/dev/null)" ]; then
     echo "$ns already has Ingresses: the smoke would reuse its paths. Run it on a platform-only cluster." >&2
     exit 1
@@ -146,15 +147,17 @@ spec:
 YAML
 }
 
-titulo "edge: k8s/exemplos/borda-os-service.yaml and borda-billing-service.yaml as is, with an echo server in place of each API"
+titulo "edge: k8s/exemplos/borda-os-service.yaml, borda-billing-service.yaml and borda-execution-service.yaml as is, with an echo server in place of each API"
 eco os-service-api
 eco billing-service-api
-for exemplo in k8s/exemplos/borda-os-service.yaml k8s/exemplos/borda-billing-service.yaml; do
+eco execution-service-api
+for exemplo in k8s/exemplos/borda-os-service.yaml k8s/exemplos/borda-billing-service.yaml k8s/exemplos/borda-execution-service.yaml; do
   $K -n "$NS" apply -f "$exemplo"
   $K -n "$NS" label -f "$exemplo" "$ROTULO" >/dev/null
 done
 $K -n "$NS" rollout status deployment/os-service-api --timeout=180s
 $K -n "$NS" rollout status deployment/billing-service-api --timeout=180s
+$K -n "$NS" rollout status deployment/execution-service-api --timeout=180s
 # O controller leva alguns segundos para empurrar as rotas novas ao Kong, e o
 # alvo de cada Service so entra quando os endpoints dele chegam ao controller:
 # ate la, a rota responde 404 (sem rota) ou 503 (sem alvo), e um Service pode
@@ -189,6 +192,9 @@ billing-service-borda-publico /billing/api/v1/publico/x
 billing-service-borda-webhook /billing/api/v1/webhooks/mercadopago
 billing-service-borda-simulador-api /billing/api/v1/simulador/x
 billing-service-borda-simulador-checkout /billing/simulador/checkout/x
+execution-service-borda-api /execucao/api/v1/estoque
+execution-service-borda-docs /execucao/docs
+execution-service-borda-openapi /execucao/openapi.json
 os-service-borda-login /os/api/v1/autenticacao/login
 SERVICES
   nao_respondeu=""
@@ -218,6 +224,11 @@ pede POST /billing/api/v1/webhooks/mercadopago 200 /api/v1/webhooks/mercadopago
 pede POST /billing/api/v1/simulador/pagamentos/123/aprovar 200 /api/v1/simulador/pagamentos/123/aprovar
 pede GET /billing/metrics 404
 pede GET /billing/api/v1/admin/outbox 404
+pede GET /execucao/api/v1/fila 200 /api/v1/fila
+pede GET /execucao/docs 200 /docs
+pede GET /execucao/openapi.json 200 /openapi.json
+pede GET /execucao/metrics 404
+pede GET /execucao/api/v1/admin/outbox 404
 
 titulo "encoded slash (%2F, %5C) in the path never gets past the gateway: bloqueia-barra-codificada answers 404, in any case"
 pede GET /os/api/v1/admin%2Foutbox 404
@@ -440,7 +451,7 @@ titulo "hardening: effective securityContext of each platform container"
 $K -n "$NS" get pods -o json | jq -r '
   def v(x): if x == null then "-" else (x | tostring) end;
   ["POD", "CONTAINER", "NON_ROOT", "PRIV_ESC", "RO_ROOTFS", "CAP_DROP", "SECCOMP", "SA_TOKEN"],
-  (.items[] | select((.metadata.labels.app // "") as $app | $app != "os-service-api" and $app != "billing-service-api")
+  (.items[] | select((.metadata.labels.app // "") as $app | $app != "os-service-api" and $app != "billing-service-api" and $app != "execution-service-api")
     | . as $p | .spec.containers[]
     | (.securityContext // {}) as $c | ($p.spec.securityContext // {}) as $ps
     | [($p.metadata.labels.app // $p.metadata.name), .name,
