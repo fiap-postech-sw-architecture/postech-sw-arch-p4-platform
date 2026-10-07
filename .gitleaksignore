@@ -1,0 +1,4 @@
+# Falso positivo da regra private-key num commit do PR #8: a expressao regular
+# do teste com o cabecalho PEM por extenso, sem chave nenhuma. O arquivo passou
+# a escrever os hifens como -{5}.
+78ab307295e31d541213405a342e159f9cfda3f9:tests/test_gerar_segredos.py:private-key:79
