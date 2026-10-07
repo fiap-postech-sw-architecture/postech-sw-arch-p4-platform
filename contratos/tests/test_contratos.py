@@ -574,7 +574,11 @@ def test_fila_de_trabalho_e_dlq_tem_as_policies_da_plataforma(
 
     # Argumento de fila e imutavel e a importacao no boot ignora a mudanca:
     # na fila de trabalho e na DLQ so o tipo e argumento; o resto vem das
-    # policies, que convergem.
+    # policies, que convergem. Limite de 5 entregas (o padrao da fila quorum
+    # e 20): a mensagem que derruba o consumidor a cada entrega, como um
+    # header que o pika nao decodifica, vai para a DLQ na sexta, em vez de
+    # prender o consumidor em reconexoes. A copia de retry entra na fila como
+    # mensagem nova, com a contagem zerada, e nao gasta o limite.
     assert filas[fila] == fila_quorum(fila)
     assert filas[dlq] == fila_quorum(dlq)
     assert politica(definitions, fila) == policy_de_fila(
@@ -584,6 +588,7 @@ def test_fila_de_trabalho_e_dlq_tem_as_policies_da_plataforma(
             "dead-letter-exchange": "pytstop.dlx",
             "dead-letter-routing-key": fila,
             "max-length": 10000,
+            "delivery-limit": 5,
             **SEM_PERDA,
         },
     )

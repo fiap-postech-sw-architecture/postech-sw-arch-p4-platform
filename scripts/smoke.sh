@@ -224,7 +224,7 @@ loki "$linhas_da_execucao" | sed -n 1,4p
 confere "Kong lines in Loki with the token" 0 "$com_token"
 confere "Kong lines in Loki of the 4 requests with the token masked" 4 "$mascaradas"
 
-titulo "RabbitMQ: arguments are x-queue-type, plus x-message-ttl on the retry queues; dead-letter, overflow and length come from policies"
+titulo "RabbitMQ: arguments are x-queue-type, plus x-message-ttl on the retry queues; dead-letter, overflow, length and delivery limit come from policies"
 R="$K -n pytstop-plataforma exec -i rabbitmq-0 -c rabbitmq --"
 # rabbitmqadmin como admin, com a senha lida no proprio pod (admin.json).
 adm() {

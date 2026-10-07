@@ -42,6 +42,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
+- 2026-10-07 - Correcao da entrada "Fila quorum no RabbitMQ 4: `nack`/`reject` com requeue nao conta no delivery-limit" (mais abaixo): as filas de trabalho tem `delivery-limit` 5 na policy, e a mensagem que derruba o consumidor vai para a DLQ na sexta entrega, nao depois de 20 reentregas - ADR-036
 - 2026-10-06 - Correcao da entrada "nack/reject com requeue nao conta no delivery-limit" (mais abaixo): no 4.3.6 so o `basic_nack` com requeue nao conta; o `basic_reject` com requeue incrementa o delivery-count e cai no dead letter ao passar do limite (com `x-delivery-limit` 2, tres entregas). O delayed retry nativo da fila quorum (4.3) segue a mesma regra: atraso linear que so cresce com reject
 - 2026-10-06 - Kong normaliza o caminho antes de casar a rota e repassa o normalizado (barras repetidas, `.` e `..`, letra codificada como `%61`); so `%2F` e `%5C` ficam como chegaram. Em 17 variantes no kind so `%2F` escapava do fora-da-borda; `%252F`, `;x=1`, `ADMIN` e `%41dmin` passam pelo Kong, e o FastAPI as roteia como outro caminho (verificado com uvicorn)
 - 2026-10-06 - O access log do Kong guarda o caminho como chegou, tambem o do pedido que um plugin barra com 404: o token em `publico%2Forcamentos/<token>` escapava da mascara do Promtail, que so olhava `/`; a mascara aceita `%2F` e o dry-run do `make manifests` roda nos dois arquivos, cluster e compose (`scripts/promtail-mascara.sh`)
