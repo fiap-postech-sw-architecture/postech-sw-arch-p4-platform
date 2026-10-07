@@ -45,10 +45,11 @@ ASYNCAPI_CLI := @asyncapi/cli@6.2.0
 # -ignore-missing-schemas: recurso sem schema reprova. Unica excecao, as
 # definicoes de CRD do Kong: o repositorio de schemas do kubeconform nao
 # publica o de CustomResourceDefinition, e elas vem prontas do chart oficial
-# (o apiserver as valida no make deploy).
+# (o apiserver as valida no make deploy). Secret reprova: as senhas nao entram
+# nos manifests, o make deploy as gera no cluster (ADR-042).
 KUBECONFORM := docker run --rm -i -v "$(CURDIR)/k8s/base/kong/schemas:/schemas:ro" $(KUBECONFORM_IMAGE) \
 	-strict -summary -output text -kubernetes-version $(KUBERNETES_VERSION) \
-	-skip CustomResourceDefinition -schema-location default \
+	-skip CustomResourceDefinition -reject Secret -schema-location default \
 	-schema-location '/schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 # Endurecimento dos pods: nenhum achado HIGH ou CRITICAL.
 TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \

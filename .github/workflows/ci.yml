@@ -81,3 +81,5 @@ jobs:
           tar -xzf gitleaks.tar.gz -C /usr/local/bin gitleaks
       - name: gitleaks (historico do repositorio, regras do .gitleaks.toml)
         run: gitleaks git . --config .gitleaks.toml --redact --no-banner --verbose
+      - name: Regras do .gitleaks.toml reprovam senha num manifesto (teste negativo)
+        run: scripts/ci/testa-gitleaks.sh
