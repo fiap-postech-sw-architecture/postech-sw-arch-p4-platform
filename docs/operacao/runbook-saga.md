@@ -38,20 +38,21 @@ A API, o banco e as métricas escrevem etapa e status em minúsculas (`falha_na_
    kubectl --context kind-pytstop-p4 -n pytstop-plataforma get secret rabbitmq-credenciais -o jsonpath='{.data.admin-senha}' | base64 -d; echo
    ```
 
-4. Defina os endereços das APIs, que respondem pela borda do kind, e entre como `admin` do OS Service. O e-mail do admin semeado é o `ADMIN_EMAIL` do ConfigMap do serviço, e a senha está na chave `ADMIN_PASSWORD` do Secret `os-admin`, gerado pelo deploy, os dois no namespace `pytstop-os` ([Segredos gerados](../../README.md#segredos-gerados)). O ConfigMap se acha pela chave, sem depender do nome dele, e a senha vai ao `curl` pela entrada padrão, sem aparecer na lista de processos:
+4. Defina os endereços das APIs, que respondem pela borda do kind, e entre como `admin` do OS Service. O e-mail do admin semeado é o `ADMIN_EMAIL` do ConfigMap do serviço, e a senha está na chave `ADMIN_PASSWORD` do Secret `os-admin`, gerado pelo deploy, os dois no namespace `pytstop-os` ([Segredos gerados](../../README.md#segredos-gerados)). O ConfigMap se acha pela chave, sem depender do nome dele. A senha fica numa variável do shell, não exportada, que só o `jq` recebe, no ambiente dele, e sai do shell logo depois do login; ao `curl` ela chega pela entrada padrão, sem aparecer na lista de processos:
 
    ```bash
    OS=http://localhost/os BILLING=http://localhost/billing EXECUCAO=http://localhost/execucao
-   export ADMIN_EMAIL="$(kubectl --context kind-pytstop-p4 -n pytstop-os get configmaps -o json \
-     | jq -r 'first(.items[].data.ADMIN_EMAIL // empty)')"
-   export ADMIN_SENHA="$(kubectl --context kind-pytstop-p4 -n pytstop-os get secret os-admin \
-     -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d)"
-   TOKEN=$(jq -n '{email: env.ADMIN_EMAIL, senha: env.ADMIN_SENHA}' \
+   ADMIN_EMAIL=$(kubectl --context kind-pytstop-p4 -n pytstop-os get configmaps -o json \
+     | jq -r 'first(.items[].data.ADMIN_EMAIL // empty)')
+   ADMIN_SENHA=$(kubectl --context kind-pytstop-p4 -n pytstop-os get secret os-admin \
+     -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d)
+   TOKEN=$(ADMIN_EMAIL="$ADMIN_EMAIL" ADMIN_SENHA="$ADMIN_SENHA" jq -n '{email: env.ADMIN_EMAIL, senha: env.ADMIN_SENHA}' \
      | curl -s "$OS/api/v1/autenticacao/login" -H 'Content-Type: application/json' -d @- \
      | jq -r .access_token)
+   unset ADMIN_SENHA
    ```
 
-   Se `$TOKEN` sair `null`, rode o pipeline de novo sem o `jq -r .access_token` do fim para ver a resposta: 401 é credencial errada, e 429, o limite de tentativas. O mesmo token serve às três APIs, porque o `admin` herda os papéis `atendente` e `mecanico` ([ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)). Ele vale 15 minutos; depois, repita o login, que aceita 5 tentativas por minuto.
+   Se `$TOKEN` sair `null`, rode o bloco de novo sem o `| jq -r .access_token` do fim e veja a resposta com `echo "$TOKEN"`: 401 é credencial errada, e 429, o limite de tentativas. O mesmo token serve às três APIs, porque o `admin` herda os papéis `atendente` e `mecanico` ([ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)). Ele vale 15 minutos; depois, rode o bloco de novo, e o login aceita 5 tentativas por minuto.
 
 O k3s da Azure é opcional ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)) e fica fora deste runbook: a API do Kubernetes dele não é exposta, e o acesso à VM é por SSH.
 
