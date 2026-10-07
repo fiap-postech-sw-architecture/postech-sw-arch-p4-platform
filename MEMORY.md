@@ -42,6 +42,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
+- 2026-10-07 - `\Z` e `$` no PCRE do RabbitMQ casam antes de um `\n` final, mas o `\Z` do `re` do Python e o fim exato: o pytest nao distingue `\z` de `\Z`, e so a prova no broker pega a troca (`prova_retry.py` publica a chave com `\n` no fim e espera 403) - README, Usuario e permissoes no RabbitMQ
 - 2026-10-07 - Correcao da entrada "Fila quorum no RabbitMQ 4: `nack`/`reject` com requeue nao conta no delivery-limit" (mais abaixo): as filas de trabalho tem `delivery-limit` 5 na policy, e a mensagem que derruba o consumidor vai para a DLQ na sexta entrega, nao depois de 20 reentregas - ADR-036
 - 2026-10-06 - Correcao da entrada "nack/reject com requeue nao conta no delivery-limit" (mais abaixo): no 4.3.6 so o `basic_nack` com requeue nao conta; o `basic_reject` com requeue incrementa o delivery-count e cai no dead letter ao passar do limite (com `x-delivery-limit` 2, tres entregas). O delayed retry nativo da fila quorum (4.3) segue a mesma regra: atraso linear que so cresce com reject
 - 2026-10-06 - Kong normaliza o caminho antes de casar a rota e repassa o normalizado (barras repetidas, `.` e `..`, letra codificada como `%61`); so `%2F` e `%5C` ficam como chegaram. Em 17 variantes no kind so `%2F` escapava do fora-da-borda; `%252F`, `;x=1`, `ADMIN` e `%41dmin` passam pelo Kong, e o FastAPI as roteia como outro caminho (verificado com uvicorn)
@@ -96,6 +97,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Review lessons
 
+- 2026-10-07 - A varredura que trocou a lista de chaves recusadas deixou de gerar o atraso sem o `s` (`.retry.1`), e o mutante `|^...\.retry\.1\z` passou na suite: ao trocar enumeracao por varredura, cada caso da lista antiga continua coberto, e a mutacao sistematica se refaz depois da troca - PR #4
 - 2026-10-06 - Head-of-line do retry com TTL por mensagem entrou como divida LOW ("so com volume"), mas basta uma mensagem esgotar as tentativas: a copia de 300 s segura as primeiras tentativas de todas atras dela, e o prazo tecnico da saga (120 s) reenviaria comandos ainda em retry. Limite conhecido do broker so vira "aceito" depois de medido com o pior caso do proprio desenho - PR #4
 - 2026-10-06 - O smoke so imprimia e saia 0 com `/os/metrics` aberto, sem 429 ou com token no Loki, e o README e o MEMORY diziam que ele "prova": script de verificacao tem de sair com status diferente de zero quando a prova nao vale, e cada prova se confirma sabotando o alvo (desligar o plugin, subir o limite, quebrar a mascara, derrubar o Prometheus) e vendo o `CHECK FAILED` certo; contar linha no Loki sem esperar as desta execucao deixa um vazamento a caminho passar calado - PR #2
 - 2026-10-06 - `noDataState` das regras de alerta nao tinha guarda: trocar `Alerting` por `OK` na regra de alvo ausente passava em todos os testes, e foi essa a regra que disparou sozinha no compose; propriedade de config que muda o comportamento e vem documentada em tabela ganha teste que compara a tabela com o arquivo (`test_tabela_de_alertas_diz_o_que_a_regra_faz`) - PR #2
