@@ -13,9 +13,14 @@
 #
 # Os objetos de teste vao para o pytstop-plataforma (o Kong so le Ingress dos
 # namespaces da fase 4), com o rotulo part-of=pytstop-smoke, e saem no fim.
+#
+# OVERLAY e o overlay implantado (make smoke OVERLAY=kind-ci): o kind-ci nao
+# tem Loki, Promtail e Grafana (ADR-042), e as provas deles pulam com aviso; as
+# demais rodam igual.
 set -euo pipefail
 
 CONTEXTO="${KUBE_CONTEXT:-kind-pytstop-p4}"
+OVERLAY="${OVERLAY:-kind}"
 BORDA="${BORDA:-http://localhost}"
 NS=pytstop-plataforma
 ROTULO=app.kubernetes.io/part-of=pytstop-smoke
@@ -52,16 +57,31 @@ confere() {
 
 titulo() { printf '\n== %s\n' "$*"; }
 
+# implantado <componente>: falso so no kind-ci, que nao tem Loki, Promtail e
+# Grafana; la a prova pula com aviso, e a linha final diz quantas pulou. Nos
+# outros overlays a prova roda, e componente ausente ou quebrado e CHECK
+# FAILED.
+PULADAS=0
+PULADOS=""
+implantado() {
+  [ "$OVERLAY" = kind-ci ] || return 0
+  echo "skipped: no $1 in the kind-ci overlay"
+  PULADAS=$((PULADAS + 1))
+  PULADOS="${PULADOS:+$PULADOS; }$1"
+  return 1
+}
+
 cabecalho() { tr -d '\r' < "$TMP/h" | awk -v nome="$1:" 'tolower($1) == nome {print $2}'; }
 
 # pede <metodo> <caminho> [<status esperado> [<caminho que o servico deve
 # receber>]]: status, o caminho que o eco recebeu e o balde de rate limiting da
 # rota (limite por minuto e quanto sobra nele). Com o status esperado, confere
 # o status e o caminho recebido; sem o ultimo, o esperado e que o servico nao
-# tenha sido chamado ("-").
+# tenha sido chamado ("-"). Todo curl do smoke tem --max-time: pedido
+# pendurado falha em segundos, em vez de gastar o timeout do job.
 pede() {
   local status recebido limite resta
-  status=$(curl -s --path-as-is -X "$1" -D "$TMP/h" -o "$TMP/b" -w '%{http_code}' "$BORDA$2")
+  status=$(curl -s --max-time 10 --path-as-is -X "$1" -D "$TMP/h" -o "$TMP/b" -w '%{http_code}' "$BORDA$2")
   recebido=$(jq -r '.path // "-"' "$TMP/b" 2>/dev/null || echo -)
   limite=$(cabecalho x-ratelimit-limit-minute)
   resta=$(cabecalho x-ratelimit-remaining-minute)
@@ -80,6 +100,8 @@ segredo="tokensmoke$(date +%s)"
 marca="run$(date +%s)"
 
 # eco <nome>: servidor de eco no lugar da API do servico (label app = nome).
+# O rotulo do smoke vai tambem no pod: o medir-kind.sh o tira da tabela por
+# pod, onde o eco passaria pela memoria da API.
 eco() {
   $K -n "$NS" apply -f - >/dev/null <<YAML
 apiVersion: apps/v1
@@ -96,6 +118,7 @@ spec:
     metadata:
       labels:
         app: $1
+        app.kubernetes.io/part-of: pytstop-smoke
     spec:
       securityContext:
         runAsNonRoot: true
@@ -132,12 +155,52 @@ for exemplo in k8s/exemplos/borda-os-service.yaml k8s/exemplos/borda-billing-ser
 done
 $K -n "$NS" rollout status deployment/os-service-api --timeout=180s
 $K -n "$NS" rollout status deployment/billing-service-api --timeout=180s
-# O controller leva alguns segundos para empurrar as rotas novas ao Kong.
+# O controller leva alguns segundos para empurrar as rotas novas ao Kong, e o
+# alvo de cada Service so entra quando os endpoints dele chegam ao controller:
+# ate la, a rota responde 404 (sem rota) ou 503 (sem alvo), e um Service pode
+# ficar pronto antes de outro. Espera um caminho de cada Service dos exemplos
+# (Service novo num exemplo entra na lista, com o nome dele) responder 200, sem
+# token e sem a marca do Loki; o login vai por ultimo, porque o balde dele e o
+# menor. Esgotado o prazo, o smoke sai com status 1 e diz qual Service nao
+# respondeu: sem isso, a espera acabaria calada e as provas seguintes
+# falhariam uma a uma, sem dizer por que.
+nao_respondeu=""
+bordas_prontas() {
+  local servico caminho status
+  while read -r servico caminho; do
+    # Sem resposta (recusa, prazo), o curl sai com erro e o -w imprime 000.
+    status=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA$caminho" || true)
+    if [ "$status" != 200 ]; then
+      [ "$status" != 000 ] || status="no response"
+      nao_respondeu="Service $servico, GET $caminho: expected 200, got $status"
+      return 1
+    fi
+  done <<'SERVICES'
+os-service-borda-api /os/api/v1/ordens-de-servico
+os-service-borda-docs /os/docs
+os-service-borda-openapi /os/openapi.json
+os-service-borda-jwks /os/.well-known/jwks.json
+os-service-borda-publico /os/api/v1/publico/acompanhamento
+os-service-borda-autenticacao /os/api/v1/autenticacao/refresh
+billing-service-borda-api /billing/api/v1/orcamentos
+billing-service-borda-docs /billing/docs
+billing-service-borda-openapi /billing/openapi.json
+billing-service-borda-publico /billing/api/v1/publico/x
+billing-service-borda-webhook /billing/api/v1/webhooks/mercadopago
+billing-service-borda-simulador-api /billing/api/v1/simulador/x
+billing-service-borda-simulador-checkout /billing/simulador/checkout/x
+os-service-borda-login /os/api/v1/autenticacao/login
+SERVICES
+  nao_respondeu=""
+}
 for _ in $(seq 60); do
-  [ "$(curl -s -o /dev/null -w '%{http_code}' "$BORDA/os/openapi.json")" = 200 ] \
-    && [ "$(curl -s -o /dev/null -w '%{http_code}' "$BORDA/billing/openapi.json")" = 200 ] && break
+  bordas_prontas && break
   sleep 2
 done
+if [ -n "$nao_respondeu" ]; then
+  echo "edge not ready after 60 tries, 2 s apart: $nao_respondeu" >&2
+  exit 1
+fi
 
 titulo "published and blocked paths: the expected status, and the path the service got (the Kong strips the prefix)"
 pede GET /os/api/v1/ordens-de-servico 200 /api/v1/ordens-de-servico
@@ -172,7 +235,7 @@ pede GET /os/api/v1/./admin/outbox 404
 pede GET /os/api/v1/%61dmin/outbox 404
 
 titulo "X-Request-ID: same id in the response and in what the upstream got"
-curl -s -D "$TMP/h" -o "$TMP/b" "$BORDA/os/api/v1/ordens-de-servico"
+curl -s --max-time 10 -D "$TMP/h" -o "$TMP/b" "$BORDA/os/api/v1/ordens-de-servico"
 id_resposta=$(cabecalho x-request-id)
 id_servico=$(jq -r '.headers["x-request-id"]' "$TMP/b")
 printf 'response:       %s\n' "$id_resposta"
@@ -180,12 +243,12 @@ printf 'upstream got:   %s\n' "$id_servico"
 confere "X-Request-ID the Kong generated" "present" "$([ -n "$id_resposta" ] && echo present || echo missing)"
 confere "X-Request-ID in the response vs at the service" "$id_resposta" "$id_servico"
 
-titulo "login rate limit (5/min, x10 on kind): POSTs in a row until the first 429 (the POST above counts if it fell in the same minute)"
+titulo "login rate limit (5/min, x10 on kind): POSTs in a row until the first 429 (the login requests above count if they fell in the same minute)"
 # Janela fixa por minuto: se a rajada atravessar a virada, o contador zera e o
 # 429 vem um pouco depois; 120 POSTs sempre passam do limite de duas janelas.
 primeiro_429=""
 for n in $(seq 120); do
-  if [ "$(curl -s -o /dev/null -w '%{http_code}' -X POST "$BORDA/os/api/v1/autenticacao/login")" = 429 ]; then
+  if [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' -X POST "$BORDA/os/api/v1/autenticacao/login")" = 429 ]; then
     primeiro_429=$n
     break
   fi
@@ -200,33 +263,36 @@ $K -n pytstop-plataforma logs deployment/kong -c proxy --tail=1 | awk '{print $1
 titulo "decision link and checkout tokens kept out of Loki (Promtail masks before pushing)"
 pede GET "/billing/api/v1/publico/orcamentos/$segredo?run=$marca" 200 "/api/v1/publico/orcamentos/$segredo"
 pede GET "/billing/simulador/checkout/123?token=$segredo&run=$marca" 200 /simulador/checkout/123
-# loki <LogQL>: linhas dos ultimos 5 minutos, pela API do Kubernetes (sem port-forward).
-loki() {
-  $K get --raw "/api/v1/namespaces/pytstop-plataforma/services/loki:3100/proxy/loki/api/v1/query_range?limit=100&since=5m&query=$(jq -rn --arg q "$1" '$q|@uri')" \
-    | jq -r '.data.result[].values[][1]'
-}
-# As quatro requisicoes com token desta execucao (duas publicadas, duas barradas
-# pelo %2F) levam run=<marca>: espera as quatro no Loki (o Promtail empurra em
-# lotes), mascaradas ou nao, e so entao conta. Sem a espera, um vazamento ainda
-# no caminho passaria calado.
-linhas_da_execucao="{app=\"kong\"} |= \"run=$marca\""
-for _ in $(seq 30); do
-  [ "$(loki "$linhas_da_execucao" | grep -c .)" -ge 4 ] && break
-  sleep 2
-done
-com_token=$(loki "{app=\"kong\"} |= \"$segredo\"" | grep -c . || true)
-mascaradas=$(loki "$linhas_da_execucao |= \"***\"" | grep -c . || true)
-printf 'Kong lines in Loki with token %s: %s\n' "$segredo" "$com_token"
-printf 'Kong lines in Loki of the 4 requests with the token, masked as ***: %s\n' "$mascaradas"
-echo "the same requests as stored in Loki:"
-# sed e nao head: head fecharia o pipe antes de o jq terminar (SIGPIPE com pipefail).
-loki "$linhas_da_execucao" | sed -n 1,4p
-confere "Kong lines in Loki with the token" 0 "$com_token"
-confere "Kong lines in Loki of the 4 requests with the token masked" 4 "$mascaradas"
+if implantado "Loki and Promtail"; then
+  # loki <LogQL>: linhas dos ultimos 5 minutos, pela API do Kubernetes (sem port-forward).
+  loki() {
+    $K get --raw "/api/v1/namespaces/pytstop-plataforma/services/loki:3100/proxy/loki/api/v1/query_range?limit=100&since=5m&query=$(jq -rn --arg q "$1" '$q|@uri')" \
+      | jq -r '.data.result[].values[][1]'
+  }
+  # As quatro requisicoes com token desta execucao (duas publicadas, duas barradas
+  # pelo %2F) levam run=<marca>: espera as quatro no Loki (o Promtail empurra em
+  # lotes), mascaradas ou nao, e so entao conta. Sem a espera, um vazamento ainda
+  # no caminho passaria calado.
+  linhas_da_execucao="{app=\"kong\"} |= \"run=$marca\""
+  for _ in $(seq 30); do
+    [ "$(loki "$linhas_da_execucao" | grep -c .)" -ge 4 ] && break
+    sleep 2
+  done
+  com_token=$(loki "{app=\"kong\"} |= \"$segredo\"" | grep -c . || true)
+  mascaradas=$(loki "$linhas_da_execucao |= \"***\"" | grep -c . || true)
+  printf 'Kong lines in Loki with token %s: %s\n' "$segredo" "$com_token"
+  printf 'Kong lines in Loki of the 4 requests with the token, masked as ***: %s\n' "$mascaradas"
+  echo "the same requests as stored in Loki:"
+  # sed e nao head: head fecharia o pipe antes de o jq terminar (SIGPIPE com pipefail).
+  loki "$linhas_da_execucao" | sed -n 1,4p
+  confere "Kong lines in Loki with the token" 0 "$com_token"
+  confere "Kong lines in Loki of the 4 requests with the token masked" 4 "$mascaradas"
+fi
 
 titulo "RabbitMQ: arguments are x-queue-type, plus x-message-ttl on the retry queues; dead-letter, overflow, length and delivery limit come from policies"
 R="$K -n pytstop-plataforma exec -i rabbitmq-0 -c rabbitmq --"
 # rabbitmqadmin como admin, com a senha lida no proprio pod (admin.json).
+# shellcheck disable=SC2016 # o sh -c roda no pod: $(...) e "$@" expandem la
 adm() {
   $R sh -c 'export RABBITMQADMIN_USERNAME=admin RABBITMQADMIN_PASSWORD="$(sed -n "s/.*\"password\": \"\([^\"]*\)\".*/\1/p" /etc/rabbitmq/definitions/admin.json)"; exec rabbitmqadmin "$@"' rabbitmqadmin "$@"
 }
@@ -258,7 +324,7 @@ for _ in $(seq 30); do
   sleep 1
 done
 [ -n "$porta" ] || cat "$TMP/port-forward" >&2
-if AMQP_URL="amqp://billing:$senha_billing@127.0.0.1:${porta:-0}/%2F" uv run --frozen python scripts/prova_retry.py; then
+if RABBITMQ_URL="amqp://billing:$senha_billing@127.0.0.1:${porta:-0}/%2F" uv run --frozen python scripts/prova_retry.py; then
   prova_retry=held
 else
   prova_retry=failed
@@ -340,28 +406,31 @@ echo "make kong-check after deleting the invalid plugin:"
 KUBE_CONTEXT="$CONTEXTO" ESPERA=10 scripts/kong-check.sh
 
 titulo "Grafana: dashboards and alert rules loaded from provisioning"
-grafana() { $K get --raw "/api/v1/namespaces/$NS/services/grafana:3000/proxy$1"; }
-grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (folder \(.folderTitle))"'
-# Logo depois do deploy a primeira avaliacao pega o Prometheus ainda sem dado
-# (erro ou sem dado); espera a avaliacao de regime, ate 3 minutos.
-for _ in $(seq 18); do
-  grafana "/api/prometheus/grafana/api/v1/rules" \
-    | jq -e '[.data.groups[].rules[] | select(.health != "ok" or .state != "inactive")] | length == 0' >/dev/null && break
-  sleep 10
-done
-grafana "/api/prometheus/grafana/api/v1/rules" > "$TMP/regras.json"
-jq -r '.data.groups[].rules[] | "rule: \(.name) [\(.state), \(.health)]"' "$TMP/regras.json"
-# Uma regra por "- uid:" nos arquivos de observabilidade/grafana: sem a conta, um
-# arquivo que o Grafana nao carregou passaria calado.
-esperadas=$(cat observabilidade/grafana/alertas*.yaml | grep -c '^      - uid: ')
-confere "Grafana alert rules loaded" "$esperadas" "$(jq '[.data.groups[].rules[]] | length' "$TMP/regras.json")"
-confere "Grafana alert rules not healthy" "" "$(jq -r '[.data.groups[].rules[] | select(.health != "ok") | .name] | join(", ")' "$TMP/regras.json")"
+if implantado Grafana; then
+  grafana() { $K get --raw "/api/v1/namespaces/$NS/services/grafana:3000/proxy$1"; }
+  grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (folder \(.folderTitle))"'
+  # Logo depois do deploy a primeira avaliacao pega o Prometheus ainda sem dado
+  # (erro ou sem dado); espera a avaliacao de regime, ate 3 minutos.
+  for _ in $(seq 18); do
+    grafana "/api/prometheus/grafana/api/v1/rules" \
+      | jq -e '[.data.groups[].rules[] | select(.health != "ok" or .state != "inactive")] | length == 0' >/dev/null && break
+    sleep 10
+  done
+  grafana "/api/prometheus/grafana/api/v1/rules" > "$TMP/regras.json"
+  jq -r '.data.groups[].rules[] | "rule: \(.name) [\(.state), \(.health)]"' "$TMP/regras.json"
+  # Uma regra por "- uid:" nos arquivos de observabilidade/grafana: sem a conta, um
+  # arquivo que o Grafana nao carregou passaria calado.
+  esperadas=$(cat observabilidade/grafana/alertas*.yaml | grep -c '^      - uid: ')
+  confere "Grafana alert rules loaded" "$esperadas" "$(jq '[.data.groups[].rules[]] | length' "$TMP/regras.json")"
+  confere "Grafana alert rules not healthy" "" "$(jq -r '[.data.groups[].rules[] | select(.health != "ok") | .name] | join(", ")' "$TMP/regras.json")"
+fi
 
 titulo "Prometheus: series returned now by each dashboard and alert query"
 prometheus() {
   $K get --raw "/api/v1/namespaces/$NS/services/prometheus:9090/proxy/api/v1/query?query=$(jq -rn --arg q "$1" '$q|@uri')" \
     | jq '.data.result | length'
 }
+# shellcheck disable=SC2016 # $__rate_interval e do Grafana, vai literal ao sed
 { jq -r '.panels[].targets[].expr' observabilidade/dashboards/*.json; sed -n 's/^ *expr: //p' observabilidade/grafana/alertas*.yaml; } \
   | sed 's/\$__rate_interval/5m/g' | sort -u | while read -r consulta; do
     printf '%3s series  %s\n' "$(prometheus "$consulta")" "$consulta"
@@ -396,8 +465,10 @@ depois=$($R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == 
 printf 'after restart:  %s\n' "$depois"
 confere "DLQ policy back to the file value after the restart" '{"message-ttl":604800000}' "$depois"
 
+pulados=""
+[ "$PULADAS" -eq 0 ] || pulados=" ($PULADAS group(s) of checks skipped: $PULADOS)"
 if [ "$FALHAS" -gt 0 ]; then
-  printf '\nsmoke FAILED: %s check(s) did not hold:\n%s' "$FALHAS" "$RESUMO" >&2
+  printf '\nsmoke FAILED: %s check(s) did not hold%s:\n%s' "$FALHAS" "$pulados" "$RESUMO" >&2
   exit 1
 fi
-printf '\nsmoke OK: every check held\n'
+printf '\nsmoke OK: every check held%s\n' "$pulados"

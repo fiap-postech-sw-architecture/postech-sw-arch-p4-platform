@@ -4,19 +4,10 @@
 # de observabilidade/kustomization.yaml. O compose monta os mesmos arquivos,
 # entao kind, k3s e compose sobem com o mesmo Grafana sem clique manual.
 #
-# Acesso: anonimo como Viewer (dashboards abertos na demo) e admin com senha
-# do Secret abaixo; a senha default do Grafana nunca fica ativa.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: grafana-admin
-  labels:
-    app: grafana
-type: Opaque
-stringData:
-  # VALOR DE DEMONSTRACAO: cluster de avaliacao, sem dado real.
-  GF_SECURITY_ADMIN_PASSWORD: "pytstop-grafana-demo-2026"  # gitleaks:allow
----
+# Acesso: anonimo como Viewer (dashboards abertos na demo) e admin com a senha
+# do Secret grafana-admin, que o scripts/gerar-segredos.sh cria no primeiro
+# deploy de cada cluster (make deploy); a senha default do Grafana nunca fica
+# ativa.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

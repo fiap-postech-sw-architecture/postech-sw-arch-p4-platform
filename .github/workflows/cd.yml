@@ -1,0 +1,66 @@
+name: CD
+
+# Deploy da plataforma num kind efemero dentro do runner, com o overlay
+# kind-ci e os segredos gerados no run, e o make smoke em cima dele (ADR-042).
+# Mede minutos e pico de memoria e escreve os dois no summary do job: o
+# deploy-kind de cada servico sobe esta mesma plataforma com os tres servicos.
+#
+# Sem filtro de paths: o deploy-kind pode virar check obrigatorio da main, e
+# check obrigatorio precisa rodar em todo PR.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um run por ref. Num PR, push novo cancela o run em curso. Na main o run em
+# curso termina, e o GitHub guarda um so run pendente por grupo: o push
+# seguinte cancela o pendente anterior, e aquele commit fica sem deploy-kind.
+# O kind e efemero, entao o commit pulado nao deixa nada no cluster, e o run
+# que roda testa o estado mais novo da main.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Na main, os checks do PR rodam de novo no commit que entrou. No PR o
+  # ci.yml ja roda pelo proprio gatilho, e este job fica de fora.
+  ci:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/ci.yml
+
+  deploy-kind:
+    needs: ci
+    # No PR o ci fica skipped e o deploy-kind roda assim mesmo; na main, so
+    # com o CI verde.
+    if: ${{ !cancelled() && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
+    # Runner fixo, como no ci.yml: os 16 GB de memoria que o ADR-042 orca
+    # para o deploy-kind, os do runner padrao de repositorio publico.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # uv no runner, para o make smoke rodar provas em Python com o Python do
+      # .python-version e as dependencias do uv.lock. Action de terceiro por
+      # SHA de commit (a tag ao lado); as oficiais, por tag.
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+      # O mesmo script do deploy-kind dos servicos: kind e kubectl fixados,
+      # make kind-up e make deploy no overlay kind-ci, com as etapas medidas.
+      - name: kind e kubectl fixados, cluster e plataforma no overlay kind-ci
+        run: scripts/ci/deploy-kind.sh
+      - name: Smoke da plataforma (make smoke)
+        run: scripts/medir-kind.sh etapa smoke && make smoke OVERLAY=kind-ci
+      - name: Minutos e pico de memoria no summary
+        if: always()
+        run: scripts/medir-kind.sh resumo
+      # Tambem no cancelamento, inclusive o do timeout-minutes, em que um
+      # pedido pendurado gasta o job inteiro.
+      - name: Pods, eventos e logs (diagnostico)
+        if: failure() || cancelled()
+        run: scripts/ci/diagnostico.sh

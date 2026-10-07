@@ -19,29 +19,37 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Runner fixo: o ubuntu-latest passa para o Ubuntu 26.04 a partir de
+# 19/10/2026 (actions/runner-images#14748). O sistema so muda com commit
+# aqui; as ferramentas do runner (kubectl, docker, jq) mudam com a imagem
+# semanal dele, e o que precisa de versao certa vem pinado (as imagens do
+# Makefile e, no deploy-kind, o kind e o kubectl).
 jobs:
   manifests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       # kubectl (com kustomize), docker, docker compose e jq ja vem no runner;
-      # kubeconform, trivy, helm, promtool, loki e promtail rodam pelas imagens
-      # pinadas no Makefile, igual ao local.
+      # kubeconform, trivy, helm, promtool, loki, promtail, shellcheck e
+      # actionlint rodam pelas imagens pinadas no Makefile, igual ao local.
+      - name: shellcheck nos scripts e actionlint nos workflows (make lint-scripts)
+        run: make lint-scripts
       - name: Manifests, configs, render do Kong e versoes (make manifests)
         run: make manifests
 
   contratos:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      # Sem python-version: o uv le o .python-version do repositorio.
-      - uses: astral-sh/setup-uv@v7
+      # Sem python-version: o uv le o .python-version do repositorio. Action de
+      # terceiro por SHA de commit (a tag ao lado); as oficiais, por tag.
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -53,7 +61,7 @@ jobs:
         run: uv lock --check
       - name: Dependencias do lockfile
         run: uv sync --frozen
-      - name: Ruff, mypy e bandit (make lint)
+      - name: Ruff, mypy, bandit, shellcheck e actionlint (make lint)
         run: make lint
       - name: Testes de contrato e de observabilidade, validacao do AsyncAPI (make test)
         run: make test
@@ -64,7 +72,7 @@ jobs:
         run: make prova-retry
 
   gitleaks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       # Historico inteiro: segredo commitado e apagado depois tambem conta.
@@ -73,12 +81,16 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
       # Binario direto, como nos repositorios de servico: o gitleaks-action
-      # exige licenca em repositorio de organizacao.
+      # exige licenca em repositorio de organizacao. Os flags do curl sao os do
+      # scripts/ci/instalar-ferramentas.sh: so https, com retry e prazo.
       - name: Instala gitleaks (versao e sha256 fixados)
         run: |
-          curl -sSfL -o gitleaks.tar.gz \
+          curl --proto '=https' --tlsv1.2 --retry 3 --retry-all-errors \
+            --connect-timeout 10 --max-time 120 -sSfL -o gitleaks.tar.gz \
             https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz
           echo "5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba  gitleaks.tar.gz" | sha256sum -c -
           tar -xzf gitleaks.tar.gz -C /usr/local/bin gitleaks
       - name: gitleaks (historico do repositorio, regras do .gitleaks.toml)
         run: gitleaks git . --config .gitleaks.toml --redact --no-banner --verbose
+      - name: Regras do .gitleaks.toml reprovam senha num manifesto (teste negativo)
+        run: scripts/ci/testa-gitleaks.sh

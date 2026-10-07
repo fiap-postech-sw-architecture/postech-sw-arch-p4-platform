@@ -45,5 +45,5 @@ docker exec -e RABBITMQADMIN_TARGET_HOST=localhost -e RABBITMQADMIN_TARGET_PORT=
   "$nome" sh /scripts/criar-usuarios.sh
 
 porta=$(docker port "$nome" 5672/tcp | sed -n 's/^127\.0\.0\.1:\([0-9]*\)$/\1/p' | head -1)
-AMQP_URL="amqp://billing:$RABBITMQ_BILLING_PASSWORD@127.0.0.1:$porta/%2F" \
+RABBITMQ_URL="amqp://billing:$RABBITMQ_BILLING_PASSWORD@127.0.0.1:$porta/%2F" \
   uv run --frozen python scripts/prova_retry.py

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Confere as versoes fixadas (make manifests): cada imagem tem uma tag so entre
-# k8s/ (os dois overlays), o compose e as ferramentas do Makefile que rodam a
+# k8s/ (os tres overlays), o compose e as ferramentas do Makefile que rodam a
 # mesma imagem (argumentos); a tabela "Componentes e versoes" do README cita
 # cada uma; e o no do kind roda o Kubernetes que o kubeconform valida.
 set -euo pipefail
@@ -8,7 +8,7 @@ set -euo pipefail
 
 imagens=$(
   {
-    for overlay in kind k3s; do kubectl kustomize "k8s/overlays/$overlay"; done \
+    for overlay in kind kind-ci k3s; do kubectl kustomize "k8s/overlays/$overlay"; done \
       | sed -n 's/^ *image: *"\{0,1\}\([^" ]*\)"\{0,1\} *$/\1/p'
     docker compose -f compose/docker-compose.yml --profile servicos config --images
     printf '%s\n' "$@"

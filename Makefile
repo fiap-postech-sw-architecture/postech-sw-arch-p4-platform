@@ -8,7 +8,8 @@ SHELL := bash
 
 CLUSTER ?= pytstop-p4
 NAMESPACE ?= pytstop-plataforma
-# Overlay do make deploy: kind (local) ou k3s (make deploy OVERLAY=k3s
+# Overlay do make deploy e do make smoke: kind (local), kind-ci (o do CI, sem
+# Loki, Promtail e Grafana) ou k3s (make deploy OVERLAY=k3s
 # KUBE_CONTEXT=<contexto do k3s>).
 OVERLAY ?= kind
 # Contexto explicito: o deploy nunca cai no cluster que estiver ativo no
@@ -40,6 +41,8 @@ RABBITMQ_IMAGE := rabbitmq:4.3.6-management
 TRIVY_IMAGE := aquasec/trivy:0.72.0
 # Valida o asyncapi.yaml contra a especificacao AsyncAPI 3.0 (exige Node 24).
 ASYNCAPI_CLI := @asyncapi/cli@6.2.0
+SHELLCHECK_IMAGE := koalaman/shellcheck:v0.11.0
+ACTIONLINT_IMAGE := rhysd/actionlint:1.7.12
 
 # Schemas do Kubernetes na versao do no do kind (kind/cluster.yaml) e o do
 # KongClusterPlugin gerado das CRDs do chart (make kong-render), versionado
@@ -47,10 +50,11 @@ ASYNCAPI_CLI := @asyncapi/cli@6.2.0
 # -ignore-missing-schemas: recurso sem schema reprova. Unica excecao, as
 # definicoes de CRD do Kong: o repositorio de schemas do kubeconform nao
 # publica o de CustomResourceDefinition, e elas vem prontas do chart oficial
-# (o apiserver as valida no make deploy).
+# (o apiserver as valida no make deploy). Secret reprova: as senhas nao entram
+# nos manifests, o make deploy as gera no cluster (ADR-042).
 KUBECONFORM := docker run --rm -i -v "$(CURDIR)/k8s/base/kong/schemas:/schemas:ro" $(KUBECONFORM_IMAGE) \
 	-strict -summary -output text -kubernetes-version $(KUBERNETES_VERSION) \
-	-skip CustomResourceDefinition -schema-location default \
+	-skip CustomResourceDefinition -reject Secret -schema-location default \
 	-schema-location '/schemas/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
 # Endurecimento dos pods: nenhum achado HIGH ou CRITICAL.
 TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
@@ -58,7 +62,7 @@ TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
 KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE) YQ_IMAGE=$(YQ_IMAGE) \
 	NAMESPACE=$(NAMESPACE) scripts/kong-render.sh
 
-.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint prova-retry manifests check kong-render
+.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -73,15 +77,19 @@ kind-down: ## remove o cluster kind
 # KongClusterPlugin quando chega no plugins.yaml. Server-side porque as CRDs
 # passam do limite de tamanho da anotacao last-applied do apply client-side.
 # Os namespaces dos servicos nascem vazios, se ainda nao existirem, para
-# receber a Role do Kong. O Job de usuarios do RabbitMQ e imutavel: sai antes
-# do apply e roda de novo; se nao terminar, o log dele vai para a saida.
+# receber a Role do Kong e o Secret rabbitmq; o da plataforma, para receber os
+# Secrets gerados antes do apply (scripts/gerar-segredos.sh: as fontes so se
+# ainda nao existem, o Secret rabbitmq de cada servico em todo deploy). O Job
+# de usuarios do RabbitMQ e imutavel: sai antes do apply e roda de novo; se
+# nao terminar, o log dele vai para a saida.
 deploy: ## aplica k8s/overlays/$(OVERLAY) e espera os rollouts
 	$(KUBECTL) apply --server-side -f k8s/base/kong/crds.yaml
 	$(KUBECTL) wait --for=condition=Established --timeout=60s -f k8s/base/kong/crds.yaml
 	set -euo pipefail; \
-	for ns in $(NAMESPACES_SERVICOS); do \
+	for ns in $(NAMESPACE) $(NAMESPACES_SERVICOS); do \
 		$(KUBECTL) get namespace "$$ns" >/dev/null 2>&1 || $(KUBECTL) create namespace "$$ns"; \
 	done
+	KUBE_CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) scripts/gerar-segredos.sh
 	$(KUBECTL) -n $(NAMESPACE) delete job rabbitmq-usuarios --ignore-not-found
 	$(KUBECTL) apply --server-side -k k8s/overlays/$(OVERLAY)
 	set -euo pipefail; \
@@ -99,7 +107,7 @@ kong-check: ## falha se o Kong recusou algum Ingress ou plugin (eventos dos ulti
 	@KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/kong-check.sh
 
 smoke: ## borda, barra codificada, rate limiting, mascara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos (status 1 se uma prova falha)
-	KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/smoke.sh
+	OVERLAY=$(OVERLAY) KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/smoke.sh
 
 redrive: ## devolve <fila>.dlq para <fila> depois de corrigida a causa (FILA=billing.comandos)
 	@case "$(FILA)" in billing.comandos|execucao.comandos|os.eventos) ;; \
@@ -132,18 +140,25 @@ test: ## testes dos contratos e da observabilidade, validacao do asyncapi.yaml
 	uv run pytest
 	CI=true npx --yes $(ASYNCAPI_CLI) validate contratos/asyncapi.yaml
 
-lint: ## ruff, mypy e bandit nos testes e na prova do retry
+lint: ## ruff, mypy e bandit nos testes e na prova do retry, mais o lint-scripts
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy
 	uv run bandit -c pyproject.toml -r contratos tests scripts -q
+
+# Pelas imagens pinadas, como no CI, onde rodam no job manifests. O actionlint
+# passa o shellcheck tambem nos run: dos workflows.
+lint: lint-scripts
+lint-scripts: ## shellcheck nos scripts e actionlint nos workflows
+	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(SHELLCHECK_IMAGE) scripts/*.sh scripts/ci/*.sh k8s/base/rabbitmq/*.sh
+	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(ACTIONLINT_IMAGE)
 
 prova-retry: ## prova do retry num RabbitMQ avulso com as definitions e as permissoes daqui (Docker e uv)
 	RABBITMQ_IMAGE=$(RABBITMQ_IMAGE) scripts/prova-retry-avulso.sh
 
 manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, regra de saga parada, render do Kong, versoes, dashboards
 	set -euo pipefail; \
-	for overlay in kind k3s; do \
+	for overlay in kind kind-ci k3s; do \
 		echo ">> kubeconform and trivy: k8s/overlays/$$overlay"; \
 		kubectl kustomize "k8s/overlays/$$overlay" | $(KUBECONFORM) -; \
 		kubectl kustomize "k8s/overlays/$$overlay" | $(TRIVY_CONFIG); \

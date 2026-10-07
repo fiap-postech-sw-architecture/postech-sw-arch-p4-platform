@@ -16,41 +16,12 @@
 # Job abaixo precisa de alguem para falar com a API. Os usuarios dos servicos
 # (os, billing, execucao) sao criados pelo Job rabbitmq-usuarios
 # (criar-usuarios.sh) a cada deploy, com as permissoes de permissoes.json.
-apiVersion: v1
-kind: Secret
-metadata:
-  name: rabbitmq-credenciais
-  labels:
-    app: rabbitmq
-type: Opaque
-stringData:
-  # VALORES DE DEMONSTRACAO: cluster kind/k3s de avaliacao, sem dado real (o
-  # ADR-042 preve senhas geradas no cluster a cada deploy). Copias: a senha
-  # do admin aparece aqui duas vezes (admin-senha e admin.json) e em
-  # compose/rabbitmq-admin.json; a de cada servico, aqui, no compose e no
-  # Secret do servico, que monta a AMQP_URL no proprio namespace. O admin.json so e lido no boot: trocou a
-  # senha do admin, rode o make deploy, reinicie o broker
-  # (kubectl -n pytstop-plataforma rollout restart statefulset/rabbitmq) e
-  # rode o make deploy de novo.
-  admin-usuario: admin
-  admin-senha: pytstop-rabbitmq-admin-demo-2026  # gitleaks:allow
-  senha-os: pytstop-os-demo-2026  # gitleaks:allow
-  senha-billing: pytstop-billing-demo-2026  # gitleaks:allow
-  senha-execucao: pytstop-execucao-demo-2026  # gitleaks:allow
-  # admin.json declara o vhost / tambem: o RabbitMQ importa o diretorio em
-  # ordem alfabetica, admin.json antes de definitions.json, e permissao em
-  # vhost que ainda nao existe derruba o boot.
-  admin.json: |
-    {
-      "vhosts": [{"name": "/"}],
-      "users": [
-        {"name": "admin", "password": "pytstop-rabbitmq-admin-demo-2026", "tags": ["administrator"]}
-      ],
-      "permissions": [
-        {"user": "admin", "vhost": "/", "configure": ".*", "write": ".*", "read": ".*"}
-      ]
-    }
----
+#
+# As senhas ficam no Secret rabbitmq-credenciais (admin-senha, admin.json e
+# senha-<usuario>), fora dos manifests: o scripts/gerar-segredos.sh o cria no
+# primeiro deploy de cada cluster (make deploy). Cada servico recebe a senha
+# dele no Secret rabbitmq do proprio namespace, ja na RABBITMQ_URL.
+#
 # Headless: da nome estavel ao pod do StatefulSet (rabbitmq-0, que e o nome
 # do no Erlang e do diretorio de dados) e serve aos clientes como
 # rabbitmq.pytstop-plataforma.svc.cluster.local:5672.

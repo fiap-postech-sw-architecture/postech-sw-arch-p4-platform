@@ -25,13 +25,15 @@ Em Estrutura de Microsserviços Parte II, cada equipe tem o seu pipeline, com te
 
 ### Workflows e jobs
 
-Três workflows em cada repositório de serviço (OS Service, de ordens de serviço; Billing Service; Execution Service, do contexto Execução), com jobs de nome estável que viram checks obrigatórios; `make check` reproduz o CI na máquina local. Esta é a lista canônica de nomes, a que a gap analysis e a [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md) remetem:
+Três workflows em cada repositório de serviço (OS Service, de ordens de serviço; Billing Service; Execution Service, do contexto Execução), com jobs de nome estável que viram checks obrigatórios; `make check` reproduz o CI na máquina local. O `platform` tem dois, nas duas últimas linhas. Esta é a lista canônica de nomes, a que a gap analysis e a [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md) remetem:
 
 | Workflow | Gatilho | Jobs |
 |---|---|---|
 | `ci.yml` | PR; chamado pelo `cd.yml` na `main` | `lint` (ruff e import-linter), `type-check` (mypy strict), `security` (bandit), `test` (unitário, integração, contrato e BDD, *behavior-driven development*, com gate de 90% e `diff-cover`), `sonarqube` (depois de `test`), `build` |
 | `security.yml` | PR; chamado pelo `cd.yml` na `main`; semanal | `pip-audit`, `gitleaks`, `trivy` |
 | `cd.yml` | push na `main`; `workflow_dispatch` com SHAs fixos | `ci` e `security-scan` → `image` → `deploy-kind` → `deploy-k3s` ou `k3s-skipped` |
+| `ci.yml` do `platform` | PR; chamado pelo `cd.yml` do `platform` na `main` | `manifests`, `contratos`, `gitleaks` |
+| `cd.yml` do `platform` | PR, push na `main` e `workflow_dispatch`, sem filtro de caminhos, para poder virar check obrigatório | `ci` (só fora de PR) → `deploy-kind` (a plataforma no `kind-ci` e o `make smoke`) |
 
 Os testes seguem o [ADR-041](041-estrategia-de-testes-e-qualidade.md). Os nomes de job ficam em inglês, o padrão técnico do ADR-009 do p3. A execução semanal do `security.yml` acha vulnerabilidade publicada (CVE) em dependência ou imagem base sem esperar o próximo PR. O `cd.yml` tem `concurrency` por repositório, sem cancelar a execução em curso, para que dois pushes seguidos não implantem fora de ordem. O `platform` tem pipeline próprio para a infraestrutura compartilhada, os testes ponta a ponta (E2E) e a varredura OWASP ZAP (RNF-049).
 
@@ -47,30 +49,43 @@ O CD só começa depois que o CI daquele commit passa:
 
 - `ci` e `security-scan`: o `cd.yml` chama o `ci.yml` e o `security.yml` como workflows reutilizáveis (`workflow_call`), e o `image` depende dos dois. O commit da `main` passa pelos mesmos checks do PR antes de virar imagem, e o CI não roda uma segunda vez no push.
 - `image`: constrói a imagem uma vez e a publica no GitHub Container Registry (GHCR) com tag igual ao SHA do commit, usando o `GITHUB_TOKEN` do workflow (`packages: write`), sem token pessoal. Gera junto o SBOM, a lista de componentes da imagem, em SPDX (`--sbom=true` do BuildKit), e exporta o tar da imagem como artefato. O build usa cache de camadas do BuildKit (`type=gha`) e cache do `uv`.
-- `deploy-kind`, o deploy obrigatório: cria um kind efêmero no runner com os mesmos alvos do ambiente local (`make -C platform kind-up deploy`) e carrega o tar do `image` (`kind load image-archive`), de modo que o E2E testa a mesma imagem que vai ao GHCR e ao k3s.
+- `deploy-kind`, o deploy obrigatório: cria um kind efêmero no runner com os mesmos alvos do ambiente local, pelo `scripts/ci/deploy-kind.sh` do `platform` (`make -C platform kind-up deploy` com o overlay `kind-ci`), e carrega o tar do `image` (`kind load image-archive`), de modo que o E2E testa a mesma imagem que vai ao GHCR e ao k3s.
 
-  Os dois serviços vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, consultado na API do GitHub, e não no último commit da `main`; os vizinhos são construídos desse código. Um `workflow_dispatch` com SHAs fixos reexecuta uma combinação. Os segredos de runtime nascem no run. Antes do E2E, um smoke por namespace confere cada serviço, e o summary nomeia o serviço que falhou. O job só fica verde se o E2E do `platform` passar ([ADR-041](041-estrategia-de-testes-e-qualidade.md)).
+  Os dois serviços vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, consultado na API do GitHub com `branch=main` e `event=push` (o CD do `platform` roda também em PR), e não no último commit da `main`; os vizinhos são construídos desse código. Um `workflow_dispatch` com SHAs fixos reexecuta uma combinação. Os segredos de runtime nascem no run. Antes do E2E, um smoke por namespace confere cada serviço, e o summary nomeia o serviço que falhou. O job só fica verde se o E2E do `platform` passar ([ADR-041](041-estrategia-de-testes-e-qualidade.md)).
 - `deploy-k3s`, o alvo persistente: implanta no k3s o mesmo digest que passou no kind. Com a variável da organização `K3S_HABILITADO` diferente de `true`, roda no lugar dele o `k3s-skipped`, que só registra o aviso, o padrão do `deploy-eks` da fase 3 (ADR-033).
 
 A independência pedida na l. 90 está no que cada pipeline controla: build, testes, análise, imagem e deploy de cada serviço saem do seu repositório, com os seus checks, e nenhum pipeline publica ou implanta a imagem de outro. O kind é o ambiente de integração: sobe os vizinhos na última versão verde para que o E2E prove a saga com os três serviços, e uma falha ali aponta, no summary, o serviço responsável.
 
-O overlay `kind-ci` é enxuto: sem Loki, Promtail e Grafana, uma réplica por Deployment e teto de 1 réplica no autoescalonamento horizontal (HPA). Orçamento de memória, com os valores do p3 onde o componente já existia e estimativas para os novos:
+O overlay `kind-ci` é enxuto: sem Loki, Promtail e Grafana, uma réplica por Deployment e teto de 1 réplica no autoescalonamento horizontal (HPA). Orçamento de memória, com os valores do p3 onde o componente já existia e estimativas para os novos, e o maior uso medido no runner:
 
-| Componente | Memória (requests/limits) | Origem |
-|---|---|---|
-| API de cada serviço (3) | 256/512 Mi | p3 |
-| relay, consumidor e `prazos` (8 processos) | 128/256 Mi cada | relay do p3 |
-| PostgreSQL (2) | 128/512 Mi | p3 |
-| MongoDB | 256/1024 Mi | estimativa |
-| exportadores de banco (3) | 32/64 Mi cada | estimativa |
-| RabbitMQ | 256/1024 Mi | estimativa |
-| Kong (proxy e controlador) | 384/768 Mi | estimativa |
-| Prometheus | 192/512 Mi | p3 |
-| Jaeger | 128/512 Mi | p3 |
-| Mailpit e kube-state-metrics | 64/128 Mi cada | p3 |
-| Total, sem metrics-server e Jobs | cerca de 3,4/8,7 GiB | |
+| Componente | Memória (requests/limits) | Origem | Medido no runner |
+|---|---|---|---|
+| API de cada serviço (3) | 256/512 Mi | p3 | a medir |
+| relay, consumidor e `prazos` (8 processos) | 128/256 Mi cada | relay do p3 | a medir |
+| PostgreSQL (2) | 128/512 Mi | p3 | a medir |
+| MongoDB | 256/1024 Mi | estimativa | a medir |
+| exportadores de banco (3) | 32/64 Mi cada | estimativa | a medir |
+| RabbitMQ | 256/1024 Mi | estimativa | 220 Mi |
+| Kong (proxy e controlador) | 384/768 Mi | estimativa | 299 Mi |
+| Prometheus | 192/512 Mi | p3 | 60 Mi |
+| Jaeger | 128/512 Mi | p3 | 11 Mi |
+| Mailpit e kube-state-metrics | 64/128 Mi cada | p3 | 12 e 13 Mi |
+| Total, sem metrics-server e Jobs | cerca de 3,4/8,7 GiB | | só a plataforma, sem os três serviços e os bancos: nó do kind inteiro, working set de até 1,5 GiB e pico de 3,5 GiB no cgroup |
 
-O total fica abaixo de 10 GiB no runner padrão de 16 GB. Cada job tem `timeout-minutes`, cada etapa do deploy tem `kubectl wait --timeout`, e o primeiro run mede minutos e pico de memória e os escreve no summary.
+O total estimado fica abaixo de 10 GiB no runner padrão de 16 GB, o que o GitHub dá a repositório público; os quatro repositórios da fase 4 são públicos, e o orçamento depende disso. Cada job tem `timeout-minutes`, cada etapa do deploy tem `kubectl wait --timeout`, e o `deploy-kind` mede minutos e pico de memória e os escreve no summary.
+
+A coluna medida cobre só a plataforma:
+
+- O que rodou: o `kind-ci` com o smoke, sem os serviços e os bancos, no runner `ubuntu-24.04` de 16 GB.
+- Execuções: três do `deploy-kind` do `platform`, em 06/10/2026 ([1](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556133536), [2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556562779) e [3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556993602)).
+- Por componente: o maior uso que o `kubectl top` mostrou nas amostras a cada 5 s, nas três execuções.
+- Duração do job: de 3 min 14 s a 3 min 31 s. A criação do kind levou de 39 a 46 s, o deploy de 50 a 54 s e o smoke de 1 min 40 s a 1 min 47 s.
+- Memória do nó do kind: o nó é um container, e a memória dele é a do seu cgroup, o grupo de controle do kernel que limita e conta o que os processos do container usam.
+- Working set do nó: a memória em uso sem o cache de arquivos que o kernel devolve sob pressão, a conta que o kubelet usa para despejar pod. Chegou a 1,5 GiB.
+- Parte do Kubernetes: cerca de 0,5 GiB desse working set é do próprio Kubernetes (apiserver, controller-manager, etcd, scheduler, CoreDNS, kube-proxy, kindnet e metrics-server).
+- Pico do cgroup: 3,5 GiB, porque conta também o cache de arquivos.
+
+Os serviços entram nas linhas que faltam quando o `deploy-kind` de cada um subir os três.
 
 ### Alvo persistente: k3s na Azure
 
@@ -93,11 +108,19 @@ Nenhum segredo de aplicação fica no GitHub, e o inevitável fica na organizaç
 | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | segredos da organização, visíveis só ao Billing e lidos só pelo `deploy-k3s` |
 | Chave RSA do JSON Web Token (JWT) e chave HMAC (código de autenticação de mensagem com hash) do link de decisão | geradas no cluster; a HMAC gira apagando o Secret e reimplantando, a RSA em duas etapas, com a chave anterior publicada no JWKS ([ADR-039](039-autenticacao-entre-servicos.md)) |
 | `ENCRYPTION_KEY`, que cifra os dados pessoais no OS Service | gerada uma vez e nunca regenerada; girá-la exige recifrar os dados e recalcular o hash do documento |
-| Senhas dos bancos e dos usuários do RabbitMQ, um por serviço | geradas no cluster; giram com `ALTER ROLE` e `rabbitmqctl change_password`, porque banco e broker só aplicam a senha do Secret na primeira inicialização do volume |
+| Senhas dos bancos e dos usuários do RabbitMQ, um por serviço | geradas no cluster. O banco só aplica a senha do Secret na primeira inicialização do volume, e ela gira com `ALTER ROLE`; no RabbitMQ, a senha nova vai para o Secret do broker (`rabbitmq-credenciais`): a de um usuário de serviço vale no `make deploy` seguinte, que a aplica no broker, pelo Job de usuários, e no Secret `rabbitmq` do serviço, e chega aos pods dele depois do restart; a do admin, no próximo boot do broker ([passo a passo no README](../../../../README.md#troca-de-senha-do-rabbitmq)) |
 | Senhas dos usuários semeados (`admin`, `atendente`, `mecanico`) e do Grafana | geradas no cluster; o E2E lê as dos usuários no Secret |
 | Desenvolvimento local | `.env.example` com valores de demonstração marcados (`gitleaks:allow`) |
 
-Um script do `platform` gera os valores com `openssl rand`, mascara cada um com `::add-mask::` e cria cada Secret só se ele ainda não existir, nos namespaces que o usam; a senha de cada usuário do RabbitMQ vai para o namespace do serviço e para o do broker, cujo init cria os usuários. No kind do CI, o script roda no runner, e os valores morrem com ele; no k3s, roda na própria VM pelo `az vm run-command`, e os valores não passam pelo GitHub. A guarda de boot do p3, que recusa literal de demonstração fora do ambiente de desenvolvimento, passa a cobrir a chave RSA.
+Um script do `platform`, o `scripts/gerar-segredos.sh`, chamado pelo `make deploy` antes do apply, trata os segredos de runtime:
+
+- Valores: gera cada um com `openssl rand` e o mascara com `::add-mask::`.
+- Secrets de origem: cria cada um só se ele ainda não existir, ou seja, no primeiro deploy de cada cluster. O RabbitMQ lê a senha do admin (o `admin.json` das definitions) só no boot, e uma senha nova com o broker de pé deixaria sem acesso o Job que cria os usuários.
+- Secret derivado: a senha de cada usuário do RabbitMQ fica no namespace do broker, cujo Job cria os usuários, e o script a copia, em todo deploy, para o Secret `rabbitmq` do namespace do serviço, já na URL de conexão.
+- URL de conexão: a chave `RABBITMQ_URL` do Secret `rabbitmq`, `amqp://<usuario>:<senha>@rabbitmq.pytstop-plataforma.svc.cluster.local:5672/%2F`, com o vhost `/` codificado como manda a especificação de URI AMQP do RabbitMQ.
+- Onde roda: no kind do CI, no runner, e os valores morrem com ele; no k3s, na própria VM pelo `az vm run-command`, e os valores não passam pelo GitHub.
+
+A guarda de boot do p3, que recusa literal de demonstração fora do ambiente de desenvolvimento, passa a cobrir a chave RSA.
 
 ### Topologia e rede
 

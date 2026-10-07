@@ -4,17 +4,31 @@ title = "PytStop fase 4 gitleaks config"
 [extend]
 useDefault = true
 
-# Valores de demonstracao, sem dado real. Linhas em YAML levam tambem o
-# marcador gitleaks:allow; JSON nao aceita comentario, entao a regra vale para
-# a linha inteira:
-# - senhas pytstop-<componente>-demo-2026 (Secrets do kind/k3s e compose; o
-#   ADR-042 preve senhas geradas no deploy);
-# - link de decisao e checkout dos exemplos de contrato, que apontam para
-#   http://localhost e carregam um token ilustrativo.
+# URL AMQP com senha, como a RABBITMQ_URL: as regras padrao nao a reconhecem,
+# e a senha que o make deploy gera (48 hexadecimais) passaria. Ficam de fora,
+# pelos caracteres excluidos, o placeholder (<senha>), a variavel de shell
+# ($senha) e a f-string ({senha}). A senha de demonstracao so vale no compose,
+# onde a linha YAML leva tambem o marcador gitleaks:allow; no kind e no k3s o
+# make deploy gera as senhas no cluster (ADR-042).
+[[rules]]
+id = "pytstop-url-amqp-com-senha"
+description = "URL AMQP com senha"
+regex = '''amqps?://[^:/\s@]+:([^@\s"'{}<>$]{8,})@'''
+secretGroup = 1
+keywords = ["amqp"]
+
+[[rules.allowlists]]
+description = "Senhas de demonstracao do compose"
+condition = "AND"
+paths = ['''(^|/)compose/''']
+regexes = ['''^pytstop-[a-z-]+-demo-2026$''']
+
+# Exemplos de contrato: o link de decisao e o checkout apontam para
+# http://localhost e carregam um token ilustrativo. JSON nao aceita comentario,
+# entao a regra vale para a linha inteira.
 [allowlist]
-description = "Valores de demonstracao e exemplos de contrato"
+description = "Exemplos de contrato"
 regexTarget = "line"
 regexes = [
-  '''pytstop-[a-z-]+-demo-2026''',
   '''"(link_decisao|checkout_url)": "http://localhost/''',
 ]

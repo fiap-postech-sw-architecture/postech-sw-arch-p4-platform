@@ -23,7 +23,7 @@ O único commit da `main` fora de pull request é o `Initial commit` que o GitHu
 |---|---|
 | Mensageria assíncrona para eventos e integração desacoplada (l. 66) e para a orquestração da saga (l. 101) | RabbitMQ em [`k8s/base/rabbitmq/`](k8s/base/rabbitmq), com topologia, policies e um usuário por serviço ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)); o contrato das mensagens em [`contratos/`](contratos) |
 | Nenhum serviço acessa o banco de outro (l. 67) | Os serviços trocam só mensagens e chamadas REST pela borda; as permissões do broker limitam o que cada usuário publica e lê |
-| Deploy automatizado em Kubernetes (l. 94 e 100) | `make kind-up deploy`, que o CD de cada serviço chama, e o mesmo alvo com o overlay `k3s` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)) |
+| Deploy automatizado em Kubernetes (l. 94 e 100) | `make kind-up deploy` com o overlay `kind-ci`, que o CD de cada serviço chama pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh) (`make -C platform kind-up deploy OVERLAY=kind-ci`), e o mesmo `make deploy` com o overlay `k3s` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)); o job `deploy-kind` do [CD](.github/workflows/cd.yml) implanta a plataforma no kind do runner, com o overlay `kind-ci`, em todo PR e push na `main` |
 | Ferramentas de monitoramento e observabilidade da fase 3 (l. 102) | Prometheus, Grafana, Loki, Promtail e Jaeger em [`k8s/base/observabilidade/`](k8s/base/observabilidade); dashboards e alertas documentados em [`observabilidade/`](observabilidade/README.md) ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) |
 | `main` com PR obrigatório e checagens automáticas (l. 95) | Ruleset da `main` com os checks `manifests` e `contratos` do CI, que roda também o `gitleaks` |
 | Diagrama geral, estratégia da saga e justificativa da divisão (l. 131 a 133) | [RFC-004](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) e ADRs em [`docs/arquitetura/`](docs/arquitetura) |
@@ -34,9 +34,9 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 
 | Alvo do `make` | Precisa de |
 |---|---|
-| `kind-up`, `deploy`, `smoke`, `redrive`, `kong-check`, `status`, `port-forward` | Docker, [kind](https://kind.sigs.k8s.io/) 0.31 ou mais novo, kubectl 1.27 ou mais novo (kustomize 5), jq e curl; portas 80 e 443 do loopback livres; o `smoke` também usa o uv (a prova do retry roda em Python) |
+| `kind-up`, `deploy`, `smoke`, `redrive`, `kong-check`, `status`, `port-forward` | Docker, [kind](https://kind.sigs.k8s.io/) 0.31.0, a versão que publicou o nó pinado e a que o CI instala (o 0.32.0 também sobe o cluster), kubectl de 1.34 a 1.36 (no máximo uma minor de distância do nó 1.35; traz o kustomize 5), jq, curl e openssl; portas 80 e 443 do loopback livres; o `smoke` também usa o uv (a prova do retry roda em Python) |
 | `up`, `down` | Docker com Compose v2 |
-| `lint`, `test` | [uv](https://docs.astral.sh/uv/), que instala o Python 3.14 do `.python-version`; Node 24 com npx (o `make test` roda o `@asyncapi/cli`) |
+| `lint`, `test` | [uv](https://docs.astral.sh/uv/), que instala o Python 3.14 do `.python-version`; Node 24 com npx (o `make test` roda o `@asyncapi/cli`); Docker (o `make lint` roda o shellcheck e o actionlint pelas imagens pinadas, o `make lint-scripts`) |
 | `prova-retry` | Docker e uv: o broker roda num container avulso, e a prova, em Python |
 | `manifests` | Docker, kubectl e jq, com acesso a ghcr.io, Docker Hub, charts.konghq.com e raw.githubusercontent.com (imagens das ferramentas, chart do Kong e schemas do Kubernetes) |
 | `kong-render` | Docker, com acesso a charts.konghq.com |
@@ -49,14 +49,14 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 |---|---|
 | [`kind/cluster.yaml`](kind/cluster.yaml) | Cluster kind `pytstop-p4` de um nó, com o Kubernetes fixo por digest e as portas 80/443 do host (só loopback) mapeadas para o Kong |
 | [`k8s/base/`](k8s/base) | Kustomize da infraestrutura compartilhada no namespace `pytstop-plataforma` |
-| [`k8s/overlays/kind`](k8s/overlays/kind), [`k8s/overlays/k3s`](k8s/overlays/k3s) | StorageClass, exposição do Kong e recursos de cada ambiente; o kind leva também o metrics-server e os limites de rate limit ×10 |
+| [`k8s/overlays/kind`](k8s/overlays/kind), [`k8s/overlays/kind-ci`](k8s/overlays/kind-ci), [`k8s/overlays/k3s`](k8s/overlays/k3s) | StorageClass, exposição do Kong e recursos de cada ambiente; o kind leva também o metrics-server e os limites de rate limit ×10, e o `kind-ci` é o kind sem Loki, Promtail e Grafana, para o runner do CI |
 | [`k8s/exemplos/`](k8s/exemplos) | Exemplos de borda do OS e do Billing (Ingress e Services do Kong), que o `make smoke` aplica no kind |
 | [`observabilidade/`](observabilidade) | Datasources, alertas e dashboards do Grafana, usados pelo Kubernetes e pelo compose; [documentação painel a painel](observabilidade/README.md) |
 | [`compose/`](compose) | Stack docker compose para desenvolver um serviço: RabbitMQ, observabilidade e Mailpit com a configuração do cluster, os bancos de cada serviço e um profile que sobe os três; sem o Kong |
 | [`contratos/`](contratos) | AsyncAPI 3.0 dos comandos e eventos, JSON Schema do envelope e de cada mensagem, exemplos e testes |
-| [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong e checagens do `make manifests` |
+| [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong, segredos gerados no deploy, medição do kind e checagens do `make manifests` |
 | [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md) e o [runbook da saga](docs/operacao/runbook-saga.md), com o procedimento para saga parada, falha na compensação, retomada e redrive da DLQ |
-| [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) |
+| [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos e de medição do kind |
 | [`Makefile`](Makefile) | Atalhos de cluster, deploy, compose e testes (`make` lista os alvos) |
 
 ## Subir a plataforma
@@ -65,7 +65,7 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 
 ```bash
 make kind-up        # cria o cluster pytstop-p4 (contexto kind-pytstop-p4)
-make deploy         # CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check
+make deploy         # segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check
 make smoke          # borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos; sai com status 1 se uma prova não valer
 make status         # pods, serviços, volumes e filas do RabbitMQ
 make port-forward   # Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025
@@ -76,12 +76,87 @@ O cluster se chama `pytstop-p4` para não colidir com o `pytstop` que o `make cd
 
 O gateway responde em `http://localhost/`. Sem nenhum serviço publicado ele devolve 404 (`no Route matched`), o que já mostra o Kong no ar.
 
-Credenciais de demonstração (no compose, os mesmos valores estão em [`compose/docker-compose.yml`](compose/docker-compose.yml)):
+Senhas dos admins do Grafana e do RabbitMQ: o `make deploy` as gera no primeiro deploy do cluster ([Segredos gerados](#segredos-gerados); um cluster criado antes das senhas geradas ainda tem as de demonstração e precisa ser recriado, como diz a [troca de senha](#troca-de-senha-do-rabbitmq)) e elas se leem do Secret (no compose, os valores de demonstração estão em [`compose/docker-compose.yml`](compose/docker-compose.yml)):
 
 | Onde | Usuário | Senha |
 |---|---|---|
 | Grafana (`http://localhost:3000`, anônimo entra como Viewer) | `admin` | `kubectl -n pytstop-plataforma get secret grafana-admin -o jsonpath='{.data.GF_SECURITY_ADMIN_PASSWORD}' \| base64 -d` |
 | RabbitMQ management (`http://localhost:15672`) | `admin` | `kubectl -n pytstop-plataforma get secret rabbitmq-credenciais -o jsonpath='{.data.admin-senha}' \| base64 -d` |
+
+### Kind no CI (overlay `kind-ci`)
+
+O job `deploy-kind` do [`cd.yml`](.github/workflows/cd.yml) roda em todo pull request para a `main`, a cada push na `main` e sob demanda, sem filtro de caminhos, para poder virar check obrigatório. No runner `ubuntu-24.04` (16 GB de memória, o padrão do GitHub para repositório público, como os quatro da fase 4), ele instala o kind 0.31.0 e o kubectl 1.35.9, com versão e sha256 fixados em [`instalar-ferramentas.sh`](scripts/ci/instalar-ferramentas.sh), e roda os mesmos alvos do kind local com `OVERLAY=kind-ci`: `make kind-up` e `make deploy` pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh), o mesmo ponto de entrada do CD dos serviços, e `make smoke`. O kind é a versão que publicou o `kindest/node:v1.35.0` pinado em [`kind/cluster.yaml`](kind/cluster.yaml), e o kubectl, a mesma minor do nó; os que vêm no runner mudam com a imagem dele (hoje, kind 0.33 e kubectl 1.37, duas minors acima do nó).
+
+O [`kind-ci`](k8s/overlays/kind-ci/kustomization.yaml) é o overlay `kind` sem Loki, Promtail e Grafana: o mesmo metrics-server, o Kong em NodePort, os limites de rate limit ×10 e uma réplica por Deployment, como no base. A plataforma fica com 1.088 Mi de requests e 3 Gi de limits de memória, mais os 200 Mi que o metrics-server reserva; o orçamento com os três serviços e os valores medidos estão no [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). Com `OVERLAY=kind-ci`, o `make smoke` pula, com aviso, as provas que dependem de Loki, Promtail e Grafana (token mascarado no Loki e regras de alerta carregadas) e roda as demais como no kind local, e a linha final diz quantos grupos de provas pulou; nos outros overlays, componente ausente ou quebrado continua reprovando. Trocar de overlay no mesmo cluster exige recriá-lo (`make kind-down kind-up`): o apply não apaga o que saiu do overlay, e um cluster que passou do `kind` para o `kind-ci` mantém Loki, Promtail e Grafana de pé, com as provas deles puladas.
+
+O job mede a duração de cada etapa e a memória do nó do kind e escreve as duas no summary ([`medir-kind.sh`](scripts/medir-kind.sh)): o `memory.peak` do cgroup do nó, que conta também o cache de arquivos que o kernel devolve sob pressão, o maior working set amostrado a cada 5 s (a conta que o kubelet usa para despejar pod) e o maior uso de cada pod no `kubectl top`, sem os servidores de eco do `make smoke`. Se uma etapa falha ou o job é cancelado, inclusive pelo `timeout-minutes`, o [`diagnostico.sh`](scripts/ci/diagnostico.sh) despeja os pods, os últimos eventos, os logs do Kong e do RabbitMQ e o `describe` e os logs, inclusive da execução anterior, dos pods que não ficaram prontos ou que reiniciaram; localmente, `scripts/ci/diagnostico.sh` faz o mesmo no contexto `KUBE_CONTEXT` (padrão `kind-pytstop-p4`).
+
+Localmente, o mesmo fluxo:
+
+```bash
+make kind-up deploy smoke OVERLAY=kind-ci
+```
+
+Para medir como o job, cada etapa é marcada antes do alvo, e o resumo sai no fim. Os arquivos da medição ficam no `TMPDIR`; sem ele (comum no Linux), exporte antes `MEDICAO=$(mktemp -d)`. O amostrador para no resumo ou quando o shell que marcou a primeira etapa termina:
+
+```bash
+scripts/medir-kind.sh etapa kind-up && make kind-up
+scripts/medir-kind.sh etapa deploy && make deploy OVERLAY=kind-ci
+scripts/medir-kind.sh etapa smoke && make smoke OVERLAY=kind-ci
+scripts/medir-kind.sh resumo
+```
+
+### Segredos gerados
+
+Nenhuma senha da plataforma fica nos manifests. O `make deploy` roda o [`gerar-segredos.sh`](scripts/gerar-segredos.sh) antes do apply, e ele cuida de dois tipos de Secret:
+
+| Secret | Namespace | Chaves | Quando o script grava |
+|---|---|---|---|
+| `rabbitmq-credenciais` (fonte) | `pytstop-plataforma` | `admin-usuario`, `admin-senha`, `senha-os`, `senha-billing`, `senha-execucao` e o `admin.json` que o broker importa no boot | Só se ainda não existe, ou seja, no primeiro deploy de cada cluster |
+| `grafana-admin` (fonte) | `pytstop-plataforma` | `GF_SECURITY_ADMIN_PASSWORD` (no `kind-ci`, sem Grafana, fica sem uso) | Só se ainda não existe |
+| `rabbitmq` (derivado) | `pytstop-os`, `pytstop-billing` e `pytstop-execucao` | `RABBITMQ_URL` do usuário do serviço, com a senha do `rabbitmq-credenciais` ([contrato com os serviços](#usuário-e-permissões-no-rabbitmq)) | Em todo deploy, com a senha que está na fonte |
+
+As fontes nascem no primeiro deploy de cada cluster, com senhas do `openssl rand` (24 bytes, em hexadecimal), porque o RabbitMQ lê o `admin.json` só no boot: uma senha de admin nova com o broker de pé deixaria o Job `rabbitmq-usuarios` sem acesso à API (401) até o próximo restart. O derivado é regravado em todo deploy, com a mesma senha que o Job aplica no broker, e assim uma senha trocada na fonte chega ao serviço no deploy seguinte ([Troca de senha do RabbitMQ](#troca-de-senha-do-rabbitmq)). Antes de gravá-lo, o script confere que a senha da fonte tem só letras e dígitos, porque ela entra crua na URL, e para com erro, sem mostrar a senha, se não tiver.
+
+O script ainda não gera as senhas dos bancos, as chaves do JWT e do link de decisão, a `ENCRYPTION_KEY` e as senhas dos usuários semeados: elas entram nele com o deploy dos serviços no kind, como prevê o [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md).
+
+Nenhuma senha passa por argumento de processo, pela saída ou pelo repositório: os Secrets chegam ao `kubectl` pela entrada padrão, e no GitHub Actions cada senha, gerada ou lida da fonte, é registrada com `::add-mask::` antes do uso, então o log do job a mostra como `***`. O derivado é gravado por apply server-side, que não guarda o Secret inteiro, com a senha em claro, na anotação `last-applied-configuration`. No kind do CI as senhas morrem com o runner. O [`test_gerar_segredos.py`](tests/test_gerar_segredos.py) roda o script contra um `kubectl` falso, que recusa o que o apiserver recusaria: cluster novo, fontes que já existem, serviço novo, Secret de serviço com a senha antiga, erro ao ler e ao gravar no cluster, chave ausente, senha fora de letras e dígitos, senha só de dígitos e a máscara do GitHub Actions.
+
+#### Troca de senha do RabbitMQ
+
+A senha nova tem só letras e dígitos, porque entra crua na URL; a do `openssl rand -hex 24` serve. Os comandos usam o contexto do kind (no k3s, troque o `--context`), e a senha vai do shell ao `jq` por variável de ambiente, não por argumento.
+
+Usuário de serviço (`os`, `billing` ou `execucao`; o exemplo troca a do `billing`):
+
+1. Grave a senha nova na chave `senha-billing` do `rabbitmq-credenciais`:
+
+   ```bash
+   senha=$(openssl rand -hex 24)
+   kubectl --context kind-pytstop-p4 -n pytstop-plataforma get secret rabbitmq-credenciais -o json \
+     | SENHA="$senha" jq '.data["senha-billing"] = (env.SENHA | @base64)' \
+     | kubectl --context kind-pytstop-p4 replace -f -
+   ```
+
+2. `make deploy`: o Job `rabbitmq-usuarios` aplica a senha no broker, e o `gerar-segredos.sh` regrava com ela a `RABBITMQ_URL` do Secret `rabbitmq` do `pytstop-billing`.
+3. Reinicie os Deployments do serviço, que leem a variável só no start: `kubectl --context kind-pytstop-p4 -n pytstop-billing rollout restart deployment`.
+
+Admin:
+
+1. Grave a senha nova em `admin-senha` e dentro do `admin.json`, que mantém o formato `"password": "<senha>"` (o `make smoke` lê a senha do arquivo montado no pod por esse padrão):
+
+   ```bash
+   senha=$(openssl rand -hex 24)
+   kubectl --context kind-pytstop-p4 -n pytstop-plataforma get secret rabbitmq-credenciais -o json \
+     | SENHA="$senha" jq '.data["admin-senha"] = (env.SENHA | @base64)
+         | .data["admin.json"] = (.data["admin.json"] | @base64d
+             | sub("\"password\": \"[^\"]*\""; "\"password\": \"\(env.SENHA)\"") | @base64)' \
+     | kubectl --context kind-pytstop-p4 replace -f -
+   ```
+
+2. Reinicie o broker, que aplica o `admin.json` só no boot, e espere: `kubectl --context kind-pytstop-p4 -n pytstop-plataforma rollout restart statefulset/rabbitmq` e, em seguida, `rollout status statefulset/rabbitmq`.
+3. `make deploy`: o Job `rabbitmq-usuarios` volta a falar com a API, agora com a senha nova.
+
+Um cluster criado antes das senhas geradas ainda tem as de demonstração, que têm hífen: o `make deploy` para na conferência da senha, e `make kind-down kind-up deploy` recria o cluster com senhas geradas.
 
 ### k3s (VM na Azure)
 
@@ -167,7 +242,16 @@ Origem conferida ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.m
 | `execucao` | `pytstop.eventos`, `pytstop.retry` | `evento.execucao.*`; no retry, só `execucao.comandos.retry.1s` a `.300s` | `execucao.comandos` | `senha-execucao` |
 | `admin` | tudo (operação e management) | tudo | tudo | `admin-senha` |
 
-Secret não atravessa namespace: cada serviço tem no próprio namespace um Secret com a `AMQP_URL` completa, usando a senha de demonstração da chave correspondente.
+Secret não atravessa namespace: o `make deploy` cria no namespace de cada serviço o Secret `rabbitmq`, com a chave `RABBITMQ_URL` (`amqp://<usuario>:<senha>@rabbitmq.pytstop-plataforma.svc.cluster.local:5672/%2F`; o `%2F` é o vhost padrão `/` codificado, a forma da [especificação de URI AMQP do RabbitMQ](https://www.rabbitmq.com/docs/uri-spec), em que `amqp://host/` seria o vhost vazio) montada com a senha do usuário dele ([Segredos gerados](#segredos-gerados)). Esse é o contrato com os serviços: cada processo lê a `RABBITMQ_URL` do Secret, e senha do broker não vai para os manifests do serviço. O Secret é da plataforma: o `make deploy` do `platform` o grava antes dos manifests do serviço, e o serviço não declara Secret com esse nome. Cada namespace recebe o usuário dele: `pytstop-os` o `os`, `pytstop-billing` o `billing` e `pytstop-execucao` (do repositório `execution-service`) o `execucao`.
+
+```yaml
+env:
+  - name: RABBITMQ_URL
+    valueFrom:
+      secretKeyRef:
+        name: rabbitmq
+        key: RABBITMQ_URL
+```
 
 ### Endereços e variáveis
 
@@ -175,12 +259,12 @@ São as variáveis que o profile `servicos` do compose passa aos serviços; nos 
 
 | Variável | Serviços | Kubernetes | compose |
 |---|---|---|---|
-| `AMQP_URL` | todos | `amqp://<usuario>:<senha>@rabbitmq.pytstop-plataforma.svc.cluster.local:5672/%2F` | `amqp://<usuario>:<senha>@rabbitmq:5672/%2F` |
+| `RABBITMQ_URL` | todos | do Secret `rabbitmq` do namespace do serviço: `amqp://<usuario>:<senha>@rabbitmq.pytstop-plataforma.svc.cluster.local:5672/%2F` | `amqp://<usuario>:<senha>@rabbitmq:5672/%2F` |
 | `OTEL_ENABLED`, `OTEL_SERVICE_NAME` | todos | `true`, nome do serviço (`os-service`, `billing-service`, `execution-service`) | iguais |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | todos | `http://jaeger.pytstop-plataforma.svc.cluster.local:4317` (gRPC) ou `:4318` (HTTP) | `http://jaeger:4317` |
 | `SMTP_HOST` / `SMTP_PORT` | OS | `mailpit.pytstop-plataforma.svc.cluster.local` / `1025` | `mailpit` / `1025` |
 | `DATABASE_URL` | OS e Execução | PostgreSQL do próprio serviço, no namespace dele | `postgresql://pytstop:pytstop@postgres-os:5432/os` e `...@postgres-execucao:5432/execucao` |
-| `MONGODB_URL` | Billing | MongoDB do próprio serviço, no namespace dele | `mongodb://mongo-billing:27017/billing?replicaSet=rs0` |
+| `MONGODB_URI` | Billing | MongoDB do próprio serviço, no namespace dele | `mongodb://mongo-billing:27017/billing?replicaSet=rs0` |
 | `RUN_MIGRATIONS_ON_STARTUP` | OS e Execução | `false` (migração em Job antes do rollout) | `true` |
 | `JWKS_URL` | Billing e Execução | `http://<svc>.pytstop-os.svc.cluster.local:8000/.well-known/jwks.json` | `http://os-service:8000/.well-known/jwks.json` |
 | `BILLING_URL` | Execução | `http://<svc>.pytstop-billing.svc.cluster.local:8000` | `http://billing-service:8000` |
@@ -371,7 +455,7 @@ def nova_tentativa(canal, entrega, propriedades, corpo) -> None:
     canal.basic_ack(entrega.delivery_tag)
 
 
-conexao = pika.BlockingConnection(pika.URLParameters(os.environ["AMQP_URL"]))
+conexao = pika.BlockingConnection(pika.URLParameters(os.environ["RABBITMQ_URL"]))
 canal = conexao.channel()
 canal.queue_declare(FILA, passive=True)  # confere, não cria
 canal.basic_qos(prefetch_count=10)  # por consumidor; a fila quorum não aceita global
@@ -439,7 +523,7 @@ Mudança de contrato começa por um PR aqui. Campo novo opcional mantém a `vers
 
 ```bash
 make test   # exemplos e negativos gerados contra os schemas, campos da RFC, AsyncAPI, routing key e topologia
-make lint   # ruff, mypy strict e bandit
+make lint   # ruff, mypy strict e bandit, mais shellcheck nos scripts e actionlint nos workflows
 ```
 
 A cobertura de linha do `make test` mede só o arquivo de teste. O que protege os schemas é a bateria de negativos gerados de cada exemplo (campo removido, tipo errado, valor fora do domínio, texto gigante, lista vazia), que precisa ser toda rejeitada, mais os testes de fronteira: toda lista vai de 1 a 50 itens (vazia só onde a RFC deixa), cada limite de tamanho, quantidade, valor e formato tem o valor no limite aceito e o seguinte rejeitado, e a regra do `decidido_por` vale nos dois sentidos em `OrcamentoAprovado` e `OrcamentoRecusado`.
@@ -448,19 +532,21 @@ A cobertura de linha do `make test` mede só o arquivo de teste. O que protege o
 
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `main`, sob demanda e quando o CD o chama (`workflow_call`). `manifests` e `contratos` são checks obrigatórios do [ruleset da `main`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837); o checkout não guarda a credencial do GitHub (`persist-credentials: false`).
 
-- `manifests`: `make manifests`, ou seja, os dois overlays e os dois exemplos de borda validados pelo kubeconform (schemas do Kubernetes 1.35, a versão do nó do kind, e o do `KongClusterPlugin` gerado das CRDs do chart) e pelo `trivy config` (nenhum achado HIGH ou CRITICAL); `docker compose config` com o profile `servicos`; `promtool`, `loki -verify-config` e `promtail -check-syntax` nas configs do cluster e do compose, mais a máscara de token do Promtail (`promtail -dry-run`); a regra de alerta "Saga parada" no `promtool test rules`, com cada condição disparando sozinha; o `k8s/base/kong` igual ao que o `make kong-render` gera; a mesma tag de cada imagem em `k8s/`, no compose e na tabela de versões; e todo dashboard JSON no configMapGenerator.
-- `contratos`: `uv lock --check`, `make lint` (ruff, mypy strict e bandit), `make test` (testes de contrato e de observabilidade e o `asyncapi.yaml` validado pelo `@asyncapi/cli`) e `make prova-retry` (um RabbitMQ 4.3.6 avulso no Docker do runner, com o `definitions.json`, o `permissoes.json` e o `criar-usuarios.sh` do commit, e a prova do retry como o `billing`: definitions que derrubam o boot ou permissão frouxa reprovam aqui, sem cluster).
-- `gitleaks`: o histórico inteiro do repositório com as regras do [`.gitleaks.toml`](.gitleaks.toml), pelo binário com versão e sha256 fixados, como nos repositórios de serviço.
+- `manifests`: `make lint-scripts` (shellcheck nos scripts e actionlint nos workflows, inclusive nos `run:`) e `make manifests`, ou seja, os três overlays (`kind`, `kind-ci` e `k3s`) e os dois exemplos de borda validados pelo kubeconform (schemas do Kubernetes 1.35, a versão do nó do kind, e o do `KongClusterPlugin` gerado das CRDs do chart; `Secret` reprova, porque senha não entra nos manifests) e pelo `trivy config` (nenhum achado HIGH ou CRITICAL); `docker compose config` com o profile `servicos`; `promtool`, `loki -verify-config` e `promtail -check-syntax` nas configs do cluster e do compose, mais a máscara de token do Promtail (`promtail -dry-run`); a regra de alerta "Saga parada" no `promtool test rules`, com cada condição disparando sozinha; o `k8s/base/kong` igual ao que o `make kong-render` gera; a mesma tag de cada imagem em `k8s/`, no compose e na tabela de versões; e todo dashboard JSON no configMapGenerator.
+- `contratos`: `uv lock --check`, `make lint` (ruff, mypy strict e bandit, mais o `lint-scripts`), `make test` (testes de contrato, de observabilidade e dos scripts de segredos e de medição do kind, e o `asyncapi.yaml` validado pelo `@asyncapi/cli`) e `make prova-retry` (um RabbitMQ 4.3.6 avulso no Docker do runner, com o `definitions.json`, o `permissoes.json` e o `criar-usuarios.sh` do commit, e a prova do retry como o `billing`: definitions que derrubam o boot ou permissão frouxa reprovam aqui, sem cluster).
+- `gitleaks`: o histórico inteiro do repositório com as regras do [`.gitleaks.toml`](.gitleaks.toml), pelo binário com versão e sha256 fixados, como nos repositórios de serviço. Além das regras padrão, uma própria reprova URL AMQP com senha, e a senha de demonstração só passa no compose; o [`testa-gitleaks.sh`](scripts/ci/testa-gitleaks.sh) confere as duas coisas com um manifesto de teste.
 
 `make check` roda `lint`, `test`, `prova-retry` e `manifests` localmente.
+
+O workflow [`cd.yml`](.github/workflows/cd.yml) tem o job `deploy-kind` ([Kind no CI](#kind-no-ci-overlay-kind-ci)) e, no push na `main`, o job `ci`, que roda o `ci.yml` no commit que entrou; ali o `deploy-kind` só começa com o CI verde. Os jobs dos dois workflows rodam no runner fixo `ubuntu-24.04`: o `ubuntu-latest` passa para o Ubuntu 26.04 a partir de 19/10/2026. O sistema só muda com commit; as ferramentas que vêm no runner (kubectl, Docker, jq) mudam com a imagem semanal dele, e as que precisam de versão certa vêm pinadas: as imagens do Makefile e, no `deploy-kind`, o kind e o kubectl.
 
 ## Decisões e limites
 
 - Kong por `helm template` do chart `kong/kong` 3.4.1 versionado em [`k8s/base/kong/kong.yaml`](k8s/base/kong/kong.yaml): o Kong Ingress Controller 3.x não publica mais os manifests all-in-one. `make kong-render` regenera a partir de [`values.yaml`](k8s/base/kong/values.yaml). O webhook de validação ficou desligado porque o chart gera o certificado dele na renderização, e versionar o resultado poria uma chave privada no repositório.
 - Sem o webhook, Ingress ou plugin inválido de um serviço não falha no `kubectl apply`. Para que ele não derrube a configuração dos outros serviços (o Kong sem banco recusa a configuração inteira), o controller roda com o gate `FallbackConfiguration`: tira o objeto com erro e o que depende dele, aplica o resto e registra um evento no objeto. O `make deploy` termina com o `make kong-check`, que falha e lista o objeto recusado; o `make smoke` prova os dois lados com um plugin inválido de propósito.
-- Senhas de demonstração versionadas (Secrets `rabbitmq-credenciais` e `grafana-admin`, marcadas com `gitleaks:allow` e na allowlist do [`.gitleaks.toml`](.gitleaks.toml)), as mesmas no kind e no k3s. O [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) prevê senhas geradas no cluster a cada deploy; aqui elas são valores de demonstração, e o k3s de avaliação usa os mesmos.
-- Pods endurecidos: todos rodam sem root, sem escalar privilégio, sem capability, com seccomp `RuntimeDefault` e raiz somente leitura (`emptyDir` com `sizeLimit` onde a imagem grava). A exceção é o Promtail, que roda como root para ler os arquivos `0640` de `/var/log/pods` por `hostPath`, ainda sem capability. Só montam token de ServiceAccount os pods que falam com a API do Kubernetes: Prometheus, Promtail, kube-state-metrics e o controller do Kong. O namespace tem Pod Security `restricted` em `warn` e `audit`; o `make smoke` mostra o contexto efetivo de cada container e que, com `enforce`, só o Promtail ficaria de fora. O `make manifests` roda `trivy config` (HIGH e CRITICAL) nos dois overlays e nos exemplos de borda.
-- O controller do Kong lê Ingress, Services e Secrets só dos quatro namespaces da fase 4 (`watchNamespaces`), com uma Role em cada um, em vez de ler os Secrets do cluster inteiro. Por isso o `make deploy` cria vazios os namespaces dos serviços que ainda não existem; o repositório de cada serviço continua dono do namespace dele. Ingress de outro namespace não chega ao Kong. Risco que sobra, aceito: o controller roda no pod exposto à internet (`kong-proxy`) e a Role de cada um dos quatro namespaces ainda lhe dá `list` e `watch` em Secrets, inclusive os dos serviços (chave RSA do JWT, segredo do webhook, credenciais de banco); quem tomasse o controle desse pod os leria. A plataforma não referencia Secret em Ingress nem em plugin, e uma saída a avaliar é tirar a regra de Secrets das Roles, se o controller subir sem ela (dívida no MEMORY).
+- Senhas geradas no cluster pelo `make deploy`, no primeiro deploy de cada cluster ([Segredos gerados](#segredos-gerados), [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). Os valores de demonstração ficam só no compose, marcados com `gitleaks:allow` e na allowlist do [`.gitleaks.toml`](.gitleaks.toml), que só os aceita em `compose/`; o `make manifests` reprova `Secret` nos manifests, e o gitleaks, URL AMQP com senha fora do compose.
+- Pods endurecidos: todos rodam sem root, sem escalar privilégio, sem capability, com seccomp `RuntimeDefault` e raiz somente leitura (`emptyDir` com `sizeLimit` onde a imagem grava). A exceção é o Promtail, que roda como root para ler os arquivos `0640` de `/var/log/pods` por `hostPath`, ainda sem capability. Só montam token de ServiceAccount os pods que falam com a API do Kubernetes: Prometheus, Promtail, kube-state-metrics e o controller do Kong. O namespace tem Pod Security `restricted` em `warn` e `audit`; o `make smoke` mostra o contexto efetivo de cada container e que, com `enforce`, só o Promtail ficaria de fora. O `make manifests` roda `trivy config` (HIGH e CRITICAL) nos três overlays e nos exemplos de borda.
+- O controller do Kong lê Ingress, Services e Secrets só dos quatro namespaces da fase 4 (`watchNamespaces`), com uma Role em cada um, em vez de ler os Secrets do cluster inteiro. Por isso o `make deploy` cria vazios os namespaces dos serviços que ainda não existem; o repositório de cada serviço continua dono do namespace dele. Ingress de outro namespace não chega ao Kong. Risco que sobra, aceito: o controller roda no pod exposto à internet (`kong-proxy`) e a Role de cada um dos quatro namespaces ainda lhe dá `list` e `watch` em Secrets, inclusive os da plataforma (o `rabbitmq-credenciais`, com as senhas do admin do broker e dos três usuários, e o `grafana-admin`) e os dos serviços (chave RSA do JWT, segredo do webhook, credenciais de banco e a URL do broker); quem tomasse o controle desse pod os leria. A plataforma não referencia Secret em Ingress nem em plugin, e uma saída a avaliar é tirar a regra de Secrets das Roles, se o controller subir sem ela (dívida no MEMORY).
 - O admin do RabbitMQ entra no boot junto com a topologia (arquivo `admin.json` do Secret), porque com definitions no boot o broker não cria usuário nenhum e o Job de usuários precisa de alguém para falar com a API.
 - `pytstop.retry` é topic, com bindings de chave exata ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): o RabbitMQ só aplica permissão por routing key em exchange topic, e sem ela a escrita no `pytstop.retry` deixaria qualquer serviço pôr mensagem na fila de trabalho de outro. Com a chave exata (o nome da fila de retry), o roteamento é o mesmo de um direct.
 - Uma fila de retry por atraso, `<fila>.retry.1s` a `.300s` ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): são 21 filas no broker, e mudar um atraso é criar outra fila.
