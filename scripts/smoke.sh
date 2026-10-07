@@ -155,10 +155,24 @@ for exemplo in k8s/exemplos/borda-os-service.yaml k8s/exemplos/borda-billing-ser
 done
 $K -n "$NS" rollout status deployment/os-service-api --timeout=180s
 $K -n "$NS" rollout status deployment/billing-service-api --timeout=180s
-# O controller leva alguns segundos para empurrar as rotas novas ao Kong.
+# O controller leva alguns segundos para empurrar as rotas novas ao Kong, e o
+# alvo de cada Service so entra quando os endpoints dele chegam ao controller:
+# ate la, a rota responde 404 (sem rota) ou 503 (sem alvo), e um Service pode
+# ficar pronto antes de outro. Espera um caminho de cada Service dos exemplos
+# (Service novo num exemplo entra na lista) responder 200, sem token e sem a
+# marca do Loki; o login vai por ultimo, porque o balde dele e o menor.
+bordas_prontas() {
+  local caminho
+  for caminho in /os/api/v1/ordens-de-servico /os/docs /os/openapi.json /os/.well-known/jwks.json \
+    /os/api/v1/publico/acompanhamento /os/api/v1/autenticacao/refresh \
+    /billing/api/v1/orcamentos /billing/docs /billing/openapi.json /billing/api/v1/publico/x \
+    /billing/api/v1/webhooks/mercadopago /billing/api/v1/simulador/x /billing/simulador/checkout/x \
+    /os/api/v1/autenticacao/login; do
+    [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA$caminho")" = 200 ] || return 1
+  done
+}
 for _ in $(seq 60); do
-  [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA/os/openapi.json")" = 200 ] \
-    && [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA/billing/openapi.json")" = 200 ] && break
+  bordas_prontas && break
   sleep 2
 done
 
@@ -203,7 +217,7 @@ printf 'upstream got:   %s\n' "$id_servico"
 confere "X-Request-ID the Kong generated" "present" "$([ -n "$id_resposta" ] && echo present || echo missing)"
 confere "X-Request-ID in the response vs at the service" "$id_resposta" "$id_servico"
 
-titulo "login rate limit (5/min, x10 on kind): POSTs in a row until the first 429 (the POST above counts if it fell in the same minute)"
+titulo "login rate limit (5/min, x10 on kind): POSTs in a row until the first 429 (the login requests above count if they fell in the same minute)"
 # Janela fixa por minuto: se a rajada atravessar a virada, o contador zera e o
 # 429 vem um pouco depois; 120 POSTs sempre passam do limite de duas janelas.
 primeiro_429=""

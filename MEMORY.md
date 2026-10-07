@@ -64,6 +64,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
+- 2026-10-07 - Kong com o KIC: a rota de um Service entra antes do alvo, que so chega quando os endpoints daquele Service chegam ao controller (cada Service na sua vez); ate la a rota responde 503, e uma rota com 200 nao diz nada da de outro Service. Espera de rotas novas confere um caminho de cada Service (`bordas_prontas` do smoke) - PR #5
 - 2026-10-07 - `\Z` e `$` no PCRE do RabbitMQ casam antes de um `\n` final, mas o `\Z` do `re` do Python e o fim exato: o pytest nao distingue `\z` de `\Z`, e so a prova no broker pega a troca (`prova_retry.py` publica a chave com `\n` no fim e espera 403) - README, Usuario e permissoes no RabbitMQ
 - 2026-10-07 - Correcao da entrada "Fila quorum no RabbitMQ 4: `nack`/`reject` com requeue nao conta no delivery-limit" (mais abaixo): as filas de trabalho tem `delivery-limit` 5 na policy, e a mensagem que derruba o consumidor vai para a DLQ na sexta entrega, nao depois de 20 reentregas - ADR-036
 - 2026-10-06 - Correcao da entrada "nack/reject com requeue nao conta no delivery-limit" (mais abaixo): no 4.3.6 so o `basic_nack` com requeue nao conta; o `basic_reject` com requeue incrementa o delivery-count e cai no dead letter ao passar do limite (com `x-delivery-limit` 2, tres entregas). O delayed retry nativo da fila quorum (4.3) segue a mesma regra: atraso linear que so cresce com reject
