@@ -1,6 +1,6 @@
 # Overlay do kind local (make kind-up deploy): a plataforma completa, com os
-# recursos do base (limites somam ~4,4 GiB). Para o runner do CI o ADR-042
-# preve o overlay kind-ci, sem Loki, Promtail e Grafana.
+# recursos do base (limites somam ~4,4 GiB). O overlay kind-ci, do runner do
+# CI, e este sem Loki, Promtail e Grafana (ADR-042).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 

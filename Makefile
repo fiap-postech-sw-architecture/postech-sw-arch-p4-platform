@@ -138,7 +138,7 @@ lint: ## ruff, mypy e bandit nos testes
 
 manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do Kong, versoes, dashboards
 	set -euo pipefail; \
-	for overlay in kind k3s; do \
+	for overlay in kind kind-ci k3s; do \
 		echo ">> kubeconform and trivy: k8s/overlays/$$overlay"; \
 		kubectl kustomize "k8s/overlays/$$overlay" | $(KUBECONFORM) -; \
 		kubectl kustomize "k8s/overlays/$$overlay" | $(TRIVY_CONFIG); \

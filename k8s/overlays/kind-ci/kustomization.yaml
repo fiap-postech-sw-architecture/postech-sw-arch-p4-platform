@@ -1,0 +1,27 @@
+# Overlay do job deploy-kind (ADR-042): o do kind (metrics-server, Kong em
+# NodePort, StorageClass e limites de rate limit x10) sem Loki, Promtail e
+# Grafana, para a plataforma caber no runner do GitHub junto com os tres
+# servicos. Todo Deployment da plataforma ja tem uma replica so no base, e
+# nenhum tem HPA.
+#
+# Memoria da plataforma aqui (requests/limits): RabbitMQ 256Mi/1Gi, Kong
+# 384/768Mi (proxy e controller), Prometheus 192/512Mi, Jaeger 128/512Mi,
+# Mailpit e kube-state-metrics 64/128Mi cada; soma 1088Mi/3Gi, mais os 200Mi
+# reservados pelo metrics-server. O pico medido no runner esta no ADR-042.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../kind
+
+patches:
+  # Tudo o que o base cria para os tres leva o rotulo app deles: Deployments,
+  # DaemonSet, Services, ConfigMaps gerados e a ServiceAccount e o RBAC do
+  # Promtail. Com target, o kind e o nome do patch nao contam.
+  - target:
+      labelSelector: app in (loki, promtail, grafana)
+    patch: |-
+      $patch: delete
+      kind: Ignorado
+      metadata:
+        name: ignorado
