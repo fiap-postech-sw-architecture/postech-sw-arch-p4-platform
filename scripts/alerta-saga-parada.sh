@@ -3,8 +3,10 @@
 # no promtool, com a consulta tirada do proprio arquivo: o prazo vencido
 # dispara sem a serie de falha_na_compensacao, a falha dispara sem a serie do
 # prazo, e atraso abaixo de 60 s, outra etapa ou nenhuma serie da saga (OS
-# Service ainda sem as metricas) nao disparam. O threshold do Grafana (A > 0)
-# e a janela de 5 min viram uma regra do Prometheus com a mesma consulta.
+# Service ainda sem as metricas) nao disparam. Cada replica da API repete o
+# gauge: duas replicas a 40 s somam 80 s e nao disparam, o que reprova a troca
+# de max por sum. O threshold do Grafana (A > 0) e a janela de 5 min viram uma
+# regra do Prometheus com a mesma consulta.
 set -euo pipefail
 : "${PROMETHEUS_IMAGE:?}" "${YQ_IMAGE:?}"
 
@@ -61,6 +63,17 @@ tests:
         values: 2x10
       - series: pytstop_saga_ativas{pod="os-api-1", etapa="falha_na_compensacao"}
         values: 0x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: SagaParada
+        exp_alerts: []
+  - name: duas replicas a 40 s, soma acima de 60 s e maximo abaixo
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-1"}
+        values: 40x10
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-2"}
+        values: 40x10
     alert_rule_test:
       - eval_time: 6m
         alertname: SagaParada
