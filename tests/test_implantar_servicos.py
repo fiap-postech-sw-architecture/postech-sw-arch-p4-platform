@@ -127,6 +127,7 @@ elif resto[:2] == ["rollout", "status"] and resto[2].startswith("statefulset"):
     falha_em("statefulset")
     print(f"{resto[2]} rolling update complete")
 elif resto[:2] == ["get", "job"]:
+    falha_em("get-job")
     if falha != f"{ns}:sem-job":
         print(f"job.batch/{JOBS[ns]}")
 elif resto[0] == "wait":
@@ -270,6 +271,13 @@ ATE_A_FALHA = {
         "rollout status",
     ],
     "sem-job": [
+        "delete job",
+        "apply --server-side",
+        "get statefulset",
+        "rollout status",
+        "get job",
+    ],
+    "get-job": [
         "delete job",
         "apply --server-side",
         "get statefulset",
@@ -467,8 +475,10 @@ def test_falha_num_namespace_nomeia_o_servico_e_os_outros_seguem(
             "[billing-service] migration log of job.batch/billing-inicializacao"
             in processo.stdout
         )
-    if verbo == "sem-job":
-        assert f"no Job labeled {INICIALIZACAO} in pytstop-billing" in processo.stdout
+    # Sem Job, a mensagem diz isso; com erro do cluster, so o erro dele.
+    assert (
+        f"no Job labeled {INICIALIZACAO} in pytstop-billing" in processo.stdout
+    ) == (verbo == "sem-job")
     for dir_ in implantacao.dirs.values():
         assert not (dir_ / "k8s" / "overlays" / "execucao").exists()
 
