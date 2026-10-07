@@ -159,22 +159,48 @@ $K -n "$NS" rollout status deployment/billing-service-api --timeout=180s
 # alvo de cada Service so entra quando os endpoints dele chegam ao controller:
 # ate la, a rota responde 404 (sem rota) ou 503 (sem alvo), e um Service pode
 # ficar pronto antes de outro. Espera um caminho de cada Service dos exemplos
-# (Service novo num exemplo entra na lista) responder 200, sem token e sem a
-# marca do Loki; o login vai por ultimo, porque o balde dele e o menor.
+# (Service novo num exemplo entra na lista, com o nome dele) responder 200, sem
+# token e sem a marca do Loki; o login vai por ultimo, porque o balde dele e o
+# menor. Esgotado o prazo, o smoke sai com status 1 e diz qual Service nao
+# respondeu: sem isso, a espera acabaria calada e as provas seguintes
+# falhariam uma a uma, sem dizer por que.
+nao_respondeu=""
 bordas_prontas() {
-  local caminho
-  for caminho in /os/api/v1/ordens-de-servico /os/docs /os/openapi.json /os/.well-known/jwks.json \
-    /os/api/v1/publico/acompanhamento /os/api/v1/autenticacao/refresh \
-    /billing/api/v1/orcamentos /billing/docs /billing/openapi.json /billing/api/v1/publico/x \
-    /billing/api/v1/webhooks/mercadopago /billing/api/v1/simulador/x /billing/simulador/checkout/x \
-    /os/api/v1/autenticacao/login; do
-    [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA$caminho")" = 200 ] || return 1
-  done
+  local servico caminho status
+  while read -r servico caminho; do
+    # Sem resposta (recusa, prazo), o curl sai com erro e o -w imprime 000.
+    status=$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA$caminho" || true)
+    if [ "$status" != 200 ]; then
+      [ "$status" != 000 ] || status="no response"
+      nao_respondeu="Service $servico, GET $caminho: expected 200, got $status"
+      return 1
+    fi
+  done <<'SERVICES'
+os-service-borda-api /os/api/v1/ordens-de-servico
+os-service-borda-docs /os/docs
+os-service-borda-openapi /os/openapi.json
+os-service-borda-jwks /os/.well-known/jwks.json
+os-service-borda-publico /os/api/v1/publico/acompanhamento
+os-service-borda-autenticacao /os/api/v1/autenticacao/refresh
+billing-service-borda-api /billing/api/v1/orcamentos
+billing-service-borda-docs /billing/docs
+billing-service-borda-openapi /billing/openapi.json
+billing-service-borda-publico /billing/api/v1/publico/x
+billing-service-borda-webhook /billing/api/v1/webhooks/mercadopago
+billing-service-borda-simulador-api /billing/api/v1/simulador/x
+billing-service-borda-simulador-checkout /billing/simulador/checkout/x
+os-service-borda-login /os/api/v1/autenticacao/login
+SERVICES
+  nao_respondeu=""
 }
 for _ in $(seq 60); do
   bordas_prontas && break
   sleep 2
 done
+if [ -n "$nao_respondeu" ]; then
+  echo "edge not ready after 60 tries, 2 s apart: $nao_respondeu" >&2
+  exit 1
+fi
 
 titulo "published and blocked paths: the expected status, and the path the service got (the Kong strips the prefix)"
 pede GET /os/api/v1/ordens-de-servico 200 /api/v1/ordens-de-servico
