@@ -117,6 +117,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 ## Tech debt / TODO
 
 - 2026-10-07 - Resolvida a divida MEDIUM "`make smoke` roda `uv run`" (mais abaixo): o `deploy-kind` instala o uv (`astral-sh/setup-uv`) antes do smoke - PR #5
+- 2026-10-07 - LOW - O `make lint` inclui o `lint-scripts`, e o job `contratos` chama o `make lint`: shellcheck e actionlint rodam duas vezes no CI (tambem no `manifests`); partir o lint em Python e scripts se o tempo do CI pesar
 - 2026-10-07 - Resolvida a divida MEDIUM "consumidor do Billing manda `DomainException` para a DLQ" (mais abaixo): o PR de mensageria do Billing (#3) trata orcamento nao aprovado como descompasso de estado (ack, log `command_ignored`, sem resposta) e deixa na DLQ so a falha permanente sem evento (orcamento ausente ou de outra ordem, recusa do provedor), como no ADR-036
 - 2026-10-07 - Correcao da entrada MEDIUM do runbook da saga (abaixo): sao cinco os alertas do ADR-043 que entram em `alertas.yaml` com as metricas dos servicos (compensacoes acima do normal, circuito aberto, outbox parada, assinatura invalida no webhook e falha na busca do JWKS); a entrada citava dois
 - 2026-10-07 - Correcao da entrada MEDIUM do runbook da saga (abaixo): a regra "Saga parada" ja esta em `alertas.yaml`; "Compensacoes acima do normal" e "Outbox parada" entram com as metricas dos servicos, e o topo do runbook diz a partir de que versao do OS Service ele vale
@@ -125,7 +126,6 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 - 2026-10-06 - Correcao da entrada LOW do overlay `kind-ci`, exportadores e runbook (abaixo): o runbook da saga ja existe, em `docs/operacao/runbook-saga.md`
 - 2026-10-06 - Resolvida a divida "Retry com TTL por mensagem numa fila so tem head-of-line" (mais abaixo): uma fila de retry por atraso - ADR-036
 - 2026-10-06 - MEDIUM - `make smoke` roda `uv run` (prova do retry): o job `deploy-kind`, quando entrar, precisa do setup-uv antes do smoke
-- 2026-10-06 - LOW - `make lint` inclui o `lint-scripts` por uma linha de pre-requisito, mas o help do `lint` ainda diz so ruff, mypy e bandit, e o job `contratos` (que chama o `make lint`) roda shellcheck e actionlint de novo, alem do `manifests`: partir o lint (Python e scripts) depois do merge do PR do retry, que muda a mesma linha
 - 2026-10-06 - LOW - `scripts/ci/deploy-kind.sh` so sobe a plataforma: os argumentos do CD dos servicos (servico, imagem, checkout) entram quando o primeiro CD de servico o chamar
 - 2026-10-06 - RESOLVIDO - "Senhas de demonstracao versionadas" e o overlay `kind-ci` das entradas abaixo: senhas geradas no cluster e overlay `kind-ci` entraram no PR #5; os exportadores de banco do ADR-043 seguem fora
 - 2026-10-06 - LOW - `deploy-kind` ainda nao e check obrigatorio do ruleset da main: incluir depois de alguns runs verdes (3 min 14 s no primeiro)

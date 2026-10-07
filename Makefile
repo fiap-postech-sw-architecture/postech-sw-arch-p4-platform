@@ -78,9 +78,10 @@ kind-down: ## remove o cluster kind
 # passam do limite de tamanho da anotacao last-applied do apply client-side.
 # Os namespaces dos servicos nascem vazios, se ainda nao existirem, para
 # receber a Role do Kong e o Secret rabbitmq; o da plataforma, para receber os
-# Secrets gerados antes do apply (scripts/gerar-segredos.sh, que so cria o que
-# ainda nao existe). O Job de usuarios do RabbitMQ e imutavel: sai antes do
-# apply e roda de novo; se nao terminar, o log dele vai para a saida.
+# Secrets gerados antes do apply (scripts/gerar-segredos.sh: as fontes so se
+# ainda nao existem, o Secret rabbitmq de cada servico em todo deploy). O Job
+# de usuarios do RabbitMQ e imutavel: sai antes do apply e roda de novo; se
+# nao terminar, o log dele vai para a saida.
 deploy: ## aplica k8s/overlays/$(OVERLAY) e espera os rollouts
 	$(KUBECTL) apply --server-side -f k8s/base/kong/crds.yaml
 	$(KUBECTL) wait --for=condition=Established --timeout=60s -f k8s/base/kong/crds.yaml
@@ -139,7 +140,7 @@ test: ## testes dos contratos e da observabilidade, validacao do asyncapi.yaml
 	uv run pytest
 	CI=true npx --yes $(ASYNCAPI_CLI) validate contratos/asyncapi.yaml
 
-lint: ## ruff, mypy e bandit nos testes e na prova do retry
+lint: ## ruff, mypy e bandit nos testes e na prova do retry, mais o lint-scripts
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy

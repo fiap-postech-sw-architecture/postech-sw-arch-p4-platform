@@ -61,7 +61,7 @@ jobs:
         run: uv lock --check
       - name: Dependencias do lockfile
         run: uv sync --frozen
-      - name: Ruff, mypy e bandit (make lint)
+      - name: Ruff, mypy, bandit, shellcheck e actionlint (make lint)
         run: make lint
       - name: Testes de contrato e de observabilidade, validacao do AsyncAPI (make test)
         run: make test
