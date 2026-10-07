@@ -66,8 +66,8 @@ No Grafana, como na fase 3, separando aviso de alerta crítico, como recomenda a
 
 | Alerta | Condição | Janela (`for`) | Severidade |
 |---|---|---|---|
-| Mensagem em DLQ | alguma fila `.dlq` com mensagem, pela métrica por fila do plugin do RabbitMQ | 1 min | crítico |
-| Saga parada | `max(pytstop_saga_prazo_vencido_segundos)` acima de 60, dois ciclos do `prazos` (instância com prazo técnico vencido e não tratado, em qualquer etapa), ou `max(pytstop_saga_ativas{etapa="falha_na_compensacao"})` acima de 0 | 5 min | crítico |
+| DLQ com mensagens | alguma fila `.dlq` com mensagem, pela métrica por fila do plugin do RabbitMQ | 1 min | crítico |
+| Saga parada | prazo técnico vencido e não tratado há mais de 60 s, em qualquer etapa, ou alguma instância em `falha_na_compensacao` (consulta abaixo) | 5 min | crítico |
 | Compensações acima do normal | razão entre compensações e sagas iniciadas acima de um limite tirado do comportamento normal | 30 min | aviso |
 | Erro 5xx acima de 1% | regra da fase 3, agregada por serviço | 5 min | crítico |
 | Circuito aberto | `pytstop_circuit_breaker_aberto` em 1 para qualquer dependência | 1 min | aviso |
@@ -75,7 +75,9 @@ No Grafana, como na fase 3, separando aviso de alerta crítico, como recomenda a
 | Assinatura inválida no webhook | `pytstop_webhook_assinatura_invalida_total` crescendo | 5 min | aviso |
 | Falha na busca do conjunto de chaves públicas (JWKS) | `pytstop_jwks_falhas_total` crescendo | 5 min | aviso |
 
-O que fazer quando "Saga parada" ou "Mensagem em DLQ" dispara está no [runbook da saga](../../../operacao/runbook-saga.md).
+A regra de saga parada é uma consulta só, `max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or vector(0)`, que dispara acima de 0. Com o `or`, a série que falta numa condição não esconde a outra, e o `vector(0)` deixa a regra com valor zero quando nenhuma condição vale, inclusive antes de o OS Service exportar as métricas da saga. Os 60 s são duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão (30 s), e o limiar muda junto quando a variável muda. O `make manifests` do `platform` prova com o promtool que cada condição dispara sozinha.
+
+O que fazer quando "Saga parada" ou "DLQ com mensagens" dispara está no [runbook da saga](../../../operacao/runbook-saga.md).
 
 ## Alternativas Consideradas
 
