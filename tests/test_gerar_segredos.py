@@ -10,7 +10,8 @@ deploys seguidos mantem os valores; que as fontes que ja existem, da
 plataforma e dos servicos, ficam como estao, e a que falta nasce sozinha; que
 o Secret rabbitmq de cada servico, derivado da fonte, e regravado a cada
 deploy, inclusive quando tem a senha antiga; que a fonte que existe sem uma
-das chaves e a do banco que falta com o volume de pe param o script antes de
+das chaves (a chave que so aparece dentro do nome de outra conta como
+ausente) e a do banco que falta com o volume de pe param o script antes de
 ele gravar qualquer coisa; que erro ao ler, listar os volumes ou gravar no
 cluster, openssl que falha e senha com caractere fora de letras e digitos
 param o script; que KUBE_CONTEXT e NAMESPACE do ambiente (make deploy
@@ -725,6 +726,30 @@ def test_fonte_que_existe_sem_uma_chave_para_o_script_sem_gravar_nada(
 
     assert processo.returncode != 0
     assert f"secret {fonte} has no key {chave}" in processo.stderr
+    assert f"secret {fonte} already exists: kept" not in processo.stdout
+    assert segredos == antes
+    assert gravacoes(chamadas) == []
+
+
+@pytest.mark.parametrize(
+    "outra",
+    ["ADMIN_PASSWORD_ANTIGA", "ANTIGA_ADMIN_PASSWORD"],
+    ids=["chave-no-comeco-do-nome-de-outra", "chave-no-fim-do-nome-de-outra"],
+)
+def test_chave_so_dentro_do_nome_de_outra_conta_como_ausente(
+    tmp_path: Path, outra: str
+) -> None:
+    # A conferencia casa o nome inteiro da chave. A fonte com ADMIN_PASSWORD_ANTIGA
+    # no lugar de ADMIN_PASSWORD deixaria o pod sem a senha, e nao pode ser dada
+    # como completa.
+    fonte = "pytstop-os/os-admin"
+    antes = existentes()
+    antes[fonte] = {outra: "valor-de-pe"}
+
+    processo, segredos, chamadas = roda(tmp_path, antes)
+
+    assert processo.returncode != 0
+    assert f"secret {fonte} has no key ADMIN_PASSWORD:" in processo.stderr
     assert f"secret {fonte} already exists: kept" not in processo.stdout
     assert segredos == antes
     assert gravacoes(chamadas) == []
