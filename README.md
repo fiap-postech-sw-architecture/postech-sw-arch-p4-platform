@@ -547,7 +547,7 @@ scripts/ci/implantar-servicos.sh --overlay kind \
 scripts/ci/smoke-servicos.sh
 ```
 
-Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl` e `sleep` falsos: builds em paralelo e com o commit, a carga no kind, o overlay gerado e apagado, a ordem de cada namespace, falha de build, apply, banco, Job e Deployment nomeando o serviço e o commit, imagem fora da tabela e argumentos recusados; e cada etapa do smoke reprovando o que deve, erro do cluster sem parar o smoke, a espera do Prometheus, o prazo de cada chamada e o certificado sem verificação só no `localhost`.
+Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl` e `sleep` falsos: builds em paralelo e com o commit, a carga no kind, o overlay gerado e apagado, a ordem de cada namespace, falha de build, apply, banco, Job e Deployment, e erro do cluster ao listar o banco e os Deployments, nomeando o serviço e o commit, imagem fora da tabela e argumentos recusados; e cada etapa do smoke reprovando o que deve, erro do cluster sem parar o smoke, a espera do Prometheus, o prazo de cada chamada e o certificado sem verificação só no `localhost`.
 
 ## Contratos de mensageria
 

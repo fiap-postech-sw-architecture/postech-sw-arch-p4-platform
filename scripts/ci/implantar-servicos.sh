@@ -112,7 +112,7 @@ for par in "${pares[@]}"; do
       grep -qF "\`$imagem\`" "$raiz/README.md" || echo "$imagem"
     done)
   if [ -n "$fora" ]; then
-    echo "$servico (commit $sha): images outside the versions table of the platform README: $(tr '\n' ' ' <<< "$fora")" >&2
+    echo "$servico (commit $sha): images outside the versions table of the platform README: $(tr '\n' ' ' <<< "$fora" | sed 's/ *$//')" >&2
     exit 1
   fi
   tar=$(valor "$servico" ${tars[@]+"${tars[@]}"})
@@ -196,12 +196,14 @@ YAML
   echo "${nomes[i]}: $EXECUCAO = $overlay with image ${refs[i]}"
 done
 
-# implanta <namespace> <dir do overlay>: a ordem do namespace.
+# implanta <namespace> <dir do overlay>: a ordem do namespace. Cada lista vem
+# antes do laco: erro do cluster dentro do $( ) do for passaria calado.
 implanta() {
-  local ns=$1 recurso jobs
+  local ns=$1 recurso recursos jobs
   $K -n "$ns" delete job -l "$INICIALIZACAO" --ignore-not-found --timeout=60s || return
   $K apply --server-side -k "$2" || return
-  for recurso in $($K -n "$ns" get statefulset -o name); do
+  recursos=$($K -n "$ns" get statefulset -o name) || return
+  for recurso in $recursos; do
     $K -n "$ns" rollout status "$recurso" --timeout=180s || return
   done
   jobs=$($K -n "$ns" get job -l "$INICIALIZACAO" -o name) || return
@@ -215,7 +217,8 @@ implanta() {
       return 1
     fi
   done
-  for recurso in $($K -n "$ns" get deployment -o name); do
+  recursos=$($K -n "$ns" get deployment -o name) || return
+  for recurso in $recursos; do
     $K -n "$ns" rollout status "$recurso" --timeout=300s || return
   done
 }

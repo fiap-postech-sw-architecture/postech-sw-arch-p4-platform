@@ -121,6 +121,7 @@ elif resto[:3] == ["apply", "--server-side", "-k"]:
     falha_em("apply")
     print(f"deployment.apps/{servico}-api serverside-applied")
 elif resto == ["get", "statefulset", "-o", "name"]:
+    falha_em("get-statefulset")
     print(f"statefulset.apps/{BANCOS[ns]}")
 elif resto[:2] == ["rollout", "status"] and resto[2].startswith("statefulset"):
     falha_em("statefulset")
@@ -133,6 +134,7 @@ elif resto[0] == "wait":
 elif resto[0] == "logs":
     print(f"migration log of {resto[1]}")
 elif resto == ["get", "deployment", "-o", "name"]:
+    falha_em("get-deployment")
     print(f"deployment.apps/{servico}-api\ndeployment.apps/{servico}-relay")
 elif resto[:2] == ["rollout", "status"] and resto[2].startswith("deployment"):
     falha_em("deployment")
@@ -260,6 +262,7 @@ def verbos(chamadas: list[Any], ns: str) -> list[str]:
 # Verbos no namespace que falhou, ate a falha: depois dela, nada.
 ATE_A_FALHA = {
     "apply": ["delete job", "apply --server-side"],
+    "get-statefulset": ["delete job", "apply --server-side", "get statefulset"],
     "statefulset": [
         "delete job",
         "apply --server-side",
@@ -291,6 +294,15 @@ ATE_A_FALHA = {
         "wait",
         "get deployment",
         "rollout status",
+    ],
+    "get-deployment": [
+        "delete job",
+        "apply --server-side",
+        "get statefulset",
+        "rollout status",
+        "get job",
+        "wait",
+        "get deployment",
     ],
 }
 
@@ -435,9 +447,7 @@ def test_job_de_inicializacao_apagado_esperado_pelo_rotulo(
     ] in kubectl
 
 
-@pytest.mark.parametrize(
-    "verbo", ["apply", "statefulset", "job", "deployment", "sem-job"]
-)
+@pytest.mark.parametrize("verbo", ATE_A_FALHA)
 def test_falha_num_namespace_nomeia_o_servico_e_os_outros_seguem(
     implantacao: Implantacao, verbo: str
 ) -> None:
