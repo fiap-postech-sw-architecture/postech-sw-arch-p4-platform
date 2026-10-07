@@ -8,6 +8,9 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Recent decisions
 
+- 2026-10-07 - O CD de cada servico sobe os tres no kind por `scripts/ci/implantar-servicos.sh` (vizinhos por `docker build` em paralelo com o commit como tag, a propria imagem pelo tar do job image, `kind load`, overlay `k8s/overlays/execucao` gerado e apagado no fim, ordem por namespace) e confere com `scripts/ci/smoke-servicos.sh` (Job, rollouts, saude e `/metrics` pela borda, `up` = 1 e a NetworkPolicy do banco); imagem de terceiro fora da tabela de versoes do README reprova antes do build - README, Contrato com os servicos; ADR-042
+- 2026-10-07 - Exemplo de borda da Execucao em `k8s/exemplos/borda-execution-service.yaml` (o do OS sem JWKS nem rotas publicas), aplicado pelo `make smoke` com os do OS e do Billing - ADR-038
+- 2026-10-07 - Exporters dos bancos na tabela de versoes: postgres_exporter v0.20.1 e mongodb_exporter 0.53.0, as ultimas publicadas; os achados HIGH do trivy estao todos em dependencias Go compiladas no binario e ficam aceitos (sidecar, porta de metricas so para o Prometheus) - README, Decisoes e limites
 - 2026-10-07 - Fontes dos servicos no `gerar-segredos.sh`, todas so se ausentes e sem derivado (a URL do banco se monta no pod, por expansao de variavel): `os-postgres`, `execucao-postgres`, `os-jwt` (RSA 2048 PKCS#8 e `JWT_PREVIOUS_PUBLIC_KEY` vazia), `os-cripto` (Fernet), `os-admin`, `billing-mongo` (root, `billing`, `exporter` e keyfile) e `billing-link` (HMAC do link e do checkout do simulador); `billing-mercadopago` fica fora, credencial do provedor - README, Segredos gerados; ADR-042
 - 2026-10-07 - Fonte que guarda estado no banco (senhas dos bancos, `ENCRYPTION_KEY`, senha do admin) e some com o PVC do namespace de pe: o script para em vez de gerar outra - a `ENCRYPTION_KEY` nova perderia os dados cifrados, e senha nova nao vale para o volume; `os-jwt` e `billing-link` nascem de novo (a troca por apagar o Secret) - README, Segredos gerados
 - 2026-10-07 - O admin e o unico usuario semeado no OS; atendente e mecanico se cadastram pela API com o token dele - o `seed_admin.py` so cria o admin; ADR-042 corrigido
@@ -50,6 +53,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Discovered conventions
 
+- 2026-10-07 - Prova de NetworkPolicy no smoke dos servicos: o pod imprime `code=$?` do `timeout 3` e so 124 (prazo esgotado, pacote descartado) aprova; o status do `kubectl exec` nao serve, porque o prazo de fora tambem sai com 124
 - 2026-10-07 - A tabela "Segredos gerados" do README e o contrato com os servicos: `test_tabela_do_readme_tem_cada_fonte_dos_servicos_e_as_chaves_dela` compara nome e chaves de cada fonte com `FONTES_DOS_SERVICOS`; fonte nova entra no script, no teste e na tabela
 - 2026-10-07 - Fonte gerada no namespace de um servico vai sem o rotulo `app.kubernetes.io/part-of` do servico: um `apply --prune -l` por ele apagaria chaves que nao se regeneram
 - 2026-10-07 - Correcao da entrada "Comando de runbook roda em bash e em zsh" (mais abaixo): "placeholder so em comentario" nao vale no zsh interativo padrao do macOS, que nao liga `INTERACTIVE_COMMENTS`: o `#` vira comando (`ORDEM_ID=... # texto` da "command not found: #" e deixa a variavel vazia, `make ... # texto` reclama de `#` depois de rodar), e ate a linha so de comentario imprime o erro. Bloco de runbook nao leva `#`: a troca de valor vai na frase acima do bloco, com um valor de exemplo no lugar do placeholder; a prova e colar cada bloco num `zsh -i` sem rc, com kubectl e curl de mentira e PostgreSQL e RabbitMQ avulsos
@@ -70,6 +74,10 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
+- 2026-10-07 - bash 3.2 do macOS fecha o `$(` no `)` de um padrao de `case` dentro da substituicao (syntax error near `;;`), e o shellcheck nao avisa: padrao com `(` na frente (`case x in (a) ...`)
+- 2026-10-07 - `wait $!` de um pipeline em segundo plano devolve o status do pipeline com `pipefail` (bash 3.2 e 5.2): nao precisa de subshell em volta
+- 2026-10-07 - kindnet descarta o pacote barrado pela NetworkPolicy: a conexao esgota o prazo; recusa ou nome que nao resolve saem com 1 e nao provam a regra
+- 2026-10-07 - kustomize recusa resource por caminho absoluto (`new root cannot be absolute`): overlay gerado fica dentro do repositorio do servico, com caminho relativo
 - 2026-10-07 - A regra `private-key` do gitleaks casa o cabecalho PEM por extenso (BEGIN e END com os cinco hifens) mesmo numa expressao regular de teste, sem chave nenhuma: o teste escreve os hifens como `-{5}`, e o commit ja enviado entra no `.gitleaksignore` pelo fingerprint, porque o job `gitleaks` varre o historico do PR e force push nao e opcao - PR #8
 - 2026-10-07 - `::add-mask::` vale ate o fim da linha: `echo "::add-mask::$pem"` mascara so a primeira e imprime o resto da chave em claro no log; valor de varias linhas se mascara linha a linha
 - 2026-10-07 - `/usr/bin/env bash` no macOS e o bash 3.2 (sem `mapfile`, `declare -A`, `${v,,}`), e os scripts rodam nele; `${pem//$'\n'/$'\n'    }` indenta a PEM no YAML no 3.2 e no 5.2
