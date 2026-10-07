@@ -25,13 +25,15 @@ Em Estrutura de Microsserviços Parte II, cada equipe tem o seu pipeline, com te
 
 ### Workflows e jobs
 
-Três workflows em cada repositório de serviço (OS Service, de ordens de serviço; Billing Service; Execution Service, do contexto Execução), com jobs de nome estável que viram checks obrigatórios; `make check` reproduz o CI na máquina local. Esta é a lista canônica de nomes, a que a gap analysis e a [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md) remetem:
+Três workflows em cada repositório de serviço (OS Service, de ordens de serviço; Billing Service; Execution Service, do contexto Execução), com jobs de nome estável que viram checks obrigatórios; `make check` reproduz o CI na máquina local. O `platform` tem dois, nas duas últimas linhas. Esta é a lista canônica de nomes, a que a gap analysis e a [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md) remetem:
 
 | Workflow | Gatilho | Jobs |
 |---|---|---|
 | `ci.yml` | PR; chamado pelo `cd.yml` na `main` | `lint` (ruff e import-linter), `type-check` (mypy strict), `security` (bandit), `test` (unitário, integração, contrato e BDD, *behavior-driven development*, com gate de 90% e `diff-cover`), `sonarqube` (depois de `test`), `build` |
 | `security.yml` | PR; chamado pelo `cd.yml` na `main`; semanal | `pip-audit`, `gitleaks`, `trivy` |
 | `cd.yml` | push na `main`; `workflow_dispatch` com SHAs fixos | `ci` e `security-scan` → `image` → `deploy-kind` → `deploy-k3s` ou `k3s-skipped` |
+| `ci.yml` do `platform` | PR; chamado pelo `cd.yml` do `platform` na `main` | `manifests`, `contratos`, `gitleaks` |
+| `cd.yml` do `platform` | PR, push na `main` e `workflow_dispatch`, sem filtro de caminhos, para poder virar check obrigatório | `ci` (só fora de PR) → `deploy-kind` (a plataforma no `kind-ci` e o `make smoke`) |
 
 Os testes seguem o [ADR-041](041-estrategia-de-testes-e-qualidade.md). Os nomes de job ficam em inglês, o padrão técnico do ADR-009 do p3. A execução semanal do `security.yml` acha vulnerabilidade publicada (CVE) em dependência ou imagem base sem esperar o próximo PR. O `cd.yml` tem `concurrency` por repositório, sem cancelar a execução em curso, para que dois pushes seguidos não implantem fora de ordem. O `platform` tem pipeline próprio para a infraestrutura compartilhada, os testes ponta a ponta (E2E) e a varredura OWASP ZAP (RNF-049).
 

@@ -24,7 +24,17 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Na main, os checks do PR rodam de novo no commit que entrou. No PR o
+  # ci.yml ja roda pelo proprio gatilho, e este job fica de fora.
+  ci:
+    if: github.event_name != 'pull_request'
+    uses: ./.github/workflows/ci.yml
+
   deploy-kind:
+    needs: ci
+    # No PR o ci fica skipped e o deploy-kind roda assim mesmo; na main, so
+    # com o CI verde.
+    if: ${{ !cancelled() && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
     # Runner fixo, como no ci.yml: os 16 GB de memoria que o ADR-042 orca
     # para o deploy-kind.
     runs-on: ubuntu-24.04
