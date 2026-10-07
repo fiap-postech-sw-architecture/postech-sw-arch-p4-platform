@@ -8,9 +8,6 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Recent decisions
 
-- 2026-10-06 - Senhas da plataforma geradas no cluster pelo `scripts/gerar-segredos.sh` (make deploy, antes do apply), so quando o Secret ainda nao existe: o RabbitMQ le o admin.json so no boot. Cada servico recebe no proprio namespace o Secret `rabbitmq` com `RABBITMQ_URL` (contrato no README); valores de demonstracao so no compose - ADR-042, PR #5
-- 2026-10-06 - Overlay `kind-ci` = overlay `kind` menos Loki, Promtail e Grafana, por um patch de delete com labelSelector `app in (loki, promtail, grafana)`; job `deploy-kind` do cd.yml em PR, push na main e dispatch, com kind 0.31.0 por sha256 (a versao que publicou o kindest/node v1.35.0 pinado) - ADR-042, PR #5
-- 2026-10-06 - Runner fixo `ubuntu-24.04` em todos os jobs: o `ubuntu-latest` passa para o 26.04 a partir de 19/10/2026 (actions/runner-images#14748) - PR #5
 - 2026-10-06 - Alerta do Kong (`pytstop-kong-fora`, sem dado = alerta) so no cluster: arquivo `alertas-cluster.yaml` num grupo proprio, montado so pelo configMapGenerator; o compose monta so `alertas.yaml`, porque sem Kong a regra disparava dois minutos depois de subir (medido no compose) - ADR-043
 - 2026-10-06 - Caminho com `%2F` ou `%5C` e barrado na borda por um `pre-function` global (`bloqueia-barra-codificada`, 404 igual ao de rota inexistente, antes do rate limit e sem gastar balde); so o caminho conta, a query string passa - ADR-038
 - 2026-10-06 - Correcao da entrada "branch protection na `main` desde o commit inicial" (mais abaixo): o unico commit fora de PR e o `Initial commit` do GitHub (auto_init); a protecao e o ruleset entraram logo depois, e desde entao tudo entra por PR com squash - ADR-042
@@ -29,8 +26,6 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Discovered conventions
 
-- 2026-10-06 - `make smoke` recebe o OVERLAY do deploy: com `kind-ci` pula com aviso so as provas de Loki, Promtail e Grafana; em outro overlay componente ausente e CHECK FAILED (`make deploy smoke OVERLAY=kind-ci` juntos)
-- 2026-10-06 - Medicao do kind: `scripts/medir-kind.sh etapa <nome>` antes de cada alvo e `resumo` no fim (summary no CI); o memory.peak do cgroup do no conta cache de arquivos, e o working set amostrado e o numero que se compara aos limits
 - 2026-10-06 - Script shell se testa com um kubectl falso em Python escrito no tmp_path (shebang sys.executable), nao como modulo em tests/: a cobertura mede tests/, e modulo so rodado em subprocesso entraria com 0%
 - 2026-10-06 - `make smoke` sai com status 1 quando uma prova nao vale (linha `CHECK FAILED`, o script segue ate o fim e resume no final): borda e admin em 404, `%2F` em 404, login chegando a 429, nenhuma linha com o token no Loki, regras do Grafana todas carregadas e saudaveis; as linhas do Loki desta execucao se acham por `run=<marca>` na requisicao
 - 2026-10-06 - Exemplos de borda em `k8s/exemplos/`: `borda-os-service.yaml` e `borda-billing-service.yaml` (webhook com balde proprio, simulador do checkout fora de `/api/v1`); o smoke aplica os dois e um servico novo parte de um deles
@@ -45,13 +40,16 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
-- 2026-10-06 - Na raiz do checkout, `kind` e o diretorio do cluster.yaml: `curl -o kind` no CI falha com exit 23; binario baixado vai para o RUNNER_TEMP
+- 2026-10-06 - `kubectl apply` client-side guarda o objeto inteiro na anotacao `last-applied-configuration`: num Secret com stringData, a senha em claro; Secret regravado a cada deploy vai por `apply --server-side` (o managedFields so tem nomes de campo)
+- 2026-10-06 - Processo em segundo plano ligado num passo do GitHub Actions: cada passo e um shell novo, entao seguir o PID do pai mata o processo no fim do passo; no Actions o runner encerra o que sobrar no fim do job, e so fora dele vale seguir o shell dono
+- 2026-10-06 - gitleaks 8.21 (o pinado no CI): o `[allowlist]` global nao tem condicao AND entre caminho e regex; allowlist restrita a um caminho vai na regra, em `[[rules.allowlists]]` com `condition = "AND"`
+- 2026-10-06 - Na raiz do checkout, `kind` e o diretorio do cluster.yaml: `curl -o kind` no CI falha com exit 23; binario baixado vai para um diretorio temporario (`scripts/ci/instalar-ferramentas.sh`)
 - 2026-10-06 - Patch de delete do kustomize com target por labelSelector tira de uma vez Deployments, Services, ConfigMaps gerados (casa pelo nome original) e RBAC de cluster; com target, kind e nome do patch nao contam
 - 2026-10-06 - `::add-mask::` impresso dentro de `$(...)` vai para a variavel, nao para o runner: mascarar no shell principal. O GITHUB_ACTIONS=true do CI chega ao script que o teste roda: tirar do env do subprocesso
 - 2026-10-06 - Funcao chamada na condicao de um `if` roda sem errexit: kubectl que falha dentro dela vira "falso" calado (Secret "nao existe" e senha nova por cima); `|| exit 1` explicito
 - 2026-10-06 - Senha gerada para Secret: hexadecimal (sem escape em URL AMQP, JSON e YAML) e entre aspas no stringData (valor so de digitos viraria numero e o apiserver recusa)
 - 2026-10-06 - O `adm()` do smoke le a senha do admin do admin.json montado no pod com sed que exige `"password": "..."`: admin.json compacto (jq -c) da 401 calado e o smoke para em "1.1 MiB message"
-- 2026-10-06 - O runner ubuntu-24.04 traz kind 0.33 e kubectl 1.37 (dois minors acima do no 1.35); o kind e instalado no job, o kubectl e o do runner
+- 2026-10-06 - O runner ubuntu-24.04 traz kind 0.33 e kubectl 1.37 (dois minors acima do no 1.35) e os troca a cada imagem semanal: o deploy-kind instala os dois por versao e sha256
 - 2026-10-06 - Kong normaliza o caminho antes de casar a rota e repassa o normalizado (barras repetidas, `.` e `..`, letra codificada como `%61`); so `%2F` e `%5C` ficam como chegaram. Em 17 variantes no kind so `%2F` escapava do fora-da-borda; `%252F`, `;x=1`, `ADMIN` e `%41dmin` passam pelo Kong, e o FastAPI as roteia como outro caminho (verificado com uvicorn)
 - 2026-10-06 - O access log do Kong guarda o caminho como chegou, tambem o do pedido que um plugin barra com 404: o token em `publico%2Forcamentos/<token>` escapava da mascara do Promtail, que so olhava `/`; a mascara aceita `%2F` e o dry-run do `make manifests` roda nos dois arquivos, cluster e compose (`scripts/promtail-mascara.sh`)
 - 2026-10-06 - Kong casa rota por segmento e nao trata `%2F` como `/`, e o uvicorn decodifica o `%2F` do caminho que o FastAPI roteia: `/os/api/v1/admin%2Foutbox` escapava do fora-da-borda e `autenticacao%2Flogin`, do limite do login (o `%5C` o uvicorn deixa literal); rota por prefixo nao protege sozinha - ADR-038
@@ -91,6 +89,8 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Tech debt / TODO
 
+- 2026-10-06 - LOW - `make lint` inclui o `lint-scripts` por uma linha de pre-requisito, mas o help do `lint` ainda diz so ruff, mypy e bandit, e o job `contratos` (que chama o `make lint`) roda shellcheck e actionlint de novo, alem do `manifests`: partir o lint (Python e scripts) depois do merge do PR do retry, que muda a mesma linha
+- 2026-10-06 - LOW - `scripts/ci/deploy-kind.sh` so sobe a plataforma: os argumentos do CD dos servicos (servico, imagem, checkout) entram quando o primeiro CD de servico o chamar
 - 2026-10-06 - RESOLVIDO - "Senhas de demonstracao versionadas" e o overlay `kind-ci` das entradas abaixo: senhas geradas no cluster e overlay `kind-ci` entraram no PR #5; exportadores de banco do ADR-043 e runbook da saga do ADR-036 seguem fora
 - 2026-10-06 - LOW - `deploy-kind` ainda nao e check obrigatorio do ruleset da main: incluir depois de alguns runs verdes (3 min 14 s no primeiro)
 - 2026-10-06 - LOW - `adm()` do smoke depende do formato do admin.json (sed): ler a chave `admin-senha` do Secret quando o bloco do RabbitMQ do smoke for mexido
@@ -106,6 +106,9 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Review lessons
 
+- 2026-10-06 - Comentario do ci.yml prometia que o CD o chamava no merge, e nenhum workflow chamava: afirmacao sobre o que outro arquivo faz se confere abrindo o arquivo; o push na main ficou sem os checks do PR - PR #5
+- 2026-10-06 - Secret derivado (o do servico, montado da fonte) criado so se ausente ficava com a senha velha depois de uma troca, e o deploy saia 0: "so se ausente" vale para a fonte, e o derivado se reconcilia a cada deploy - PR #5
+- 2026-10-06 - Guardas do script de segredos (chave ausente, `set -e`, aspas, `kind`/`apiVersion`) sobreviviam a mutacao com os testes verdes: script shell com guarda ganha teste negativo por guarda e um falso que recusa o que o apiserver recusaria, e a afirmacao de cobertura so vem depois de sabotar cada uma - PR #5
 - 2026-10-06 - O smoke so imprimia e saia 0 com `/os/metrics` aberto, sem 429 ou com token no Loki, e o README e o MEMORY diziam que ele "prova": script de verificacao tem de sair com status diferente de zero quando a prova nao vale, e cada prova se confirma sabotando o alvo (desligar o plugin, subir o limite, quebrar a mascara, derrubar o Prometheus) e vendo o `CHECK FAILED` certo; contar linha no Loki sem esperar as desta execucao deixa um vazamento a caminho passar calado - PR #2
 - 2026-10-06 - `noDataState` das regras de alerta nao tinha guarda: trocar `Alerting` por `OK` na regra de alvo ausente passava em todos os testes, e foi essa a regra que disparou sozinha no compose; propriedade de config que muda o comportamento e vem documentada em tabela ganha teste que compara a tabela com o arquivo (`test_tabela_de_alertas_diz_o_que_a_regra_faz`) - PR #2
 - 2026-10-06 - "22 de 22 mutantes mortos" valia so para os mutantes escolhidos a mao: o conjunto sistematico (cada palavra-chave de cada schema removida ou deslocada em 1, 996 variacoes) deixava 118 vivos, entre eles `maxItems` de seis das sete listas e o `then` de OrcamentoAprovado; afirmacao de cobertura de contrato so entra depois de mutacao sistematica - PR #2
