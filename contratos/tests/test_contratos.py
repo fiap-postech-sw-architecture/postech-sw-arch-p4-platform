@@ -384,19 +384,51 @@ def test_exemplo_valido_contra_envelope_e_schema_do_tipo(tipo: str) -> None:
     assert exemplo["correlation_id"] == dados.get("ordem_id", dados.get("veiculo_id"))
 
 
-def test_causation_id_dos_exemplos_aponta_a_causa() -> None:
-    # RFC-004 5.2: evento leva o id de um comando (o que ele responde ou o que
-    # abriu o fluxo), nunca null; comando leva o id do evento que o disparou, ou
-    # null quando a causa e uma requisicao HTTP ou o reenvio por prazo.
-    exemplos = {tipo: ler_json(EXEMPLOS / f"{tipo}.json") for tipo in CATALOGO}
-    kind_por_id = {e["id"]: CATALOGO[tipo][0] for tipo, e in exemplos.items()}
+# RFC-004 5.2: o comando cujo id cada evento leva no causation_id, o que ele
+# responde ou o que abriu o fluxo. O PagamentoEstornado responde ao
+# EstornarPagamento ou, no estorno automatico, aponta o SolicitarPagamento.
+CAUSA_DO_EVENTO: dict[str, set[str]] = {
+    "DiagnosticoIniciado": {"SolicitarDiagnostico"},
+    "DiagnosticoConcluido": {"SolicitarDiagnostico"},
+    "DiagnosticoDescartado": {"DescartarDiagnostico"},
+    "OrcamentoGerado": {"GerarOrcamento"},
+    "GeracaoDeOrcamentoFalhou": {"GerarOrcamento"},
+    "OrcamentoAprovado": {"GerarOrcamento"},
+    "OrcamentoRecusado": {"GerarOrcamento"},
+    "OrcamentoExpirado": {"GerarOrcamento"},
+    "OrcamentoCancelado": {"CancelarOrcamento"},
+    "PecasReservadas": {"ReservarPecas"},
+    "ReservaDePecasFalhou": {"ReservarPecas"},
+    "ReservaLiberada": {"LiberarReserva"},
+    "PagamentoSolicitado": {"SolicitarPagamento"},
+    "PagamentoConfirmado": {"SolicitarPagamento"},
+    "PagamentoRecusado": {"SolicitarPagamento"},
+    "PagamentoExpirado": {"SolicitarPagamento"},
+    "PagamentoCancelado": {"EstornarPagamento"},
+    "PagamentoEstornado": {"EstornarPagamento", "SolicitarPagamento"},
+    "EstornoDePagamentoFalhou": {"EstornarPagamento"},
+    "ExecucaoAgendada": {"AgendarExecucao"},
+    "ExecucaoCancelada": {"CancelarExecucao"},
+    "ExecucaoIniciada": {"AgendarExecucao"},
+    "ExecucaoFinalizada": {"AgendarExecucao"},
+}
 
+
+def test_causation_id_dos_exemplos_aponta_a_causa() -> None:
+    # Evento aponta o comando da tabela acima, nunca null; comando aponta o
+    # evento que o disparou, ou null quando a causa e uma requisicao HTTP ou o
+    # prazo tecnico.
+    exemplos = {tipo: ler_json(EXEMPLOS / f"{tipo}.json") for tipo in CATALOGO}
+    tipo_por_id = {e["id"]: tipo for tipo, e in exemplos.items()}
+    eventos = {tipo for tipo, (kind, _, _) in CATALOGO.items() if kind == "evento"}
+
+    assert set(CAUSA_DO_EVENTO) == eventos
     for tipo, exemplo in exemplos.items():
-        causa = kind_por_id.get(exemplo["causation_id"])
-        if CATALOGO[tipo][0] == "evento":
-            assert causa == "comando", tipo
+        causa = tipo_por_id.get(exemplo["causation_id"])
+        if tipo in eventos:
+            assert causa in CAUSA_DO_EVENTO[tipo], tipo
         else:
-            assert exemplo["causation_id"] is None or causa == "evento", tipo
+            assert exemplo["causation_id"] is None or causa in eventos, tipo
 
 
 @pytest.mark.parametrize("tipo", CATALOGO)
