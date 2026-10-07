@@ -32,6 +32,7 @@
 | Rotas, borda e autenticação | [Seção 6](#6-apis-e-borda), [seção 8](#8-segurança), [ADR-038](../../adr/fase4/038-borda-e-comunicacao-sincrona.md) e [ADR-039](../../adr/fase4/039-autenticacao-entre-servicos.md) |
 | Estados dos agregados, modelos de dados e índices | [Seção 7](#7-dados) e [ADR-037](../../adr/fase4/037-banco-por-servico.md) |
 | Observabilidade | [Seção 9](#9-observabilidade) e [ADR-043](../../adr/fase4/043-observabilidade-distribuida.md) |
+| Operação da saga: saga parada, falha na compensação, retomada e redrive da DLQ | [Runbook da saga](../../../operacao/runbook-saga.md) |
 | Pipeline e implantação | [Seção 10](#10-implantação), [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md) e [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md) |
 | Parâmetros e variáveis de ambiente | [Seção 10.3](#103-parâmetros-e-variáveis-de-ambiente) |
 | Riscos e pontos em aberto | [Seção 11](#11-riscos-limitações-e-pontos-em-aberto) |
@@ -254,6 +255,7 @@ stateDiagram-v2
     COMPENSANDO --> COMPENSADA: última compensação confirmada, OS CANCELADA
     COMPENSANDO --> FALHA_NA_COMPENSACAO: 5 reenvios sem resposta ou EstornoDePagamentoFalhou
     FALHA_NA_COMPENSACAO --> COMPENSANDO: retomada pelo operador
+    FALHA_NA_COMPENSACAO --> EM_EXECUCAO: ExecucaoIniciada com CancelarExecucao parada (corrida no pivot)
     COMPENSADA --> [*]
 ```
 
@@ -338,11 +340,13 @@ As compensações rodam em sequência, cada uma esperando a resposta, nesta orde
 | `AGUARDANDO_PAGAMENTO` | cancelamento (antes de `PagamentoSolicitado` ou com o checkout aberto) ou prazo técnico esgotado | `EstornarPagamento`, `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` |
 | `AGUARDANDO_AGENDAMENTO` | cancelamento ou prazo técnico esgotado, com `AgendarExecucao` em voo | `CancelarExecucao`, `EstornarPagamento`, `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` |
 | `AGUARDANDO_INICIO` | cancelamento | `CancelarExecucao`, `EstornarPagamento`, `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` |
-| `EM_EXECUCAO` e depois | cancelamento | nenhuma: 409 (RN-029) |
+| `EM_EXECUCAO` e depois | cancelamento | nenhuma: 409 `TRANSICAO_STATUS_INVALIDA` (RN-029; [seção 6.1](#61-rotas-por-serviço)) |
 
 As esperas humanas (`AGUARDANDO_DIAGNOSTICO`, `AGUARDANDO_DECISAO`, `AGUARDANDO_INICIO` e o checkout aberto em `AGUARDANDO_PAGAMENTO`) não têm prazo técnico; a validade das esperas do cliente é do Billing (seção 4.6).
 
 `EstornarPagamento` compensa o T6 em qualquer estado do pagamento: em `SOLICITADO`, o Billing cancela a cobrança, o checkout deixa de valer, e a resposta é `PagamentoCancelado`; em `CONFIRMADO`, estorna no Mercado Pago e responde `PagamentoEstornado`; já cancelado ou estornado, republica o desfecho. Aprovação que chega depois do cancelamento, da expiração ou da recusa é estornada pelo próprio Billing, com motivo `pagamento_apos_encerramento`, e o orquestrador ignora `PagamentoConfirmado` em `COMPENSANDO` e `COMPENSADA` ([ADR-040](../../adr/fase4/040-integracao-mercado-pago.md)).
+
+A resposta ao `EstornarPagamento` se reconhece pelo `causation_id` ([seção 5.2](#52-envelope)). A instância guarda o `id` de cada envio do comando em voo, o original e os reenvios. Em `COMPENSANDO`, com o `EstornarPagamento` em voo, a resposta a ele é o `PagamentoCancelado`, o `PagamentoEstornado` (com qualquer `motivo`) ou o `EstornoDePagamentoFalhou` cujo `causation_id` é um desses ids: os dois primeiros concluem a compensação, e o terceiro leva a saga a `FALHA_NA_COMPENSACAO` ([seção 4.7](#47-falha-na-compensação-e-retomada)). O `PagamentoEstornado` do estorno automático leva o `id` do `SolicitarPagamento` e, em qualquer etapa, só atualiza o resumo do pagamento na OS, se houver. Nem o tipo nem o `motivo` bastariam: o estorno automático também chega como `PagamentoEstornado`, inclusive com a compensação pendente, e o Billing responde ao comando com `pagamento_apos_encerramento` quando a aprovação tardia já tinha sido estornada.
 
 ### 4.5 Contramedidas de isolamento
 
@@ -351,10 +355,10 @@ A saga não tem o "I" do ACID (SAGA Pattern, Aula 03). Contramedidas, detalhadas
 - Reler o valor (*reread value*): toda transição da OS e da instância é condicionada à versão lida (bloqueio otimista), e o perdedor de uma corrida, como aprovação contra cancelamento, relê e é reavaliado.
 - Visão pessimista (*pessimistic view*): a ordem das compensações tira a OS da fila antes de estornar.
 - Etapas explícitas: as etapas `AGUARDANDO_*` e a `MaquinaDeStatus` do p3 recusam comandos incompatíveis (o *semantic lock* de Richardson, fora das aulas).
-- Evento fora de ordem: o de etapa já passada, ou de saga encerrada, é ignorado com log; o de etapa à frente, como `ExecucaoIniciada` antes de `ExecucaoAgendada`, volta pela `.retry` até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta.
+- Evento fora de ordem: o de etapa já passada, ou de saga encerrada, é ignorado com log; o de etapa à frente, como `ExecucaoIniciada` antes de `ExecucaoAgendada`, volta pela `.retry` até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta. Dentro da mesma etapa vale o mesmo critério: `DiagnosticoConcluido` com a OS ainda `RECEBIDA` (antes do `DiagnosticoIniciado`) e `PagamentoConfirmado`, `PagamentoRecusado` ou `PagamentoExpirado` antes do `PagamentoSolicitado` também são adiantados e voltam pelo retry do consumidor; `DiagnosticoIniciado` com a OS já `EM_DIAGNOSTICO` e `PagamentoSolicitado` repetido são ignorados.
 - Comando repetido, pelo mesmo `id` ou pela mesma chave de negócio (o reenvio do orquestrador leva `id` novo), não repete o efeito e publica de novo a resposta registrada.
 - Lápide: a compensação que chega antes do comando original cria o registro já no estado final (seção 7.1); o comando atrasado, ao chegar, encontra esse registro pelo índice único por OS e é descartado.
-- Corrida no pivot: decide a transação da Execução. Se o início vencer, o `ExecucaoIniciada` que chega com só `CancelarExecucao` pendente devolve a saga a `EM_EXECUCAO`, e o histórico registra "cancelamento recusado: execução já iniciada".
+- Corrida no pivot: decide a transação da Execução. Se o início vencer, o `ExecucaoIniciada` que chega com só `CancelarExecucao` pendente devolve a saga a `EM_EXECUCAO`, o pedido de cancelamento guardado na OS é descartado, e o histórico registra "cancelamento recusado: execução já iniciada". Vale também em `FALHA_NA_COMPENSACAO` quando a compensação parada é o `CancelarExecucao`: nada foi desfeito, e a Execução não cancela execução iniciada, então ignorar o evento deixaria a OS parada, com uma retomada que nunca concluiria.
 - Reserva tudo ou nada, com o lock pessimista do p3 (RN-012, [ADR-008](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/008-bloqueio-pessimista-estoque.md)) sem o `NOWAIT`: `SELECT ... FOR UPDATE` bloqueante, limitado por `lock_timeout`, com os itens travados em ordem de `sku`, para que duas reservas nunca travem em ordem oposta. Quem perde a disputa pela última unidade recebe `ReservaDePecasFalhou`, e não um erro de lock.
 
 ### 4.6 Prazos
@@ -363,12 +367,15 @@ A saga não tem o "I" do ACID (SAGA Pattern, Aula 03). Contramedidas, detalhadas
 - Conciliação: a cada 30 segundos, o mesmo processo consulta no Mercado Pago os pagamentos em `SOLICITADO`, o que cobre webhook perdido e prova a integração real sem URL pública, no kind local com `MP_MODE=mercadopago` (ADR-040).
 - Diagnóstico e execução dependem do mecânico, sem prazo automático: a OS fica visível nas filas e pode ser cancelada antes do pivot.
 - Espera técnica: sem resposta em `SAGA_PRAZO_RESPOSTA_SEGUNDOS` (padrão 120), o processo `prazos` do OS reenvia o comando, com `id` novo e a mesma chave de negócio, uma vez a cada prazo vencido, até `SAGA_MAX_REENVIOS` reenvios (padrão 5); depois inicia a compensação, com o passo em voo no plano. Com os padrões, o comando original e os cinco reenvios cobrem 12 minutos.
+- O prazo só corre depois que o comando sai da outbox: vence `SAGA_PRAZO_RESPOSTA_SEGUNDOS` depois do `entregue_em` da linha, e o comando que ainda está pendente, com o relay ou o broker fora, não gasta reenvio.
+- Pausa: a cada ciclo, o `prazos` confere a fila `os.eventos` por declaração passiva. Sem consumidor nela (o consumidor do OS fora) ou com o broker fora do ar, o ciclo não reenvia nem esgota prazo, só registra em log, porque a resposta pode estar esperando na fila; quando a fila volta a ter consumidor, a saga segue de onde estava.
+- A janela de reenvio (12 minutos com os padrões) fica maior que a soma dos atrasos de retry do consumidor (1 + 5 + 15 + 60 + 300 = 381 s, [seção 10.3](#103-parâmetros-e-variáveis-de-ambiente)), e um teste da configuração do OS Service confere essa relação: com os atrasos nominais, a saga não desiste de um passo cujo comando o participante ainda está tentando processar.
 - Na compensação vale a mesma regra para cada comando, e, esgotados os reenvios, a saga vai a `FALHA_NA_COMPENSACAO`. O contador `reenvios` da instância recomeça a cada comando novo, inclusive ao entrar em `COMPENSANDO`.
-- Saga parada: o alerta da [seção 9](#9-observabilidade) acusa instância com prazo técnico vencido ou em `FALHA_NA_COMPENSACAO`, e o gauge `pytstop_saga_etapa_mais_antiga_segundos{etapa}` dá a idade da instância mais antiga em cada etapa.
+- Saga parada: o alerta da [seção 9](#9-observabilidade) acusa instância com prazo técnico vencido e não tratado, inclusive durante a pausa (gauge `pytstop_saga_prazo_vencido_segundos`), ou em `FALHA_NA_COMPENSACAO`; o gauge `pytstop_saga_etapa_mais_antiga_segundos{etapa}` dá a idade da instância mais antiga em cada etapa.
 
 ### 4.7 Falha na compensação e retomada
 
-Uma compensação que esgota os reenvios, ou um `EstornoDePagamentoFalhou`, leva a saga a `FALHA_NA_COMPENSACAO`. A sequência para nesse ponto: as compensações seguintes não são enviadas, e o operador encontra cada recurso como a compensação o deixou. Depois de um `EstornoDePagamentoFalhou` num cancelamento pós-pagamento, por exemplo:
+Uma compensação que esgota os reenvios, ou um `EstornoDePagamentoFalhou`, leva a saga a `FALHA_NA_COMPENSACAO`, e a instância registra a falha: `reenvios_esgotados` ou `estorno_recusado`. A sequência para nesse ponto: as compensações seguintes não são enviadas, e o operador encontra cada recurso como a compensação o deixou. Depois de um `EstornoDePagamentoFalhou` num cancelamento pós-pagamento, por exemplo:
 
 | Recurso | Estado |
 |---|---|
@@ -379,11 +386,13 @@ Uma compensação que esgota os reenvios, ou um `EstornoDePagamentoFalhou`, leva
 | Diagnóstico | `CONCLUIDO` |
 | OS | status anterior (`AGUARDANDO_EXECUCAO`); etapa `FALHA_NA_COMPENSACAO` no `GET /api/v1/ordens-de-servico/{id}`, e o histórico registra o estorno recusado |
 
-O alerta "Saga parada" dispara, e o operador segue o runbook `docs/operacao/runbook-saga.md` do `platform`:
+O alerta "Saga parada" dispara, e o operador segue o [runbook da saga](../../../operacao/runbook-saga.md), em `docs/operacao/` do `platform`:
 
-1. consulta `GET /api/v1/sagas/{ordem_id}`, que mostra a compensação pendente e o motivo;
+1. consulta `GET /api/v1/sagas/{ordem_id}`, que mostra a compensação pendente, o motivo e a falha;
 2. resolve a causa: no exemplo, faz o estorno pelo painel do Mercado Pago; se uma mensagem estiver numa `.dlq`, devolve-a à fila com `make -C platform redrive FILA=<fila>`;
 3. retoma com `POST /api/v1/sagas/{ordem_id}/compensacao` (admin), que reenvia a compensação pendente e segue o plano até `COMPENSADA`. Como o Billing consulta o pagamento antes de estornar, o estorno feito no painel é reconhecido e respondido com `PagamentoEstornado`, sem nova chamada ao provedor.
+
+Resposta que chega atrasada em `FALHA_NA_COMPENSACAO` é ignorada, como todo evento fora da etapa: quem retoma é o operador, e o participante responde ao reenvio com o desfecho registrado. A exceção é o `ExecucaoIniciada` com o `CancelarExecucao` parado, que devolve a saga a `EM_EXECUCAO` ([seção 4.5](#45-contramedidas-de-isolamento)).
 
 ### 4.8 Sequências
 
@@ -626,7 +635,13 @@ O comando que abre o T3, publicado em `pytstop.comandos` com a routing key `coma
 }
 ```
 
-`causation_id` é o `id` do `DiagnosticoConcluido` que gerou o comando. Propriedades AMQP: `message_id` (o `id`), `correlation_id`, `type` (o `tipo`), `user_id` (o usuário do serviço), `content_type=application/json`, `delivery_mode=2` e headers `traceparent`/`tracestate` (W3C Trace Context, como `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01`) e `x-tentativa`; metadados no cabeçalho e comando no corpo, como na Aula 02 de Microsserviços I.
+`causation_id` é o `id` do `DiagnosticoConcluido` que gerou o comando. A regra vale para todas as mensagens:
+
+- a resposta a um comando, inclusive o desfecho republicado para comando repetido, leva o `id` do comando que ela responde;
+- o evento espontâneo (decisão do cliente, webhook ou conciliação, prazo do Billing, ação do mecânico) leva o `id` do comando que abriu o fluxo, que o participante guarda com o registro: `SolicitarDiagnostico` no início e na conclusão do diagnóstico, `GerarOrcamento` na decisão e na expiração do orçamento, `SolicitarPagamento` na confirmação, recusa, expiração e no estorno automático do pagamento, `AgendarExecucao` no início e no fim da execução;
+- o comando do orquestrador leva o `id` do evento que o disparou, ou `null` quando a causa é uma requisição HTTP (abertura, cancelamento, retomada, eliminação de dados) ou o prazo técnico (reenvio ou esgotamento).
+
+Evento nunca leva `null`: é pelo `causation_id` que o orquestrador reconhece a resposta ao comando em voo ([seção 4.4](#44-pivot-e-plano-de-compensação)). Propriedades AMQP: `message_id` (o `id`), `correlation_id`, `type` (o `tipo`), `user_id` (o usuário do serviço), `content_type=application/json`, `delivery_mode=2` e headers `traceparent`/`tracestate` (W3C Trace Context, como `00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01`) e `x-tentativa`; metadados no cabeçalho e comando no corpo, como na Aula 02 de Microsserviços I.
 
 ### 5.3 Catálogo de comandos e eventos
 
@@ -672,7 +687,8 @@ A routing key deriva do nome, em snake_case: `GerarOrcamento` → `comando.billi
 - `link_decisao` e `checkout_url` são URLs `http` ou `https` sem usuário embutido e carregam token: nunca vão para log nem para atributo de span.
 - Para peça, o `codigo` de `itens[]` e de `linhas[]` é o `sku`; serviço usa o código da tabela de preços. Código de serviço e `sku` têm no máximo 50 caracteres nos três serviços e nos schemas de `contratos/`. O OS guarda os itens do `DiagnosticoConcluido` na instância da saga e monta `ReservarPecas` com os de tipo `peca`.
 - O participante localiza o recurso a compensar pelo `ordem_id` quando o comando chega sem `orcamento_id` ou `pagamento_id`, o caso do passo em voo.
-- Nos comandos de compensação, `motivo` é um código da enumeração de `pytstop_saga_compensacoes_total` ([seção 9](#9-observabilidade)); o texto que o atendente escreve no cancelamento fica só no histórico da OS.
+- Nos comandos de compensação, `motivo` é um código da enumeração de `pytstop_saga_compensacoes_total` ([seção 9](#9-observabilidade)); o texto que o atendente escreve no cancelamento fica só na OS ([seção 7.2](#72-os-service-postgresql-16)).
+- `AgendarExecucao` sai sempre com `prioridade: normal` nesta fase: a OS não tem dado que justifique `alta`, e nenhuma rota escolhe a prioridade. O schema mantém `alta`, que a fila da Execução já atende antes de `normal` ([seção 7.3](#73-execution-service-postgresql-16)), para quando houver regra.
 - Dados pessoais: as mensagens não levam nome, documento nem contato do cliente, e o OS, dono desses dados, envia as notificações. A exceção é a placa, no retrato do veículo que a Execução guarda para o mecânico achar o carro no pátio; na eliminação de dados da LGPD, o OS envia `AnonimizarVeiculo`, e a Execução troca a placa por `ANONIMIZADO:{veiculo_id}`, o marcador do p3 (`src/cliente_veiculo/dominio/placa_anonimizada.py`). Texto livre (`descricao_problema`, `observacoes`, `motivo`) nunca vai para log.
 
 ### 5.4 Garantias de entrega
@@ -680,7 +696,7 @@ A routing key deriva do nome, em snake_case: `GerarOrcamento` → `comando.billi
 Em todos os serviços, a outbox entra na transação do efeito: no PostgreSQL, o relay evolui o do p3 ([ADR-022](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/022-transactional-outbox-relay.md)), com *publisher confirms*; no MongoDB, faz *polling* com *claim* atômico, e a transação multidocumento exige o replica set. O consumidor grava o `id` da mensagem em `mensagens_processadas` na transação do efeito (o "Idempotent Event Handler" da Aula 05 de Microsserviços I), e o retry segue a [seção 5.1](#51-topologia). A entrega é pelo menos uma vez, e o consumidor idempotente faz cada efeito acontecer uma vez (RN-028). O detalhe está no ADR-036; três regras completam o desenho:
 
 - Comando repetido, pelo mesmo `id` ou pela mesma chave de negócio, republica a resposta registrada ([seção 4.5](#45-contramedidas-de-isolamento)).
-- Mensagem esgotada vai para a `.dlq` e dispara alerta; corrigida a causa, volta à fila com `make -C platform redrive FILA=<fila>`, conforme o runbook `docs/operacao/runbook-saga.md` do `platform`.
+- Mensagem esgotada vai para a `.dlq` e dispara alerta; corrigida a causa, volta à fila com `make -C platform redrive FILA=<fila>`, conforme o [runbook da saga](../../../operacao/runbook-saga.md) do `platform`.
 - Retenção: as linhas entregues da outbox são apagadas depois de 7 dias e as de `mensagens_processadas` depois de 30, mais que os 7 dias em que uma mensagem pode esperar o redrive na `.dlq`.
 
 ### 5.5 Contratos
@@ -708,9 +724,20 @@ Papel exigido em cada rota: matriz única do [ADR-039](../../adr/fase4/039-auten
 | `POST /api/v1/ordens-de-servico` (abre a OS e inicia a saga); `GET /api/v1/ordens-de-servico` (fila por prioridade de status) | JWT |
 | `GET /api/v1/ordens-de-servico/{id}` (com resumo de orçamento, pagamento e etapa); `GET .../{id}/historico` (status, passos da saga, ator e motivo) | JWT |
 | `GET /api/v1/ordens-de-servico/metricas` (tempo médio por status, calculado do histórico; RF-008 da fase 1) | JWT (admin) |
-| `POST /api/v1/ordens-de-servico/{id}/cancelamento` (202 com a etapa; 409 depois do pivot); `POST .../{id}/entrega` (T10) | JWT |
-| `GET /api/v1/sagas/{ordem_id}`; `POST /api/v1/sagas/{ordem_id}/compensacao` (retoma a compensação suspensa) | JWT (admin) |
+| `POST /api/v1/ordens-de-servico/{id}/cancelamento` (202 com a etapa; 409 depois do pivot; respostas abaixo); `POST .../{id}/entrega` (T10) | JWT |
+| `GET /api/v1/sagas/{ordem_id}`; `POST /api/v1/sagas/{ordem_id}/compensacao` (retoma a compensação suspensa; respostas abaixo) | JWT (admin) |
 | `POST /api/v1/publico/acompanhamento` (placa e documento no corpo, nunca na URL; documento validado pelo módulo 11 e placa pelo formato antes da consulta, com o mesmo 404 para dado inválido e para OS não encontrada) | sem JWT |
+
+Respostas do cancelamento e da retomada, conforme a etapa da saga. O 409 usa o código `TRANSICAO_STATUS_INVALIDA`, o mesmo que o OS já devolve às transições de status recusadas, com mensagem própria:
+
+| Pedido | Etapa | Resposta |
+|---|---|---|
+| cancelamento | `AGUARDANDO_*` (antes do pivot) | 202 com a OS e a etapa `COMPENSANDO`; a compensação começa ([seção 4.4](#44-pivot-e-plano-de-compensação)) |
+| cancelamento, inclusive repetido | `COMPENSANDO` ou `FALHA_NA_COMPENSACAO` | 202 com a etapa atual, sem novo efeito: a compensação já começou |
+| cancelamento | `EM_EXECUCAO` ou `CONCLUIDA` | 409, "Cancelamento recusado: execução já iniciada" (RN-029) |
+| cancelamento | `COMPENSADA` | 409, "Ordem já cancelada" |
+| retomada | `FALHA_NA_COMPENSACAO` | 202 com a etapa `COMPENSANDO`; a compensação pendente sai de novo, com `id` novo, prazo novo e contador de reenvios zerado ([seção 4.7](#47-falha-na-compensação-e-retomada)) |
+| retomada | qualquer outra | 409 |
 
 | Billing Service (`/billing`) | Acesso |
 |---|---|
@@ -818,9 +845,11 @@ erDiagram
     sagas {
         uuid ordem_id PK, FK
         varchar etapa
-        jsonb passos "linha do tempo da saga"
+        varchar motivo "código da compensação"
+        varchar falha "reenvios_esgotados ou estorno_recusado"
+        jsonb passos "linha do tempo da saga, só com códigos"
         jsonb passos_concluidos
-        jsonb comando_em_voo
+        jsonb comando_em_voo "comando com prazo técnico: tipo, dados e id de cada envio"
         jsonb plano_compensacao
         jsonb itens "do DiagnosticoConcluido"
         int reenvios
@@ -854,8 +883,9 @@ erDiagram
 - As tabelas de cliente, veículo, consentimento, usuário e token vêm do p3 sem mudança.
 - A OS perde o orçamento em JSONB e ganha versão otimista e o resumo de orçamento e pagamento copiado dos eventos, para responder sem chamar o Billing.
 - `historico_status_ordem` só recebe inserções, na transação de cada transição (RF-030), com o ator: o `sub` do JWT ou o processo. A única exceção é da LGPD: a eliminação de dados do cliente reescreve o `motivo`, texto livre, com o marcador de anonimização, como faz com a descrição do problema e o motivo de cancelamento da OS.
-- A instância da saga guarda a linha do tempo dos passos, que o `GET .../historico` junta às transições de status, o plano de compensação, o comando em voo, os itens do diagnóstico e o `traceparent` da mensagem que a pôs em espera.
-- A outbox tem dois destinos: `rabbitmq`, para os comandos, e `email`, para as notificações ao cliente, que o relay entrega por SMTP como no p3, separadas da mensageria. Falha de SMTP não trava a saga.
+- A instância da saga guarda a linha do tempo dos passos, que o `GET .../historico` junta às transições de status, o plano de compensação, o comando em voo, que só existe para comando com prazo técnico e não tem texto livre, com o `id` de cada envio (o original e os reenvios, com os quais a resposta casa pelo `causation_id`), os itens do diagnóstico e o `traceparent` da mensagem que a pôs em espera. A posição na fila que chega no `ExecucaoAgendada` fica só no passo desse evento; a fila atual é a do `GET /api/v1/fila` da Execução.
+- A saga guarda só códigos (etapa, motivo da compensação, falha), nunca texto livre. O texto que o atendente escreve no cancelamento vai para `ordens_de_servico.motivo_cancelamento` já no pedido, antes de a compensação terminar, e passa ao histórico quando a OS chega a `CANCELADA` (na corrida do pivot, o pedido é descartado); assim a eliminação de dados da LGPD o alcança sem tocar `sagas`.
+- A outbox tem dois destinos: `rabbitmq`, para os comandos, e `email`, para as notificações ao cliente, que o relay entrega por SMTP como no p3, separadas da mensageria. Falha de SMTP não trava a saga, porque a ordem do relay vale por destino: um e-mail em backoff segura só os e-mails seguintes da mesma OS, nunca os comandos dela.
 
 ### 7.3 Execution Service (PostgreSQL 16)
 
@@ -1015,11 +1045,25 @@ A outbox de todos os serviços guarda o `traceparent` de quem a gravou; o relay 
 
 O `correlation_id` vai como atributo dos spans de mensagem e em todo log JSON, com `trace_id`, `span_id` e `request_id` e sem PII (dado pessoal identificável); uma busca por ele no Loki traz a OS nos três serviços. Os laços ociosos (poll do relay, relay do MongoDB, `prazos`) só abrem span quando há trabalho.
 
-Métricas novas levam o prefixo `pytstop_`; as herdadas do p3 mantêm o nome (`outbox_pendentes`, `outbox_dead`, `http_request_duration_seconds`), para reaproveitar regras e painéis. As da saga são `pytstop_saga_iniciadas_total`, `pytstop_saga_finalizadas_total{resultado}`, `pytstop_saga_compensacoes_total{motivo}`, `pytstop_saga_etapa_duracao_segundos{etapa}`, `pytstop_saga_ativas{etapa}` e `pytstop_saga_etapa_mais_antiga_segundos{etapa}`, e o `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. Mensageria, Mercado Pago, circuit breaker, webhook, JWKS, Kong e bancos têm métricas próprias, com os nomes no ADR-043.
+Métricas novas levam o prefixo `pytstop_`; as herdadas do p3 mantêm o nome (`outbox_pendentes`, `outbox_dead`, `http_request_duration_seconds`), para reaproveitar regras e painéis. As da saga:
+
+| Métrica | Tipo e labels | Quem calcula |
+|---|---|---|
+| `pytstop_saga_iniciadas_total` | contador | api, na abertura da OS |
+| `pytstop_saga_finalizadas_total{resultado}` | contador; `resultado` em `concluida` ou `compensada` | consumidor |
+| `pytstop_saga_compensacoes_total{motivo}` | contador | quem inicia a compensação (consumidor, api ou `prazos`) |
+| `pytstop_saga_etapa_duracao_segundos{etapa}` | histograma | quem tira a saga da etapa |
+| `pytstop_saga_reenvios_total{comando}` | contador; `comando` é o tipo do comando reenviado | `prazos` |
+| `pytstop_saga_prazos_esgotados_total{comando}` | contador | `prazos` |
+| `pytstop_saga_ativas{etapa}` | gauge: instâncias em cada etapa não final | coletor da API |
+| `pytstop_saga_etapa_mais_antiga_segundos{etapa}` | gauge: idade da instância mais antiga em cada etapa | coletor da API |
+| `pytstop_saga_prazo_vencido_segundos` | gauge: maior atraso entre as instâncias com prazo técnico vencido, zero sem atraso | coletor da API |
+
+Os três gauges saem de uma consulta à tabela `sagas` que o coletor da API faz na hora da raspagem, e por isso continuam certos com o `prazos` fora do ar. O label `etapa` leva o nome da etapa em minúsculas (`falha_na_compensacao`), e o `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. Mensageria, Mercado Pago, circuit breaker, webhook, JWKS, Kong e bancos têm métricas próprias, com os nomes no ADR-043.
 
 Coleta: o Prometheus raspa por pod, com `kubernetes_sd`, a porta `metrics` de todo Deployment nos namespaces `pytstop-*` e no da plataforma, com o label `processo` (api, relay, consumidor, `prazos`).
 
-Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do `platform`, documentados painel a painel: Saga, Mensageria, Serviços (taxa, erros e duração, o RED, mais recursos e respostas 401, 403 e 429 do Kong) e Negócio (inclusive o tempo médio por status do RF-008). Alertas, com níveis de aviso e de alerta (Microsserviços II, Aula 06): mensagem em DLQ, compensações acima do normal, saga parada, 5xx acima de 1%, circuit breaker aberto, outbox parada (`outbox_pendentes` acima de zero por 5 minutos), assinatura inválida no webhook e falha na busca do JWKS. Saga parada é instância com prazo técnico vencido (`prazo_resposta_em` no passado), em qualquer etapa, ou em `FALHA_NA_COMPENSACAO`. Expressões e janelas ficam no ADR-043.
+Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do `platform`, documentados painel a painel: Saga, Mensageria, Serviços (taxa, erros e duração, o RED, mais recursos e respostas 401, 403 e 429 do Kong) e Negócio (inclusive o tempo médio por status do RF-008). Alertas, com níveis de aviso e de alerta (Microsserviços II, Aula 06): mensagem em DLQ, compensações acima do normal, saga parada, 5xx acima de 1%, circuit breaker aberto, outbox parada (`outbox_pendentes` acima de zero por 5 minutos), assinatura inválida no webhook e falha na busca do JWKS. Saga parada é `pytstop_saga_prazo_vencido_segundos` acima de 60 s, dois ciclos do `prazos` (instância com prazo técnico vencido e não tratado, em qualquer etapa), ou alguma instância em `FALHA_NA_COMPENSACAO`; o procedimento está no [runbook da saga](../../../operacao/runbook-saga.md). Expressões e janelas ficam no ADR-043.
 
 ## 10. Implantação
 
@@ -1096,7 +1140,7 @@ Nomes em maiúsculas são variáveis de ambiente, definidas no ConfigMap ou no S
 
 | Parâmetro | Padrão | Unidade | Serviço | Efeito |
 |---|---|---|---|---|
-| `SAGA_PRAZO_RESPOSTA_SEGUNDOS` | 120 | s | OS (`prazos`) | espera por resposta a comando antes de cada reenvio |
+| `SAGA_PRAZO_RESPOSTA_SEGUNDOS` | 120 | s | OS (`prazos`) | espera por resposta a comando, contada da saída da outbox, antes de cada reenvio |
 | `SAGA_MAX_REENVIOS` | 5 | reenvios | OS (`prazos`) | esgotados, compensa; numa compensação, vai a `FALHA_NA_COMPENSACAO` |
 | `ORCAMENTO_VALIDADE_HORAS` | 72 | h | Billing | validade do orçamento e do link de decisão |
 | `PAGAMENTO_VALIDADE_MINUTOS` | 60 | min | Billing | validade da cobrança e da preferência no Mercado Pago |
@@ -1135,8 +1179,8 @@ Os limites de rate limit por rota estão no ADR-038, e os requests e limits por 
 | 2 | Webhook exige URL pública com HTTPS, que o kind não tem | no k3s, hostname e certificado ([seção 10.2](#102-pipeline-e-deploy)); no kind, a conciliação a cada 30 s cobre a confirmação |
 | 3 | Bancos em StatefulSet: sem backup automatizado nem alta disponibilidade; replica set de um nó só para transações | custo zero e paridade kind/k3s; evoluir para banco gerenciado (DBaaS, banco de dados como serviço, Aula 06 de Data Engineering) troca connection string e manifestos, não código |
 | 4 | Consistência eventual: logo após a decisão no Billing, a OS ainda mostra o status anterior, e os resumos no OS são cópias | a consulta mostra a etapa da saga; E2E e collection esperam o evento antes de afirmar o status |
-| 5 | Orquestrador como ponto único de falha (SAGA Pattern, Aulas 02 e 05) | estado persistido, réplicas e filas duráveis: com o OS fora, as mensagens esperam e a saga segue na volta |
-| 6 | Pagamento aprovado no provedor depois do cancelamento, da expiração ou da recusa | o Billing estorna sozinho e publica `PagamentoEstornado` com motivo `pagamento_apos_encerramento`; a saga encerrada ignora o evento, e o caso aparece em `pytstop_pagamentos_estornados_total{motivo}` |
+| 5 | Orquestrador como ponto único de falha (SAGA Pattern, Aulas 02 e 05) | estado persistido, réplicas e filas duráveis: com o OS fora, as mensagens esperam e a saga segue na volta, porque o `prazos` não reenvia nem esgota prazo com `os.eventos` sem consumidor ([seção 4.6](#46-prazos)) |
+| 6 | Pagamento aprovado no provedor depois do cancelamento, da expiração ou da recusa | o Billing estorna sozinho e publica `PagamentoEstornado` com motivo `pagamento_apos_encerramento`; a saga não muda de etapa por ele, só atualiza o resumo do pagamento na OS ([seção 4.4](#44-pivot-e-plano-de-compensação)), e o caso aparece em `pytstop_pagamentos_estornados_total{motivo}` |
 | 7 | TTL por mensagem numa `.retry` única só expira na cabeça da fila: uma espera de 300 s atrasa as de 1 s atrás dela | aceito no volume de uma oficina; evolução: uma fila de retry por nível de atraso |
 | 8 | Um serviço com acesso ao broker poderia forjar mensagem de outro | usuário por serviço, permissão só nas próprias routing keys e `user_id` conferido pelo consumidor ([seção 5.1](#51-topologia)) |
 | 9 | Billing e Execução dependem do JWKS do OS | cache de 10 minutos; acabado o cache com o OS fora, respondem 503 com `Retry-After`, não 401, e `pytstop_jwks_falhas_total` acusa |
@@ -1178,7 +1222,7 @@ Também aceitos:
 | Reenvio | nova emissão de um comando pelo orquestrador quando o prazo técnico vence |
 | Tentativa | nova entrega de uma mensagem pelo retry do consumidor (header `x-tentativa`) |
 | Recusa | `rejected` do Mercado Pago para um pagamento em `SOLICITADO`, contada no campo `recusas` até `PAGAMENTO_MAX_RECUSAS`; não é tentativa |
-| Prazo técnico | espera máxima por resposta automática a um comando (`SAGA_PRAZO_RESPOSTA_SEGUNDOS`) |
+| Prazo técnico | espera máxima por resposta automática a um comando (`SAGA_PRAZO_RESPOSTA_SEGUNDOS`), contada da saída do comando da outbox |
 | Conciliação | consulta periódica do Billing ao Mercado Pago pelos pagamentos em `SOLICITADO` |
 | Fila de diagnóstico, fila de execução | listas de trabalho da oficina na Execução; as filas do RabbitMQ aparecem sempre pelo nome (`os.eventos`, `billing.comandos`, `execucao.comandos`) |
 
