@@ -42,46 +42,21 @@ jobs:
     # para o deploy-kind.
     runs-on: ubuntu-24.04
     timeout-minutes: 30
-    env:
-      OVERLAY: kind-ci
     steps:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - name: kind e kubectl (versao e sha256 fixados)
-        run: scripts/ci/instalar-ferramentas.sh
-      - name: Cluster kind (make kind-up)
-        run: scripts/medir-kind.sh etapa kind-up && make kind-up
-      - name: Segredos gerados e plataforma no overlay kind-ci (make deploy)
-        run: scripts/medir-kind.sh etapa deploy && make deploy
+      # O mesmo script do deploy-kind dos servicos: kind e kubectl fixados,
+      # make kind-up e make deploy no overlay kind-ci, com as etapas medidas.
+      - name: kind e kubectl fixados, cluster e plataforma no overlay kind-ci
+        run: scripts/ci/deploy-kind.sh
       - name: Smoke da plataforma (make smoke)
-        run: scripts/medir-kind.sh etapa smoke && make smoke
+        run: scripts/medir-kind.sh etapa smoke && make smoke OVERLAY=kind-ci
       - name: Minutos e pico de memoria no summary
         if: always()
         run: scripts/medir-kind.sh resumo
-      # Melhor esforco: um comando que falha nao esconde os seguintes.
-      - name: Pods, eventos e logs dos pods com problema
-        if: failure()
-        run: |
-          set +e
-          K="kubectl --context kind-pytstop-p4"
-          echo "::group::pods"
-          $K get pods -A -o wide
-          echo "::endgroup::"
-          echo "::group::events (last 100)"
-          $K get events -A --sort-by=.lastTimestamp | tail -n 100
-          echo "::endgroup::"
-          # Pod que nao terminou com sucesso e tem container nao pronto, que
-          # reiniciou ou que nem chegou a ser criado.
-          $K get pods -A -o json | jq -r '.items[]
-            | select(.status.phase != "Succeeded")
-            | select(.status.containerStatuses == null
-                or any(.status.containerStatuses[]; .ready == false or .restartCount > 0))
-            | "\(.metadata.namespace) \(.metadata.name)"' \
-          | while read -r ns pod; do
-              echo "::group::$ns/$pod"
-              $K -n "$ns" describe pod "$pod" | tail -n 40
-              $K -n "$ns" logs "$pod" --all-containers --tail=200
-              $K -n "$ns" logs "$pod" --all-containers --previous --tail=100 2>/dev/null
-              echo "::endgroup::"
-            done
+      # Tambem no cancelamento, inclusive o do timeout-minutes, em que um
+      # pedido pendurado gasta o job inteiro.
+      - name: Pods, eventos e logs (diagnostico)
+        if: failure() || cancelled()
+        run: scripts/ci/diagnostico.sh
