@@ -239,7 +239,7 @@ docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl -q set_pa
   "{\"src-uri\": \"amqp://\", \"src-queue\": \"$FILA.dlq\", \"dest-uri\": \"amqp://\", \"dest-queue\": \"$FILA\", \"src-delete-after\": \"queue-length\"}"
 ```
 
-Resultado esperado: a linha `after:` do `make redrive` mostra a `<fila>.dlq` em 0, e o alerta "DLQ com mensagens" resolve na avaliação seguinte, em cerca de 1 minuto. No compose, `make status` não existe; confira com `docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl -q list_queues name messages`, que atualiza a contagem das filas quorum a cada 5 s. Se a DLQ voltar a encher, veja [Quando pedir ajuda](#quando-pedir-ajuda).
+Resultado esperado: a linha `after:` do `make redrive` mostra a `<fila>.dlq` em 0, e o alerta "DLQ com mensagens" resolve na avaliação seguinte, em cerca de 1 minuto. No compose, `make status` não serve, porque lê o cluster kind; confira com `docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl -q list_queues name messages`, que atualiza a contagem das filas quorum a cada 5 s. Se a DLQ voltar a encher, veja [Quando pedir ajuda](#quando-pedir-ajuda).
 
 ## 5. O trace e os logs pelo `correlation_id`
 
