@@ -8,6 +8,11 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Recent decisions
 
+- 2026-10-07 - `prazo_resposta_em` fica nulo enquanto o comando esta na outbox e vale `entregue_em` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS` depois da entrega, gravado pelo relay; o gauge `pytstop_saga_prazo_vencido_segundos` conta dessa coluna, e comando preso na outbox e sinal da "Outbox parada", nao da "Saga parada" - o gauge e o alerta dependiam da coluna sem que a RFC dissesse quando ela e gravada - RFC-004 4.6 e 7.2
+- 2026-10-07 - Ids do comando em voo: o original, os reenvios por prazo e o envio da retomada; o conjunto recomeca a cada comando novo - a resposta tardia a qualquer envio do mesmo comando e resposta valida, porque a chave de negocio e a mesma - RFC-004 4.4, ADR-035
+- 2026-10-07 - Comando recusado pelo dominio do participante: descompasso de estado recebe ack, log `command_ignored` e `resultado="ignorada"`, sem resposta nem DLQ; falha de negocio com evento no contrato publica o evento; falha permanente sem evento vai para a DLQ, e o prazo tecnico compensa - o redrive devolveria o descompasso ao mesmo consumidor - ADR-036, RFC-004 5.4
+- 2026-10-07 - Regra "Saga parada" (`pytstop-saga-parada`) ja em `alertas.yaml`: uma consulta com `or` entre as condicoes e `or vector(0)` no fim, em OK ate o OS Service exportar as metricas; o `make manifests` prova cada condicao no promtool com a consulta tirada do arquivo (`scripts/alerta-saga-parada.sh`) - ADR-043
+- 2026-10-07 - `etapa` gravada em minusculas, como o `status` da OS, na coluna, na API e no label das metricas; a RFC escreve os nomes em maiusculas - RFC-004 7.2
 - 2026-10-06 - Runbook da saga em `docs/operacao/runbook-saga.md`: achar a saga parada (alerta, metricas, `GET /api/v1/sagas/{ordem_id}`), o que significa cada `falha` (`estorno_recusado`, `reenvios_esgotados`), retomada, redrive da DLQ e trace por `correlation_id` - RFC-004 4.7, ADR-035 e ADR-036 ja o citavam sem o arquivo existir - RFC-004 4.7
 - 2026-10-06 - Posicao na fila do `ExecucaoAgendada` fica so no passo da saga; summary do AsyncAPI e descricao do schema corrigidos - a fila atual e a da Execucao (`GET /api/v1/fila`), e o modelo do OS nao tem coluna para ela - RFC-004 7.2
 - 2026-10-06 - Texto do pedido de cancelamento em `ordens_de_servico.motivo_cancelamento`, gravado ja no pedido; a saga guarda so codigos (etapa, motivo, falha) - texto livre na saga ficaria fora da eliminacao de dados da LGPD - RFC-004 7.2
@@ -39,6 +44,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Discovered conventions
 
+- 2026-10-07 - Comando de runbook roda em bash e em zsh (o shell padrao do macOS): funcao no lugar de variavel com comando (`$K` com espaco nao separa palavras no zsh), placeholder so em comentario (`ORDEM_ID=<uuid>` vira redirecionamento) e recurso que o manifesto ainda nao nomeou achado por chave, label ou imagem
 - 2026-10-06 - Os exemplos de `contratos/exemplos/` contam uma saga so: evento leva no `causation_id` o id do exemplo do comando que o causou (o respondido ou o que abriu o fluxo); `test_causation_id_dos_exemplos_aponta_a_causa` confere so o par evento -> comando e comando -> evento ou null
 - 2026-10-06 - Filtro pelo label `queue` (`=~` ou `!~`) em dashboard ou alerta entra em `FILTRO_DE_FILA` (`tests/test_observabilidade.py`), que compara as filas selecionadas com os grupos da topologia (destinos de cada exchange no definitions.json); os atrasos do retry ficam amarrados entre `ATRASOS` (test_contratos.py), a linha "atrasos das filas de retry" da RFC 10.3 e o header `x-tentativa` do AsyncAPI
 - 2026-10-06 - `make smoke` sai com status 1 quando uma prova nao vale (linha `CHECK FAILED`, o script segue ate o fim e resume no final): borda e admin em 404, `%2F` em 404, login chegando a 429, nenhuma linha com o token no Loki, regras do Grafana todas carregadas e saudaveis; as linhas do Loki desta execucao se acham por `run=<marca>` na requisicao
@@ -96,6 +102,8 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Tech debt / TODO
 
+- 2026-10-07 - Correcao da entrada MEDIUM do runbook da saga (abaixo): a regra "Saga parada" ja esta em `alertas.yaml`; "Compensacoes acima do normal" e "Outbox parada" entram com as metricas dos servicos, e o topo do runbook diz a partir de que versao do OS Service ele vale
+- 2026-10-07 - MEDIUM - O consumidor do Billing (PR de mensageria) manda `DomainException` para a DLQ; pelo ADR-036, descompasso de estado e ack com `command_ignored`, sem DLQ - alinhar no Billing Service
 - 2026-10-06 - MEDIUM - `docs/operacao/runbook-saga.md` cita rotas, metricas, logs e a tabela `sagas` do OS que entram com a saga (RFC-004 4.7, 6.1 e 9): conferir cada comando no kind quando o OS implantar a saga; as regras "Saga parada" e "Compensacoes acima do normal" entram em `observabilidade/grafana/alertas.yaml` junto com as metricas do OS - runbook, secao 1
 - 2026-10-06 - Correcao da entrada LOW do overlay `kind-ci`, exportadores e runbook (abaixo): o runbook da saga ja existe, em `docs/operacao/runbook-saga.md`
 - 2026-10-06 - Resolvida a divida "Retry com TTL por mensagem numa fila so tem head-of-line" (mais abaixo): uma fila de retry por atraso - ADR-036
@@ -111,6 +119,8 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Review lessons
 
+- 2026-10-07 - Regra espelhada por extenso em RFC, ADRs, README, schemas e exemplos divergiu duas vezes (a correlacao pelo `causation_id` e o "so no historico da OS" de cinco schemas): a regra fica inteira num lugar (a RFC e a descricao do campo), os outros levam uma frase e o link, e mudar a regra comeca por buscar todos os espelhos - PR #6
+- 2026-10-07 - Runbook escrito sem rodar trazia variavel que nunca era obtida, `psql` sem pod e um desfecho errado do consumidor (`CancelarExecucao` de execucao iniciada voltando a DLQ): comando de runbook so entra depois de rodar no kind ou num container avulso, e o desfecho de cada caso se confere no codigo do consumidor - PR #6
 - 2026-10-07 - A varredura que trocou a lista de chaves recusadas deixou de gerar o atraso sem o `s` (`.retry.1`), e o mutante `|^...\.retry\.1\z` passou na suite: ao trocar enumeracao por varredura, cada caso da lista antiga continua coberto, e a mutacao sistematica se refaz depois da troca - PR #4
 - 2026-10-06 - Head-of-line do retry com TTL por mensagem entrou como divida LOW ("so com volume"), mas basta uma mensagem esgotar as tentativas: a copia de 300 s segura as primeiras tentativas de todas atras dela, e o prazo tecnico da saga (120 s) reenviaria comandos ainda em retry. Limite conhecido do broker so vira "aceito" depois de medido com o pior caso do proprio desenho - PR #4
 - 2026-10-06 - O smoke so imprimia e saia 0 com `/os/metrics` aberto, sem 429 ou com token no Loki, e o README e o MEMORY diziam que ele "prova": script de verificacao tem de sair com status diferente de zero quando a prova nao vale, e cada prova se confirma sabotando o alvo (desligar o plugin, subir o limite, quebrar a mascara, derrubar o Prometheus) e vendo o `CHECK FAILED` certo; contar linha no Loki sem esperar as desta execucao deixa um vazamento a caminho passar calado - PR #2
