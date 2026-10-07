@@ -34,14 +34,6 @@ set -euo pipefail
 K="kubectl --context ${KUBE_CONTEXT:-kind-pytstop-p4}"
 NS="${NAMESPACE:-pytstop-plataforma}"
 
-# existe <namespace> <secret>. Erro ao falar com o cluster aborta, em vez de
-# virar "nao existe" e trocar senhas que nao foram lidas.
-existe() {
-  local nome
-  nome=$($K -n "$1" get secret "$2" --ignore-not-found -o name) || exit 1
-  [ -n "$nome" ]
-}
-
 # Hexadecimal: entra na URL AMQP, no JSON e no YAML sem escape.
 senha() { openssl rand -hex 24; }
 
@@ -51,13 +43,29 @@ mascara() {
   for valor in "$@"; do echo "::add-mask::$valor"; done
 }
 
-# ausente <namespace> <secret>: status 0 se a fonte ainda nao existe; se ja
-# existe, avisa que ela fica como esta.
+# ausente <namespace> <secret> <chave>...: status 0 se a fonte ainda nao
+# existe. A que existe com todas as chaves fica como esta; sem uma delas, o
+# script para, porque nunca reescreve uma fonte e o pod que a le nao subiria.
+# Erro ao falar com o cluster aborta, em vez de virar "nao existe" e trocar
+# senhas que nao foram lidas.
 ausente() {
-  if existe "$1" "$2"; then
-    echo "secret $1/$2 already exists: kept"
-    return 1
-  fi
+  local ns=$1 nome=$2 atual chave
+  shift 2
+  atual=$($K -n "$ns" get secret "$nome" --ignore-not-found \
+    -o "go-template={{.metadata.name}}:{{range \$chave, \$valor := .data}} {{\$chave}}{{end}}") || exit 1
+  [ -n "$atual" ] || return 0
+  for chave in "$@"; do
+    case "$atual " in
+      *" $chave "*) ;;
+      *)
+        echo "secret $ns/$nome has no key $chave: add it in the format of the README" \
+          "(Segredos gerados); the script never rewrites a source that exists" >&2
+        exit 1
+        ;;
+    esac
+  done
+  echo "secret $ns/$nome already exists: kept"
+  return 1
 }
 
 # cria <namespace> <secret> [<app>]: cria a fonte com as chaves do stringData
@@ -88,7 +96,8 @@ sem_volume() {
   exit 1
 }
 
-if ausente "$NS" rabbitmq-credenciais; then
+if ausente "$NS" rabbitmq-credenciais admin-usuario admin-senha senha-os senha-billing \
+  senha-execucao admin.json; then
   admin=$(senha)
   os=$(senha)
   billing=$(senha)
@@ -120,10 +129,6 @@ for usuario in os billing execucao; do
   servico="pytstop-$usuario"
   # A senha que o Job rabbitmq-usuarios aplica ao usuario no broker.
   senha_usuario=$($K -n "$NS" get secret rabbitmq-credenciais -o "jsonpath={.data.senha-$usuario}" | base64 -d)
-  if [ -z "$senha_usuario" ]; then
-    echo "secret $NS/rabbitmq-credenciais has no key senha-$usuario" >&2
-    exit 1
-  fi
   mascara "$senha_usuario"
   # Vai crua na URL e no YAML, entao so letras e digitos. A de demonstracao,
   # de um cluster criado antes das senhas geradas, tem hifen e para aqui.
@@ -149,7 +154,7 @@ YAML
   echo "secret $servico/rabbitmq applied (RABBITMQ_URL of user $usuario)"
 done
 
-if ausente "$NS" grafana-admin; then
+if ausente "$NS" grafana-admin GF_SECURITY_ADMIN_PASSWORD; then
   grafana=$(senha)
   mascara "$grafana"
   cria "$NS" grafana-admin grafana <<YAML
@@ -161,7 +166,7 @@ fi
 # MP_WEBHOOK_SECRET) nao sai daqui: sao credenciais do provedor, e o simulador
 # assina o checkout com o ORCAMENTO_LINK_SECRET.
 for banco in os execucao; do
-  if ausente "pytstop-$banco" "$banco-postgres"; then
+  if ausente "pytstop-$banco" "$banco-postgres" POSTGRES_PASSWORD; then
     sem_volume "pytstop-$banco" "$banco-postgres"
     postgres=$(senha)
     mascara "$postgres"
@@ -171,7 +176,7 @@ YAML
   fi
 done
 
-if ausente pytstop-os os-jwt; then
+if ausente pytstop-os os-jwt JWT_PRIVATE_KEY JWT_PREVIOUS_PUBLIC_KEY; then
   # PKCS#8. Os pontos que o genpkey escreve no stderr sao so o progresso.
   pem=$(openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048)
   # O runner mascara uma linha por vez.
@@ -185,7 +190,7 @@ if ausente pytstop-os os-jwt; then
 YAML
 fi
 
-if ausente pytstop-os os-cripto; then
+if ausente pytstop-os os-cripto ENCRYPTION_KEY; then
   sem_volume pytstop-os os-cripto
   # Chave Fernet: 32 bytes em base64 url-safe, com o "=" do fim (44
   # caracteres). Nunca regenerada (ADR-042).
@@ -198,7 +203,7 @@ fi
 
 # O admin e o unico usuario semeado; atendente e mecanico se cadastram pela
 # API, com o token dele.
-if ausente pytstop-os os-admin; then
+if ausente pytstop-os os-admin ADMIN_PASSWORD; then
   sem_volume pytstop-os os-admin
   admin_os=$(senha)
   mascara "$admin_os"
@@ -207,7 +212,8 @@ if ausente pytstop-os os-admin; then
 YAML
 fi
 
-if ausente pytstop-billing billing-mongo; then
+if ausente pytstop-billing billing-mongo MONGO_INITDB_ROOT_PASSWORD MONGO_BILLING_PASSWORD \
+  MONGO_EXPORTER_PASSWORD MONGO_KEYFILE; then
   sem_volume pytstop-billing billing-mongo
   root=$(senha)
   billing_mongo=$(senha)
@@ -224,7 +230,7 @@ if ausente pytstop-billing billing-mongo; then
 YAML
 fi
 
-if ausente pytstop-billing billing-link; then
+if ausente pytstop-billing billing-link ORCAMENTO_LINK_SECRET; then
   # 32 bytes aleatorios em 64 caracteres hexadecimais: o boot do Billing
   # exige ao menos 32 bytes.
   link=$(openssl rand -hex 32)

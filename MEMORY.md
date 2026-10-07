@@ -10,6 +10,7 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Recent decisions
 
+- 2026-10-07 - Fonte que ja existe sem uma das chaves do contrato (editada a mao, ou criada antes de a chave entrar) para o `gerar-segredos.sh` nomeando a chave, sem "kept" e sem regravar: o script nunca reescreve fonte, e o pod que a le cairia em `CreateContainerConfigError`; a conferencia e uma chamada so por fonte (go-template com o nome e as chaves) - comentario do `ausente`
 - 2026-10-07 - Fontes dos servicos no `gerar-segredos.sh`, todas so se ausentes e sem derivado (a URL do banco se monta no pod, por expansao de variavel): `os-postgres`, `execucao-postgres`, `os-jwt` (RSA 2048 PKCS#8 e `JWT_PREVIOUS_PUBLIC_KEY` vazia), `os-cripto` (Fernet), `os-admin`, `billing-mongo` (root, `billing`, `exporter` e keyfile) e `billing-link` (HMAC do link e do checkout do simulador); `billing-mercadopago` fica fora, credencial do provedor - README, Segredos gerados; ADR-042
 - 2026-10-07 - Fonte que guarda estado no banco (senhas dos bancos, `ENCRYPTION_KEY`, senha do admin) e some com o PVC do namespace de pe: o script para em vez de gerar outra - a `ENCRYPTION_KEY` nova perderia os dados cifrados, e senha nova nao vale para o volume; `os-jwt` e `billing-link` nascem de novo (a troca por apagar o Secret) - README, Segredos gerados
 - 2026-10-07 - O admin e o unico usuario semeado no OS; atendente e mecanico se cadastram pela API com o token dele - o `seed_admin.py` so cria o admin; ADR-042 corrigido

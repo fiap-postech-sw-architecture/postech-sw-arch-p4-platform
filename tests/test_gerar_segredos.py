@@ -108,6 +108,9 @@ from pathlib import Path
 
 import yaml
 
+MOLDE_DAS_CHAVES = (
+    "go-template={{.metadata.name}}:{{range $chave, $valor := .data}} {{$chave}}{{end}}"
+)
 estado = Path(os.environ["KUBECTL_FALSO"])
 arquivo = estado / "segredos.json"
 segredos = json.loads(arquivo.read_text())
@@ -145,8 +148,13 @@ def manifesto():
 if resto[:2] == ["get", "secret"]:
     chave = f"{ns}/{resto[2]}"
     if "--ignore-not-found" in resto:
+        # O nome e as chaves, em ordem, como a go-template do script imprime;
+        # nada se o Secret nao existe.
+        if resto[resto.index("-o") + 1] != MOLDE_DAS_CHAVES:
+            sys.exit(f"chamada inesperada: {args}")
         if chave in segredos:
-            print(f"secret/{resto[2]}")
+            chaves = "".join(f" {c}" for c in sorted(segredos[chave]))
+            print(f"{resto[2]}:{chaves}", end="")
         sys.exit(0)
     if chave not in segredos:
         sys.exit(f'Error from server (NotFound): secrets "{resto[2]}" not found')
@@ -603,17 +611,30 @@ def test_openssl_que_falha_para_o_script_sem_gravar_a_fonte(
     assert "pytstop-billing/billing-link" not in segredos
 
 
-def test_chave_ausente_na_fonte_para_o_script(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("fonte", "chave"),
+    [
+        (fonte, chave)
+        for fonte, chaves in existentes().items()
+        if not fonte.endswith("/rabbitmq")
+        for chave in sorted(chaves)
+    ],
+)
+def test_fonte_que_existe_sem_uma_chave_para_o_script_sem_gravar_nada(
+    tmp_path: Path, fonte: str, chave: str
+) -> None:
+    # Editada a mao, ou criada antes de a chave entrar no contrato: o pod que
+    # a le nao subiria, e o script nao reescreve a fonte.
     antes = existentes()
-    del antes[CREDENCIAIS]["senha-execucao"]
-    del antes["pytstop-execucao/rabbitmq"]
+    del antes[fonte][chave]
 
-    processo, segredos, _ = roda(tmp_path, antes)
+    processo, segredos, chamadas = roda(tmp_path, antes)
 
     assert processo.returncode != 0
-    assert "has no key senha-execucao" in processo.stderr
-    assert "pytstop-execucao/rabbitmq" not in segredos
-    assert "grafana-admin" not in processo.stdout
+    assert f"secret {fonte} has no key {chave}" in processo.stderr
+    assert f"secret {fonte} already exists: kept" not in processo.stdout
+    assert segredos == antes
+    assert [chamada for chamada in chamadas if "create" in chamada] == []
 
 
 @pytest.mark.parametrize(
