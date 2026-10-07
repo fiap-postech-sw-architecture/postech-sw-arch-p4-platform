@@ -11,9 +11,14 @@
 #
 # Os objetos de teste vao para o pytstop-plataforma (o Kong so le Ingress dos
 # namespaces da fase 4), com o rotulo part-of=pytstop-smoke, e saem no fim.
+#
+# OVERLAY e o overlay implantado (make smoke OVERLAY=kind-ci): o kind-ci nao
+# tem Loki, Promtail e Grafana (ADR-042), e as provas deles pulam com aviso; as
+# demais rodam igual.
 set -euo pipefail
 
 CONTEXTO="${KUBE_CONTEXT:-kind-pytstop-p4}"
+OVERLAY="${OVERLAY:-kind}"
 BORDA="${BORDA:-http://localhost}"
 NS=pytstop-plataforma
 ROTULO=app.kubernetes.io/part-of=pytstop-smoke
@@ -46,6 +51,15 @@ confere() {
 }
 
 titulo() { printf '\n== %s\n' "$*"; }
+
+# implantado <componente>: falso so no kind-ci, que nao tem Loki, Promtail e
+# Grafana; la a prova pula com aviso. Nos outros overlays a prova roda, e
+# componente ausente ou quebrado e CHECK FAILED.
+implantado() {
+  [ "$OVERLAY" = kind-ci ] || return 0
+  echo "skipped: no $1 in the kind-ci overlay"
+  return 1
+}
 
 cabecalho() { tr -d '\r' < "$TMP/h" | awk -v nome="$1:" 'tolower($1) == nome {print $2}'; }
 
@@ -195,29 +209,31 @@ $K -n pytstop-plataforma logs deployment/kong -c proxy --tail=1 | awk '{print $1
 titulo "decision link and checkout tokens kept out of Loki (Promtail masks before pushing)"
 pede GET "/billing/api/v1/publico/orcamentos/$segredo?run=$marca" 200 "/api/v1/publico/orcamentos/$segredo"
 pede GET "/billing/simulador/checkout/123?token=$segredo&run=$marca" 200 /simulador/checkout/123
-# loki <LogQL>: linhas dos ultimos 5 minutos, pela API do Kubernetes (sem port-forward).
-loki() {
-  $K get --raw "/api/v1/namespaces/pytstop-plataforma/services/loki:3100/proxy/loki/api/v1/query_range?limit=100&since=5m&query=$(jq -rn --arg q "$1" '$q|@uri')" \
-    | jq -r '.data.result[].values[][1]'
-}
-# As quatro requisicoes com token desta execucao (duas publicadas, duas barradas
-# pelo %2F) levam run=<marca>: espera as quatro no Loki (o Promtail empurra em
-# lotes), mascaradas ou nao, e so entao conta. Sem a espera, um vazamento ainda
-# no caminho passaria calado.
-linhas_da_execucao="{app=\"kong\"} |= \"run=$marca\""
-for _ in $(seq 30); do
-  [ "$(loki "$linhas_da_execucao" | grep -c .)" -ge 4 ] && break
-  sleep 2
-done
-com_token=$(loki "{app=\"kong\"} |= \"$segredo\"" | grep -c . || true)
-mascaradas=$(loki "$linhas_da_execucao |= \"***\"" | grep -c . || true)
-printf 'Kong lines in Loki with token %s: %s\n' "$segredo" "$com_token"
-printf 'Kong lines in Loki of the 4 requests with the token, masked as ***: %s\n' "$mascaradas"
-echo "the same requests as stored in Loki:"
-# sed e nao head: head fecharia o pipe antes de o jq terminar (SIGPIPE com pipefail).
-loki "$linhas_da_execucao" | sed -n 1,4p
-confere "Kong lines in Loki with the token" 0 "$com_token"
-confere "Kong lines in Loki of the 4 requests with the token masked" 4 "$mascaradas"
+if implantado "Loki and Promtail"; then
+  # loki <LogQL>: linhas dos ultimos 5 minutos, pela API do Kubernetes (sem port-forward).
+  loki() {
+    $K get --raw "/api/v1/namespaces/pytstop-plataforma/services/loki:3100/proxy/loki/api/v1/query_range?limit=100&since=5m&query=$(jq -rn --arg q "$1" '$q|@uri')" \
+      | jq -r '.data.result[].values[][1]'
+  }
+  # As quatro requisicoes com token desta execucao (duas publicadas, duas barradas
+  # pelo %2F) levam run=<marca>: espera as quatro no Loki (o Promtail empurra em
+  # lotes), mascaradas ou nao, e so entao conta. Sem a espera, um vazamento ainda
+  # no caminho passaria calado.
+  linhas_da_execucao="{app=\"kong\"} |= \"run=$marca\""
+  for _ in $(seq 30); do
+    [ "$(loki "$linhas_da_execucao" | grep -c .)" -ge 4 ] && break
+    sleep 2
+  done
+  com_token=$(loki "{app=\"kong\"} |= \"$segredo\"" | grep -c . || true)
+  mascaradas=$(loki "$linhas_da_execucao |= \"***\"" | grep -c . || true)
+  printf 'Kong lines in Loki with token %s: %s\n' "$segredo" "$com_token"
+  printf 'Kong lines in Loki of the 4 requests with the token, masked as ***: %s\n' "$mascaradas"
+  echo "the same requests as stored in Loki:"
+  # sed e nao head: head fecharia o pipe antes de o jq terminar (SIGPIPE com pipefail).
+  loki "$linhas_da_execucao" | sed -n 1,4p
+  confere "Kong lines in Loki with the token" 0 "$com_token"
+  confere "Kong lines in Loki of the 4 requests with the token masked" 4 "$mascaradas"
+fi
 
 titulo "RabbitMQ: x-queue-type is the only argument; TTL, dead-letter, overflow and length come from policies"
 R="$K -n pytstop-plataforma exec -i rabbitmq-0 -c rabbitmq --"
@@ -305,22 +321,24 @@ echo "make kong-check after deleting the invalid plugin:"
 KUBE_CONTEXT="$CONTEXTO" ESPERA=10 scripts/kong-check.sh
 
 titulo "Grafana: dashboards and alert rules loaded from provisioning"
-grafana() { $K get --raw "/api/v1/namespaces/$NS/services/grafana:3000/proxy$1"; }
-grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (folder \(.folderTitle))"'
-# Logo depois do deploy a primeira avaliacao pega o Prometheus ainda sem dado
-# (erro ou sem dado); espera a avaliacao de regime, ate 3 minutos.
-for _ in $(seq 18); do
-  grafana "/api/prometheus/grafana/api/v1/rules" \
-    | jq -e '[.data.groups[].rules[] | select(.health != "ok" or .state != "inactive")] | length == 0' >/dev/null && break
-  sleep 10
-done
-grafana "/api/prometheus/grafana/api/v1/rules" > "$TMP/regras.json"
-jq -r '.data.groups[].rules[] | "rule: \(.name) [\(.state), \(.health)]"' "$TMP/regras.json"
-# Uma regra por "- uid:" nos arquivos de observabilidade/grafana: sem a conta, um
-# arquivo que o Grafana nao carregou passaria calado.
-esperadas=$(cat observabilidade/grafana/alertas*.yaml | grep -c '^      - uid: ')
-confere "Grafana alert rules loaded" "$esperadas" "$(jq '[.data.groups[].rules[]] | length' "$TMP/regras.json")"
-confere "Grafana alert rules not healthy" "" "$(jq -r '[.data.groups[].rules[] | select(.health != "ok") | .name] | join(", ")' "$TMP/regras.json")"
+if implantado Grafana; then
+  grafana() { $K get --raw "/api/v1/namespaces/$NS/services/grafana:3000/proxy$1"; }
+  grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (folder \(.folderTitle))"'
+  # Logo depois do deploy a primeira avaliacao pega o Prometheus ainda sem dado
+  # (erro ou sem dado); espera a avaliacao de regime, ate 3 minutos.
+  for _ in $(seq 18); do
+    grafana "/api/prometheus/grafana/api/v1/rules" \
+      | jq -e '[.data.groups[].rules[] | select(.health != "ok" or .state != "inactive")] | length == 0' >/dev/null && break
+    sleep 10
+  done
+  grafana "/api/prometheus/grafana/api/v1/rules" > "$TMP/regras.json"
+  jq -r '.data.groups[].rules[] | "rule: \(.name) [\(.state), \(.health)]"' "$TMP/regras.json"
+  # Uma regra por "- uid:" nos arquivos de observabilidade/grafana: sem a conta, um
+  # arquivo que o Grafana nao carregou passaria calado.
+  esperadas=$(cat observabilidade/grafana/alertas*.yaml | grep -c '^      - uid: ')
+  confere "Grafana alert rules loaded" "$esperadas" "$(jq '[.data.groups[].rules[]] | length' "$TMP/regras.json")"
+  confere "Grafana alert rules not healthy" "" "$(jq -r '[.data.groups[].rules[] | select(.health != "ok") | .name] | join(", ")' "$TMP/regras.json")"
+fi
 
 titulo "Prometheus: series returned now by each dashboard and alert query"
 prometheus() {

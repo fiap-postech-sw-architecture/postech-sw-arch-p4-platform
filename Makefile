@@ -100,7 +100,7 @@ kong-check: ## falha se o Kong recusou algum Ingress ou plugin (eventos dos ulti
 	@KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/kong-check.sh
 
 smoke: ## borda, barra codificada, rate limiting, mascara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos (status 1 se uma prova falha)
-	KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/smoke.sh
+	OVERLAY=$(OVERLAY) KUBE_CONTEXT=$(KUBE_CONTEXT) scripts/smoke.sh
 
 redrive: ## devolve <fila>.dlq para <fila> depois de corrigida a causa (FILA=billing.comandos)
 	@case "$(FILA)" in billing.comandos|execucao.comandos|os.eventos) ;; \
