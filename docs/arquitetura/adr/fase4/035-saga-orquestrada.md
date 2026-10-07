@@ -51,7 +51,7 @@ Assim, recusa ou expiração do orçamento descarta o diagnóstico e cancela a O
 
 Toda compensação é idempotente. Se chegar ao participante antes do comando original, ele grava uma lápide e descarta o original quando este chegar. `EstornarPagamento` compensa o T6 em qualquer estado do pagamento: cancela o que está em `SOLICITADO`, com resposta `PagamentoCancelado`, e estorna o `CONFIRMADO`, com resposta `PagamentoEstornado` ([ADR-040](040-integracao-mercado-pago.md)).
 
-A resposta a um comando se reconhece pelo `causation_id` do envelope, que leva o `id` do comando respondido, inclusive quando o participante republica o desfecho para um comando repetido; evento espontâneo, como a decisão do cliente ou um estorno automático, leva o `id` do comando que abriu o fluxo ([ADR-036](036-mensageria-rabbitmq.md)). A instância guarda o `id` de cada envio do comando em voo, o original e os reenvios. Em `COMPENSANDO`, com o `EstornarPagamento` em voo, a resposta a ele é o `PagamentoCancelado`, o `PagamentoEstornado` ou o `EstornoDePagamentoFalhou` cujo `causation_id` é um desses ids, com qualquer `motivo`: os dois primeiros concluem a compensação, e o terceiro leva à falha na compensação. Um `PagamentoEstornado` com outro `causation_id`, de estorno automático, só atualiza o resumo do pagamento. Casar pelo `motivo` erraria nos dois sentidos: o Billing responde ao comando com `pagamento_apos_encerramento` quando a aprovação tardia já tinha sido estornada, e o estorno automático que chega com a compensação pendente não é a resposta dela.
+A resposta a um comando se reconhece pelo `causation_id` do envelope, que leva o `id` do comando respondido; a regra completa, com o evento espontâneo e o comando, está na seção 5.2 da [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md#52-envelope). A instância guarda o `id` de cada envio do comando em voo, o original, os reenvios e o da retomada, e o conjunto recomeça a cada comando novo. Em `COMPENSANDO`, com o `EstornarPagamento` em voo, o `PagamentoCancelado`, o `PagamentoEstornado` ou o `EstornoDePagamentoFalhou` que traz um desses ids, com qualquer `motivo`, é a resposta: os dois primeiros concluem a compensação, e o terceiro leva à falha na compensação. O `PagamentoEstornado` do estorno automático, que aponta o `SolicitarPagamento`, só atualiza o resumo do pagamento.
 
 ### Isolamento
 
@@ -92,6 +92,7 @@ A Aula 02 aponta dois contras (p. 10). O primeiro é o orquestrador acumular reg
 * Orquestrador como quarto serviço
 * Vencimento das esperas humanas no orquestrador
 * Pivot no pagamento, com estorno fora da saga
+* Resposta reconhecida pelo tipo ou pelo `motivo` do evento
 * Motor de workflow (Temporal, Camunda, AWS Step Functions)
 * Apache Camel, como nas aulas
 
@@ -129,6 +130,14 @@ O `prazos` do OS Service venceria também orçamento e pagamento e mandaria o Bi
 * Ruim, porque o trecho entre pagar e começar o reparo, em que a oficina ainda pode desistir, ficaria sem compensação automática, e o estorno viraria trabalho manual
 * Ruim, porque a Aula 01 compensa com registro reverso o registro contábil posterior à cobrança (p. 10), e o exemplo de Step Functions da Aula 02 tem o ramo `RefundCustomer` (Fig. 6)
 
+### Resposta reconhecida pelo tipo ou pelo `motivo` do evento
+
+A saga tomaria o `PagamentoEstornado` com `motivo` `compensacao` como a resposta ao `EstornarPagamento`, sem guardar o `id` de cada envio.
+
+* Bom, porque dispensaria o `causation_id` nos eventos espontâneos e os ids de envio na instância
+* Ruim, porque erra nos dois sentidos: o Billing responde ao comando com `pagamento_apos_encerramento` quando a aprovação tardia já tinha sido estornada, e um estorno automático que chega com a compensação pendente não é a resposta dela
+* Ruim, porque o tipo sozinho também não distingue: o estorno automático chega como `PagamentoEstornado`, igual à resposta
+
 ### Motor de workflow (Temporal, Camunda, AWS Step Functions)
 
 * Bom, porque estado durável, temporizadores, retentativas e visualização vêm prontos; Step Functions aparece na Aula 02 com ramo de estorno
@@ -157,6 +166,7 @@ O `prazos` do OS Service venceria também orçamento e pagamento e mandaria o Bi
 * Consistência eventual: a OS pode mostrar `AGUARDANDO_APROVACAO` com o orçamento já vencido no Billing, até o evento chegar
 * Compensação sequencial: cancelar depois do pagamento custa várias idas e voltas pelo broker e depende de o Mercado Pago aceitar o estorno
 * `FALHA_NA_COMPENSACAO` deixa recursos parcialmente compensados até a intervenção manual
+* Cada participante guarda o `id` do comando que abriu o fluxo, para pô-lo no `causation_id` dos eventos espontâneos, e a instância guarda o `id` de cada envio do comando em voo
 * Evento adiantado passa pelas filas de retry até a saga alcançá-lo, e, se o evento anterior parar na DLQ, ele também acaba lá
 
 ### Neutras
