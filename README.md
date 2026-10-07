@@ -115,12 +115,12 @@ Nenhuma senha ou chave fica nos manifests. O `make deploy` roda o [`gerar-segred
 | `rabbitmq-credenciais` (fonte) | `pytstop-plataforma` | `admin-usuario` (`admin`), `admin-senha`, `senha-os`, `senha-billing` e `senha-execucao` (48 hexadecimais cada) e o `admin.json` que o broker importa no boot | RabbitMQ e Job `rabbitmq-usuarios` | Só se ainda não existe | [Troca de senha do RabbitMQ](#troca-de-senha-do-rabbitmq) |
 | `grafana-admin` (fonte) | `pytstop-plataforma` | `GF_SECURITY_ADMIN_PASSWORD` (48 hexadecimais) | Grafana (no `kind-ci`, sem Grafana, fica sem uso) | Só se ainda não existe | Apagar o Secret, `make deploy` e `rollout restart deployment/grafana` no `pytstop-plataforma`: sem volume, o Grafana cria o admin com a senha do Secret a cada start |
 | `rabbitmq` (derivado) | `pytstop-os`, `pytstop-billing` e `pytstop-execucao` | `RABBITMQ_URL` do usuário do serviço, com a senha do `rabbitmq-credenciais` ([contrato com os serviços](#usuário-e-permissões-no-rabbitmq)) | relay, consumidor e `prazos` | Em todo deploy, com a senha que está na fonte | Segue a fonte: a senha trocada no `rabbitmq-credenciais` chega aqui no `make deploy` seguinte |
-| `os-postgres` (fonte) | `pytstop-os` | Uma senha por papel, 48 hexadecimais cada: `POSTGRES_PASSWORD` (superusuário `postgres`), `POSTGRES_OWNER_PASSWORD` (`os`, dono das tabelas: DDL), `POSTGRES_APP_PASSWORD` (`os_app`: só DML nas tabelas do dono) e `POSTGRES_EXPORTER_PASSWORD` (`os_exporter`: `pg_monitor`) | PostgreSQL, que cria os papéis na primeira inicialização do volume (script de init nos manifests do serviço); `os`: Job de migração; `os_app`: API, relay, consumidor e `prazos`; `os_exporter`: exporter | Só se ainda não existe | Com janela: `ALTER ROLE` do papel, como `postgres`, a senha nova no Secret e o restart de quem usa o papel: `os_app`, os Deployments do serviço; `os_exporter`, o StatefulSet do banco, porque o exporter é sidecar dele e o banco reinicia junto; `os`, o Job, que a relê no deploy seguinte do serviço; `postgres`, ninguém. Até o restart, conexão nova com a senha antiga é recusada |
-| `execucao-postgres` (fonte) | `pytstop-execucao` | Uma senha por papel, 48 hexadecimais cada: `POSTGRES_PASSWORD` (superusuário `postgres`), `POSTGRES_OWNER_PASSWORD` (`execucao`, dono das tabelas: DDL), `POSTGRES_APP_PASSWORD` (`execucao_app`: só DML nas tabelas do dono) e `POSTGRES_EXPORTER_PASSWORD` (`execucao_exporter`: `pg_monitor`) | PostgreSQL, que cria os papéis na primeira inicialização do volume (script de init nos manifests do serviço); `execucao`: Job de migração; `execucao_app`: API, relay e consumidor; `execucao_exporter`: exporter | Só se ainda não existe | Como a do `os-postgres`, com os papéis `execucao`, `execucao_app` e `execucao_exporter` |
+| `os-postgres` (fonte) | `pytstop-os` | Uma senha por papel, 48 hexadecimais cada: `POSTGRES_PASSWORD` (superusuário `postgres`), `POSTGRES_OWNER_PASSWORD` (`os`, dono das tabelas: DDL), `POSTGRES_APP_PASSWORD` (`os_app`: só DML nas tabelas do dono) e `POSTGRES_EXPORTER_PASSWORD` (`os_exporter`: `pg_monitor`) | PostgreSQL, que cria os papéis na primeira inicialização do volume (script de init nos manifests do serviço); `os`: Job de migração; `os_app`: API, relay, consumidor e `prazos`; `os_exporter`: exporter | Só se ainda não existe | Com janela, pelos passos de [Troca de senha do banco](#troca-de-senha-do-banco): a senha nova no Secret, o `ALTER ROLE` do papel, como `postgres`, sem a senha em argumento nem no log do servidor, e o restart de quem usa o papel: `os_app`, os Deployments do serviço; `os_exporter`, o StatefulSet do banco, porque o exporter é sidecar dele e o banco reinicia junto; `os`, o Job, que a relê no deploy seguinte do serviço; `postgres`, o StatefulSet do banco, que lê a senha dele só no start (sem o restart, a próxima troca não autentica). Até o restart, conexão nova com a senha antiga é recusada |
+| `execucao-postgres` (fonte) | `pytstop-execucao` | Uma senha por papel, 48 hexadecimais cada: `POSTGRES_PASSWORD` (superusuário `postgres`), `POSTGRES_OWNER_PASSWORD` (`execucao`, dono das tabelas: DDL), `POSTGRES_APP_PASSWORD` (`execucao_app`: só DML nas tabelas do dono) e `POSTGRES_EXPORTER_PASSWORD` (`execucao_exporter`: `pg_monitor`) | PostgreSQL, que cria os papéis na primeira inicialização do volume (script de init nos manifests do serviço); `execucao`: Job de migração; `execucao_app`: API, relay e consumidor; `execucao_exporter`: exporter | Só se ainda não existe | Como a do `os-postgres`, com o namespace `pytstop-execucao`, o StatefulSet `execucao-postgres` e os papéis `execucao`, `execucao_app` e `execucao_exporter` |
 | `os-jwt` (fonte) | `pytstop-os` | `JWT_PRIVATE_KEY` (RSA de 2048 bits em PEM PKCS#8) e `JWT_PREVIOUS_PUBLIC_KEY` (vazia; durante a rotação, recebe a chave pública que entra, na etapa 1, ou a que sai, na etapa 2, só publicada no JWKS) | API do OS Service | Só se ainda não existe | Sem derrubar sessão, pelas etapas da [rotação da chave](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#rotação-da-chave) do OS Service ([ADR-039](docs/arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)): as chaves de cada etapa no Secret e o `rollout restart` da API do OS. Apagar o Secret, rodar o `make deploy` e reiniciar a API é a troca de emergência, que derruba as sessões |
 | `os-cripto` (fonte) | `pytstop-os` | `ENCRYPTION_KEY` (chave Fernet: 32 bytes em base64 url-safe, 44 caracteres) | API e relay do OS Service | Só se ainda não existe; nunca é regenerada | Não gira sem migração: a chave nova exige recifrar os dados pessoais e recalcular o hash do documento ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)) |
 | `os-admin` (fonte) | `pytstop-os` | `ADMIN_PASSWORD` (48 hexadecimais), a senha do admin | Job de migração do OS Service (semente) e E2E | Só se ainda não existe | Não gira pelo Secret: a semente só cria o admin que ainda não existe, e o OS Service não tem troca de senha; o Secret guarda a senha da primeira semente |
-| `billing-mongo` (fonte) | `pytstop-billing` | `MONGO_INITDB_ROOT_PASSWORD` (root), `MONGO_BILLING_PASSWORD` (`billing`) e `MONGO_EXPORTER_PASSWORD` (`exporter`), 48 hexadecimais cada, e `MONGO_KEYFILE` (756 bytes em base64, 1.008 caracteres numa linha) | mongod (o root, no primeiro boot, e o keyfile), Job de inicialização, processos do serviço e exporter | Só se ainda não existe | Senhas, com janela: `db.changeUserPassword`, como root, a senha nova no Secret e o restart de quem usa o usuário: `billing`, os Deployments do Billing; `exporter`, o StatefulSet do banco; o root, o Job, que a relê no deploy seguinte do serviço. Keyfile, com o banco fora durante o restart: o valor novo no Secret e `rollout restart statefulset/billing-mongo`; o replica set tem um membro só, e nenhum outro precisa da chave antiga |
+| `billing-mongo` (fonte) | `pytstop-billing` | `MONGO_INITDB_ROOT_PASSWORD` (root), `MONGO_BILLING_PASSWORD` (`billing`) e `MONGO_EXPORTER_PASSWORD` (`exporter`), 48 hexadecimais cada, e `MONGO_KEYFILE` (756 bytes em base64, 1.008 caracteres numa linha) | mongod (o root, no primeiro boot, e o keyfile), Job de inicialização, processos do serviço e exporter | Só se ainda não existe | Senhas, com janela, pelos passos de [Troca de senha do banco](#troca-de-senha-do-banco): a senha nova no Secret, o `db.changeUserPassword`, como root, sem a senha em argumento, e o restart de quem usa o usuário: `billing`, os Deployments do Billing; `exporter`, o StatefulSet do banco; o root, o Job, que a relê no deploy seguinte do serviço, e o StatefulSet do banco, que lê a senha dele só no start (sem o restart, a próxima troca não autentica). Keyfile, com o banco fora durante o restart: o valor novo no Secret e `rollout restart statefulset/billing-mongo`; o replica set tem um membro só, e nenhum outro precisa da chave antiga |
 | `billing-link` (fonte) | `pytstop-billing` | `ORCAMENTO_LINK_SECRET` (64 hexadecimais), a chave HMAC do link de decisão e do checkout do simulador | API e consumidor do Billing | Só se ainda não existe | Apagar o Secret, `make deploy` e o `rollout restart` dos Deployments do Billing, a API e o consumidor juntos: os links e checkouts já enviados deixam de valer (o orçamento que aguarda decisão fica sem link até vencer, e o atendente ainda decide por ele), e até o fim do restart um link pode abrir numa réplica e dar 404 em outra |
 
 Os valores saem do `openssl`: as senhas são 24 bytes do `openssl rand` em hexadecimal (48 caracteres, que entram em URL, JSON e YAML sem escape), e a chave RSA vem do `openssl genpkey`. O restart que cada troca pede é o `rollout restart` do Deployment ou do StatefulSet no namespace do serviço (`kubectl --context kind-pytstop-p4 -n pytstop-billing rollout restart deployment` reinicia todos os Deployments do Billing), porque o pod lê o Secret só no start.
@@ -170,6 +170,47 @@ Admin:
 3. `make deploy`: o Job `rabbitmq-usuarios` volta a falar com a API, agora com a senha nova.
 
 Um cluster criado antes das senhas geradas ainda tem as de demonstração, que têm hífen: o `make deploy` para na conferência da senha, e `make kind-down kind-up deploy` recria o cluster com senhas geradas.
+
+#### Troca de senha do banco
+
+A senha nova vai do shell ao pod pela entrada padrão do `kubectl exec -i`, e o `psql` ou o `mongosh` a lê da variável de ambiente `SENHA_NOVA`, nunca de um argumento: o argumento de um `kubectl exec` fica no `ps` da máquina e na URL do pedido ao apiserver, que o log de auditoria, quando ligado, registra, e o de um `psql -c "ALTER ROLE … PASSWORD '<senha>'"` ainda vai para o log do servidor se o comando falhar. O `printf` do bash e do zsh é interno ao shell, então a senha também não aparece no `ps`. Os comandos usam o contexto do kind (no k3s, troque o `--context`) e supõem os nomes que os manifests dos serviços devem ter: o StatefulSet `os-postgres` com o contêiner `postgres`, e o `billing-mongo` com o `mongo`.
+
+PostgreSQL (o exemplo troca a do `os_app`; para outro papel, troque a chave do Secret e o nome do papel). Grave a senha nova no Secret antes de aplicá-la no banco, para que o valor não fique só numa variável do shell:
+
+```bash
+senha=$(openssl rand -hex 24)
+kubectl --context kind-pytstop-p4 -n pytstop-os get secret os-postgres -o json \
+  | SENHA="$senha" jq '.data["POSTGRES_APP_PASSWORD"] = (env.SENHA | @base64)' \
+  | kubectl --context kind-pytstop-p4 replace -f -
+```
+
+Aplique no banco, como `postgres`: o contêiner do banco já tem a senha dele em `POSTGRES_PASSWORD`, e o `-w` impede o `psql` de pedir senha de conexão, que sem terminal ele leria do próprio script. A saída esperada é `SET`, `SET` e `ALTER ROLE`:
+
+```bash
+{ printf '%s\n' "$senha"; cat <<'SQL'
+SET log_statement = none;
+SET log_min_error_statement = panic;
+\getenv senha SENHA_NOVA
+ALTER ROLE os_app PASSWORD :'senha';
+SQL
+} | kubectl --context kind-pytstop-p4 -n pytstop-os exec -i statefulset/os-postgres -c postgres -- \
+    sh -c 'read -r SENHA_NOVA && [ -n "$SENHA_NOVA" ] && export SENHA_NOVA && PGPASSWORD=$POSTGRES_PASSWORD exec psql -w -U postgres -v ON_ERROR_STOP=1'
+```
+
+O `psql` troca `:'senha'` pelo valor antes de enviar o comando (o `psql -c` do 16 não faz essa troca), então o servidor recebe a senha em claro. Os dois `SET`, que valem só para a sessão, a tiram do log do servidor: sem eles, um `log_statement` em `all` ou `ddl` registra o comando, e um comando que falha registra a linha `STATEMENT` com a senha. Por fim, reinicie quem usa o papel, como diz a coluna "Como girar" da tabela; para o `os_app`, `kubectl --context kind-pytstop-p4 -n pytstop-os rollout restart deployment`.
+
+MongoDB (o exemplo troca a do `billing` e supõe o usuário no banco `admin`; se o init o criou em outro, troque o `admin` da segunda linha do script. O root autentica com as variáveis do próprio contêiner). Grave a senha nova na chave `MONGO_BILLING_PASSWORD` do `billing-mongo`, no `pytstop-billing`, com o mesmo `jq` acima, e aplique:
+
+```bash
+{ printf '%s\n' "$senha"; cat <<'JS'
+db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD)
+db.getSiblingDB("admin").changeUserPassword("billing", process.env.SENHA_NOVA)
+JS
+} | kubectl --context kind-pytstop-p4 -n pytstop-billing exec -i statefulset/billing-mongo -c mongo -- \
+    sh -c 'read -r SENHA_NOVA && [ -n "$SENHA_NOVA" ] && export SENHA_NOVA && exec mongosh --quiet --norc'
+```
+
+A saída esperada é `{ ok: 1 }` duas vezes, e o `mongod` registra o `updateUser` com `"pwd":"xxx"`. O restart de quem usa o usuário vem da coluna "Como girar".
 
 ### k3s (VM na Azure)
 
