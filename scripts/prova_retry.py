@@ -8,8 +8,10 @@ user_id da propria conexao, header x-tentativa, sem expiration) e confere:
    o user_id e o x-tentativa;
 2. uma copia em billing.comandos.retry.5s publicada antes de outra em
    billing.comandos.retry.1s nao segura a de 1 s, que volta primeiro;
-3. o broker recusa (403) a copia do billing na fila de retry de outro servico
-   e com a routing key antiga, o nome da fila de trabalho.
+3. o broker recusa (403) a copia do billing na fila de retry de outro servico,
+   com a routing key antiga (o nome da fila de trabalho) e com a chave da
+   propria fila de 1 s seguida de uma quebra de linha: o padrao da permissao
+   acaba no fim exato do nome, e com $ no lugar essa chave passaria.
 
 O script le e descarta o que houver em billing.comandos. Por isso so roda num
 broker sem consumidor nessa fila: com o Billing conectado, recusa e sai com
@@ -159,9 +161,14 @@ def prova_sem_head_of_line(conexao: pika.BlockingConnection) -> None:
     confere("5 s copy back after ~5 s", no_prazo(volta_5s, 5), segundos(volta_5s))
 
 
+def numa_linha(texto: str) -> str:
+    """O texto com a quebra de linha escrita como \\n, para sair numa linha so."""
+    return texto.encode("unicode_escape").decode()
+
+
 def prova_recusas(conexao: pika.BlockingConnection) -> None:
-    """Prova 3: 403 na fila de retry de outro servico e na chave antiga."""
-    for chave in (f"{FILA_ALHEIA}.retry.1s", FILA):
+    """Prova 3: 403 na fila de outro servico, na chave antiga e na com \\n no fim."""
+    for chave in (f"{FILA_ALHEIA}.retry.1s", FILA, f"{FILA}.retry.1s\n"):
         canal = canal_com_confirmacao(conexao)  # a recusa fecha o canal
         try:
             publica(canal, chave, 1)
@@ -171,8 +178,10 @@ def prova_recusas(conexao: pika.BlockingConnection) -> None:
         except UnroutableError:
             # Permissao aceitou e nenhuma fila tem a chave (mandatory devolveu).
             resultado = "accepted, then returned as unroutable"
-        print(f"{USUARIO} -> {chave}: {resultado}")
-        confere(f"{chave} refused", resultado.startswith("403 "), resultado)
+        # O broker repete a chave no texto da recusa, quebra de linha inclusa.
+        nome, resultado = numa_linha(chave), numa_linha(resultado)
+        print(f"{USUARIO} -> {nome}: {resultado}")
+        confere(f"{nome} refused", resultado.startswith("403 "), resultado)
 
 
 def main() -> int:
