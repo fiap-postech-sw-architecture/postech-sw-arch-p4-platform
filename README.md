@@ -106,15 +106,17 @@ scripts/medir-kind.sh resumo
 
 ### Segredos gerados
 
-Nenhuma senha da plataforma fica nos manifests. O `make deploy` roda o [`gerar-segredos.sh`](scripts/gerar-segredos.sh) antes do apply, e ele gera com `openssl rand` (24 bytes, em hexadecimal) as senhas do admin do RabbitMQ, dos usuários `os`, `billing` e `execucao` e do admin do Grafana, e cria cada Secret só se ele ainda não existe:
+Nenhuma senha da plataforma fica nos manifests. O `make deploy` roda o [`gerar-segredos.sh`](scripts/gerar-segredos.sh) antes do apply, e ele cuida de dois tipos de Secret:
 
-| Secret | Namespace | Chaves |
-|---|---|---|
-| `rabbitmq-credenciais` | `pytstop-plataforma` | `admin-usuario`, `admin-senha`, `senha-os`, `senha-billing`, `senha-execucao` e o `admin.json` que o broker importa no boot |
-| `grafana-admin` | `pytstop-plataforma` | `GF_SECURITY_ADMIN_PASSWORD` (no `kind-ci`, sem Grafana, fica sem uso) |
-| `rabbitmq` | `pytstop-os`, `pytstop-billing` e `pytstop-execucao` | `RABBITMQ_URL` do usuário do serviço, com a senha do `rabbitmq-credenciais` ([contrato com os serviços](#usuário-e-permissões-no-rabbitmq)) |
+| Secret | Namespace | Chaves | Quando o script grava |
+|---|---|---|---|
+| `rabbitmq-credenciais` (fonte) | `pytstop-plataforma` | `admin-usuario`, `admin-senha`, `senha-os`, `senha-billing`, `senha-execucao` e o `admin.json` que o broker importa no boot | Só se ainda não existe, ou seja, no primeiro deploy de cada cluster |
+| `grafana-admin` (fonte) | `pytstop-plataforma` | `GF_SECURITY_ADMIN_PASSWORD` (no `kind-ci`, sem Grafana, fica sem uso) | Só se ainda não existe |
+| `rabbitmq` (derivado) | `pytstop-os`, `pytstop-billing` e `pytstop-execucao` | `RABBITMQ_URL` do usuário do serviço, com a senha do `rabbitmq-credenciais` ([contrato com os serviços](#usuário-e-permissões-no-rabbitmq)) | Em todo deploy, com a senha que está na fonte |
 
-Os Secrets nascem no primeiro deploy de cada cluster, e não a cada deploy: o RabbitMQ lê o `admin.json` só no boot, e uma senha nova com o broker de pé deixaria o Job `rabbitmq-usuarios` sem acesso à API (401) até o próximo restart. Nenhuma senha passa por argumento de processo, pela saída ou pelo repositório: os Secrets chegam ao `kubectl` pela entrada padrão, e no GitHub Actions cada senha é registrada com `::add-mask::` antes do uso, então o log do job a mostra como `***`. No kind do CI as senhas morrem com o runner. O [`test_gerar_segredos.py`](tests/test_gerar_segredos.py) roda o script contra um `kubectl` falso: cluster novo, Secrets que já existem, serviço novo com o broker de pé, erro ao ler o cluster e a máscara do GitHub Actions.
+As fontes nascem no primeiro deploy de cada cluster, com senhas do `openssl rand` (24 bytes, em hexadecimal), porque o RabbitMQ lê o `admin.json` só no boot: uma senha de admin nova com o broker de pé deixaria o Job `rabbitmq-usuarios` sem acesso à API (401) até o próximo restart. O derivado é regravado em todo deploy, com a mesma senha que o Job aplica no broker, e assim uma senha trocada na fonte chega ao serviço no deploy seguinte ([Troca de senha do RabbitMQ](#troca-de-senha-do-rabbitmq)). Antes de gravá-lo, o script confere que a senha da fonte tem só letras e dígitos, porque ela entra crua na URL, e para com erro, sem mostrar a senha, se não tiver.
+
+Nenhuma senha passa por argumento de processo, pela saída ou pelo repositório: os Secrets chegam ao `kubectl` pela entrada padrão, e no GitHub Actions cada senha, gerada ou lida da fonte, é registrada com `::add-mask::` antes do uso, então o log do job a mostra como `***`. O derivado é gravado por apply server-side, que não guarda o Secret inteiro, com a senha em claro, na anotação `last-applied-configuration`. No kind do CI as senhas morrem com o runner. O [`test_gerar_segredos.py`](tests/test_gerar_segredos.py) roda o script contra um `kubectl` falso, que recusa o que o apiserver recusaria: cluster novo, fontes que já existem, serviço novo, Secret de serviço com a senha antiga, erro ao ler e ao gravar no cluster, chave ausente, senha fora de letras e dígitos, senha só de dígitos e a máscara do GitHub Actions.
 
 Troca de senha do RabbitMQ, executada no kind: a de um usuário de serviço vai para a chave `senha-<usuario>` do `rabbitmq-credenciais` (sem caractere que precise de escape na URL, como a do `openssl rand -hex 24`); depois de apagar o Secret `rabbitmq` do namespace do serviço, o `make deploy` o recria com a URL nova e o Job `rabbitmq-usuarios` aplica a senha no broker, e os pods do serviço precisam reiniciar para ler a variável. A do admin vai para `admin-senha` e para o `admin.json`, no mesmo formato (o `make smoke` lê a senha do arquivo montado no pod); o broker a aplica no boot (`kubectl -n pytstop-plataforma rollout restart statefulset/rabbitmq`), e o `make deploy` seguinte roda o Job com ela.
 

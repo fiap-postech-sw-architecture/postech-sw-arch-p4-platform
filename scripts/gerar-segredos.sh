@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 # Segredos de runtime da plataforma (make deploy, antes do apply; ADR-042).
-# Gera com openssl rand as senhas do admin do RabbitMQ, dos usuarios os,
-# billing e execucao e do admin do Grafana, e cria cada Secret so se ele
-# ainda nao existe, ou seja, no primeiro deploy de cada cluster: o RabbitMQ le
-# o admin.json so no boot, e uma senha nova com o broker de pe deixaria o Job
+#
+# Fontes: rabbitmq-credenciais (senhas do admin do RabbitMQ e dos usuarios os,
+# billing e execucao, mais o admin.json) e grafana-admin. O script gera as
+# senhas com openssl rand e cria cada fonte so se ela ainda nao existe, ou
+# seja, no primeiro deploy de cada cluster: o RabbitMQ le o admin.json so no
+# boot, e uma senha de admin nova com o broker de pe deixaria o Job
 # rabbitmq-usuarios sem acesso a API (401) ate o proximo restart.
 #
-# Em cada namespace de servico (pytstop-os, pytstop-billing, pytstop-execucao)
-# cria o Secret rabbitmq com a chave RABBITMQ_URL, a URL do usuario do servico
-# no broker, montada com a senha do rabbitmq-credenciais: e o contrato com os
-# servicos (README, "Usuario e permissoes no RabbitMQ").
+# Derivado: o Secret rabbitmq de cada namespace de servico (pytstop-os,
+# pytstop-billing, pytstop-execucao), com a chave RABBITMQ_URL, a URL do
+# usuario do servico no broker. E o contrato com os servicos (README, "Usuario
+# e permissoes no RabbitMQ") e e regravado a cada deploy com a senha da fonte,
+# a mesma que o Job rabbitmq-usuarios aplica no broker: trocar a senha na
+# fonte vale no deploy seguinte (README, "Troca de senha do RabbitMQ").
 #
 # Nenhuma senha vai para argumento de processo, para a saida ou para o
 # repositorio: o Secret chega ao kubectl pela entrada padrao. No GitHub
@@ -80,18 +84,25 @@ fi
 
 for usuario in os billing execucao; do
   servico="pytstop-$usuario"
-  if existe "$servico" rabbitmq; then
-    echo "secret $servico/rabbitmq already exists: kept"
-    continue
-  fi
-  # A senha que o Job rabbitmq-usuarios deu ao usuario no broker.
+  # A senha que o Job rabbitmq-usuarios aplica ao usuario no broker.
   senha_usuario=$($K -n "$NS" get secret rabbitmq-credenciais -o "jsonpath={.data.senha-$usuario}" | base64 -d)
   if [ -z "$senha_usuario" ]; then
     echo "secret $NS/rabbitmq-credenciais has no key senha-$usuario" >&2
     exit 1
   fi
   mascara "$senha_usuario"
-  $K create -f - >/dev/null <<YAML
+  # Vai crua na URL e no YAML, entao so letras e digitos. A de demonstracao,
+  # de um cluster criado antes das senhas geradas, tem hifen e para aqui.
+  if ! [[ "$senha_usuario" =~ ^[A-Za-z0-9]+$ ]]; then
+    echo "secret $NS/rabbitmq-credenciais: senha-$usuario must have only letters and digits (A-Z, a-z, 0-9)." \
+      "Change it as in the README (Troca de senha do RabbitMQ); a kind cluster created with the demo" \
+      "passwords is recreated with make kind-down kind-up deploy" >&2
+    exit 1
+  fi
+  # Server-side: o apply client-side guardaria o Secret inteiro, senha em
+  # claro, na anotacao last-applied-configuration. --force-conflicts porque o
+  # script e o dono da chave, mesmo que outro processo a tenha gravado antes.
+  $K apply --server-side --force-conflicts --field-manager=gerar-segredos -f - >/dev/null <<YAML
 apiVersion: v1
 kind: Secret
 metadata:
@@ -101,7 +112,7 @@ type: Opaque
 stringData:
   RABBITMQ_URL: "amqp://$usuario:$senha_usuario@rabbitmq.$NS.svc.cluster.local:5672/%2F"
 YAML
-  echo "secret $servico/rabbitmq created (RABBITMQ_URL of user $usuario)"
+  echo "secret $servico/rabbitmq applied (RABBITMQ_URL of user $usuario)"
 done
 
 if existe "$NS" grafana-admin; then
