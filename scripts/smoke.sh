@@ -2,8 +2,10 @@
 # Smoke da plataforma num cluster so com a plataforma implantada (make kind-up
 # deploy smoke). Aplica os exemplos de borda de k8s/exemplos/ (OS e Billing)
 # com um servidor de eco no lugar de cada API e confere borda, rate limiting,
-# barra codificada, mascara de token no Loki, policies e redrive do RabbitMQ,
-# fallback do Kong, regras do Grafana e o endurecimento dos pods.
+# barra codificada, mascara de token no Loki, policies, retry por atraso e
+# redrive do RabbitMQ, fallback do Kong, regras do Grafana e o endurecimento dos
+# pods. A prova do retry (scripts/prova_retry.py) roda com o uv, por um
+# port-forward ao broker.
 #
 # A saida e a evidencia: cada linha diz o que foi pedido e o que voltou. Prova
 # que nao vale vira uma linha CHECK FAILED; o script segue ate o fim, para a
@@ -24,11 +26,14 @@ NS=pytstop-plataforma
 ROTULO=app.kubernetes.io/part-of=pytstop-smoke
 K="kubectl --context $CONTEXTO"
 limpa() {
+  [ -z "${port_forward:-}" ] || kill "$port_forward" 2>/dev/null || true
   $K delete kongclusterplugin smoke-plugin-invalido --ignore-not-found >/dev/null
   $K -n "$NS" delete deployment,service,ingress -l "$ROTULO" --ignore-not-found >/dev/null
   rm -rf "$TMP"
 }
 
+# A prova do retry roda com o uv: sem ele, o smoke so falharia no fim.
+command -v uv >/dev/null || { echo "uv not found: the retry proof (scripts/prova_retry.py) runs with it, see https://docs.astral.sh/uv/" >&2; exit 1; }
 # Os exemplos usam os caminhos /os e /billing dos servicos de verdade.
 for ns in pytstop-os pytstop-billing; do
   if [ -n "$($K -n "$ns" get ingress -o name 2>/dev/null)" ]; then
@@ -244,7 +249,7 @@ if implantado "Loki and Promtail"; then
   confere "Kong lines in Loki of the 4 requests with the token masked" 4 "$mascaradas"
 fi
 
-titulo "RabbitMQ: x-queue-type is the only argument; TTL, dead-letter, overflow and length come from policies"
+titulo "RabbitMQ: arguments are x-queue-type, plus x-message-ttl on the retry queues; dead-letter, overflow, length and delivery limit come from policies"
 R="$K -n pytstop-plataforma exec -i rabbitmq-0 -c rabbitmq --"
 # rabbitmqadmin como admin, com a senha lida no proprio pod (admin.json).
 # shellcheck disable=SC2016 # o sh -c roda no pod: $(...) e "$@" expandem la
@@ -252,7 +257,8 @@ adm() {
   $R sh -c 'export RABBITMQADMIN_USERNAME=admin RABBITMQADMIN_PASSWORD="$(sed -n "s/.*\"password\": \"\([^\"]*\)\".*/\1/p" /etc/rabbitmq/definitions/admin.json)"; exec rabbitmqadmin "$@"' rabbitmqadmin "$@"
 }
 filas() { $R rabbitmqctl -q list_queues --no-table-headers name messages | grep "^billing" | tr '\n' ' '; echo; }
-mensagens() { $R rabbitmqctl -q list_queues --no-table-headers name messages | awk -v fila="$1" '$1 == fila {print $2}'; }
+# mensagens <regex>: soma das mensagens das filas cujo nome casa a regex (awk).
+mensagens() { $R rabbitmqctl -q list_queues --no-table-headers name messages | awk -v padrao="$1" '$1 ~ padrao {soma += $2} END {print soma + 0}'; }
 $R rabbitmqctl -q list_queues --no-table-headers name arguments policy | sort
 $R rabbitmqctl -q list_policies --no-table-headers | cut -f2,5 | sort
 printf 'max_message_size: '; $R rabbitmqctl -q eval 'application:get_env(rabbit, max_message_size).'
@@ -261,12 +267,41 @@ head -c 1153434 /dev/zero | tr '\0' x \
   | { adm publish message --exchange pytstop.dlx --routing-key billing.comandos --payload-file - 2>&1 || true; } \
   | grep -m1 PRECONDITION
 
-titulo "retry: copy with 1 s expiration on pytstop.retry comes back to billing.comandos"
-adm publish message --exchange pytstop.retry --routing-key billing.comandos --payload '{"smoke":"retry"}' --properties '{"expiration":"1000","headers":{"x-tentativa":1}}'
-sleep 7  # a contagem das filas quorum e atualizada a cada 5 s
+titulo "retry: one queue per delay; copies published as the billing user (scripts/prova_retry.py, through a port-forward)"
+# Publica pelo AMQP com o usuario do servico, nao pelo admin: so assim valem a
+# permissao de topico e a conferencia do user_id. Porta local livre, lida da
+# saida do port-forward.
+senha_billing=$($K -n "$NS" get secret rabbitmq-credenciais -o jsonpath='{.data.senha-billing}' | base64 -d)
+# O arquivo nasce antes: o redirecionamento do job em segundo plano so acontece
+# no processo filho, e o sed abaixo sairia com erro se chegasse primeiro.
+: > "$TMP/port-forward"
+$K -n "$NS" port-forward svc/rabbitmq :5672 > "$TMP/port-forward" 2>&1 &
+port_forward=$!
+porta=""
+for _ in $(seq 30); do
+  porta=$(sed -n 's/^Forwarding from 127\.0\.0\.1:\([0-9]*\) .*/\1/p' "$TMP/port-forward")
+  [ -n "$porta" ] && break
+  sleep 1
+done
+[ -n "$porta" ] || cat "$TMP/port-forward" >&2
+if AMQP_URL="amqp://billing:$senha_billing@127.0.0.1:${porta:-0}/%2F" uv run --frozen python scripts/prova_retry.py; then
+  prova_retry=held
+else
+  prova_retry=failed
+fi
+kill "$port_forward" 2>/dev/null || true
+wait "$port_forward" 2>/dev/null || true  # sem o aviso "Terminated" do bash
+port_forward=""
+confere "retry proofs (scripts/prova_retry.py)" held "$prova_retry"
+# A contagem das filas quorum no list_queues atualiza a cada ~5 s: espera as
+# filas de retry do billing zerarem, por ate 30 s.
+for _ in $(seq 15); do
+  retidas=$(mensagens '^billing[.]comandos[.]retry[.]')
+  [ "$retidas" = 0 ] && break
+  sleep 2
+done
 filas
-confere "retry copy back in billing.comandos" 1 "$(mensagens billing.comandos)"
-confere "retry queue billing.comandos.retry drained" 0 "$(mensagens billing.comandos.retry)"
+confere "billing.comandos retry queues drained" 0 "$retidas"
 $R rabbitmqctl -q purge_queue billing.comandos
 
 titulo "make redrive FILA=billing.comandos: the DLQ goes back to the queue"

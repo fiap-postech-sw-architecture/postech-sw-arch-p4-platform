@@ -30,7 +30,7 @@ Todo Deployment expõe a porta `metrics`, com as anotações de descoberta, e o 
 ### Rastreamento (RNF-056)
 
 - OpenTelemetry nos três serviços, instrumentando FastAPI, SQLAlchemy/psycopg, PyMongo, pika e httpx, com exportação OTLP para o Jaeger.
-- O contexto W3C (`traceparent`, `tracestate`) viaja nos headers AMQP (*Advanced Message Queuing Protocol*) do envelope ([ADR-036](036-mensageria-rabbitmq.md)). A instrumentação do pika injeta e extrai esses headers, mas quem publica é o relay, fora da transação de origem; por isso a outbox grava o `traceparent` com a mensagem, e o relay publica dentro desse contexto. O span do consumidor é filho do span de publicação, e cada passagem pela fila de retry acrescenta spans ao mesmo trace. Na chamada REST de negócio entre serviços (Execução para Billing), o httpx propaga o contexto.
+- O contexto W3C (`traceparent`, `tracestate`) viaja nos headers AMQP (*Advanced Message Queuing Protocol*) do envelope ([ADR-036](036-mensageria-rabbitmq.md)). A instrumentação do pika injeta e extrai esses headers, mas quem publica é o relay, fora da transação de origem; por isso a outbox grava o `traceparent` com a mensagem, e o relay publica dentro desse contexto. O span do consumidor é filho do span de publicação, e cada passagem por uma fila de retry acrescenta spans ao mesmo trace. Na chamada REST de negócio entre serviços (Execução para Billing), o httpx propaga o contexto.
 - Passos retomados por pessoa, sistema externo ou prazo (diagnóstico e execução pelo mecânico, decisão do cliente, webhook do Mercado Pago, processos `prazos`) começam com trace próprio. Para não partir a saga, o registro que espera o passo guarda o `traceparent` da mensagem que o pôs em espera, e o evento seguinte é publicado como filho desse contexto, com span link para o trace de quem retomou. Cada saga vira um trace no Jaeger, com raiz na abertura da OS.
 - Laços ociosos (poll de segurança do relay, relay do MongoDB e processos `prazos`) só abrem span quando há trabalho, e o `--memory.max-traces` do Jaeger fica em cerca de 5000 traces, o que cabe no limite de 512 Mi do pod, para que ciclos vazios não encham a memória nem escondam as sagas.
 
@@ -42,7 +42,7 @@ Todo Deployment expõe a porta `metrics`, com as anotações de descoberta, e o 
 
 Métricas novas levam o prefixo `pytstop_`; as herdadas do p3 mantêm o nome (`outbox_pendentes`, `outbox_dead`, `http_request_duration_seconds`), para reaproveitar regras e painéis.
 
-- Saga: `pytstop_saga_iniciadas_total`, `pytstop_saga_finalizadas_total{resultado}`, `pytstop_saga_compensacoes_total{motivo}`, `pytstop_saga_etapa_duracao_segundos{etapa}`, `pytstop_saga_ativas{etapa}` e `pytstop_saga_etapa_mais_antiga_segundos{etapa}`, gauge calculado por consulta à tabela `sagas`, como as métricas de outbox do p3, com a idade da instância mais antiga em cada etapa. O `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. O texto livre fica só no histórico, nunca no log.
+- Saga: os contadores `pytstop_saga_iniciadas_total`, `pytstop_saga_finalizadas_total{resultado}` (`resultado` em `concluida` ou `compensada`), `pytstop_saga_compensacoes_total{motivo}`, `pytstop_saga_reenvios_total{comando}` e `pytstop_saga_prazos_esgotados_total{comando}`, estes dois do processo `prazos`, com o tipo do comando no label; o histograma `pytstop_saga_etapa_duracao_segundos{etapa}`; e três gauges, `pytstop_saga_ativas{etapa}`, `pytstop_saga_etapa_mais_antiga_segundos{etapa}` (idade da instância mais antiga em cada etapa) e `pytstop_saga_prazo_vencido_segundos` (maior atraso entre as instâncias cujo envio mais recente já foi entregue e passou do prazo, contado do `entregue_em` mais `SAGA_PRAZO_RESPOSTA_SEGUNDOS`; zero sem atraso, e o comando que ainda espera na outbox não conta). Os gauges são calculados por um coletor da API na hora da raspagem, por consulta às tabelas `sagas` e `outbox`, como as métricas de outbox do p3, e continuam certos com o `prazos` fora do ar. O label `etapa` leva o nome da etapa em minúsculas, e o `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. O texto livre fica só na OS, nunca no log.
 - Mensageria: `pytstop_mensagens_publicadas_total{tipo}`, `pytstop_mensagens_consumidas_total{tipo,resultado}`, `outbox_pendentes` e `outbox_dead`, que o relay do Billing também exporta, mais o plugin Prometheus do RabbitMQ (profundidade por fila, inclusive das filas de mensagens mortas, as DLQ, consumidores e taxas de publicação e confirmação).
 - Integrações: `pytstop_mercadopago_requisicoes_total{operacao,resultado}`, `pytstop_circuit_breaker_aberto{dependencia}` e `pytstop_pagamentos_estornados_total{motivo}`, com `motivo` em `compensacao` ou `pagamento_apos_encerramento`.
 - Segurança: `pytstop_webhook_assinatura_invalida_total` e `pytstop_jwks_falhas_total`, mais as respostas 401, 403 e 429 do Kong por rota.
@@ -66,14 +66,18 @@ No Grafana, como na fase 3, separando aviso de alerta crítico, como recomenda a
 
 | Alerta | Condição | Janela (`for`) | Severidade |
 |---|---|---|---|
-| Mensagem em DLQ | alguma fila `.dlq` com mensagem, pela métrica por fila do plugin do RabbitMQ | 1 min | crítico |
-| Saga parada | instância com prazo técnico vencido (`prazo_resposta_em` no passado), em qualquer etapa, ou em `FALHA_NA_COMPENSACAO` | 5 min | crítico |
+| DLQ com mensagens | alguma fila `.dlq` com mensagem, pela métrica por fila do plugin do RabbitMQ | 1 min | crítico |
+| Saga parada | prazo técnico vencido e não tratado há mais de 60 s, em qualquer etapa, ou alguma instância em `falha_na_compensacao` (consulta abaixo) | 5 min | crítico |
 | Compensações acima do normal | razão entre compensações e sagas iniciadas acima de um limite tirado do comportamento normal | 30 min | aviso |
 | Erro 5xx acima de 1% | regra da fase 3, agregada por serviço | 5 min | crítico |
 | Circuito aberto | `pytstop_circuit_breaker_aberto` em 1 para qualquer dependência | 1 min | aviso |
 | Outbox parada | `outbox_pendentes` acima de zero em qualquer serviço (broker fora do ar ou relay parado) | 5 min | crítico |
 | Assinatura inválida no webhook | `pytstop_webhook_assinatura_invalida_total` crescendo | 5 min | aviso |
 | Falha na busca do conjunto de chaves públicas (JWKS) | `pytstop_jwks_falhas_total` crescendo | 5 min | aviso |
+
+A regra de saga parada é uma consulta só, `max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or vector(0)`, que dispara acima de 0. Com o `or`, a série que falta numa condição não esconde a outra, e o `vector(0)` deixa a regra com valor zero quando nenhuma condição vale, inclusive antes de o OS Service exportar as métricas da saga. Os 60 s são duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão (30 s); o limiar e a `summary` ficam literais em `alertas.yaml` e não acompanham a variável, então quem muda o intervalo muda também os dois. O `make manifests` do `platform` prova com o promtool que cada condição dispara sozinha.
+
+O que fazer quando "Saga parada" ou "DLQ com mensagens" dispara está no [runbook da saga](../../../operacao/runbook-saga.md).
 
 ## Alternativas Consideradas
 

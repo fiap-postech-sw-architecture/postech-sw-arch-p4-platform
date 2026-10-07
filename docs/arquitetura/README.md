@@ -2,7 +2,7 @@
 
 > [↑ Raiz do projeto](../../README.md)
 
-O desenho integrado está na [RFC-004: PytStop em microsserviços com saga orquestrada](rfc/fase4/rfc-004-microsservicos-saga.md), com diagrama geral, divisão dos serviços, saga com as sequências de sucesso e de compensação, mensageria, APIs, dados, segurança, observabilidade e implantação. Cada escolha tem um registro de decisão de arquitetura (ADR) com o contexto, as alternativas descartadas e as consequências.
+O desenho integrado está na [RFC-004: PytStop em microsserviços com saga orquestrada](rfc/fase4/rfc-004-microsservicos-saga.md), com diagrama geral, divisão dos serviços, saga com as sequências de sucesso e de compensação, mensageria, APIs, dados, segurança, observabilidade e implantação. Cada escolha tem um registro de decisão de arquitetura (ADR) com o contexto, as alternativas descartadas e as consequências. A operação da saga (saga parada, falha na compensação, retomada e redrive da DLQ) está no [runbook da saga](../operacao/runbook-saga.md).
 
 | ADR | Decisão | Status |
 |---|---|---|
