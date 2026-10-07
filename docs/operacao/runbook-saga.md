@@ -50,7 +50,7 @@ A API, o banco e as métricas escrevem etapa e status em minúsculas (`falha_na_
      | jq -r .access_token)
    ```
 
-   O mesmo token serve às três APIs, porque o `admin` herda os papéis `atendente` e `mecanico` ([ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)). Ele vale 15 minutos; depois, repita o login, que aceita 5 tentativas por minuto.
+   Se `$TOKEN` sair `null`, rode o pipeline de novo sem o `jq -r .access_token` do fim para ver a resposta: 401 é credencial errada, e 429, o limite de tentativas. O mesmo token serve às três APIs, porque o `admin` herda os papéis `atendente` e `mecanico` ([ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)). Ele vale 15 minutos; depois, repita o login, que aceita 5 tentativas por minuto.
 
 O k3s da Azure é opcional ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)) e fica fora deste runbook: a API do Kubernetes dele não é exposta, e o acesso à VM é por SSH.
 
@@ -122,7 +122,13 @@ A sequência parou na compensação pendente. O que já foi compensado continua 
 
 1. Trate a causa conforme a `falha` da instância.
    - `estorno_recusado`: o Billing respondeu `EstornoDePagamentoFalhou` ao `EstornarPagamento`, porque o Mercado Pago recusou o estorno.
-     1. Confira o pagamento no Billing, com o `pagamento_id` do resumo da OS: `curl -s "$BILLING/api/v1/pagamentos/$PAGAMENTO_ID" -H "Authorization: Bearer $TOKEN" | jq`.
+     1. Confira o pagamento no Billing, com o `pagamento_id` do resumo da OS (seção 1):
+
+        ```bash
+        PAGAMENTO_ID=b7e2c4d1-0a9f-4e3b-8c6d-5f1a2b3c4d5e   # troque pelo pagamento_id do resumo da OS
+        curl -s "$BILLING/api/v1/pagamentos/$PAGAMENTO_ID" -H "Authorization: Bearer $TOKEN" | jq
+        ```
+
      2. Com `MP_MODE=mercadopago`, faça o estorno pelo painel do Mercado Pago. Na retomada, o Billing consulta o pagamento antes de estornar, reconhece o estorno feito no painel e responde `PagamentoEstornado` sem chamar o provedor de novo ([ADR-040](../arquitetura/adr/fase4/040-integracao-mercado-pago.md)).
      3. Se o painel também recusar o estorno, não retome: veja [Quando pedir ajuda](#quando-pedir-ajuda).
    - `reenvios_esgotados`: a compensação pendente ficou sem resposta depois do envio original e de 5 reenvios, 12 minutos com os padrões. Ache por que o participante não respondeu:
