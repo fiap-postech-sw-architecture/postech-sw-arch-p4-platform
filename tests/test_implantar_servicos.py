@@ -71,14 +71,22 @@ with (Path(os.environ["FALSOS"]) / "kind.jsonl").open("a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\n")
 """
 
-# kubectl falso: cada namespace tem o banco, o Job de inicializacao e dois
-# Deployments. KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar
-# naquele namespace (apply, statefulset, job, deployment, sem-job).
+# kubectl falso: o kustomize devolve as imagens de imagens.txt do overlay;
+# cada namespace tem o banco, o Job de inicializacao e dois Deployments.
+# KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
+# (apply, statefulset, job, deployment, sem-job).
 KUBECTL_FALSO = r"""
 import json
 import os
 import sys
 from pathlib import Path
+
+if sys.argv[1:2] == ["kustomize"]:
+    with (Path(os.environ["FALSOS"]) / "kustomize.jsonl").open("a") as log:
+        log.write(json.dumps(sys.argv[1:]) + "\n")
+    for imagem in (Path(sys.argv[2]) / "imagens.txt").read_text().split():
+        print(f"        image: {imagem}")
+    sys.exit(0)
 
 BANCOS = {"pytstop-os": "os-postgres", "pytstop-billing": "billing-mongo",
           "pytstop-execucao": "execucao-postgres"}
@@ -146,15 +154,30 @@ def git(*args: str, cwd: Path) -> str:
     return processo.stdout.strip()
 
 
+# Imagens de terceiros que os manifests de cada servico usam, todas na tabela
+# de versoes do README.
+DE_TERCEIROS = {
+    "os-service": "postgres:16.15 prometheuscommunity/postgres-exporter:v0.20.1",
+    "billing-service": "mongo:7.0.43 percona/mongodb_exporter:0.53.0",
+    "execution-service": "postgres:16.15 prometheuscommunity/postgres-exporter:v0.20.1",
+}
+
+
 def checkout(raiz: Path, servico: str, *, overlay: str | None = "kind-ci") -> Path:
     """Checkout de um servico com um commit e, se pedido, o overlay."""
     # O nome do diretorio leva o namespace: o kubectl falso o le no apply.
     dir_ = raiz / SERVICOS[servico] / "repo"
     (dir_ / "k8s" / "overlays").mkdir(parents=True)
     if overlay:
-        (dir_ / "k8s" / "overlays" / overlay).mkdir()
-        (dir_ / "k8s" / "overlays" / overlay / "kustomization.yaml").write_text(
+        dir_overlay = dir_ / "k8s" / "overlays" / overlay
+        dir_overlay.mkdir()
+        (dir_overlay / "kustomization.yaml").write_text(
             "resources: [../../base]\n", encoding="utf-8"
+        )
+        # A propria imagem sem tag e com a do kind local, e as de terceiros.
+        (dir_overlay / "imagens.txt").write_text(
+            f"pytstop-{servico} pytstop-{servico}:dev {DE_TERCEIROS[servico]}\n",
+            encoding="utf-8",
         )
     git("init", "-q", cwd=dir_)
     git("commit", "-q", "--allow-empty", "-m", "teste", cwd=dir_)
@@ -583,3 +606,38 @@ def test_argumentos_recusados_sem_chamar_nada(
     assert mensagem in processo.stderr
     assert implantacao.chamadas("docker") == []
     assert implantacao.chamadas("kubectl") == []
+
+
+@pytest.mark.parametrize(
+    "imagem",
+    ["busybox:1.37", "postgres", "postgres:16.4", "pytstop-os-service:dev"],
+    ids=["outra-imagem", "sem-tag", "outra-versao", "imagem-de-outro-servico"],
+)
+def test_imagem_fora_da_tabela_de_versoes_para_antes_de_tudo(
+    implantacao: Implantacao, imagem: str
+) -> None:
+    dir_overlay = implantacao.dirs["billing-service"] / "k8s" / "overlays" / "kind-ci"
+    (dir_overlay / "imagens.txt").write_text(
+        f"pytstop-billing-service {DE_TERCEIROS['billing-service']} {imagem}\n"
+    )
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["billing-service"])
+    assert (
+        f"billing-service (commit {commit}): images outside the versions table "
+        f"of the platform README: {imagem}"
+    ) in processo.stderr
+    assert implantacao.chamadas("docker") == []
+    assert implantacao.chamadas("kubectl") == []
+
+
+def test_versoes_conferidas_no_overlay_pedido(implantacao: Implantacao) -> None:
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 0, processo.stderr
+    assert sorted(implantacao.chamadas("kustomize")) == sorted(
+        ["kustomize", str(dir_ / "k8s" / "overlays" / "kind-ci")]
+        for dir_ in implantacao.dirs.values()
+    )

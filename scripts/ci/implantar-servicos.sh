@@ -16,9 +16,12 @@
 # o script o apaga no fim. Em cada namespace, na ordem: apaga os Jobs de
 # inicializacao (Job e imutavel), apply server-side, espera o banco
 # (StatefulSet), o Job (log dele no erro) e cada Deployment. Os namespaces
-# vao em paralelo, e a saida de cada um leva o nome do servico.
+# vao em paralelo, e a saida de cada um leva o nome do servico. Antes de
+# tudo, cada servico so pode usar, alem da propria imagem, as imagens da tabela
+# de versoes do README deste repositorio (banco, exporter, initContainers).
 set -euo pipefail
 
+raiz=$(cd "$(dirname "$0")/../.." && pwd)
 CLUSTER="${CLUSTER:-pytstop-p4}"
 K="kubectl --context ${KUBE_CONTEXT:-kind-$CLUSTER}"
 INICIALIZACAO=app.kubernetes.io/component=inicializacao
@@ -98,6 +101,18 @@ for par in "${pares[@]}"; do
   fi
   if [ -e "$dir/$EXECUCAO" ]; then
     echo "$servico (commit $sha): $EXECUCAO already exists; this script generates and deletes it" >&2
+    exit 1
+  fi
+  manifests=$(kubectl kustomize "$dir/k8s/overlays/$overlay") \
+    || { echo "$servico (commit $sha): kubectl kustomize k8s/overlays/$overlay failed" >&2; exit 1; }
+  fora=$(sed -n 's/^ *image: *"\{0,1\}\([^" ]*\)"\{0,1\} *$/\1/p' <<< "$manifests" | sort -u \
+    | while read -r imagem; do
+      # O "(" antes do padrao: sem ele, o bash 3.2 do macOS fecha o $( no ")".
+      case "$imagem" in ("pytstop-$servico" | "pytstop-$servico:"*) continue ;; esac
+      grep -qF "\`$imagem\`" "$raiz/README.md" || echo "$imagem"
+    done)
+  if [ -n "$fora" ]; then
+    echo "$servico (commit $sha): images outside the versions table of the platform README: $(tr '\n' ' ' <<< "$fora")" >&2
     exit 1
   fi
   tar=$(valor "$servico" ${tars[@]+"${tars[@]}"})
@@ -213,8 +228,8 @@ prefixa() {
 
 pids=()
 for ((i = 0; i < n; i++)); do
-  # Subshell: o wait devolve o status do implanta (pipefail), nao o do prefixa.
-  (implanta "${nss[i]}" "${dirs[i]}/$EXECUCAO" 2>&1 | prefixa "${nomes[i]}") &
+  # Com o pipefail, o wait do pipeline devolve o status do implanta.
+  implanta "${nss[i]}" "${dirs[i]}/$EXECUCAO" 2>&1 | prefixa "${nomes[i]}" &
   pids[i]=$!
 done
 falharam=""
