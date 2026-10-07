@@ -6,7 +6,7 @@ Add-only log of project-specific learnings. New entries go to the top of each se
 
 Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-review.md`. The `last-consolidated` marker above is updated only when `/consolidate-memory` runs, not on every append.
 
-Consolidado em 2026-10-07: as 97 entradas que sairam (repetidas, superadas por uma correcao, dividas resolvidas e as que o README, os ADRs, a RFC-004, o runbook da saga ou comentarios do codigo ja registram) estao em `MEMORY.archive.md`. As linhas de 2026-10-07 que citam uma fonte dizem onde a regra esta; o MEMORY guarda inteiro so o que nao esta em outro lugar.
+Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por uma correcao, dividas resolvidas, as que o README, os ADRs, a RFC-004, o runbook da saga ou comentarios do codigo ja registram e a regra de pyjwt e anyio, que vale so para os servicos) estao em `MEMORY.archive.md`. As linhas de 2026-10-07 que citam uma fonte dizem onde a regra esta; o MEMORY guarda inteiro so o que nao esta em outro lugar.
 
 ## Recent decisions
 
@@ -47,7 +47,6 @@ Consolidado em 2026-10-07: as 97 entradas que sairam (repetidas, superadas por u
 - 2026-10-06 - KIC 3.x nao publica manifests all-in-one; o `helm template` so gera a IngressClass com `--api-versions networking.k8s.io/v1/IngressClass`
 - 2026-10-06 - Grafana 11.1: `/api/datasources/uid/jaeger/health` responde 500 (plugin so de frontend); testar pelo proxy `/api/datasources/proxy/uid/jaeger/api/services`
 - 2026-10-06 - ruff 0.16 formata blocos python dentro de Markdown: `ruff format --check .` pega snippet do README
-- 2026-10-06 - PyJWT 2.13.x acumulou 27 advisories em out/2026: comecar em `pyjwt>=2.15.1` e `anyio>=4.15.1`. PyJWT 2.15 exige base64url valido na assinatura mesmo com `verify_signature=False` (JWT falso de teste precisa de segmento valido)
 
 ## Tech debt / TODO
 

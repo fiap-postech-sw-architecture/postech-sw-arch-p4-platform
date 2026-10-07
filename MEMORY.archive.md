@@ -1,11 +1,12 @@
 # Project Memory Archive -- postech-sw-arch-p4-platform
 
-Entradas que sairam do `MEMORY.md` na consolidacao de 2026-10-07 (97 das 146),
-na ordem e nas secoes originais: as repetidas ou superadas por uma correcao, as
-dividas resolvidas e as que o README, os ADRs, a RFC-004, o runbook da saga ou
-comentarios do codigo ja registram. No `MEMORY.md`, essas ultimas viraram linhas
-que apontam a fonte, e as entradas que nao estao em outro lugar seguem la sem
-mudanca. A referencia a um documento de planejamento fora dos repositorios
+Entradas que sairam do `MEMORY.md` na consolidacao de 2026-10-07 (98 das 143
+que a `main` tinha), na ordem e nas secoes originais: as repetidas ou
+superadas por uma correcao, as dividas resolvidas, as que o README, os ADRs, a
+RFC-004, o runbook da saga ou comentarios do codigo ja registram e a regra de
+pyjwt e anyio, que vale so para os servicos. No `MEMORY.md`, as que ja estao em
+outra fonte viraram linhas que apontam essa fonte, e as entradas que nao estao
+em outro lugar seguem la sem mudanca. A referencia a um documento de planejamento fora dos repositorios
 publicos foi trocada pela fonte publica (ADR-042); o texto exato esta no
 historico do git (`git show f1f0f0a:MEMORY.md`).
 
@@ -100,6 +101,7 @@ historico do git (`git show f1f0f0a:MEMORY.md`).
 - 2026-10-06 - KongPlugin e namespaced e Ingress de outro namespace nao o enxerga: KongClusterPlugin
 - 2026-10-06 - `strip-path` do Kong tira o caminho casado inteiro: cada prefixo publicado usa um Service com `konghq.com/path`
 - 2026-10-06 - Cluster kind da fase 4 e `pytstop-p4`: `pytstop` e o do `make cd-local` da fase 3 na mesma maquina
+- 2026-10-06 - PyJWT 2.13.x acumulou 27 advisories em out/2026: comecar em `pyjwt>=2.15.1` e `anyio>=4.15.1`. PyJWT 2.15 exige base64url valido na assinatura mesmo com `verify_signature=False` (JWT falso de teste precisa de segmento valido)
 
 ## Tech debt / TODO
 
