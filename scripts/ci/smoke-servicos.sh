@@ -2,11 +2,12 @@
 # Smoke dos servicos implantados no kind (scripts/ci/implantar-servicos.sh),
 # por namespace: o Job de inicializacao completo; os Deployments e o banco com
 # todas as replicas prontas e atualizadas; pela borda, a saude em 200 (ate 1
-# min) e o /metrics em 404; cada pod anotado com up = 1 no Prometheus (ate 45
-# s); e a
-# NetworkPolicy barrando o banco a quem vem de outro namespace, numa conexao do
-# rabbitmq-0 da plataforma que tem de esgotar o prazo (recusa ou nome que nao
-# resolve nao provam a regra). README, "Contrato com os servicos".
+# min) e o /metrics em 404; cada pod anotado com up = 1 no Prometheus e o
+# exporter do banco com pg_up (PostgreSQL) ou mongodb_up (MongoDB) em 1, as
+# duas esperas juntas por ate 45 s; e a NetworkPolicy barrando o banco a quem
+# vem de outro namespace, numa conexao do rabbitmq-0 da plataforma que tem de
+# esgotar o prazo (recusa ou nome que nao resolve nao provam a regra). README,
+# "Contrato com os servicos".
 #
 #   scripts/ci/smoke-servicos.sh [<servico>...]   (sem argumento, os tres)
 #
@@ -22,12 +23,13 @@ INICIALIZACAO=app.kubernetes.io/component=inicializacao
 # para o localhost.
 case "$BORDA" in https://localhost | https://localhost:*) tls=-k ;; *) tls="" ;; esac
 
-# servico <nome>: namespace, prefixo na borda, host e porta do banco.
+# servico <nome>: namespace, prefixo na borda, host e porta do banco e a metrica
+# com que o exporter dele diz se entrou no banco.
 servico() {
   case "$1" in
-    os-service) echo "pytstop-os /os os-postgres.pytstop-os.svc.cluster.local 5432" ;;
-    billing-service) echo "pytstop-billing /billing billing-mongo.pytstop-billing.svc.cluster.local 27017" ;;
-    execution-service) echo "pytstop-execucao /execucao execucao-postgres.pytstop-execucao.svc.cluster.local 5432" ;;
+    os-service) echo "pytstop-os /os os-postgres.pytstop-os.svc.cluster.local 5432 pg_up" ;;
+    billing-service) echo "pytstop-billing /billing billing-mongo.pytstop-billing.svc.cluster.local 27017 mongodb_up" ;;
+    execution-service) echo "pytstop-execucao /execucao execucao-postgres.pytstop-execucao.svc.cluster.local 5432 pg_up" ;;
     *) return 1 ;;
   esac
 }
@@ -56,13 +58,17 @@ junta() { tr '\n' ' ' | sed 's/ *$//'; }
 # status <caminho>: o status HTTP pela borda, 000 sem resposta.
 status() { curl -s ${tls:+"$tls"} --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA$1" || true; }
 
-# ups <namespace>: os pods do namespace com up = 1 no Prometheus.
-ups() {
+# serie <metrica> <namespace>: "<pod> <valor>" de cada pod do namespace com a
+# metrica no Prometheus.
+serie() {
   local consulta
-  consulta=$(jq -rn --arg q "up{namespace=\"$1\"}" '$q | @uri')
+  consulta=$(jq -rn --arg q "${1}{namespace=\"$2\"}" '$q | @uri')
   $K get --raw "/api/v1/namespaces/$PLATAFORMA/services/prometheus:9090/proxy/api/v1/query?query=$consulta" \
-    | jq -r '.data.result[] | select(.value[1] == "1") | .metric.pod' | sort -u
+    | jq -r '.data.result[] | "\(.metric.pod) \(.value[1])"' | sort -u
 }
+
+# ups <namespace>: os pods do namespace com up = 1 no Prometheus.
+ups() { serie up "$1" | sed -n 's/ 1$//p'; }
 
 if [ "$#" -eq 0 ]; then set -- os-service billing-service execution-service; fi
 for nome in "$@"; do
@@ -70,7 +76,7 @@ for nome in "$@"; do
 done
 
 for nome in "$@"; do
-  read -r ns prefixo banco porta <<< "$(servico "$nome")"
+  read -r ns prefixo banco porta conexao <<< "$(servico "$nome")"
 
   # Erro do cluster numa consulta vira FAILED na linha, sem parar o smoke.
   jobs=$($K -n "$ns" get job -l "$INICIALIZACAO" -o json \
@@ -101,8 +107,9 @@ for nome in "$@"; do
   obtido=$(status "$prefixo/metrics")
   registra "$nome" "GET $prefixo/metrics" "$obtido" "$([ "$obtido" = 404 ] && echo sim)"
 
-  # O Prometheus raspa a cada 15 s: pod que acabou de subir ainda pode faltar.
-  # Pod saindo (o de antes de um rollout) nao conta.
+  # O Prometheus raspa a cada 15 s: pod que acabou de subir ainda pode faltar,
+  # e o exporter que subiu antes do banco ainda pode dizer pg_up 0. Pod saindo
+  # (o de antes de um rollout) nao conta.
   esperados=$($K -n "$ns" get pods -o json | jq -r '.items[]
     | select(.metadata.annotations["prometheus.io/scrape"] == "true" and .status.phase == "Running"
         and .metadata.deletionTimestamp == null)
@@ -110,7 +117,9 @@ for nome in "$@"; do
   faltam=$esperados
   for _ in $(seq 9); do
     faltam=$(comm -23 <(printf '%s\n' "$esperados") <(ups "$ns") | grep . || true)
-    [ -z "$faltam" ] && break
+    conexoes=$(serie "$conexao" "$ns" || true)
+    desligados=$(awk 'NF && $2 != 1 { print $1 }' <<< "$conexoes")
+    [ -z "$faltam" ] && [ -z "$desligados" ] && break
     sleep 5
   done
   if [ -z "$esperados" ]; then
@@ -121,6 +130,19 @@ for nome in "$@"; do
     detalhe="$(grep -c . <<< "$esperados") pods"
   fi
   registra "$nome" "up = 1 in Prometheus" "$detalhe" "$([ -n "$esperados" ] && [ -z "$faltam" ] && echo sim)"
+
+  # O alvo do exporter responde up = 1 mesmo sem entrar no banco (o
+  # postgres_exporter e o mongodb_exporter servem o /metrics assim e so zeram
+  # pg_up e mongodb_up): papel do exporter inexistente no PostgreSQL ou senha
+  # errada no MongoDB so aparecem nessa metrica.
+  if [ -z "$conexoes" ]; then
+    detalhe="no $conexao series"
+  elif [ -n "$desligados" ]; then
+    detalhe="$conexao is not 1 on $(junta <<< "$desligados")"
+  else
+    detalhe="$(awk '{ print $1 }' <<< "$conexoes" | junta)"
+  fi
+  registra "$nome" "$conexao = 1 in Prometheus" "$detalhe" "$([ -n "$conexoes" ] && [ -z "$desligados" ] && echo sim)"
 
   # 124 e o codigo do timeout: o pacote sumiu, a NetworkPolicy barrou.
   # $K separa as palavras de proposito (o comando com o contexto); $0, $1 e

@@ -1,14 +1,15 @@
 """scripts/ci/smoke-servicos.sh com kubectl, curl e sleep falsos.
 
 O cluster falso sai de um JSON por namespace: Jobs, Deployments e
-StatefulSets, pods anotados, o up de cada pod no Prometheus (que pode chegar
-so depois de algumas consultas) e o codigo da conexao do rabbitmq-0 ao banco;
-o curl responde pelo caminho. O teste confere a tabela servico | etapa |
-resultado (saida e summary), que cada etapa reprova o que deve reprovar e
-nomeia o servico, que erro do cluster numa consulta vira FAILED sem parar o
-smoke, a espera do Prometheus, a conexao ao banco de cada servico pelo
-rabbitmq-0, o prazo de cada chamada e o certificado sem verificacao so no
-localhost.
+StatefulSets, pods anotados, o up de cada pod no Prometheus e a metrica com
+que o exporter diz se entrou no banco (pg_up ou mongodb_up), ambos podendo
+chegar so depois de algumas consultas, e o codigo da conexao do rabbitmq-0 ao
+banco; o curl responde pelo caminho. O teste confere a tabela servico | etapa
+| resultado (saida e summary), que cada etapa reprova o que deve reprovar e
+nomeia o servico, inclusive o exporter com up = 1 e o banco desligado, que
+erro do cluster numa consulta vira FAILED sem parar o smoke, a espera do
+Prometheus, a conexao ao banco de cada servico pelo rabbitmq-0, o prazo de
+cada chamada e o certificado sem verificacao so no localhost.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ import re
 # subprocess so roda o script do repositorio, sem shell.
 import subprocess  # nosec B404
 import sys
+import urllib.parse
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,7 +36,13 @@ SERVICOS = {
     "billing-service": ("pytstop-billing", "/billing", "billing-mongo", "27017"),
     "execution-service": ("pytstop-execucao", "/execucao", "execucao-postgres", "5432"),
 }
-ETAPAS = 6
+# A metrica com que o exporter de cada banco diz se entrou nele.
+CONEXAO = {
+    "os-service": "pg_up",
+    "billing-service": "mongodb_up",
+    "execution-service": "pg_up",
+}
+ETAPAS = 7
 
 
 def namespace_saudavel(servico: str) -> dict[str, Any]:
@@ -54,6 +62,10 @@ def namespace_saudavel(servico: str) -> dict[str, Any]:
             {"nome": f"{curto}-inicializacao-x", "anotado": False, "fase": "Succeeded"},
         ],
         "up": dict.fromkeys(pods, "1"),
+        # So o exporter do banco tem a metrica de conexao. O valor de um pod
+        # pode ser uma lista, um valor por consulta (a ultima se repete).
+        "metrica": CONEXAO[servico],
+        "conexao": {f"{banco}-0": "1"},
         # Consultas ao Prometheus antes de os pods aparecerem.
         "up_depois_de": 0,
         "codigo": "124",
@@ -131,16 +143,29 @@ elif resto[:2] == ["get", "--raw"]:
     caminho, consulta = resto[2].split("?query=")
     prometheus = "/api/v1/namespaces/pytstop-plataforma/services/prometheus:9090"
     assert caminho == f"{prometheus}/proxy/api/v1/query", caminho
-    alvo = urllib.parse.unquote(consulta)
-    alvo = alvo.removeprefix('up{namespace="').removesuffix('"}')
-    contador = dir_ / f"prometheus-{alvo}"
+    consulta = urllib.parse.unquote(consulta).removesuffix('"}')
+    metrica, alvo = consulta.split('{namespace="')
+    if estado[alvo].get("erro"):
+        sys.exit("The connection to the server localhost:8080 was refused")
+    contador = dir_ / f"prometheus-{alvo}-{metrica}"
     n = int(contador.read_text()) + 1 if contador.exists() else 1
     contador.write_text(str(n))
-    ups = estado[alvo]["up"] if n > estado[alvo]["up_depois_de"] else {}
-    print(json.dumps({"data": {"result": [
-        {"metric": {"pod": pod, "namespace": alvo}, "value": [0, valor]}
-        for pod, valor in ups.items()
-    ]}}))
+    # Uma metrica que o namespace nao expoe volta sem serie, como no Prometheus.
+    if metrica == "up":
+        series = estado[alvo]["up"]
+    elif metrica == estado[alvo]["metrica"]:
+        series = estado[alvo]["conexao"]
+    else:
+        series = {}
+    if n <= estado[alvo]["up_depois_de"]:
+        series = {}
+    resultado = []
+    for pod, valor in series.items():
+        if isinstance(valor, list):
+            valor = valor[min(n - 1, len(valor) - 1)]
+        rotulos = {"pod": pod, "namespace": alvo}
+        resultado.append({"metric": rotulos, "value": [0, valor]})
+    print(json.dumps({"data": {"result": resultado}}))
 elif ns == "pytstop-plataforma" and resto[:2] == ["exec", "rabbitmq-0"]:
     host, porta = resto[-2:]
     alvo = host.split(".")[1]
@@ -263,6 +288,7 @@ def test_servicos_saudaveis_passam_em_todas_as_etapas(smoke: Smoke) -> None:
             (servico, f"GET {prefixo}/api/v1/saude", "ok: 200"),
             (servico, f"GET {prefixo}/metrics", "ok: 404"),
             (servico, "up = 1 in Prometheus", "ok: 3 pods"),
+            (servico, f"{CONEXAO[servico]} = 1 in Prometheus", f"ok: {banco}-0"),
             (
                 servico,
                 f"rabbitmq-0 -> {banco}.{ns}.svc.cluster.local:{porta}",
@@ -347,6 +373,10 @@ FALHAS: dict[str, tuple[Callable[[dict[str, Any]], object], tuple[str, str]]] = 
         lambda e: e["pytstop-billing"].update(pods=[]),
         ("up = 1 in Prometheus", "FAILED: no annotated pod running"),
     ),
+    "exporter-sem-a-metrica-do-banco": (
+        lambda e: e["pytstop-billing"].update(conexao={}),
+        ("mongodb_up = 1 in Prometheus", "FAILED: no mongodb_up series"),
+    ),
     "banco-alcancavel": (
         lambda e: e["pytstop-billing"].update(codigo="0"),
         (
@@ -405,6 +435,7 @@ def test_erro_do_cluster_vira_failed_e_o_smoke_segue(smoke: Smoke) -> None:
         ("os-service", "initialization Job"),
         ("os-service", "rollouts"),
         ("os-service", "up = 1 in Prometheus"),
+        ("os-service", "pg_up = 1 in Prometheus"),
     }
     assert len(smoke.linhas()) == ETAPAS * len(SERVICOS)
 
@@ -464,7 +495,86 @@ def test_pod_que_nunca_aparece_esgota_a_espera_de_45_s(smoke: Smoke) -> None:
     processo = smoke.roda(estado, "os-service")
 
     assert processo.returncode == 1
+    # O up e a metrica do banco esperam juntos: o prazo e um so.
     assert len(smoke.chamadas("sleep")) == 9
+
+
+@pytest.mark.parametrize("servico", SERVICOS)
+def test_exporter_com_up_1_e_banco_desligado_reprova_so_a_conexao(
+    smoke: Smoke, servico: str
+) -> None:
+    # O alvo responde ao Prometheus (up = 1), mas o exporter nao entrou no banco.
+    ns, _, banco, _ = SERVICOS[servico]
+    metrica = CONEXAO[servico]
+    estado = cluster_saudavel()
+    estado[ns]["conexao"] = {f"{banco}-0": "0"}
+
+    processo = smoke.roda(estado)
+
+    assert processo.returncode == 1
+    assert processo.stderr.endswith(f"services smoke FAILED: {servico}\n")
+    assert [linha for linha in smoke.linhas() if "FAILED" in linha[2]] == [
+        (
+            servico,
+            f"{metrica} = 1 in Prometheus",
+            f"FAILED: {metrica} is not 1 on {banco}-0",
+        )
+    ]
+    assert (servico, "up = 1 in Prometheus", "ok: 3 pods") in smoke.linhas()
+    assert len(smoke.chamadas("sleep")) == 9
+
+
+def test_exporter_ganha_tempo_ate_entrar_no_banco(smoke: Smoke) -> None:
+    # O exporter subiu antes do banco: duas raspagens com pg_up 0, e a terceira
+    # ja conectada.
+    estado = cluster_saudavel()
+    estado["pytstop-execucao"]["conexao"] = {"execucao-postgres-0": ["0", "0", "1"]}
+
+    processo = smoke.roda(estado)
+
+    assert processo.returncode == 0, processo.stderr
+    assert len(smoke.chamadas("sleep")) == 2
+    assert (
+        "execution-service",
+        "pg_up = 1 in Prometheus",
+        "ok: execucao-postgres-0",
+    ) in smoke.linhas()
+
+
+def test_so_um_exporter_desligado_reprova_o_servico_e_nomeia_o_pod(
+    smoke: Smoke,
+) -> None:
+    # Com dois pods de banco, o conectado nao esconde o desligado.
+    estado = cluster_saudavel()
+    estado["pytstop-os"]["conexao"] = {"os-postgres-0": "1", "os-postgres-1": "0"}
+
+    processo = smoke.roda(estado, "os-service")
+
+    assert processo.returncode == 1
+    assert (
+        "os-service",
+        "pg_up = 1 in Prometheus",
+        "FAILED: pg_up is not 1 on os-postgres-1",
+    ) in smoke.linhas()
+
+
+def test_consulta_a_metrica_do_banco_de_cada_servico_no_namespace_dele(
+    smoke: Smoke,
+) -> None:
+    processo = smoke.roda(cluster_saudavel())
+
+    assert processo.returncode == 0, processo.stderr
+    consultas = {
+        urllib.parse.unquote(chamada[-1].split("?query=")[1])
+        for chamada in smoke.chamadas("kubectl")
+        if chamada[3:5] == ["get", "--raw"]
+    }
+    assert consultas == {
+        *(f'up{{namespace="{ns}"}}' for ns, *_ in SERVICOS.values()),
+        'pg_up{namespace="pytstop-os"}',
+        'mongodb_up{namespace="pytstop-billing"}',
+        'pg_up{namespace="pytstop-execucao"}',
+    }
 
 
 def test_curl_com_prazo_e_sem_verificar_certificado_so_no_localhost(
