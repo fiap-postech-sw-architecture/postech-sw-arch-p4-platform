@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Segredos de runtime da plataforma e dos servicos (make deploy, antes do
-# apply; ADR-042).
+# apply; ADR-042). Supoe os quatro namespaces ja criados, como o make deploy
+# faz antes de chamar o script: rodado sozinho num cluster sem os namespaces
+# dos servicos, para no primeiro Secret de um deles.
 #
 # Fontes da plataforma: rabbitmq-credenciais (senhas do admin do RabbitMQ e
 # dos usuarios os, billing e execucao, mais o admin.json) e grafana-admin. O
