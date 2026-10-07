@@ -2,11 +2,11 @@
 # arquivo). Cada regra: consulta no Prometheus (A) e limiar (C). Notificacao
 # pela policy default do Grafana, sem canal externo, como na fase 3. Os
 # alertas do ADR-043 sobre metricas que os servicos ainda nao exportam
-# (compensacoes acima do normal, circuito aberto, outbox parada) entram com
-# elas; a saga parada ja esta aqui e fica em OK ate o OS Service exportar as
-# metricas da saga. Este arquivo
-# vale no Kubernetes e no compose; o que depende do Kong, que o compose nao
-# tem, fica em alertas-cluster.yaml.
+# (compensacoes acima do normal, circuito aberto, outbox parada, assinatura
+# invalida no webhook e falha na busca do JWKS) entram com elas; a saga
+# parada ja esta aqui e fica em OK ate o OS Service exportar as metricas da
+# saga. Este arquivo vale no Kubernetes e no compose; o que depende do Kong,
+# que o compose nao tem, fica em alertas-cluster.yaml.
 apiVersion: 1
 groups:
   - orgId: 1
