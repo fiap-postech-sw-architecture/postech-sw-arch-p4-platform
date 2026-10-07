@@ -297,7 +297,31 @@ Todas são quorum, duráveis, não exclusivas e sem auto-delete. O tipo (`x-queu
 
 O TTL da fila de retry fica no argumento de propósito: o atraso está no nome da fila, e mudar um atraso é criar outra fila (com a permissão de tópico e os consumidores), nunca mudar o argumento de uma que já existe. E não vai para a `retry-<fila>`, comum às cinco: com policy e argumento, a fila quorum usa o menor dos dois ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)), e um `message-ttl` ali cortaria os atrasos maiores.
 
-Um broker criado com uma versão anterior deste arquivo (volume do compose ou PVC do StatefulSet) guarda as filas antigas, porque a importação não apaga fila: as que tinham dead-letter e TTL como argumento, de antes das policies, e a `<fila>.retry` única, de antes das filas por atraso. Esta fica sem policy (a `retry-<fila>` passa a casar só as filas por atraso), e a permissão de tópico recusa a chave que a alcançava: cópia que ainda estiver nela expira sem dead letter e se perde (conferido no 4.3.6), e até ser apagada ela aparece como fila de trabalho sem consumidor nos painéis 2, 4 e 5 do dashboard. Apague as filas antigas uma vez (`rabbitmqctl delete_queue billing.comandos.retry`, e o mesmo para `execucao.comandos.retry` e `os.eventos.retry`) ou o volume.
+A importação do boot não apaga fila, e fila que já existe fica com os argumentos com que nasceu. Um broker com volume (compose) ou PVC (StatefulSet) que ainda tem a fila de retry única de cada fila de trabalho (`<fila>.retry`, sem o atraso no nome) passa às filas por atraso sem perder cópia assim:
+
+1. Pare os consumidores dos serviços (réplicas em zero no cluster), para nenhuma cópia nova entrar na `<fila>.retry`, e espere as três esvaziarem: em até 300 s, o maior `expiration` que as cópias levavam, todas voltam para a fila de trabalho pela policy que ainda vale. Confira na coluna `messages`:
+
+   ```bash
+   # kind; no k3s, o contexto dele no --context
+   kubectl --context kind-pytstop-p4 -n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl -q list_queues name messages
+   # compose
+   docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl -q list_queues name messages
+   ```
+
+2. Aplique as definitions e as permissões: `make deploy` no kind e no k3s (o ConfigMap novo reinicia o broker, e o Job `rabbitmq-usuarios` roda de novo) ou `make down && make up` no compose (só recriando os containers o broker reimporta as definitions e o `rabbitmq-usuarios` reaplica o `permissoes.json`). Daqui em diante a `<fila>.retry` fica sem policy, porque a `retry-<fila>` passa a casar só as filas por atraso: cópia que ainda estivesse nela expiraria sem dead letter e se perderia (conferido no 4.3.6), e por isso o passo 1 vem antes.
+
+3. Apague as três filas antigas, que até lá aparecem como fila de trabalho sem consumidor nos painéis 2, 4 e 5 do dashboard:
+
+   ```bash
+   for fila in billing.comandos.retry execucao.comandos.retry os.eventos.retry; do
+     kubectl --context kind-pytstop-p4 -n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl delete_queue "$fila"
+     # compose: docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl delete_queue "$fila"
+   done
+   ```
+
+4. Suba os consumidores já publicando nas chaves `<fila>.retry.1s` a `.300s`: a permissão de tópico recusa a chave antiga, o nome da fila de trabalho.
+
+Fila de trabalho ou DLQ com argumento além de `x-queue-type` (dead letter, TTL ou tamanho, que hoje vêm das policies; o `list_queues name arguments` mostra) também não muda na importação: apague-a, com as mensagens dela. Quando o conteúdo do broker não importa, apagar o volume resolve tudo de uma vez: `docker compose -f compose/docker-compose.yml down -v` no compose, ou `make kind-down` e `make kind-up deploy` no kind.
 
 Limites: a cópia volta no atraso da fila de retry em que entrou; a fila de trabalho cheia (10000 mensagens) recusa a publicação, que o relay do produtor retenta; e o broker recusa mensagem acima de 1 MiB (`max_message_size` no `rabbitmq.conf`).
 
