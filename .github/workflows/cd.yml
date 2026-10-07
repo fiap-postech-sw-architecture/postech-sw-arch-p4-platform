@@ -17,8 +17,11 @@ on:
 permissions:
   contents: read
 
-# Um run por ref: push novo num PR cancela o run anterior; na main, o deploy
-# em curso termina antes do proximo.
+# Um run por ref. Num PR, push novo cancela o run em curso. Na main o run em
+# curso termina, e o GitHub guarda um so run pendente por grupo: o push
+# seguinte cancela o pendente anterior, e aquele commit fica sem deploy-kind.
+# O kind e efemero, entao o commit pulado nao deixa nada no cluster, e o run
+# que roda testa o estado mais novo da main.
 concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
