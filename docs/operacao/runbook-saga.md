@@ -58,7 +58,7 @@ O k3s da Azure é opcional ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy
 
 "Saga parada" ([ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md#alertas), regra `pytstop-saga-parada`) dispara quando uma destas condições dura 5 minutos, e cada uma vale sozinha:
 
-- prazo técnico vencido e não tratado há mais de 60 s, duas vezes o intervalo de 30 s do `prazos`, ou seja, `max(pytstop_saga_prazo_vencido_segundos) > 60` ([seção 3](#3-prazo-técnico-vencido-sem-reenvio));
+- prazo técnico vencido e não tratado há mais de 60 s, duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão (30 s, o intervalo do `prazos`; o limiar muda junto com a variável), ou seja, `max(pytstop_saga_prazo_vencido_segundos) > 60` ([seção 3](#3-prazo-técnico-vencido-sem-reenvio));
 - alguma instância em `falha_na_compensacao`, ou seja, `max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0` ([seção 2](#2-falha-na-compensação-e-retomada)).
 
 ### Métricas
@@ -160,7 +160,7 @@ Resultado esperado: `GET $OS/api/v1/sagas/$ORDEM_ID` chega a `compensada`, com a
 
 ## 3. Prazo técnico vencido sem reenvio
 
-Com tudo de pé, o `prazos` reenvia o comando a cada prazo vencido, e o atraso não passa do intervalo dele, 30 s. Atraso acima de 60 s quer dizer que o prazo não está sendo tratado. Confira as causas nesta ordem:
+Com tudo de pé, o `prazos` reenvia o comando a cada prazo vencido, e o atraso não passa do intervalo dele (`PRAZOS_INTERVALO_SEGUNDOS`, 30 s por padrão). Atraso acima de 60 s quer dizer que o prazo não está sendo tratado. Confira as causas nesta ordem:
 
 | Causa | Como confirmar | O que fazer |
 |---|---|---|
