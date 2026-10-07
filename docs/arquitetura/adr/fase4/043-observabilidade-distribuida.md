@@ -42,7 +42,7 @@ Todo Deployment expõe a porta `metrics`, com as anotações de descoberta, e o 
 
 Métricas novas levam o prefixo `pytstop_`; as herdadas do p3 mantêm o nome (`outbox_pendentes`, `outbox_dead`, `http_request_duration_seconds`), para reaproveitar regras e painéis.
 
-- Saga: `pytstop_saga_iniciadas_total`, `pytstop_saga_finalizadas_total{resultado}`, `pytstop_saga_compensacoes_total{motivo}`, `pytstop_saga_etapa_duracao_segundos{etapa}`, `pytstop_saga_ativas{etapa}` e `pytstop_saga_etapa_mais_antiga_segundos{etapa}`, gauge calculado por consulta à tabela `sagas`, como as métricas de outbox do p3, com a idade da instância mais antiga em cada etapa. O `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. O texto livre fica só no histórico, nunca no log.
+- Saga: os contadores `pytstop_saga_iniciadas_total`, `pytstop_saga_finalizadas_total{resultado}` (`resultado` em `concluida` ou `compensada`), `pytstop_saga_compensacoes_total{motivo}`, `pytstop_saga_reenvios_total{comando}` e `pytstop_saga_prazos_esgotados_total{comando}`, estes dois do processo `prazos`, com o tipo do comando no label; o histograma `pytstop_saga_etapa_duracao_segundos{etapa}`; e três gauges, `pytstop_saga_ativas{etapa}`, `pytstop_saga_etapa_mais_antiga_segundos{etapa}` (idade da instância mais antiga em cada etapa) e `pytstop_saga_prazo_vencido_segundos` (maior atraso entre as instâncias com prazo técnico vencido, zero sem atraso). Os gauges são calculados por um coletor da API na hora da raspagem, por consulta à tabela `sagas`, como as métricas de outbox do p3, e continuam certos com o `prazos` fora do ar. O label `etapa` leva o nome da etapa em minúsculas, e o `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. O texto livre fica só na OS, nunca no log.
 - Mensageria: `pytstop_mensagens_publicadas_total{tipo}`, `pytstop_mensagens_consumidas_total{tipo,resultado}`, `outbox_pendentes` e `outbox_dead`, que o relay do Billing também exporta, mais o plugin Prometheus do RabbitMQ (profundidade por fila, inclusive das filas de mensagens mortas, as DLQ, consumidores e taxas de publicação e confirmação).
 - Integrações: `pytstop_mercadopago_requisicoes_total{operacao,resultado}`, `pytstop_circuit_breaker_aberto{dependencia}` e `pytstop_pagamentos_estornados_total{motivo}`, com `motivo` em `compensacao` ou `pagamento_apos_encerramento`.
 - Segurança: `pytstop_webhook_assinatura_invalida_total` e `pytstop_jwks_falhas_total`, mais as respostas 401, 403 e 429 do Kong por rota.
@@ -67,13 +67,15 @@ No Grafana, como na fase 3, separando aviso de alerta crítico, como recomenda a
 | Alerta | Condição | Janela (`for`) | Severidade |
 |---|---|---|---|
 | Mensagem em DLQ | alguma fila `.dlq` com mensagem, pela métrica por fila do plugin do RabbitMQ | 1 min | crítico |
-| Saga parada | instância com prazo técnico vencido (`prazo_resposta_em` no passado), em qualquer etapa, ou em `FALHA_NA_COMPENSACAO` | 5 min | crítico |
+| Saga parada | `max(pytstop_saga_prazo_vencido_segundos)` acima de 60, dois ciclos do `prazos` (instância com prazo técnico vencido e não tratado, em qualquer etapa), ou `max(pytstop_saga_ativas{etapa="falha_na_compensacao"})` acima de 0 | 5 min | crítico |
 | Compensações acima do normal | razão entre compensações e sagas iniciadas acima de um limite tirado do comportamento normal | 30 min | aviso |
 | Erro 5xx acima de 1% | regra da fase 3, agregada por serviço | 5 min | crítico |
 | Circuito aberto | `pytstop_circuit_breaker_aberto` em 1 para qualquer dependência | 1 min | aviso |
 | Outbox parada | `outbox_pendentes` acima de zero em qualquer serviço (broker fora do ar ou relay parado) | 5 min | crítico |
 | Assinatura inválida no webhook | `pytstop_webhook_assinatura_invalida_total` crescendo | 5 min | aviso |
 | Falha na busca do conjunto de chaves públicas (JWKS) | `pytstop_jwks_falhas_total` crescendo | 5 min | aviso |
+
+O que fazer quando "Saga parada" ou "Mensagem em DLQ" dispara está no [runbook da saga](../../../operacao/runbook-saga.md).
 
 ## Alternativas Consideradas
 

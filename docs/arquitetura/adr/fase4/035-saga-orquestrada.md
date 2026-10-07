@@ -39,7 +39,7 @@ São nove passos (T1 a T9) em três serviços (OS Service, Billing Service e Exe
 
 ### Pivot e ordem dos passos
 
-O pivot é o início da execução física (T8): depois que o mecânico começa a desmontar o carro, o trabalho feito não se desfaz por mensagem. Até ali tudo compensa, inclusive o pagamento, por estorno. Antes do pivot, `POST /api/v1/ordens-de-servico/{id}/cancelamento` responde 202 com a etapa da saga e dispara a compensação; depois, responde 409. O histórico da OS registra o pedido e o desfecho.
+O pivot é o início da execução física (T8): depois que o mecânico começa a desmontar o carro, o trabalho feito não se desfaz por mensagem. Até ali tudo compensa, inclusive o pagamento, por estorno. Antes do pivot, `POST /api/v1/ordens-de-servico/{id}/cancelamento` responde 202 com a etapa da saga e dispara a compensação; depois, responde 409 com o código `TRANSICAO_STATUS_INVALIDA`, o mesmo que o OS Service já usa nas transições de status recusadas (respostas na seção 6.1 da [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md#61-rotas-por-serviço)). O histórico da OS registra o pedido e o desfecho.
 
 A reserva (T5) vem antes do pagamento (T6), como na Aula 01, que reserva estoque antes de cobrar, e a OS só entra na fila de execução (T7) com pagamento confirmado (RN-027). Nesta ordem, falta de peça compensa sem estorno, e o estorno de RN-026 vale para toda compensação iniciada depois de `PagamentoConfirmado`. A OS vai a `AGUARDANDO_EXECUCAO` já no `PagamentoConfirmado`, porque o agendamento que vem depois é técnico e não tem falha de negócio.
 
@@ -50,6 +50,8 @@ Em ordem inversa, uma por vez, cada uma esperando a resposta: `CancelarExecucao`
 Assim, recusa ou expiração do orçamento descarta o diagnóstico e cancela a OS, sem `CancelarOrcamento` (RN-024), e pagamento recusado ou expirado libera a reserva, cancela o orçamento, descarta o diagnóstico e cancela a OS (RN-025). A tabela de gatilhos por etapa, com cancelamento e prazo esgotado em cada uma, está na [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md).
 
 Toda compensação é idempotente. Se chegar ao participante antes do comando original, ele grava uma lápide e descarta o original quando este chegar. `EstornarPagamento` compensa o T6 em qualquer estado do pagamento: cancela o que está em `SOLICITADO`, com resposta `PagamentoCancelado`, e estorna o `CONFIRMADO`, com resposta `PagamentoEstornado` ([ADR-040](040-integracao-mercado-pago.md)).
+
+A resposta a um comando se reconhece pelo `causation_id` do envelope, que leva o `id` do comando respondido, inclusive quando o participante republica o desfecho para um comando repetido; evento espontâneo, como a decisão do cliente ou um estorno automático, leva o `id` do comando que abriu o fluxo ([ADR-036](036-mensageria-rabbitmq.md)). A instância guarda o `id` de cada envio do comando em voo, o original e os reenvios. Em `COMPENSANDO`, com o `EstornarPagamento` em voo, a resposta a ele é o `PagamentoCancelado`, o `PagamentoEstornado` ou o `EstornoDePagamentoFalhou` cujo `causation_id` é um desses ids, com qualquer `motivo`: os dois primeiros concluem a compensação, e o terceiro leva à falha na compensação. Um `PagamentoEstornado` com outro `causation_id`, de estorno automático, só atualiza o resumo do pagamento. Casar pelo `motivo` erraria nos dois sentidos: o Billing responde ao comando com `pagamento_apos_encerramento` quando a aprovação tardia já tinha sido estornada, e o estorno automático que chega com a compensação pendente não é a resposta dela.
 
 ### Isolamento
 
@@ -63,7 +65,7 @@ A saga é ACD (atomicidade, consistência e durabilidade, sem o isolamento; Aula
 
 A `Saga` é um process manager da camada de aplicação do OS Service, persistido como agregado próprio na tabela `sagas`, no PostgreSQL da outbox ([ADR-037](037-banco-por-servico.md)). OS e saga mudam na mesma transação: etapa e status não podem divergir, e mudança de etapa e comando seguinte entram no mesmo commit. Etapas: uma `AGUARDANDO_*` por espera (de `AGUARDANDO_DIAGNOSTICO` a `AGUARDANDO_INICIO`), `EM_EXECUCAO`, `CONCLUIDA`, `COMPENSANDO`, `COMPENSADA` e `FALHA_NA_COMPENSACAO`. Etapa e status da OS são campos diferentes, alguns com o mesmo nome; o mapa entre os dois está na RFC-004.
 
-Evento que não corresponde à etapa atual tem dois tratamentos. Evento de passo já passado, ou que chega com a saga em compensação ou encerrada, é ignorado com log. Evento de passo à frente, como um `ExecucaoIniciada` que ultrapassou o `ExecucaoAgendada` no retry ou entre consumidores concorrentes, é erro transitório: volta pela fila de retry até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta. A exceção é a corrida do pivot: se `ExecucaoIniciada` chega com só `CancelarExecucao` pendente, nada foi desfeito, e a saga volta a `EM_EXECUCAO`, com "cancelamento recusado: execução já iniciada" no histórico. Reentrega não repete efeito (RN-028, [ADR-036](036-mensageria-rabbitmq.md)).
+Evento que não corresponde à etapa atual tem dois tratamentos. Evento de passo já passado, ou que chega com a saga em compensação ou encerrada, é ignorado com log. Evento de passo à frente, como um `ExecucaoIniciada` que ultrapassou o `ExecucaoAgendada` no retry ou entre consumidores concorrentes, é erro transitório: volta pela fila de retry até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta. O critério vale dentro da mesma etapa: `DiagnosticoConcluido` que chega com a OS ainda `RECEBIDA`, antes do `DiagnosticoIniciado`, e `PagamentoConfirmado`, `PagamentoRecusado` ou `PagamentoExpirado` antes do `PagamentoSolicitado` também são adiantados. A exceção é a corrida do pivot: se `ExecucaoIniciada` chega com só `CancelarExecucao` pendente, nada foi desfeito, e a saga volta a `EM_EXECUCAO`, com "cancelamento recusado: execução já iniciada" no histórico. O mesmo vale com a saga em `FALHA_NA_COMPENSACAO` e o `CancelarExecucao` parado: a Execução não cancela execução iniciada, e ignorar o evento deixaria a OS presa a uma retomada que nunca concluiria. Reentrega não repete efeito (RN-028, [ADR-036](036-mensageria-rabbitmq.md)).
 
 ### Prazos
 
@@ -71,11 +73,13 @@ Espera humana com validade expira no dono do dado: o processo `prazos` do Billin
 
 Espera técnica tem prazo no orquestrador: sem resposta em `SAGA_PRAZO_RESPOSTA_SEGUNDOS` (padrão 120), o processo `prazos` do OS Service reenvia o comando, até 5 reenvios, e então inicia a compensação, que inclui o passo em voo. Compensação sem resposta segue a mesma regra. O contador de reenvios é por passo e volta a zero a cada comando novo, inclusive no primeiro de `COMPENSANDO`. Prazos e limites são variáveis de ambiente, listadas na RFC-004; o perfil de demonstração usa valores curtos.
 
+O prazo só corre depois que o comando sai da outbox, a partir do `entregue_em` da linha: relay ou broker fora não gastam reenvio. A cada ciclo, o `prazos` confere por declaração passiva se a fila `os.eventos` tem consumidor; sem consumidor, ou com o broker fora, o ciclo não reenvia nem esgota prazo, só registra em log, porque a resposta pode estar parada na fila, e o alerta de saga parada acusa a demora. Com os padrões, a janela de reenvio (12 minutos) fica maior que a soma dos atrasos de retry do consumidor (381 s), e um teste da configuração confere a relação: com os atrasos nominais, a saga não desiste de um passo cujo comando o participante ainda está tentando processar.
+
 ### Falha na compensação
 
 Com 5 reenvios sem resposta, ou com `EstornoDePagamentoFalhou`, a saga vai para `FALHA_NA_COMPENSACAO`, a sequência para e o alerta de saga parada dispara ([ADR-043](043-observabilidade-distribuida.md)). O que já foi compensado continua compensado e o resto fica como estava. No estorno recusado, por exemplo, a execução já saiu da fila, mas pagamento, reserva, orçamento e diagnóstico seguem ativos, e a OS mantém o status anterior, com a etapa visível na consulta da OS.
 
-A intervenção manual segue o runbook `docs/operacao/runbook-saga.md` do `platform`. O operador resolve a causa (no estorno recusado, faz o estorno pelo painel do Mercado Pago) e retoma com `POST /api/v1/sagas/{ordem_id}/compensacao`, restrito a `admin`, que reenvia a compensação pendente e segue o plano. Mensagem parada numa DLQ volta à fila pelo redrive descrito no mesmo runbook ([ADR-036](036-mensageria-rabbitmq.md)).
+A intervenção manual segue o [runbook da saga](../../../operacao/runbook-saga.md) do `platform`. O operador resolve a causa (no estorno recusado, faz o estorno pelo painel do Mercado Pago) e retoma com `POST /api/v1/sagas/{ordem_id}/compensacao`, restrito a `admin`, que reenvia a compensação pendente e segue o plano. Mensagem parada numa DLQ volta à fila pelo redrive descrito no mesmo runbook ([ADR-036](036-mensageria-rabbitmq.md)).
 
 ### Contras da orquestração na Aula 02
 
@@ -149,7 +153,7 @@ O `prazos` do OS Service venceria também orçamento e pagamento e mandaria o Bi
 
 ### Negativas
 
-* Com todos os pods do consumidor fora, as sagas param; o estado não se perde, o processamento retoma na volta, e o alerta de saga parada dispara
+* Com todos os pods do consumidor fora, as sagas param; o estado não se perde, o `prazos` não reenvia nem esgota prazo enquanto `os.eventos` estiver sem consumidor, o processamento retoma na volta, e o alerta de saga parada dispara
 * Consistência eventual: a OS pode mostrar `AGUARDANDO_APROVACAO` com o orçamento já vencido no Billing, até o evento chegar
 * Compensação sequencial: cancelar depois do pagamento custa várias idas e voltas pelo broker e depende de o Mercado Pago aceitar o estorno
 * `FALHA_NA_COMPENSACAO` deixa recursos parcialmente compensados até a intervenção manual
