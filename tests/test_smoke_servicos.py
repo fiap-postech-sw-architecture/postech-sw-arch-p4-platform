@@ -209,6 +209,19 @@ with (Path(os.environ["FALSOS"]) / "sleep.jsonl").open("a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\n")
 """
 
+# So o Linux tem timeout; o falso o poe no PATH tambem no macOS, onde o script
+# cai no alarm do perl.
+TIMEOUT_FALSO = r"""
+import json
+import os
+import sys
+from pathlib import Path
+
+with (Path(os.environ["FALSOS"]) / "timeout.jsonl").open("a") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\n")
+os.execvp(sys.argv[2], sys.argv[2:])
+"""
+
 
 class Smoke:
     def __init__(self, tmp_path: Path) -> None:
@@ -326,6 +339,22 @@ def test_conexao_ao_banco_sai_do_rabbitmq_0_com_prazo_no_pod(smoke: Smoke) -> No
         ]
         assert chamada[9:12] == ["--", "bash", "-c"]
         assert chamada[12].startswith('timeout 3 bash -c "</dev/tcp/$0/$1"')
+
+
+def test_kubectl_exec_vai_com_prazo_em_volta(smoke: Smoke) -> None:
+    # Sem o prazo, um rabbitmq-0 que nao responde pendura o smoke.
+    timeout = smoke.tmp / "bin" / "timeout"
+    timeout.write_text(f"#!{sys.executable}\n{TIMEOUT_FALSO}", encoding="utf-8")
+    timeout.chmod(0o755)
+
+    processo = smoke.roda(cluster_saudavel())
+
+    assert processo.returncode == 0, processo.stderr
+    prazos = smoke.chamadas("timeout")
+    assert len(prazos) == len(SERVICOS)
+    for chamada in prazos:
+        assert chamada[:2] == ["20", "kubectl"]
+        assert "exec" in chamada
 
 
 # Uma falha no Billing, por etapa: o que muda no cluster e a linha esperada.
