@@ -1160,7 +1160,7 @@ Também aceitos:
 2. Credenciais de teste do Mercado Pago, passo humano: criar as contas de teste e gravar `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` como segredos da organização, visíveis só ao Billing. São necessárias para a evidência da integração real (risco 1).
 3. `x-signature` na notificação enviada à `notification_url` da preferência: a documentação não diz se ela vem assinada. A primeira execução na sandbox decide; se faltar assinatura, a URL passa a ser cadastrada no painel de Webhooks (ADR-040).
 4. Crédito da Azure para o k3s, passo humano: sem ele, o deploy obrigatório continua no kind do CI, e o vídeo usa o kind local.
-5. Minutos e pico de memória do `kind-ci` no runner, medidos no primeiro `deploy-kind` e registrados no summary.
+5. Minutos e pico de memória do `kind-ci` no runner com os três serviços, registrados no summary de cada `deploy-kind`. Só com a plataforma, o primeiro `deploy-kind` do `platform` (06/10/2026) levou 3 min 14 s, com working set de até 1,5 GiB no nó do kind ([ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md)).
 
 ## Glossário e siglas
 

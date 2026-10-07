@@ -54,23 +54,25 @@ O CD só começa depois que o CI daquele commit passa:
 
 A independência pedida na l. 90 está no que cada pipeline controla: build, testes, análise, imagem e deploy de cada serviço saem do seu repositório, com os seus checks, e nenhum pipeline publica ou implanta a imagem de outro. O kind é o ambiente de integração: sobe os vizinhos na última versão verde para que o E2E prove a saga com os três serviços, e uma falha ali aponta, no summary, o serviço responsável.
 
-O overlay `kind-ci` é enxuto: sem Loki, Promtail e Grafana, uma réplica por Deployment e teto de 1 réplica no autoescalonamento horizontal (HPA). Orçamento de memória, com os valores do p3 onde o componente já existia e estimativas para os novos:
+O overlay `kind-ci` é enxuto: sem Loki, Promtail e Grafana, uma réplica por Deployment e teto de 1 réplica no autoescalonamento horizontal (HPA). Orçamento de memória, com os valores do p3 onde o componente já existia e estimativas para os novos, e o maior uso medido no runner:
 
-| Componente | Memória (requests/limits) | Origem |
-|---|---|---|
-| API de cada serviço (3) | 256/512 Mi | p3 |
-| relay, consumidor e `prazos` (8 processos) | 128/256 Mi cada | relay do p3 |
-| PostgreSQL (2) | 128/512 Mi | p3 |
-| MongoDB | 256/1024 Mi | estimativa |
-| exportadores de banco (3) | 32/64 Mi cada | estimativa |
-| RabbitMQ | 256/1024 Mi | estimativa |
-| Kong (proxy e controlador) | 384/768 Mi | estimativa |
-| Prometheus | 192/512 Mi | p3 |
-| Jaeger | 128/512 Mi | p3 |
-| Mailpit e kube-state-metrics | 64/128 Mi cada | p3 |
-| Total, sem metrics-server e Jobs | cerca de 3,4/8,7 GiB | |
+| Componente | Memória (requests/limits) | Origem | Medido no runner |
+|---|---|---|---|
+| API de cada serviço (3) | 256/512 Mi | p3 | a medir |
+| relay, consumidor e `prazos` (8 processos) | 128/256 Mi cada | relay do p3 | a medir |
+| PostgreSQL (2) | 128/512 Mi | p3 | a medir |
+| MongoDB | 256/1024 Mi | estimativa | a medir |
+| exportadores de banco (3) | 32/64 Mi cada | estimativa | a medir |
+| RabbitMQ | 256/1024 Mi | estimativa | 213 Mi |
+| Kong (proxy e controlador) | 384/768 Mi | estimativa | 293 Mi |
+| Prometheus | 192/512 Mi | p3 | 57 Mi |
+| Jaeger | 128/512 Mi | p3 | 11 Mi |
+| Mailpit e kube-state-metrics | 64/128 Mi cada | p3 | 10 e 11 Mi |
+| Total, sem metrics-server e Jobs | cerca de 3,4/8,7 GiB | | nó do kind inteiro: working set de até 1,5 GiB e pico de 3,5 GiB no cgroup |
 
-O total fica abaixo de 10 GiB no runner padrão de 16 GB. Cada job tem `timeout-minutes`, cada etapa do deploy tem `kubectl wait --timeout`, e o primeiro run mede minutos e pico de memória e os escreve no summary.
+O total fica abaixo de 10 GiB no runner padrão de 16 GB. Cada job tem `timeout-minutes`, cada etapa do deploy tem `kubectl wait --timeout`, e o `deploy-kind` mede minutos e pico de memória e os escreve no summary.
+
+A coluna medida vem do primeiro `deploy-kind` do `platform` (PR #5, 06/10/2026), só com a plataforma no `kind-ci` e o smoke, no runner `ubuntu-24.04` de 16 GB: o maior uso de cada pod no `kubectl top`, amostrado a cada 5 s. O job levou 3 min 14 s (kind 39 s, deploy 51 s, smoke 1 min 40 s). No nó do kind, o maior working set amostrado (a conta que o kubelet usa para despejar pod) foi de 1,5 GiB, cerca de 0,5 GiB dele do próprio Kubernetes (apiserver, controller-manager, etcd, scheduler, CoreDNS, kube-proxy, kindnet e metrics-server), e o pico do cgroup, 3,5 GiB, com o cache de arquivos que o kernel devolve sob pressão. Os serviços entram nas linhas que faltam quando o `deploy-kind` de cada um subir os três.
 
 ### Alvo persistente: k3s na Azure
 
@@ -93,11 +95,11 @@ Nenhum segredo de aplicação fica no GitHub, e o inevitável fica na organizaç
 | `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | segredos da organização, visíveis só ao Billing e lidos só pelo `deploy-k3s` |
 | Chave RSA do JSON Web Token (JWT) e chave HMAC (código de autenticação de mensagem com hash) do link de decisão | geradas no cluster; a HMAC gira apagando o Secret e reimplantando, a RSA em duas etapas, com a chave anterior publicada no JWKS ([ADR-039](039-autenticacao-entre-servicos.md)) |
 | `ENCRYPTION_KEY`, que cifra os dados pessoais no OS Service | gerada uma vez e nunca regenerada; girá-la exige recifrar os dados e recalcular o hash do documento |
-| Senhas dos bancos e dos usuários do RabbitMQ, um por serviço | geradas no cluster; giram com `ALTER ROLE` e `rabbitmqctl change_password`, porque banco e broker só aplicam a senha do Secret na primeira inicialização do volume |
+| Senhas dos bancos e dos usuários do RabbitMQ, um por serviço | geradas no cluster. O banco só aplica a senha do Secret na primeira inicialização do volume, e ela gira com `ALTER ROLE`; no RabbitMQ, a senha nova vai para o Secret do broker: a de um usuário de serviço vale no `make deploy` seguinte, cujo Job de usuários a reaplica, e a do admin, no próximo boot do broker |
 | Senhas dos usuários semeados (`admin`, `atendente`, `mecanico`) e do Grafana | geradas no cluster; o E2E lê as dos usuários no Secret |
 | Desenvolvimento local | `.env.example` com valores de demonstração marcados (`gitleaks:allow`) |
 
-Um script do `platform` gera os valores com `openssl rand`, mascara cada um com `::add-mask::` e cria cada Secret só se ele ainda não existir, nos namespaces que o usam; a senha de cada usuário do RabbitMQ vai para o namespace do serviço e para o do broker, cujo init cria os usuários. No kind do CI, o script roda no runner, e os valores morrem com ele; no k3s, roda na própria VM pelo `az vm run-command`, e os valores não passam pelo GitHub. A guarda de boot do p3, que recusa literal de demonstração fora do ambiente de desenvolvimento, passa a cobrir a chave RSA.
+Um script do `platform` (`scripts/gerar-segredos.sh`, chamado pelo `make deploy` antes do apply) gera os valores com `openssl rand`, mascara cada um com `::add-mask::` e cria cada Secret só se ele ainda não existir, nos namespaces que o usam, ou seja, no primeiro deploy de cada cluster, e não a cada deploy: o RabbitMQ lê a senha do admin (o `admin.json` das definitions) só no boot, e uma senha nova com o broker de pé deixaria sem acesso o Job que cria os usuários. A senha de cada usuário do RabbitMQ vai para o namespace do broker, cujo Job cria os usuários, e para o do serviço, já na URL de conexão (`RABBITMQ_URL` do Secret `rabbitmq`). No kind do CI, o script roda no runner, e os valores morrem com ele; no k3s, roda na própria VM pelo `az vm run-command`, e os valores não passam pelo GitHub. A guarda de boot do p3, que recusa literal de demonstração fora do ambiente de desenvolvimento, passa a cobrir a chave RSA.
 
 ### Topologia e rede
 
