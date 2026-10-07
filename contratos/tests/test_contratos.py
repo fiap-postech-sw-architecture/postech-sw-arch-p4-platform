@@ -780,11 +780,13 @@ def test_permissao_no_retry_aceita_so_as_cinco_chaves_da_propria_fila(
     for chave in filas_de_retry(fila):
         assert [s for s in sobras if aceita(chave + s) or aceita(s + chave)] == []
     # As chaves das outras filas, a antiga (o nome da fila de trabalho), o
-    # prefixo sem atraso, a DLQ e cada ponto trocado por outro caractere (pega
-    # o ponto sem escape na regex).
+    # prefixo sem atraso, cada atraso sem o s (a varredura acima nunca deixa
+    # o s de fora), a DLQ e cada ponto trocado por outro caractere (pega o
+    # ponto sem escape na regex).
     recusadas = [
         *(chave for outra in outras for chave in filas_de_retry(outra)),
         *(f"{propria[:i]}-{propria[i + 1 :]}" for i in pontos),
+        *(f"{fila}.retry.{atraso}" for atraso in ATRASOS),
         fila,
         f"{fila}.retry",
         f"{fila}.retry.",
