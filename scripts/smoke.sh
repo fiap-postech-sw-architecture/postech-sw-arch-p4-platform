@@ -243,6 +243,9 @@ titulo "retry: one queue per delay; copies published as the billing user (script
 # permissao de topico e a conferencia do user_id. Porta local livre, lida da
 # saida do port-forward.
 senha_billing=$($K -n "$NS" get secret rabbitmq-credenciais -o jsonpath='{.data.senha-billing}' | base64 -d)
+# O arquivo nasce antes: o redirecionamento do job em segundo plano so acontece
+# no processo filho, e o sed abaixo sairia com erro se chegasse primeiro.
+: > "$TMP/port-forward"
 $K -n "$NS" port-forward svc/rabbitmq :5672 > "$TMP/port-forward" 2>&1 &
 port_forward=$!
 porta=""
@@ -263,6 +266,9 @@ port_forward=""
 confere "retry proofs (scripts/prova_retry.py)" held "$prova_retry"
 sleep 7  # a contagem das filas quorum e atualizada a cada 5 s
 filas
+retidas=$($R rabbitmqctl -q list_queues --no-table-headers name messages \
+  | awk '$1 ~ /^billing[.]comandos[.]retry[.]/ {soma += $2} END {print soma + 0}')
+confere "billing.comandos retry queues drained" 0 "$retidas"
 $R rabbitmqctl -q purge_queue billing.comandos
 
 titulo "make redrive FILA=billing.comandos: the DLQ goes back to the queue"

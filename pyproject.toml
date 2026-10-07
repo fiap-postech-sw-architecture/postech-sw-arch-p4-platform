@@ -72,5 +72,6 @@ module = ["pika", "pika.*"]
 ignore_missing_imports = true
 
 [tool.bandit]
-# assert e o mecanismo do pytest, e aqui so ha codigo de teste.
+# assert e o mecanismo do pytest; a prova do retry em scripts/ nao usa assert
+# (o S101 do ruff pega se usar).
 skips = ["B101"]

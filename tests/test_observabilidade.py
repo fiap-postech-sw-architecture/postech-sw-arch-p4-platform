@@ -147,35 +147,43 @@ def test_grafana_do_cluster_monta_todos_os_alertas_e_o_compose_so_os_comuns() ->
     assert "alertas-cluster" not in montados
 
 
-def consultas_com_filtro_de_fila() -> list[Any]:
-    consultas = [
-        (painel["title"], alvo["expr"])
-        for arquivo in DASHBOARDS
-        for painel in json.loads(arquivo.read_text(encoding="utf-8"))["panels"]
-        for alvo in painel["targets"]
-    ] + [
-        (regra["uid"], dado["model"]["expr"])
-        for _, regra in REGRAS
-        for dado in regra["data"]
-        if "expr" in dado["model"]
-    ]
-    return [
-        pytest.param(nome, expr, id=nome)
-        for nome, expr in consultas
-        if re.search(r"queue[=!]~", expr)
-    ]
+# Matcher de regex no label queue, com ou sem espaco e com qualquer aspa do
+# PromQL.
+FILTRO_REGEX_DE_FILA = re.compile(r"""queue\s*(=~|!~)\s*["'`]([^"'`]*)["'`]""")
+CONSULTAS: list[tuple[str, str]] = [
+    (painel["title"], alvo["expr"])
+    for arquivo in DASHBOARDS
+    for painel in json.loads(arquivo.read_text(encoding="utf-8"))["panels"]
+    for alvo in painel["targets"]
+] + [
+    (regra["uid"], dado["model"]["expr"])
+    for _, regra in REGRAS
+    for dado in regra["data"]
+    if "expr" in dado["model"]
+]
+COM_FILTRO_DE_FILA = [
+    (nome, expr) for nome, expr in CONSULTAS if FILTRO_REGEX_DE_FILA.search(expr)
+]
 
 
-@pytest.mark.parametrize(("nome", "expr"), consultas_com_filtro_de_fila())
+def test_painel_e_regra_com_filtro_de_fila_sao_os_mapeados() -> None:
+    # Painel que perde o filtro sai do conjunto e reprova; um novo precisa de
+    # grupo em FILTRO_DE_FILA.
+    assert {nome for nome, _ in COM_FILTRO_DE_FILA} == set(FILTRO_DE_FILA)
+    assert FILAS == TRABALHO | RETRY | DLQ
+
+
+@pytest.mark.parametrize(
+    ("nome", "expr"), COM_FILTRO_DE_FILA, ids=[nome for nome, _ in COM_FILTRO_DE_FILA]
+)
 def test_filtro_de_fila_seleciona_o_grupo_certo_da_topologia(
     nome: str, expr: str
 ) -> None:
     # Matcher do PromQL e RE2 ancorado nas duas pontas (re.fullmatch). Uma fila
     # nova no definitions.json com nome fora do padrao, ou um padrao que ficou
     # para tras quando a topologia mudou, reprova aqui.
-    (operador, padrao), *outros = re.findall(r'queue(=~|!~)"([^"]*)"', expr)
+    (operador, padrao), *outros = FILTRO_REGEX_DE_FILA.findall(expr)
     casam = {fila for fila in FILAS if re.fullmatch(padrao, fila)}
 
     assert outros == []
-    assert FILAS == TRABALHO | RETRY | DLQ
     assert (casam if operador == "=~" else FILAS - casam) == FILTRO_DE_FILA[nome]
