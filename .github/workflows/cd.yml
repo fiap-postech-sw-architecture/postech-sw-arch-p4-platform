@@ -46,6 +46,10 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
+      # uv no runner, para o make smoke rodar provas em Python com o Python do
+      # .python-version e as dependencias do uv.lock. Action de terceiro por
+      # SHA de commit (a tag ao lado); as oficiais, por tag.
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
       # O mesmo script do deploy-kind dos servicos: kind e kubectl fixados,
       # make kind-up e make deploy no overlay kind-ci, com as etapas medidas.
       - name: kind e kubectl fixados, cluster e plataforma no overlay kind-ci
