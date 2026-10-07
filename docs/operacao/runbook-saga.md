@@ -200,7 +200,7 @@ Resultado esperado: no ciclo seguinte do `prazos`, em até 30 s, o que venceu é
 
 O domínio do participante recusa um comando de três jeitos, e só o último chega à DLQ ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md#entrega-retry-e-dlq)):
 
-1. Descompasso de estado, como o `CancelarExecucao` de execução já iniciada: o participante dá `ack` e ignora o comando, sem resposta. Aparece no log dele como `command_ignored`, com o código do motivo, e em `pytstop_mensagens_consumidas_total{resultado="ignorada"}`; a saga resolve pelo evento que já recebeu ou pelo prazo técnico.
+1. Descompasso de estado, como o `CancelarExecucao` de execução já iniciada: o participante dá `ack` e ignora o comando, sem resposta. Aparece no log dele como `command_ignored`, com o código do motivo, e em `pytstop_mensagens_consumidas_total{resultado="ignorada"}`; a saga resolve pelo evento que já recebeu ou pelo prazo técnico. A compensação repetida não entra aqui: o participante republica o desfecho registrado, e a saga o recebe como resposta.
 2. Falha de negócio com evento no contrato (`GeracaoDeOrcamentoFalhou`, `ReservaDePecasFalhou`, `EstornoDePagamentoFalhou`): o evento chega ao OS Service, e a saga compensa ou, no estorno, vai a `falha_na_compensacao`. Aparece nos passos da instância e em `pytstop_saga_compensacoes_total`.
 3. Falha permanente sem evento no contrato, como o provedor recusar a criação da cobrança: a mensagem vai para a DLQ e dispara "DLQ com mensagens", e o prazo técnico compensa a saga, com `motivo=prazo_tecnico`.
 
