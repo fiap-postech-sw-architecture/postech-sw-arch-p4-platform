@@ -34,13 +34,14 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 
 | Alvo do `make` | Precisa de |
 |---|---|
-| `kind-up`, `deploy`, `smoke`, `redrive`, `kong-check`, `status`, `port-forward` | Docker, [kind](https://kind.sigs.k8s.io/) 0.31 ou mais novo, kubectl 1.27 ou mais novo (kustomize 5), jq e curl; portas 80 e 443 do loopback livres |
+| `kind-up`, `deploy`, `smoke`, `redrive`, `kong-check`, `status`, `port-forward` | Docker, [kind](https://kind.sigs.k8s.io/) 0.31 ou mais novo, kubectl 1.27 ou mais novo (kustomize 5), jq e curl; portas 80 e 443 do loopback livres; o `smoke` também usa o uv (a prova do retry roda em Python) |
 | `up`, `down` | Docker com Compose v2 |
 | `lint`, `test` | [uv](https://docs.astral.sh/uv/), que instala o Python 3.14 do `.python-version`; Node 24 com npx (o `make test` roda o `@asyncapi/cli`) |
+| `prova-retry` | Docker e uv: o broker roda num container avulso, e a prova, em Python |
 | `manifests` | Docker, kubectl e jq, com acesso a ghcr.io, Docker Hub, charts.konghq.com e raw.githubusercontent.com (imagens das ferramentas, chart do Kong e schemas do Kubernetes) |
 | `kong-render` | Docker, com acesso a charts.konghq.com |
 
-`make check` roda `lint`, `test` e `manifests`, como o CI.
+`make check` roda `lint`, `test`, `prova-retry` e `manifests`, como o CI.
 
 ## Conteúdo
 
@@ -53,8 +54,8 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 | [`observabilidade/`](observabilidade) | Datasources, alertas e dashboards do Grafana, usados pelo Kubernetes e pelo compose; [documentação painel a painel](observabilidade/README.md) |
 | [`compose/`](compose) | Stack docker compose para desenvolver um serviço: RabbitMQ, observabilidade e Mailpit com a configuração do cluster, os bancos de cada serviço e um profile que sobe os três; sem o Kong |
 | [`contratos/`](contratos) | AsyncAPI 3.0 dos comandos e eventos, JSON Schema do envelope e de cada mensagem, exemplos e testes |
-| [`scripts/`](scripts) | Smoke do cluster, checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong e checagens do `make manifests` |
-| [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação) |
+| [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong e checagens do `make manifests` |
+| [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) |
 | [`Makefile`](Makefile) | Atalhos de cluster, deploy, compose e testes (`make` lista os alvos) |
 
 ## Subir a plataforma
@@ -152,15 +153,17 @@ O Promtail está em fim de vida desde 02/03/2026. Ele continua aqui porque o enu
 
 Cada serviço tem um usuário próprio, criado pelo Job `rabbitmq-usuarios` ([`criar-usuarios.sh`](k8s/base/rabbitmq/criar-usuarios.sh)) com as senhas do Secret `rabbitmq-credenciais` e as permissões de [`permissoes.json`](k8s/base/rabbitmq/permissoes.json). Nenhum serviço tem permissão de configure: a topologia inteira vem do [`definitions.json`](k8s/base/rabbitmq/definitions.json), importado no boot do broker, e o serviço só confere o que precisa com declaração passiva. Assim nenhum comando volta como não roteável porque o consumidor do destino ainda não subiu.
 
-Além do exchange, a permissão de tópico limita as routing keys que cada usuário publica. Sem ela, um serviço poderia publicar evento em nome de outro ou mandar uma cópia ao `pytstop.retry` com a routing key da fila de outro serviço e entregar mensagem lá.
+Além do exchange, a permissão de tópico limita as routing keys que cada usuário publica. Sem ela, um serviço poderia publicar evento em nome de outro ou mandar uma cópia ao `pytstop.retry` com a routing key de uma fila de retry de outro serviço e entregar mensagem lá.
 
-Origem conferida ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): toda publicação leva na propriedade `user_id` do AMQP (*Advanced Message Queuing Protocol*) o usuário da conexão, e o broker recusa outro valor (`406 PRECONDITION_FAILED`), porque nenhum usuário de serviço tem a tag `impersonator`. O consumidor confere o `user_id` contra o produtor do tipo da mensagem, o `userId` da operação de envio no [`asyncapi.yaml`](contratos/asyncapi.yaml) (a routing key não serve, porque na cópia de retry ela é o nome da fila). A cópia de retry é republicada pelo próprio consumidor e leva o `user_id` dele, então com `x-tentativa` de 1 em diante ele aceita o próprio usuário; qualquer outro valor é erro permanente e vai para a DLQ. O snippet de [Filas, exchanges e argumentos](#filas-exchanges-e-argumentos) traz as duas regras.
+Os padrões de nome exato do `permissoes.json` terminam em `\z`, não em `$`: na expressão regular do broker o `$` também casa antes de um `\n` final, e com ele a chave `billing.comandos.retry.1s` seguida de `\n` passava pela permissão do `billing` (RabbitMQ 4.3.6; com `\z`, 403). Os de prefixo, das routing keys de comando e de evento, ficam abertos no fim, porque a chave continua com o nome da ação ou do fato.
+
+Origem conferida ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): toda publicação leva na propriedade `user_id` do AMQP (*Advanced Message Queuing Protocol*) o usuário da conexão, e o broker recusa outro valor (`406 PRECONDITION_FAILED`), porque nenhum usuário de serviço tem a tag `impersonator`. O consumidor confere o `user_id` contra o produtor do tipo da mensagem, o `userId` da operação de envio no [`asyncapi.yaml`](contratos/asyncapi.yaml) (a routing key não serve, porque na cópia de retry ela é o nome da fila de retry). A cópia de retry é republicada pelo próprio consumidor e leva o `user_id` dele, então com `x-tentativa` de 1 em diante ele aceita o próprio usuário; qualquer outro valor é erro permanente e vai para a DLQ. O snippet de [Filas, exchanges e argumentos](#filas-exchanges-e-argumentos) traz as duas regras.
 
 | Usuário | Publica em | Routing keys permitidas | Lê de | Senha (chave do Secret) |
 |---|---|---|---|---|
-| `os` | `pytstop.comandos`, `pytstop.retry` | `comando.billing.*` e `comando.execucao.*`; no retry, só `os.eventos` | `os.eventos` | `senha-os` |
-| `billing` | `pytstop.eventos`, `pytstop.retry` | `evento.billing.*`; no retry, só `billing.comandos` | `billing.comandos` | `senha-billing` |
-| `execucao` | `pytstop.eventos`, `pytstop.retry` | `evento.execucao.*`; no retry, só `execucao.comandos` | `execucao.comandos` | `senha-execucao` |
+| `os` | `pytstop.comandos`, `pytstop.retry` | `comando.billing.*` e `comando.execucao.*`; no retry, só `os.eventos.retry.1s` a `.300s` | `os.eventos` | `senha-os` |
+| `billing` | `pytstop.eventos`, `pytstop.retry` | `evento.billing.*`; no retry, só `billing.comandos.retry.1s` a `.300s` | `billing.comandos` | `senha-billing` |
+| `execucao` | `pytstop.eventos`, `pytstop.retry` | `evento.execucao.*`; no retry, só `execucao.comandos.retry.1s` a `.300s` | `execucao.comandos` | `senha-execucao` |
 | `admin` | tudo (operação e management) | tudo | tudo | `admin-senha` |
 
 Secret não atravessa namespace: cada serviço tem no próprio namespace um Secret com a `AMQP_URL` completa, usando a senha de demonstração da chave correspondente.
@@ -236,7 +239,7 @@ O `X-Request-ID` gerado pelo Kong é um UUID simples (`generator: uuid`), aceito
 
 ### Filas, exchanges e argumentos
 
-Toda a topologia está em [`k8s/base/rabbitmq/definitions.json`](k8s/base/rabbitmq/definitions.json), importada pelo RabbitMQ no boot (kind, k3s e compose). Os serviços não declaram nada com efeito: só conferem com declaração passiva (`passive=True`). No RabbitMQ 4.3 a declaração passiva também exige permissão no recurso: cada usuário confere a própria fila (permissão de leitura) e os exchanges em que publica (escrita). Fila ou exchange de outro serviço, `.retry` e `.dlq` respondem `403 ACCESS_REFUSED` e fecham o canal, então o check de topologia do boot fica nesta lista:
+Toda a topologia está em [`k8s/base/rabbitmq/definitions.json`](k8s/base/rabbitmq/definitions.json), importada pelo RabbitMQ no boot (kind, k3s e compose). Os serviços não declaram nada com efeito: só conferem com declaração passiva (`passive=True`). No RabbitMQ 4.3 a declaração passiva também exige permissão no recurso: cada usuário confere a própria fila (permissão de leitura) e os exchanges em que publica (escrita). Fila ou exchange de outro serviço, filas de retry e `.dlq` respondem `403 ACCESS_REFUSED` e fecham o canal, então o check de topologia do boot fica nesta lista:
 
 | Usuário | Pode conferir com declaração passiva |
 |---|---|
@@ -260,12 +263,12 @@ flowchart LR
     q_ex --> c_ex["consumidor da Execução"]
     q_os --> c_os["consumidor do OS"]
 
-    c_bi -.->|"erro transitório: cópia com expiration<br/>em pytstop.retry, chave billing.comandos"| rt_bi["billing.comandos.retry"]
-    c_ex -.->|"erro transitório: idem,<br/>chave execucao.comandos"| rt_ex["execucao.comandos.retry"]
-    c_os -.->|"erro transitório: idem,<br/>chave os.eventos"| rt_os["os.eventos.retry"]
-    rt_bi -.->|"TTL vence: dead-letter<br/>de volta à fila"| q_bi
-    rt_ex -.->|"TTL vence"| q_ex
-    rt_os -.->|"TTL vence"| q_os
+    c_bi -.->|"erro transitório: cópia em pytstop.retry,<br/>chave = fila do atraso da tentativa"| rt_bi["billing.comandos.retry.1s<br/>.5s · .15s · .60s · .300s"]
+    c_ex -.->|"erro transitório: idem"| rt_ex["execucao.comandos.retry.1s<br/>.5s · .15s · .60s · .300s"]
+    c_os -.->|"erro transitório: idem"| rt_os["os.eventos.retry.1s<br/>.5s · .15s · .60s · .300s"]
+    rt_bi -.->|"TTL da fila vence: dead-letter<br/>de volta à fila"| q_bi
+    rt_ex -.->|"TTL da fila vence"| q_ex
+    rt_os -.->|"TTL da fila vence"| q_os
 
     q_bi -.->|"reject: 5ª tentativa<br/>ou erro permanente"| dlx{{"pytstop.dlx<br/>(direct)"}}
     q_ex -.->|"reject"| dlx
@@ -279,20 +282,48 @@ flowchart LR
 |---|---|---|
 | `pytstop.comandos` | topic | Comandos do OS (`comando.<serviço de destino>.<ação>`) |
 | `pytstop.eventos` | topic | Eventos de Billing e Execução (`evento.<serviço de origem>.<fato>`) |
-| `pytstop.retry` | topic | Cópias para nova tentativa; a routing key é o nome da fila de trabalho. É topic, com bindings de chave exata, só para aceitar permissão de tópico; num direct qualquer serviço com escrita no exchange alcançaria a fila de outro |
+| `pytstop.retry` | topic | Cópias para nova tentativa; a routing key é o nome da fila de retry do atraso daquela tentativa. É topic, com bindings de chave exata, só para aceitar permissão de tópico; num direct qualquer serviço com escrita no exchange alcançaria a fila de outro |
 | `pytstop.dlx` | direct | Dead-letter das filas de trabalho; a routing key é o nome da fila |
 
 | Fila | Consumidor | Bindings | Policy |
 |---|---|---|---|
-| `billing.comandos` | Billing | `pytstop.comandos` com `comando.billing.#` | `trabalho-billing.comandos`: `dead-letter-exchange=pytstop.dlx`, `dead-letter-routing-key=billing.comandos`, `dead-letter-strategy=at-least-once`, `overflow=reject-publish`, `max-length=10000` |
+| `billing.comandos` | Billing | `pytstop.comandos` com `comando.billing.#` | `trabalho-billing.comandos`: `dead-letter-exchange=pytstop.dlx`, `dead-letter-routing-key=billing.comandos`, `dead-letter-strategy=at-least-once`, `overflow=reject-publish`, `max-length=10000`, `delivery-limit=5` |
 | `execucao.comandos` | Execução | `pytstop.comandos` com `comando.execucao.#` | `trabalho-execucao.comandos`: as mesmas, com `dead-letter-routing-key=execucao.comandos` |
 | `os.eventos` | OS | `pytstop.eventos` com `evento.billing.#` e `evento.execucao.#` | `trabalho-os.eventos`: as mesmas, com `dead-letter-routing-key=os.eventos` |
-| `<fila>.retry` | ninguém | `pytstop.retry` com routing key `<fila>` | `retry-<fila>`: `dead-letter-exchange=""` (default exchange), `dead-letter-routing-key=<fila>`, `dead-letter-strategy=at-least-once`, `overflow=reject-publish`, `message-ttl=300000` |
+| `<fila>.retry.1s`, `.5s`, `.15s`, `.60s` e `.300s` | ninguém | `pytstop.retry` com routing key igual ao nome da fila de retry | `retry-<fila>` (padrão `^<fila>\.retry\.`): `dead-letter-exchange=""` (default exchange), `dead-letter-routing-key=<fila>`, `dead-letter-strategy=at-least-once`, `overflow=reject-publish`, sem `message-ttl`; o TTL é o argumento `x-message-ttl` de cada fila (1000 a 300000) |
 | `<fila>.dlq` | ninguém (análise e `make redrive`) | `pytstop.dlx` com routing key `<fila>` | `dlq`: `message-ttl=604800000` (7 dias: as mensagens carregam dado pessoal, como a placa) |
 
-Todas são quorum, duráveis, não exclusivas e sem auto-delete, e o tipo (`x-queue-type`) é o único argumento. O resto vem de policies, porque argumento de fila é imutável e a importação do boot ignora a mudança numa fila que já existe, enquanto as policies são regravadas a cada boot: mudar o `definitions.json` muda as filas no próximo restart do broker. Um broker criado com uma versão anterior deste arquivo, com os argumentos nas filas, precisa apagar as nove filas (ou o volume) uma vez.
+Todas são quorum, duráveis, não exclusivas e sem auto-delete. O tipo (`x-queue-type`) é argumento de todas, e o TTL (`x-message-ttl`), só das filas de retry. O resto vem de policies, porque argumento de fila é imutável e a importação do boot ignora a mudança numa fila que já existe, enquanto as policies são regravadas a cada boot: mudar uma policy no `definitions.json` muda as filas no próximo restart do broker.
 
-Tetos: o `message-ttl` de 300 s da `.retry` vale para a cópia que chegar sem `expiration`, que assim não fica parada para sempre; a fila de trabalho cheia (10000 mensagens) recusa a publicação, que o relay do produtor retenta; e o broker recusa mensagem acima de 1 MiB (`max_message_size` no `rabbitmq.conf`).
+O TTL da fila de retry fica no argumento de propósito: o atraso está no nome da fila, e mudar um atraso é criar outra fila (com a permissão de tópico e os consumidores), nunca mudar o argumento de uma que já existe. E não vai para a `retry-<fila>`, comum às cinco: com policy e argumento, a fila quorum usa o menor dos dois ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)), e um `message-ttl` ali cortaria os atrasos maiores.
+
+A importação do boot não apaga fila, e fila que já existe fica com os argumentos com que nasceu. Um broker com volume (compose) ou PVC (StatefulSet) que ainda tem a fila de retry única de cada fila de trabalho (`<fila>.retry`, sem o atraso no nome) passa às filas por atraso sem perder cópia assim:
+
+1. Pare os consumidores dos serviços (réplicas em zero no cluster), para nenhuma cópia nova entrar na `<fila>.retry`, e espere as três esvaziarem: em até 300 s, o maior `expiration` que as cópias levavam, todas voltam para a fila de trabalho pela policy que ainda vale. Confira na coluna `messages`:
+
+   ```bash
+   # kind; no k3s, o contexto dele no --context
+   kubectl --context kind-pytstop-p4 -n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl -q list_queues name messages
+   # compose
+   docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl -q list_queues name messages
+   ```
+
+2. Aplique as definitions e as permissões: `make deploy` no kind e no k3s (o ConfigMap novo reinicia o broker, e o Job `rabbitmq-usuarios` roda de novo) ou `make down && make up` no compose (só recriando os containers o broker reimporta as definitions e o `rabbitmq-usuarios` reaplica o `permissoes.json`). Daqui em diante a `<fila>.retry` fica sem policy, porque a `retry-<fila>` passa a casar só as filas por atraso: cópia que ainda estivesse nela expiraria sem dead letter e se perderia (conferido no 4.3.6), e por isso o passo 1 vem antes.
+
+3. Apague as três filas antigas, que até lá aparecem como fila de trabalho sem consumidor nos painéis 2, 4 e 5 do dashboard:
+
+   ```bash
+   for fila in billing.comandos.retry execucao.comandos.retry os.eventos.retry; do
+     kubectl --context kind-pytstop-p4 -n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl delete_queue "$fila"
+     # compose: docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl delete_queue "$fila"
+   done
+   ```
+
+4. Suba os consumidores já publicando nas chaves `<fila>.retry.1s` a `.300s`: a permissão de tópico recusa a chave antiga, o nome da fila de trabalho.
+
+Fila de trabalho ou DLQ com argumento além de `x-queue-type` (dead letter, TTL ou tamanho, que hoje vêm das policies; o `list_queues name arguments` mostra) também não muda na importação: apague-a, com as mensagens dela. Quando o conteúdo do broker não importa, apagar o volume resolve tudo de uma vez: `docker compose -f compose/docker-compose.yml down -v` no compose, ou `make kind-down` e `make kind-up deploy` no kind.
+
+Limites: a cópia volta no atraso da fila de retry em que entrou; a fila de trabalho cheia (10000 mensagens) recusa a publicação, que o relay do produtor retenta; e o broker recusa mensagem acima de 1 MiB (`max_message_size` no `rabbitmq.conf`).
 
 No consumidor do Billing, com pika (o `user_id` de toda publicação é o usuário da conexão; o broker recusa outro valor com `406 PRECONDITION_FAILED`, porque nenhum usuário de serviço tem a tag `impersonator`):
 
@@ -302,7 +333,8 @@ import os
 import pika
 
 USUARIO = "billing"  # o user_id das cópias de retry é o do próprio consumidor
-ATRASOS_MS = ["1000", "5000", "15000", "60000", "300000"]
+FILA = "billing.comandos"
+ATRASOS = ["1s", "5s", "15s", "60s", "300s"]  # x-tentativa 1 a 5: <fila>.retry.<atraso>
 
 
 def origem_valida(propriedades: pika.BasicProperties, produtor: str) -> bool:
@@ -315,14 +347,14 @@ def origem_valida(propriedades: pika.BasicProperties, produtor: str) -> bool:
 
 def nova_tentativa(canal, entrega, propriedades, corpo) -> None:
     tentativa = (propriedades.headers or {}).get("x-tentativa", 0) + 1
-    if tentativa > len(ATRASOS_MS):
+    if tentativa > len(ATRASOS):
         canal.basic_reject(entrega.delivery_tag, requeue=False)  # vai para a DLQ
         return
     # mandatory + confirm: se a cópia não for roteada ou o broker a recusar,
     # o pika levanta UnroutableError/NackError antes do ack, e a original fica.
     canal.basic_publish(
         exchange="pytstop.retry",
-        routing_key="billing.comandos",
+        routing_key=f"{FILA}.retry.{ATRASOS[tentativa - 1]}",  # fila de retry do atraso
         body=corpo,
         properties=pika.BasicProperties(
             message_id=propriedades.message_id,
@@ -331,7 +363,6 @@ def nova_tentativa(canal, entrega, propriedades, corpo) -> None:
             user_id=USUARIO,
             content_type="application/json",
             delivery_mode=2,
-            expiration=ATRASOS_MS[tentativa - 1],
             headers={**(propriedades.headers or {}), "x-tentativa": tentativa},
         ),
         mandatory=True,
@@ -341,25 +372,28 @@ def nova_tentativa(canal, entrega, propriedades, corpo) -> None:
 
 conexao = pika.BlockingConnection(pika.URLParameters(os.environ["AMQP_URL"]))
 canal = conexao.channel()
-canal.queue_declare("billing.comandos", passive=True)  # confere, não cria
+canal.queue_declare(FILA, passive=True)  # confere, não cria
 canal.basic_qos(prefetch_count=10)  # por consumidor; a fila quorum não aceita global
 canal.confirm_delivery()  # basic_publish espera o broker confirmar
 ```
 
 Fluxo de uma mensagem que falha no consumidor:
 
-1. Erro transitório: o consumidor publica uma cópia no `pytstop.retry` com a routing key igual ao nome da fila, o próprio `user_id`, `expiration` crescente por tentativa (1s, 5s, 15s, 60s, 300s) e o header `x-tentativa`, espera a confirmação do broker (publisher confirms, `mandatory`) e só então dá ack na original. O broker põe a cópia em `<fila>.retry`.
-2. Quando o TTL (*time to live*) vence, a `.retry` devolve a mensagem para `<fila>` pelo default exchange, com o histórico no header `x-death`. Esse dead-letter é interno ao broker e não pede permissão do serviço.
+1. Erro transitório: o consumidor publica uma cópia no `pytstop.retry`, sem `expiration`, com a routing key da fila de retry do atraso da nova tentativa (`x-tentativa` 1 vai para `<fila>.retry.1s`, 2 para `.5s`, 3 para `.15s`, 4 para `.60s` e 5 para `.300s`), o próprio `user_id` e o header `x-tentativa`, espera a confirmação do broker (publisher confirms, `mandatory`) e só então dá ack na original.
+2. Quando o TTL (*time to live*) da fila vence, a fila de retry devolve a mensagem para `<fila>` pelo default exchange, com o histórico no header `x-death`. Como todas as cópias de uma fila de retry têm o mesmo TTL, a ordem de chegada é a de expiração, e nenhuma espera atrás de outra mais longa. Esse dead-letter é interno ao broker e não pede permissão do serviço.
 3. Depois da 5ª tentativa, ou em erro permanente (validação, schema), o consumidor faz `basic_reject(requeue=False)` e a mensagem vai para `<fila>.dlq` pelo `pytstop.dlx`, onde fica até 7 dias. Corrigida a causa, `make redrive FILA=<fila>` a devolve para `<fila>` (abaixo).
-4. Mensagem que derruba o consumidor sem ack (conexão ou canal fechados) volta para a fila; no RabbitMQ 4 a fila quorum manda para a DLQ depois de 20 reentregas (limite padrão de entregas). `basic_nack` ou `basic_reject` com `requeue=True` não conta para esse limite: a mensagem volta para a fila indefinidamente. Retry é sempre pelo `pytstop.retry`.
+4. Mensagem que derruba o consumidor sem ack (conexão ou canal fechados) volta para a fila e gasta uma entrega. É o caminho da mensagem venenosa, como a que traz um header que o pika não decodifica e derruba a conexão a cada entrega:
+   - O limite: a policy da fila de trabalho limita as entregas a 5 (`delivery-limit`; o padrão da fila quorum é 20), e na sexta a mensagem vai para a DLQ com o motivo `delivery_limit`. Com o limite padrão, o consumidor passaria 21 entregas reconectando.
+   - O que conta (conferido no 4.3.6): `basic_reject` com `requeue=True` conta entrega, e `basic_nack` com `requeue=True` não conta (a mensagem volta para a fila indefinidamente). Por isso o retry é sempre pelo `pytstop.retry`.
+   - A cópia de retry entra na fila como mensagem nova, com a contagem de entregas do broker zerada, e não gasta o limite.
 
-Por que filas quorum e não classic duráveis: a quorum grava em log Raft com fsync antes de confirmar, aceita TTL por mensagem e faz dead-lettering at-least-once (exige `overflow=reject-publish`). Assim a volta da `.retry` e a ida para a `.dlq` não perdem mensagem; na classic o dead-lettering é at-most-once.
+Por que uma fila de retry por atraso: TTL só vence quando a mensagem chega à cabeça da fila. Numa fila de retry única, com `expiration` em cada cópia, uma cópia de 1 s publicada atrás de uma de 8 s só voltou aos 8 s (RabbitMQ 4.3.6); no uso real, a cópia de 300 s da quinta tentativa seguraria por 5 minutos as primeiras tentativas de todas as mensagens atrás dela. Com o TTL fixo em cada fila, a cópia volta no atraso dela. O `make smoke` prova isso no kind, e o `make prova-retry` num RabbitMQ avulso (também no CI), publicando como o usuário `billing` ([`prova_retry.py`](scripts/prova_retry.py)): a cópia de 1 s publicada depois de uma de 5 s volta em 1 s, e o broker recusa a cópia na fila de retry de outro serviço, na chave antiga e na chave da própria fila seguida de `\n`.
+
+Por que filas quorum e não classic duráveis: a quorum grava em log Raft com fsync antes de confirmar, aceita TTL e faz dead-lettering at-least-once (exige `overflow=reject-publish`). Assim a volta das filas de retry e a ida para a `.dlq` não perdem mensagem; na classic o dead-lettering é at-most-once.
 
 Com um nó não há replicação, mas os clientes não mudam se o broker virar cluster. O custo é um pouco mais de memória e disco por fila, e o prefetch tem de ser por consumidor, porque a quorum não aceita prefetch global.
 
 Redrive: `make redrive FILA=billing.comandos` (ou `execucao.comandos`, `os.eventos`) cria um shovel no próprio broker (plugin `rabbitmq_shovel`, ligado em [`enabled_plugins`](k8s/base/rabbitmq/enabled_plugins)) que move para a fila as mensagens que estavam na DLQ quando ele começou e se apaga ao terminar. O shovel só tira a mensagem da DLQ depois de a fila confirmar o recebimento, e preserva as propriedades (`user_id`, `message_id`, `x-tentativa`), então o consumidor a trata como a última tentativa. No compose, o mesmo comando do [`redrive.sh`](scripts/redrive.sh) roda com `docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl set_parameter shovel ...`.
-
-Limite conhecido: TTL por mensagem só vence quando a mensagem chega à cabeça da fila. Numa `.retry` com uma mensagem de 300s na frente, uma de 1s espera os 300s. Com o volume da demonstração isso não aparece; se aparecer, a saída é uma fila de retry por atraso.
 
 ## Contratos de mensageria
 
@@ -414,10 +448,10 @@ A cobertura de linha do `make test` mede só o arquivo de teste. O que protege o
 O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `main`, sob demanda e quando o CD o chama (`workflow_call`). `manifests` e `contratos` são checks obrigatórios do [ruleset da `main`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837); o checkout não guarda a credencial do GitHub (`persist-credentials: false`).
 
 - `manifests`: `make manifests`, ou seja, os dois overlays e os dois exemplos de borda validados pelo kubeconform (schemas do Kubernetes 1.35, a versão do nó do kind, e o do `KongClusterPlugin` gerado das CRDs do chart) e pelo `trivy config` (nenhum achado HIGH ou CRITICAL); `docker compose config` com o profile `servicos`; `promtool`, `loki -verify-config` e `promtail -check-syntax` nas configs do cluster e do compose, mais a máscara de token do Promtail (`promtail -dry-run`); o `k8s/base/kong` igual ao que o `make kong-render` gera; a mesma tag de cada imagem em `k8s/`, no compose e na tabela de versões; e todo dashboard JSON no configMapGenerator.
-- `contratos`: `uv lock --check`, `make lint` (ruff, mypy strict e bandit) e `make test` (testes de contrato e de observabilidade e o `asyncapi.yaml` validado pelo `@asyncapi/cli`).
+- `contratos`: `uv lock --check`, `make lint` (ruff, mypy strict e bandit), `make test` (testes de contrato e de observabilidade e o `asyncapi.yaml` validado pelo `@asyncapi/cli`) e `make prova-retry` (um RabbitMQ 4.3.6 avulso no Docker do runner, com o `definitions.json`, o `permissoes.json` e o `criar-usuarios.sh` do commit, e a prova do retry como o `billing`: definitions que derrubam o boot ou permissão frouxa reprovam aqui, sem cluster).
 - `gitleaks`: o histórico inteiro do repositório com as regras do [`.gitleaks.toml`](.gitleaks.toml), pelo binário com versão e sha256 fixados, como nos repositórios de serviço.
 
-`make check` roda `lint`, `test` e `manifests` localmente.
+`make check` roda `lint`, `test`, `prova-retry` e `manifests` localmente.
 
 ## Decisões e limites
 
@@ -427,7 +461,8 @@ O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `mai
 - Pods endurecidos: todos rodam sem root, sem escalar privilégio, sem capability, com seccomp `RuntimeDefault` e raiz somente leitura (`emptyDir` com `sizeLimit` onde a imagem grava). A exceção é o Promtail, que roda como root para ler os arquivos `0640` de `/var/log/pods` por `hostPath`, ainda sem capability. Só montam token de ServiceAccount os pods que falam com a API do Kubernetes: Prometheus, Promtail, kube-state-metrics e o controller do Kong. O namespace tem Pod Security `restricted` em `warn` e `audit`; o `make smoke` mostra o contexto efetivo de cada container e que, com `enforce`, só o Promtail ficaria de fora. O `make manifests` roda `trivy config` (HIGH e CRITICAL) nos dois overlays e nos exemplos de borda.
 - O controller do Kong lê Ingress, Services e Secrets só dos quatro namespaces da fase 4 (`watchNamespaces`), com uma Role em cada um, em vez de ler os Secrets do cluster inteiro. Por isso o `make deploy` cria vazios os namespaces dos serviços que ainda não existem; o repositório de cada serviço continua dono do namespace dele. Ingress de outro namespace não chega ao Kong. Risco que sobra, aceito: o controller roda no pod exposto à internet (`kong-proxy`) e a Role de cada um dos quatro namespaces ainda lhe dá `list` e `watch` em Secrets, inclusive os dos serviços (chave RSA do JWT, segredo do webhook, credenciais de banco); quem tomasse o controle desse pod os leria. A plataforma não referencia Secret em Ingress nem em plugin, e uma saída a avaliar é tirar a regra de Secrets das Roles, se o controller subir sem ela (dívida no MEMORY).
 - O admin do RabbitMQ entra no boot junto com a topologia (arquivo `admin.json` do Secret), porque com definitions no boot o broker não cria usuário nenhum e o Job de usuários precisa de alguém para falar com a API.
-- `pytstop.retry` é topic, com bindings de chave exata ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): o RabbitMQ só aplica permissão por routing key em exchange topic, e sem ela a escrita no `pytstop.retry` deixaria qualquer serviço pôr mensagem na fila de trabalho de outro. Com a chave exata (o nome da fila), o roteamento é o mesmo de um direct.
+- `pytstop.retry` é topic, com bindings de chave exata ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): o RabbitMQ só aplica permissão por routing key em exchange topic, e sem ela a escrita no `pytstop.retry` deixaria qualquer serviço pôr mensagem na fila de trabalho de outro. Com a chave exata (o nome da fila de retry), o roteamento é o mesmo de um direct.
+- Uma fila de retry por atraso, `<fila>.retry.1s` a `.300s` ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): são 21 filas no broker, e mudar um atraso é criar outra fila.
 - Versões de Prometheus, Grafana e Loki iguais às da fase 3. Jaeger na última 1.x: a 2.x troca a configuração pelo formato do OpenTelemetry Collector.
 - CVEs conhecidas nas imagens (trivy, HIGH e CRITICAL com correção publicada, out/2026): Prometheus v2.54.1 (96 e 6), Loki 2.9.8 (53 e 3) e kube-state-metrics v2.13.0 (44 e 1) não têm versão de correção na própria linha (o Loki 2.9.17 tem mais achados, e o Prometheus 2.55.1 tira só quatro) e ficam como estão: rodam só dentro do cluster, sem Ingress, e o acesso de fora é por port-forward ou túnel. Sair delas é trocar de linha (Prometheus 3, Loki 3, kube-state-metrics 2.17), com mudança de configuração. O Mailpit subiu para v1.31.4, sem achado HIGH.
 - Sem persistência em Prometheus, Loki e Grafana (o estado do Grafana vem todo do provisioning; o TSDB do Prometheus fica num emptyDir). Só o RabbitMQ tem volume. Cada emptyDir tem teto (`sizeLimit`) para não encher o disco do nó, que no k3s guarda também os volumes do broker e dos bancos: o Prometheus guarda 2 dias (7 no k3s) e no máximo 1 GB, e o Loki apaga os logs com mais de 7 dias (compactor com retenção).

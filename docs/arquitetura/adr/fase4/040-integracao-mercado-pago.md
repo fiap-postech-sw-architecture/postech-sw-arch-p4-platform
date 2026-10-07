@@ -58,7 +58,7 @@ A evidência de RF-034 depende das credenciais de teste. A execução na sandbox
 
 ### Resiliência
 
-O envelope do [ADR-038](038-borda-e-comunicacao-sincrona.md), com timeout, circuit breaker para o Mercado Pago e retry com jitter só em operação idempotente: as consultas e o estorno com chave. A criação da preferência não tem chave de idempotência documentada e não é repetida pelo cliente HTTP; se falhar, o comando volta pela fila de retry ([ADR-036](036-mensageria-rabbitmq.md)). As chamadas alimentam `pytstop_mercadopago_requisicoes_total{operacao,resultado}` e `pytstop_circuit_breaker_aberto{dependencia}` ([ADR-043](043-observabilidade-distribuida.md)).
+O envelope do [ADR-038](038-borda-e-comunicacao-sincrona.md), com timeout, circuit breaker para o Mercado Pago e retry com jitter só em operação idempotente: as consultas e o estorno com chave. A criação da preferência não tem chave de idempotência documentada e não é repetida pelo cliente HTTP; se falhar, o comando volta pelas filas de retry ([ADR-036](036-mensageria-rabbitmq.md)). As chamadas alimentam `pytstop_mercadopago_requisicoes_total{operacao,resultado}` e `pytstop_circuit_breaker_aberto{dependencia}` ([ADR-043](043-observabilidade-distribuida.md)).
 
 ## Alternativas Consideradas
 
@@ -116,7 +116,7 @@ Descartados pelo enunciado: usar só o simulador e trocar de provedor, porque a 
 - [ADR-021](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/021-aprovacao-externa-orcamento.md): assinatura HMAC por requisição num canal externo, o mesmo princípio do `x-signature`
 - [ADR-018](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/018-notificacao-email.md): adapter escolhido por configuração, com servidor falso (Mailpit) na demonstração, o precedente do simulador
 - [ADR-035](035-saga-orquestrada.md): pagamento compensável por estorno, antes do pivot (ponto sem retorno, RN-029) no início da execução
-- [ADR-036](036-mensageria-rabbitmq.md): comandos, eventos e fila de retry do Billing
+- [ADR-036](036-mensageria-rabbitmq.md): comandos, eventos e filas de retry do Billing
 - [ADR-038](038-borda-e-comunicacao-sincrona.md): rota do webhook na borda e envelope de resiliência
 - [ADR-039](039-autenticacao-entre-servicos.md): tokens HMAC e política de segredos
 - [ADR-041](041-estrategia-de-testes-e-qualidade.md): teste de contrato do adapter e cenários de pagamento

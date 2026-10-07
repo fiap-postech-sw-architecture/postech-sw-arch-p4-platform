@@ -2,13 +2,13 @@
 # Billing e Execucao, eventos de volta para o OS). Um no, filas quorum.
 #
 # Por que quorum e nao classic duravel: a fila quorum grava em log replicado
-# (Raft) com fsync antes do confirm, aceita TTL por mensagem (usado nas filas
-# .retry) e permite dead-lettering at-least-once, o que garante que a
-# mensagem que expira na .retry volta para a fila original e a que e
-# rejeitada chega na .dlq sem perda. Na classic o dead-lettering e
-# at-most-once. Com um no so nao ha replicacao, mas os clientes nao mudam se o
-# broker virar cluster de 3. Custo: mais disco e memoria por fila (irrelevante
-# para 9 filas) e nada de prefetch global (os consumidores usam prefetch por
+# (Raft) com fsync antes do confirm, aceita TTL (fixo em cada fila de retry)
+# e permite dead-lettering at-least-once, o que garante que a mensagem que
+# expira numa fila de retry volta para a fila original e a que e rejeitada
+# chega na .dlq sem perda. Na classic o dead-lettering e at-most-once. Com um
+# no so nao ha replicacao, mas os clientes nao mudam se o broker virar
+# cluster de 3. Custo: mais disco e memoria por fila (irrelevante
+# para 21 filas) e nada de prefetch global (os consumidores usam prefetch por
 # consumidor, que e o default do pika).
 #
 # Usuarios: o admin (operacao e management) entra junto com a topologia no
