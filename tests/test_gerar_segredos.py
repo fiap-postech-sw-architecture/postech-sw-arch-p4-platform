@@ -1,19 +1,23 @@
 """scripts/gerar-segredos.sh contra um kubectl falso.
 
-O kubectl falso guarda os Secrets num JSON, registra os argumentos de cada
-chamada e recusa manifesto que o apiserver recusaria ou com rotulo fora do
-previsto (os da plataforma com os dela, os dos servicos sem nenhum). O teste
-confere o que o script cria num cluster novo, com o formato de cada chave dos
-servicos (o contrato da tabela "Segredos gerados" do README, que o teste
-tambem le); que dois deploys seguidos mantem os valores; que as fontes que ja
-existem, da plataforma e dos servicos, ficam como estao, e a que falta nasce
-sozinha; que o Secret rabbitmq de cada servico, derivado da fonte, e regravado
-a cada deploy, inclusive quando tem a senha antiga; que erro ao ler ou gravar
-no cluster, openssl que falha, chave ausente e senha com caractere fora de
-letras e digitos param o script; que KUBE_CONTEXT e NAMESPACE do ambiente
-(make deploy KUBE_CONTEXT=<contexto>) valem no lugar dos padroes; e que
-nenhuma senha ou chave passa por argumento de processo ou pela saida (no
-GitHub Actions, so pelo ::add-mask::, a chave PEM uma linha por vez).
+O kubectl falso guarda os Secrets num JSON, registra os argumentos e o
+ambiente de cada chamada e recusa manifesto que o apiserver recusaria ou com
+rotulo fora do previsto (os da plataforma com os dela, os dos servicos sem
+nenhum). O teste confere o que o script cria num cluster novo, com o formato
+de cada chave dos servicos; a tabela "Segredos gerados" do README contra essas
+fontes (nome, namespace, chaves, formato e quando o script grava); que dois
+deploys seguidos mantem os valores; que as fontes que ja existem, da
+plataforma e dos servicos, ficam como estao, e a que falta nasce sozinha; que
+o Secret rabbitmq de cada servico, derivado da fonte, e regravado a cada
+deploy, inclusive quando tem a senha antiga; que a fonte que existe sem uma
+das chaves e a do banco que falta com o volume de pe param o script antes de
+ele gravar qualquer coisa; que erro ao ler, listar os volumes ou gravar no
+cluster, openssl que falha e senha com caractere fora de letras e digitos
+param o script; que KUBE_CONTEXT e NAMESPACE do ambiente (make deploy
+KUBE_CONTEXT=<contexto>) valem no lugar dos padroes; e que nenhuma senha ou
+chave passa por argumento de processo, pelo ambiente dos processos filhos,
+pelo trace do bash ou pela saida (no GitHub Actions, so pelo ::add-mask::, a
+chave PEM uma linha por vez).
 """
 
 from __future__ import annotations
@@ -93,6 +97,15 @@ FORMATOS = {
         r"-{5}END PRIVATE KEY-{5}\n"
     ),
     "JWT_PREVIOUS_PUBLIC_KEY": r"",
+}
+# Como a tabela "Segredos gerados" do README escreve cada formato.
+FORMATO_NO_README = {
+    HEX_48: "48 hexadecimais",
+    HEX_64: "64 hexadecimais",
+    FORMATOS["ENCRYPTION_KEY"]: "44 caracteres",
+    FORMATOS["MONGO_KEYFILE"]: "1.008 caracteres",
+    FORMATOS["JWT_PRIVATE_KEY"]: "PEM PKCS#8",
+    FORMATOS["JWT_PREVIOUS_PUBLIC_KEY"]: "vazia",
 }
 # O que o make deploy passa a outro cluster, no lugar dos padroes do kind
 # (make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto do k3s>).
@@ -770,21 +783,38 @@ def test_no_github_actions_a_senha_lida_da_fonte_e_mascarada(tmp_path: Path) -> 
     assert mascaradas == lidas
 
 
-def test_tabela_do_readme_tem_cada_fonte_dos_servicos_e_as_chaves_dela() -> None:
+def test_tabela_do_readme_tem_chaves_formato_e_quando_de_cada_fonte() -> None:
     readme = (RAIZ / "README.md").read_text(encoding="utf-8")
     secao = readme.split("### Segredos gerados\n", 1)[1].split("\n#", 1)[0]
-    tabela: dict[str, set[str]] = {}
+    # "<namespace>/<nome>" -> a celula das chaves e a do "Quando o script grava".
+    tabela: dict[str, tuple[str, str]] = {}
     for linha in secao.splitlines():
         if not linha.startswith("| `"):
             continue
-        secret, namespaces, chaves = linha.split("|")[1:4]
+        secret, namespaces, chaves, _, quando = re.split(r"(?<!\\)\|", linha)[1:6]
         nome = re.findall(r"`([\w-]+)`", secret)[0]
         for ns in re.findall(r"`([\w-]+)`", namespaces):
-            tabela[f"{ns}/{nome}"] = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", chaves))
-
-    assert {
-        fonte: chaves
-        for fonte, chaves in tabela.items()
+            tabela[f"{ns}/{nome}"] = (chaves, quando.strip())
+    dos_servicos = {
+        fonte: celulas
+        for fonte, celulas in tabela.items()
         if fonte.split("/")[0] in NAMESPACES_DOS_SERVICOS
         and not fonte.endswith("/rabbitmq")
+    }
+
+    assert {
+        fonte: set(re.findall(r"`([A-Z][A-Z0-9_]+)`", chaves))
+        for fonte, (chaves, _) in dos_servicos.items()
     } == FONTES_DOS_SERVICOS
+    sem_formato = [
+        f"{fonte} {chave}"
+        for fonte, (celula, _) in dos_servicos.items()
+        for chave in FONTES_DOS_SERVICOS[fonte]
+        if FORMATO_NO_README[FORMATOS[chave]] not in celula
+    ]
+    assert sem_formato == []
+    assert [
+        fonte
+        for fonte, (_, quando) in dos_servicos.items()
+        if not quando.startswith("Só se ainda não existe")
+    ] == []
