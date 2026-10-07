@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "PagamentoEstornado (dados)",
-  "description": "Campo dados da mensagem PagamentoEstornado (evento, billing-service -> os-service). Pagamento estornado no provedor: em resposta ao EstornarPagamento (motivo compensacao) ou por iniciativa do Billing, quando a aprovação chega depois do cancelamento, da expiração ou da recusa (motivo pagamento_apos_encerramento, que a saga encerrada ignora).",
+  "description": "Campo dados da mensagem PagamentoEstornado (evento, billing-service -> os-service). Pagamento estornado no provedor. O motivo diz a origem do estorno: compensacao, pedido pelo EstornarPagamento; pagamento_apos_encerramento, aprovação que chegou depois do cancelamento, da expiração ou da recusa e que o Billing estornou sozinho. A resposta ao EstornarPagamento se reconhece pelo causation_id, não pelo motivo: o desfecho republicado pode trazer pagamento_apos_encerramento, e o estorno automático leva o id do SolicitarPagamento e só atualiza o resumo do pagamento na OS.",
   "type": "object",
   "required": [
     "ordem_id",
@@ -35,7 +35,7 @@
         "compensacao",
         "pagamento_apos_encerramento"
       ],
-      "description": "compensacao: resposta ao EstornarPagamento; pagamento_apos_encerramento: aprovação que chegou depois do cancelamento, da expiração ou da recusa, estornada pelo próprio Billing."
+      "description": "Origem do estorno. compensacao: pedido pelo EstornarPagamento; pagamento_apos_encerramento: aprovação que chegou depois do cancelamento, da expiração ou da recusa, estornada pelo próprio Billing. Não identifica a resposta ao EstornarPagamento: quem a identifica é o causation_id do envelope."
     },
     "uuid": {
       "type": "string",
