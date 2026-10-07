@@ -19,9 +19,12 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Runner fixo: o ubuntu-latest passa para o Ubuntu 26.04 a partir de
+# 19/10/2026 (actions/runner-images#14748), e a imagem do CI so muda com
+# commit aqui.
 jobs:
   manifests:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -34,7 +37,7 @@ jobs:
         run: make manifests
 
   contratos:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7
@@ -59,7 +62,7 @@ jobs:
         run: make test
 
   gitleaks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       # Historico inteiro: segredo commitado e apagado depois tambem conta.
