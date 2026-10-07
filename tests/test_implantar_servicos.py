@@ -7,8 +7,9 @@ cada imagem entra no kind pelo caminho certo (arquivo ou imagem local); que o
 overlay da execucao parte do overlay pedido, troca a imagem e some no fim; a
 ordem de cada namespace (Jobs de inicializacao apagados, apply, banco, Job,
 Deployments); que falha de build, de Job, de rollout ou de apply nomeia o
-servico e o commit; que servico sem o overlay pedido falha antes de tudo; e
-os argumentos recusados.
+servico e o commit; que servico sem o overlay pedido, ou com imagem de
+terceiro fora da tabela de versoes do README (citada ou nao em outro trecho
+dele), falha antes de tudo; e os argumentos recusados.
 """
 
 from __future__ import annotations
@@ -217,10 +218,11 @@ class Implantacao:
         self.dirs = {servico: checkout(tmp_path, servico) for servico in SERVICOS}
         self.tar = tmp_path / "imagem.tar"
         self.tar.write_bytes(b"tar")
+        self.script = SCRIPT
 
     def roda(self, *args: str, **ambiente: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603  # nosec B603
-            [str(SCRIPT), *args],
+            [str(self.script), *args],
             env=self.env | ambiente,
             capture_output=True,
             text=True,
@@ -628,8 +630,6 @@ def test_argumentos_recusados_sem_chamar_nada(
     assert implantacao.chamadas("kubectl") == []
 
 
-# "postgres" sem tag e o caso que separa a tabela do resto do README: o texto
-# cita o superusuario `postgres` entre crases, e so a tabela de versoes vale.
 @pytest.mark.parametrize(
     "imagem",
     ["busybox:1.37", "postgres", "postgres:16.4", "pytstop-os-service:dev"],
@@ -650,6 +650,44 @@ def test_imagem_fora_da_tabela_de_versoes_para_antes_de_tudo(
     assert (
         f"billing-service (commit {commit}): images outside the versions table "
         f"of the platform README: {imagem}"
+    ) in processo.stderr
+    assert implantacao.chamadas("docker") == []
+    assert implantacao.chamadas("kubectl") == []
+
+
+def test_so_a_tabela_de_versoes_vale_como_lista_de_imagens(
+    implantacao: Implantacao, tmp_path: Path
+) -> None:
+    # README de mentira, ao lado de uma copia do script: a tabela tem as imagens
+    # de terceiros dos tres servicos menos a postgres:16.15, que so aparece na
+    # prosa e na segunda coluna de outra tabela, depois da de versoes, como o
+    # `postgres` do superusuario no README de verdade.
+    plataforma = tmp_path / "plataforma"
+    (plataforma / "scripts" / "ci").mkdir(parents=True)
+    copia = plataforma / "scripts" / "ci" / SCRIPT.name
+    shutil.copy(SCRIPT, copia)
+    imagens = {i for lista in DE_TERCEIROS.values() for i in lista.split()}
+    linhas = "".join(
+        f"| item | `{imagem}` | para que serve |\n"
+        for imagem in sorted(imagens - {"postgres:16.15"})
+    )
+    (plataforma / "README.md").write_text(
+        "| Componente | Versão | Para que serve |\n|---|---|---|\n"
+        + linhas
+        + "\nO banco roda `postgres:16.15`.\n\n"
+        "| Item | Outra tabela |\n|---|---|\n"
+        "| a | `postgres:16.15` |\n",
+        encoding="utf-8",
+    )
+    implantacao.script = copia
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["os-service"])
+    assert (
+        f"os-service (commit {commit}): images outside the versions table "
+        "of the platform README: postgres:16.15"
     ) in processo.stderr
     assert implantacao.chamadas("docker") == []
     assert implantacao.chamadas("kubectl") == []
