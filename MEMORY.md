@@ -105,6 +105,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Tech debt / TODO
 
+- 2026-10-07 - Resolvida a divida MEDIUM "consumidor do Billing manda `DomainException` para a DLQ" (mais abaixo): o PR de mensageria do Billing (#3) trata orcamento nao aprovado como descompasso de estado (ack, log `command_ignored`, sem resposta) e deixa na DLQ so a falha permanente sem evento (orcamento ausente ou de outra ordem, recusa do provedor), como no ADR-036
 - 2026-10-07 - Correcao da entrada MEDIUM do runbook da saga (abaixo): sao cinco os alertas do ADR-043 que entram em `alertas.yaml` com as metricas dos servicos (compensacoes acima do normal, circuito aberto, outbox parada, assinatura invalida no webhook e falha na busca do JWKS); a entrada citava dois
 - 2026-10-07 - Correcao da entrada MEDIUM do runbook da saga (abaixo): a regra "Saga parada" ja esta em `alertas.yaml`; "Compensacoes acima do normal" e "Outbox parada" entram com as metricas dos servicos, e o topo do runbook diz a partir de que versao do OS Service ele vale
 - 2026-10-07 - MEDIUM - O consumidor do Billing (PR de mensageria) manda `DomainException` para a DLQ; pelo ADR-036, descompasso de estado e ack com `command_ignored`, sem DLQ - alinhar no Billing Service
