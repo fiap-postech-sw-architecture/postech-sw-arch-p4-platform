@@ -11,9 +11,10 @@
 # no broker, montada com a senha do rabbitmq-credenciais: e o contrato com os
 # servicos (README, "Usuario e permissoes no RabbitMQ").
 #
-# Nenhuma senha vai para argumento de processo, saida ou arquivo: o Secret
-# chega ao kubectl pela entrada padrao. No GitHub Actions cada senha e
-# registrada com ::add-mask:: antes do uso, e o log do job a mostra como ***.
+# Nenhuma senha vai para argumento de processo, para a saida ou para o
+# repositorio: o Secret chega ao kubectl pela entrada padrao. No GitHub
+# Actions cada senha e registrada com ::add-mask:: antes do uso, e o log do
+# job a mostra como ***.
 set -euo pipefail
 
 K="kubectl --context ${KUBE_CONTEXT:-kind-pytstop-p4}"
