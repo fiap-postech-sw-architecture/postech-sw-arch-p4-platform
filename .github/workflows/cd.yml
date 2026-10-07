@@ -48,17 +48,8 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      # A versao do kind que publicou o kindest/node:v1.35.0 pinado por digest
-      # em kind/cluster.yaml; o kind que vem no runner e mais novo. Baixa no
-      # RUNNER_TEMP: na raiz do checkout, kind e o diretorio do cluster.yaml.
-      - name: Instala o kind (versao e sha256 fixados)
-        working-directory: ${{ runner.temp }}
-        run: |
-          curl -sSfL -o kind https://github.com/kubernetes-sigs/kind/releases/download/v0.31.0/kind-linux-amd64
-          echo "eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa  kind" | sha256sum -c -
-          sudo install -m 0755 kind /usr/local/bin/kind
-          rm kind
-          kind version | grep -F 'kind v0.31.0 '
+      - name: kind e kubectl (versao e sha256 fixados)
+        run: scripts/ci/instalar-ferramentas.sh
       - name: Cluster kind (make kind-up)
         run: scripts/medir-kind.sh etapa kind-up && make kind-up
       - name: Segredos gerados e plataforma no overlay kind-ci (make deploy)
