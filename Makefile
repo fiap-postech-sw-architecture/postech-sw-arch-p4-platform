@@ -71,15 +71,18 @@ kind-down: ## remove o cluster kind
 # KongClusterPlugin quando chega no plugins.yaml. Server-side porque as CRDs
 # passam do limite de tamanho da anotacao last-applied do apply client-side.
 # Os namespaces dos servicos nascem vazios, se ainda nao existirem, para
-# receber a Role do Kong. O Job de usuarios do RabbitMQ e imutavel: sai antes
-# do apply e roda de novo; se nao terminar, o log dele vai para a saida.
+# receber a Role do Kong e o Secret rabbitmq; o da plataforma, para receber os
+# Secrets gerados antes do apply (scripts/gerar-segredos.sh, que so cria o que
+# ainda nao existe). O Job de usuarios do RabbitMQ e imutavel: sai antes do
+# apply e roda de novo; se nao terminar, o log dele vai para a saida.
 deploy: ## aplica k8s/overlays/$(OVERLAY) e espera os rollouts
 	$(KUBECTL) apply --server-side -f k8s/base/kong/crds.yaml
 	$(KUBECTL) wait --for=condition=Established --timeout=60s -f k8s/base/kong/crds.yaml
 	set -euo pipefail; \
-	for ns in $(NAMESPACES_SERVICOS); do \
+	for ns in $(NAMESPACE) $(NAMESPACES_SERVICOS); do \
 		$(KUBECTL) get namespace "$$ns" >/dev/null 2>&1 || $(KUBECTL) create namespace "$$ns"; \
 	done
+	KUBE_CONTEXT=$(KUBE_CONTEXT) NAMESPACE=$(NAMESPACE) scripts/gerar-segredos.sh
 	$(KUBECTL) -n $(NAMESPACE) delete job rabbitmq-usuarios --ignore-not-found
 	$(KUBECTL) apply --server-side -k k8s/overlays/$(OVERLAY)
 	set -euo pipefail; \
