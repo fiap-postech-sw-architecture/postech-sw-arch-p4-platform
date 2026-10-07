@@ -102,10 +102,10 @@ As métricas não levam o `ordem_id`, porque os labels são fechados. Para chega
 
    O comando que o relay ainda não entregou não entra na lista, porque o prazo dele não começou: o sinal é `outbox_pendentes` ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)). `entregue_em` e `venceu_em` vazios são de instância sem comando em voo, como a que está em `falha_na_compensacao`. O significado das colunas está na [RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16).
 
-Guarde o `ordem_id` achado:
+Guarde o `ordem_id` achado, no lugar do UUID de exemplo:
 
 ```bash
-ORDEM_ID=3c9a7e10-5b2f-4f6d-8a41-0e2d9b7c6f55   # troque pelo ordem_id achado acima
+ORDEM_ID=3c9a7e10-5b2f-4f6d-8a41-0e2d9b7c6f55
 ```
 
 ### A instância
@@ -125,10 +125,10 @@ A sequência parou na compensação pendente. O que já foi compensado continua 
 
 1. Trate a causa conforme a `falha` da instância.
    - `estorno_recusado`: o Billing respondeu `EstornoDePagamentoFalhou` ao `EstornarPagamento`, porque o Mercado Pago recusou o estorno.
-     1. Confira o pagamento no Billing, com o `pagamento_id` do resumo da OS (seção 1):
+     1. Confira o pagamento no Billing, com o `pagamento_id` do resumo da OS (seção 1) no lugar do UUID de exemplo:
 
         ```bash
-        PAGAMENTO_ID=b7e2c4d1-0a9f-4e3b-8c6d-5f1a2b3c4d5e   # troque pelo pagamento_id do resumo da OS
+        PAGAMENTO_ID=b7e2c4d1-0a9f-4e3b-8c6d-5f1a2b3c4d5e
         curl -s "$BILLING/api/v1/pagamentos/$PAGAMENTO_ID" -H "Authorization: Bearer $TOKEN" | jq
         ```
 
@@ -223,18 +223,18 @@ O redrive não repete efeito, mesmo que a saga já tenha seguido: o consumidor d
 
 ### Como
 
-No kind, na raiz deste repositório:
+No kind, na raiz deste repositório, com a fila da DLQ em vez de `billing.comandos`, que pode ser `execucao.comandos` ou `os.eventos`:
 
 ```bash
-make redrive FILA=billing.comandos   # ou execucao.comandos, os.eventos
+make redrive FILA=billing.comandos
 ```
 
 O alvo cria um shovel no broker que move para a fila as mensagens que estavam na DLQ quando ele começou, imprime as contagens antes e depois e se apaga ao terminar ([`scripts/redrive.sh`](../../scripts/redrive.sh)). O shovel preserva as propriedades, inclusive `x-tentativa`: a mensagem que esgotou as tentativas volta com a contagem cheia e, se falhar de novo, retorna direto à DLQ. A DLQ guarda cada mensagem por 7 dias e depois a descarta, porque ela carrega dado pessoal.
 
-No compose, o mesmo shovel, também na raiz deste repositório:
+No compose, o mesmo shovel, também na raiz deste repositório e com a mesma troca de fila:
 
 ```bash
-FILA=billing.comandos   # ou execucao.comandos, os.eventos
+FILA=billing.comandos
 docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl -q set_parameter shovel "redrive-$FILA" \
   "{\"src-uri\": \"amqp://\", \"src-queue\": \"$FILA.dlq\", \"dest-uri\": \"amqp://\", \"dest-queue\": \"$FILA\", \"src-delete-after\": \"queue-length\"}"
 ```
