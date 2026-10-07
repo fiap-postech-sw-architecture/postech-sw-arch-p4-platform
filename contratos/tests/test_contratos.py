@@ -169,6 +169,9 @@ FILA_DO_USUARIO = {
 # Atraso, em segundos, de cada nova tentativa: a copia com x-tentativa n vai
 # para <fila>.retry.<ATRASOS[n - 1]>s; a falha seguinte a quinta vai para a DLQ.
 ATRASOS = (1, 5, 15, 60, 300)
+# Dead letter sem perda: at-least-once, que a fila quorum so aceita com
+# overflow reject-publish.
+SEM_PERDA = {"dead-letter-strategy": "at-least-once", "overflow": "reject-publish"}
 SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -192,6 +195,7 @@ def fila_do_consumidor(tipo: str) -> str:
 
 
 def filas_de_retry(fila: str) -> list[str]:
+    """Filas de retry da fila de trabalho, na ordem das tentativas."""
     return [f"{fila}.retry.{atraso}s" for atraso in ATRASOS]
 
 
@@ -208,12 +212,55 @@ def casa_topico(padrao: list[str], chave: list[str]) -> bool:
 def filas_alcancadas(
     definitions: dict[str, Any], exchange: str, chave: str
 ) -> set[str]:
-    """Filas que recebem a publicacao com esta routing key no exchange topic."""
+    """Filas do vhost / que recebem a publicacao com esta routing key no topic."""
     return {
         b["destination"]
         for b in definitions["bindings"]
         if b["source"] == exchange
+        and b["vhost"] == "/"
+        and b["destination_type"] == "queue"
         and casa_topico(b["routing_key"].split("."), chave.split("."))
+    }
+
+
+# Objetos como o definitions.json os declara, para comparar inteiros: vhost,
+# tipo de destino ou auto-delete errados derrubam a importacao no boot, e o
+# broker nao sobe.
+def fila_quorum(nome: str, ttl_ms: int | None = None) -> dict[str, Any]:
+    """Fila quorum duravel do vhost /; o TTL so nas filas de retry."""
+    argumentos: dict[str, Any] = {"x-queue-type": "quorum"}
+    if ttl_ms is not None:
+        argumentos["x-message-ttl"] = ttl_ms
+    return {
+        "name": nome,
+        "vhost": "/",
+        "durable": True,
+        "auto_delete": False,
+        "arguments": argumentos,
+    }
+
+
+def ligacao(origem: str, destino: str, chave: str) -> dict[str, Any]:
+    """Binding de exchange para fila no vhost /, sem argumentos."""
+    return {
+        "source": origem,
+        "vhost": "/",
+        "destination": destino,
+        "destination_type": "queue",
+        "routing_key": chave,
+        "arguments": {},
+    }
+
+
+def policy_de_fila(nome: str, padrao: str, definicao: dict[str, Any]) -> dict[str, Any]:
+    """Policy do vhost / para filas, com a prioridade 0 de todas."""
+    return {
+        "vhost": "/",
+        "name": nome,
+        "pattern": padrao,
+        "apply-to": "queues",
+        "priority": 0,
+        "definition": definicao,
     }
 
 
@@ -511,140 +558,193 @@ def test_routing_key_chega_so_na_fila_do_consumidor(
 
 
 def politica(definitions: dict[str, Any], fila: str) -> dict[str, Any]:
-    """Definicao da policy que o RabbitMQ aplica na fila (re.search no nome)."""
+    """A policy que o RabbitMQ aplica na fila (re.search do padrao no nome)."""
     casadas = [p for p in definitions["policies"] if re.search(p["pattern"], fila)]
     assert len(casadas) == 1, (fila, [p["name"] for p in casadas])
-    assert casadas[0]["apply-to"] == "queues"
-    definicao: dict[str, Any] = casadas[0]["definition"]
-    return definicao
+    policy: dict[str, Any] = casadas[0]
+    return policy
 
 
 @pytest.mark.parametrize("fila", FILAS_DE_TRABALHO)
-def test_fila_de_trabalho_tem_retry_por_atraso_e_dlq_com_as_policies_da_plataforma(
+def test_fila_de_trabalho_e_dlq_tem_as_policies_da_plataforma(
     definitions: dict[str, Any], fila: str
 ) -> None:
     filas = {q["name"]: q for q in definitions["queues"]}
-    seguro = {"dead-letter-strategy": "at-least-once", "overflow": "reject-publish"}
-    ligacoes = [
-        (b["source"], b["routing_key"], b["destination"])
-        for b in definitions["bindings"]
-        if b["destination_type"] == "queue"
-        and b["vhost"] == "/"
-        and b["arguments"] == {}
-    ]
+    dlq = f"{fila}.dlq"
 
     # Argumento de fila e imutavel e a importacao no boot ignora a mudanca:
     # na fila de trabalho e na DLQ so o tipo e argumento; o resto vem das
     # policies, que convergem.
-    for nome in (fila, f"{fila}.dlq"):
-        assert filas[nome]["durable"] is True
-        assert filas[nome]["arguments"] == {"x-queue-type": "quorum"}
-    assert politica(definitions, fila) == {
-        "dead-letter-exchange": "pytstop.dlx",
-        "dead-letter-routing-key": fila,
-        "max-length": 10000,
-        **seguro,
-    }
+    assert filas[fila] == fila_quorum(fila)
+    assert filas[dlq] == fila_quorum(dlq)
+    assert politica(definitions, fila) == policy_de_fila(
+        f"trabalho-{fila}",
+        f"^{re.escape(fila)}$",
+        {
+            "dead-letter-exchange": "pytstop.dlx",
+            "dead-letter-routing-key": fila,
+            "max-length": 10000,
+            **SEM_PERDA,
+        },
+    )
+    # DLQ guarda no maximo 7 dias: as mensagens carregam dado pessoal (placa).
+    assert politica(definitions, dlq) == policy_de_fila(
+        "dlq", r"\.dlq$", {"message-ttl": 7 * 24 * 60 * 60 * 1000}
+    )
+
+
+@pytest.mark.parametrize("fila", FILAS_DE_TRABALHO)
+def test_fila_de_trabalho_tem_uma_fila_de_retry_por_atraso(
+    definitions: dict[str, Any], fila: str
+) -> None:
+    filas = {q["name"]: q for q in definitions["queues"]}
+    # Sem message-ttl na policy: com policy e argumento, a fila quorum usa o
+    # menor, e um valor na policy encurtaria os atrasos maiores.
+    retry = policy_de_fila(
+        f"retry-{fila}",
+        f"^{re.escape(fila)}\\.retry\\.",
+        {"dead-letter-exchange": "", "dead-letter-routing-key": fila, **SEM_PERDA},
+    )
+
     # Uma fila de retry por atraso, com o TTL fixo no argumento: TTL por
     # mensagem so vence na cabeca da fila, e numa fila unica uma copia de
     # 300 s seguraria as de 1 s chegadas depois. Com TTL igual para todas, a
     # ordem de chegada e a de expiracao. O atraso esta no nome, entao mudar um
     # atraso e criar outra fila, nunca mudar o argumento de uma que ja existe.
-    assert sorted(n for n in filas if n.startswith(f"{fila}.retry")) == sorted(
+    assert {n for n in filas if n.startswith(f"{fila}.retry")} == set(
         filas_de_retry(fila)
     )
-    for nome, atraso in zip(filas_de_retry(fila), ATRASOS, strict=True):
-        assert filas[nome]["durable"] is True
-        assert filas[nome]["arguments"] == {
-            "x-queue-type": "quorum",
-            "x-message-ttl": atraso * 1000,
-        }
-        # A routing key da copia e o nome da fila de retry e so chega nela.
-        assert filas_alcancadas(definitions, "pytstop.retry", nome) == {nome}
-        # Sem message-ttl na policy: com policy e argumento, a fila quorum usa
-        # o menor, e um valor na policy encurtaria os atrasos maiores.
-        assert politica(definitions, nome) == {
-            "dead-letter-exchange": "",
-            "dead-letter-routing-key": fila,
-            **seguro,
-        }
-    (retry,) = [p for p in definitions["policies"] if p["name"] == f"retry-{fila}"]
     assert {n for n in filas if re.search(retry["pattern"], n)} == set(
         filas_de_retry(fila)
     )
-    # DLQ guarda no maximo 7 dias: as mensagens carregam dado pessoal (placa).
-    assert ("pytstop.dlx", fila, f"{fila}.dlq") in ligacoes
-    assert politica(definitions, f"{fila}.dlq") == {
-        "message-ttl": 7 * 24 * 60 * 60 * 1000
-    }
+    for nome, atraso in zip(filas_de_retry(fila), ATRASOS, strict=True):
+        assert filas[nome] == fila_quorum(nome, ttl_ms=atraso * 1000)
+        assert politica(definitions, nome) == retry
+        # A routing key da copia e o nome da fila de retry e so chega nela.
+        assert filas_alcancadas(definitions, "pytstop.retry", nome) == {nome}
 
 
-def test_pytstop_retry_so_liga_cada_fila_de_retry_a_propria_chave(
+def test_bindings_ligam_cada_fila_so_as_proprias_chaves(
     definitions: dict[str, Any],
 ) -> None:
-    # Sem curinga e sem binding a mais: a permissao de topico do usuario
-    # (abaixo) decide sozinha em quais filas de retry ele publica.
-    ligacoes = {
-        (b["routing_key"], b["destination"])
-        for b in definitions["bindings"]
-        if b["source"] == "pytstop.retry"
-    }
+    # Comando pelo servico de destino, evento pelo de origem (todos para o
+    # OS), dead letter pelo nome da fila. No pytstop.retry, chave exata, sem
+    # curinga e sem binding a mais: a permissao de topico do usuario (abaixo)
+    # decide sozinha em quais filas de retry ele publica.
+    esperadas = [
+        *(
+            ligacao("pytstop.comandos", f"{servico}.comandos", f"comando.{servico}.#")
+            for servico in ("billing", "execucao")
+        ),
+        *(
+            ligacao("pytstop.eventos", "os.eventos", f"evento.{servico}.#")
+            for servico in ("billing", "execucao")
+        ),
+        *(
+            ligacao("pytstop.retry", nome, nome)
+            for fila in FILAS_DE_TRABALHO
+            for nome in filas_de_retry(fila)
+        ),
+        *(ligacao("pytstop.dlx", f"{fila}.dlq", fila) for fila in FILAS_DE_TRABALHO),
+    ]
 
-    assert ligacoes == {
-        (nome, nome) for fila in FILAS_DE_TRABALHO for nome in filas_de_retry(fila)
-    }
+    def ordem(binding: dict[str, Any]) -> str:
+        return json.dumps(binding, sort_keys=True)
+
+    assert sorted(definitions["bindings"], key=ordem) == sorted(esperadas, key=ordem)
 
 
-def test_exchanges_da_plataforma(definitions: dict[str, Any]) -> None:
-    tipos = {e["name"]: e["type"] for e in definitions["exchanges"] if e["durable"]}
-
+def test_vhost_e_exchanges_da_plataforma(definitions: dict[str, Any]) -> None:
     # pytstop.retry e topic (com bindings de chave exata) so para aceitar
     # permissao por routing key: em direct, qualquer servico com escrita no
-    # exchange poria mensagem na fila de outro.
-    assert tipos == {
+    # exchange poria mensagem na fila de outro. Objeto inteiro: num exchange
+    # interno o broker recusa toda publicacao (403).
+    tipos = {
         "pytstop.comandos": "topic",
         "pytstop.eventos": "topic",
         "pytstop.retry": "topic",
         "pytstop.dlx": "direct",
     }
 
+    assert definitions["vhosts"] == [{"name": "/"}]
+    assert {e["name"]: e for e in definitions["exchanges"]} == {
+        nome: {
+            "name": nome,
+            "vhost": "/",
+            "type": tipo,
+            "durable": True,
+            "auto_delete": False,
+            "internal": False,
+            "arguments": {},
+        }
+        for nome, tipo in tipos.items()
+    }
 
-@pytest.mark.parametrize("usuario", ["os", "billing", "execucao"])
-def test_permissoes_do_usuario_cobrem_so_o_que_o_catalogo_manda(
+
+# O RabbitMQ acha o padrao de permissao em qualquer posicao do nome
+# (re.search): sem ^ ou \z, o padrao casaria tambem as filas de retry, a .dlq
+# ou um nome com sobra. O fim e \z porque o $ casa tambem antes de um \n final.
+def casam(padrao: str, nomes: set[str]) -> set[str]:
+    return {n for n in nomes if re.search(padrao, n)}
+
+
+def com_sobras(nomes: set[str]) -> set[str]:
+    """Os nomes e cada um com uma sobra antes ou depois, o \\n final incluso."""
+    return nomes | {s for n in nomes for s in (f"x{n}", f"{n}x", f"{n}\n")}
+
+
+@pytest.mark.parametrize("usuario", FILA_DO_USUARIO)
+def test_permissao_do_usuario_no_vhost_cobre_so_a_propria_fila_e_onde_publica(
     definitions: dict[str, Any], usuario: str
 ) -> None:
-    permissoes = ler_json(PERMISSOES)
-    (geral,) = [p for p in permissoes["permissions"] if p["user"] == usuario]
+    (geral,) = [p for p in ler_json(PERMISSOES)["permissions"] if p["user"] == usuario]
+    exchange = EXCHANGE["comando" if usuario == "os" else "evento"]
+    exchanges = {e["name"] for e in definitions["exchanges"]}
+    filas = {q["name"] for q in definitions["queues"]}
+
+    # Objeto inteiro: vhost e configure fixos; write e read pelo que casam.
+    assert geral | {"write": "", "read": ""} == {
+        "user": usuario,
+        "vhost": "/",
+        "configure": "^\\z",
+        "write": "",
+        "read": "",
+    }
+    assert casam(geral["write"], com_sobras(exchanges)) == {exchange, "pytstop.retry"}
+    assert casam(geral["read"], com_sobras(filas)) == {FILA_DO_USUARIO[usuario]}
+
+
+@pytest.mark.parametrize("usuario", FILA_DO_USUARIO)
+def test_permissao_de_topico_cobre_so_as_chaves_que_o_catalogo_manda(
+    definitions: dict[str, Any], usuario: str
+) -> None:
     topico = {
-        p["exchange"]: p["write"]
-        for p in permissoes["topic_permissions"]
+        p["exchange"]: p
+        for p in ler_json(PERMISSOES)["topic_permissions"]
         if p["user"] == usuario
     }
+    exchange = EXCHANGE["comando" if usuario == "os" else "evento"]
+    chaves = {routing_key_esperada(t) for t in CATALOGO}
     publica = {
         routing_key_esperada(t)
         for t, (_, emissor, _) in CATALOGO.items()
         if emissor == usuario
     }
-    exchange = EXCHANGE["comando" if usuario == "os" else "evento"]
-    fila = FILA_DO_USUARIO[usuario]
-
-    # O RabbitMQ procura o padrao em qualquer posicao do nome (re.search):
-    # padrao sem ^ ou \z casaria tambem as filas de retry e a .dlq e
-    # reprovaria aqui. O fim e \z, nao $: o $ do PCRE casa tambem antes de
-    # um \n final.
-    def casam(padrao: str, nomes: set[str]) -> set[str]:
-        return {n for n in nomes if re.search(padrao, n)}
-
-    exchanges = {e["name"] for e in definitions["exchanges"]}
     filas = {q["name"] for q in definitions["queues"]}
-    chaves = {routing_key_esperada(t) for t in CATALOGO}
-    assert geral["configure"] == "^\\z"
-    assert casam(geral["write"], exchanges) == {exchange, "pytstop.retry"}
-    assert casam(geral["read"], filas) == {fila}
-    assert set(topico) == {exchange, "pytstop.retry"}
-    assert casam(topico[exchange], chaves) == publica
-    # No pytstop.retry a routing key e o nome da fila de retry.
-    assert casam(topico["pytstop.retry"], filas) == set(filas_de_retry(fila))
+
+    # Objeto inteiro: uma por exchange em que publica, so de escrita.
+    so_escrita = {"user": usuario, "vhost": "/", "write": "", "read": "^\\z"}
+    assert {nome: p | {"write": ""} for nome, p in topico.items()} == {
+        nome: so_escrita | {"exchange": nome} for nome in (exchange, "pytstop.retry")
+    }
+    # Chave de comando ou evento: o padrao e prefixo, so a sobra antes conta.
+    prefixadas = chaves | {f"x{c}" for c in chaves}
+    assert casam(topico[exchange]["write"], prefixadas) == publica
+    # No pytstop.retry a routing key e o nome da fila de retry (a varredura
+    # esta no teste seguinte).
+    assert casam(topico["pytstop.retry"]["write"], filas) == set(
+        filas_de_retry(FILA_DO_USUARIO[usuario])
+    )
 
 
 @pytest.mark.parametrize("usuario", FILA_DO_USUARIO)
@@ -657,40 +757,35 @@ def test_permissao_no_retry_aceita_so_as_cinco_chaves_da_propria_fila(
         if p["user"] == usuario and p["exchange"] == "pytstop.retry"
     ]
     fila = FILA_DO_USUARIO[usuario]
-    alheias = [
-        chave
-        for outra in FILAS_DE_TRABALHO
-        if outra != fila
-        for chave in filas_de_retry(outra)
-    ]
-    # A chave antiga (o nome da fila de trabalho), o prefixo sem atraso,
-    # atrasos fora da lista e sobras antes ou depois do nome (o \n final passa
-    # por um padrao terminado em $).
-    fora_da_lista = [
+    propria = filas_de_retry(fila)[0]
+    outras = [f for f in FILAS_DE_TRABALHO if f != fila]
+    pontos = [i for i, c in enumerate(propria) if c == "."]
+
+    def aceita(chave: str) -> bool:
+        return re.search(padrao, chave) is not None
+
+    # Varredura, nao amostra: de 0 a 1000 s, com ou sem zero a esquerda, so
+    # os cinco atrasos passam; depois do numero, so o s; e nenhuma sobra de um
+    # ou dois caracteres ASCII (o \n incluso) antes ou depois de uma chave.
+    sobras = [chr(c) + resto for c in range(128) for resto in ("", "x")]
+    assert [n for n in range(1001) if aceita(f"{fila}.retry.{n}s")] == list(ATRASOS)
+    assert [n for n in range(1001) if aceita(f"{fila}.retry.0{n}s")] == []
+    for atraso in ATRASOS:
+        assert [s for s in sobras if aceita(f"{fila}.retry.{atraso}{s}")] == ["s"]
+    for chave in filas_de_retry(fila):
+        assert [s for s in sobras if aceita(chave + s) or aceita(s + chave)] == []
+    # As chaves das outras filas, a antiga (o nome da fila de trabalho), o
+    # prefixo sem atraso, a DLQ e cada ponto trocado por outro caractere (pega
+    # o ponto sem escape na regex).
+    recusadas = [
+        *(chave for outra in outras for chave in filas_de_retry(outra)),
+        *(f"{propria[:i]}-{propria[i + 1 :]}" for i in pontos),
         fila,
         f"{fila}.retry",
         f"{fila}.retry.",
-        f"{fila}.retry.1",
-        f"{fila}.retry.2s",
-        f"{fila}.retry.10s",
-        f"{fila}.retry.01s",
-        f"{fila}.retry.150s",
-        f"{fila}.retry.3000s",
-        f"{fila}.retry.1s.x",
-        f"{fila}.retry.300sx",
-        f"{fila}.retry.1s\n",
-        f"{fila}.retry.300s\n",
-        f"x{fila}.retry.1s",
         f"{fila}.dlq",
     ]
-    # Cada ponto trocado por outro caractere: pega o ponto sem escape na regex.
-    propria = filas_de_retry(fila)[0]
-    fora_da_lista += [
-        f"{propria[:i]}-{propria[i + 1 :]}" for i, c in enumerate(propria) if c == "."
-    ]
-
-    assert [c for c in filas_de_retry(fila) if not re.search(padrao, c)] == []
-    assert [c for c in alheias + fora_da_lista if re.search(padrao, c)] == []
+    assert [c for c in recusadas if aceita(c)] == []
 
 
 @pytest.mark.parametrize(
