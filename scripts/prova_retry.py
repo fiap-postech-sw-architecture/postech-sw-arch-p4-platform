@@ -42,10 +42,10 @@ if TYPE_CHECKING:
 USUARIO = "billing"
 FILA = "billing.comandos"
 FILA_ALHEIA = "execucao.comandos"
-# Fracao do atraso que a copia pode levar a mais para voltar: no 4.3.6 a de
-# 1 s volta em 1,0 a 1,1 s, e a de 5 s em 5,0 a 5,1 s. Com 0,5, um TTL de
-# 1,6 s na fila de 1 s ja reprova.
-FOLGA = 0.5
+# Segundos que a copia pode levar a mais para voltar: no 4.3.6 a de 1 s volta
+# em 1,0 a 1,1 s, e a de 5 s em 5,0 a 5,1 s. Com 0,5 s, um TTL de 1,6 s na
+# fila de 1 s ou de 5,6 s na de 5 s ja reprova.
+FOLGA_S = 0.5
 
 # pika nao publica tipos (sem py.typed nem stubs): para o mypy, BlockingChannel,
 # BlockingConnection e BasicProperties sao Any. As anotacoes ficam pelo leitor.
@@ -97,10 +97,10 @@ def voltas(
 ) -> dict[str, Volta]:
     """Le a fila ate os ids voltarem: id -> (segundos desde o inicio, propriedades).
 
-    Espera 2 s alem da folga do maior atraso, para medir a volta atrasada em
-    vez de responder never.
+    Espera 2 s alem da folga, para medir a volta atrasada em vez de responder
+    never.
     """
-    limite_s = atraso * (1 + FOLGA) + 2
+    limite_s = atraso + FOLGA_S + 2
     chegou: dict[str, Volta] = {}
     while set(chegou) != ids and time.monotonic() - inicio < limite_s:
         metodo, propriedades, _ = canal.basic_get(FILA, auto_ack=True)
@@ -118,7 +118,7 @@ def segundos(volta: Volta | None) -> str:
 
 def no_prazo(volta: Volta | None, atraso: int) -> bool:
     """Voltou entre 90 % do atraso e o atraso mais a folga."""
-    return volta is not None and atraso * 0.9 <= volta[0] <= atraso * (1 + FOLGA)
+    return volta is not None and atraso * 0.9 <= volta[0] <= atraso + FOLGA_S
 
 
 def prova_volta_no_atraso(conexao: pika.BlockingConnection) -> None:
