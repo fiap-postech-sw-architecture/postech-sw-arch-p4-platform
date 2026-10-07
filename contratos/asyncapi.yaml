@@ -1884,7 +1884,7 @@ components:
     PagamentoEstornado:
       name: PagamentoEstornado
       title: "Pagamento estornado"
-      summary: "Pagamento estornado no provedor. O motivo diz a origem do estorno: compensacao, pedido pelo EstornarPagamento; pagamento_apos_encerramento, aprovação que chegou depois do cancelamento, da expiração ou da recusa e que o Billing estornou sozinho. A resposta ao EstornarPagamento se reconhece pelo causation_id, não pelo motivo: o desfecho republicado pode trazer pagamento_apos_encerramento, e o estorno automático leva o id do SolicitarPagamento e só atualiza o resumo do pagamento na OS."
+      summary: "Pagamento estornado no provedor; o motivo diz a origem do estorno."
       traits:
         - $ref: '#/components/messageTraits/envelope'
       payload:
