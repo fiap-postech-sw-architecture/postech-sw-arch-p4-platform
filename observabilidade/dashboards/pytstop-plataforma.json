@@ -117,7 +117,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (queue) (rabbitmq_queue_consumers{queue!~\".+[.](dlq|retry)\"})",
+          "expr": "sum by (queue) (rabbitmq_queue_consumers{queue!~\".+[.](dlq|retry[.].+)\"})",
           "legendFormat": "{{queue}}",
           "instant": true
         }
@@ -247,7 +247,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (queue) (rabbitmq_queue_messages_ready{queue!~\".+[.](dlq|retry)\"})",
+          "expr": "sum by (queue) (rabbitmq_queue_messages_ready{queue!~\".+[.](dlq|retry[.].+)\"})",
           "legendFormat": "{{queue}}"
         }
       ]
@@ -281,7 +281,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (queue) (rabbitmq_queue_messages_unacked{queue!~\".+[.](dlq|retry)\"})",
+          "expr": "sum by (queue) (rabbitmq_queue_messages_unacked{queue!~\".+[.](dlq|retry[.].+)\"})",
           "legendFormat": "{{queue}}"
         }
       ]
@@ -289,7 +289,7 @@
     {
       "id": 6,
       "title": "Entrada por fila (msg/s)",
-      "description": "Taxa de mensagens roteadas para cada fila, incluindo as republicações nas filas .retry. Mostra o ritmo de comandos e eventos da saga.",
+      "description": "Taxa de mensagens roteadas para cada fila, incluindo as republicações nas filas de retry (uma por atraso, <fila>.retry.1s a <fila>.retry.300s). Mostra o ritmo de comandos e eventos da saga.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -322,7 +322,7 @@
     {
       "id": 7,
       "title": "Aguardando retry e DLQ",
-      "description": "Profundidade das filas .retry (mensagens esperando o TTL para voltar à fila principal) e .dlq. Retry que sobe e desce é o mecanismo funcionando; DLQ deveria ficar em zero (e descarta o que passar de 7 dias).",
+      "description": "Profundidade das filas de retry, uma por atraso (<fila>.retry.1s a <fila>.retry.300s, mensagens esperando o TTL da fila para voltar à fila principal), e das .dlq. Retry que sobe e desce é o mecanismo funcionando; DLQ deveria ficar em zero (e descarta o que passar de 7 dias).",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -348,7 +348,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (queue) (rabbitmq_queue_messages{queue=~\".+[.](retry|dlq)\"})",
+          "expr": "sum by (queue) (rabbitmq_queue_messages{queue=~\".+[.](retry[.].+|dlq)\"})",
           "legendFormat": "{{queue}}"
         }
       ]
@@ -356,7 +356,7 @@
     {
       "id": 8,
       "title": "Dead-letter por motivo (msg/s)",
-      "description": "Mensagens que saíram de uma fila por dead-letter, por motivo. \"rejeitada\" vai para a DLQ; \"volta do retry\" é o TTL vencendo nas filas .retry, o caminho normal de uma nova tentativa; \"descartada da DLQ\" é mensagem que passou 7 dias na DLQ sem ninguém tratar; \"limite de entregas\" é mensagem que derrubou o consumidor 20 vezes; \"sem rota\" é publicação com routing key que nenhuma fila escuta (contrato quebrado).",
+      "description": "Mensagens que saíram de uma fila por dead-letter, por motivo. \"rejeitada\" vai para a DLQ; \"volta do retry\" é o TTL vencendo nas filas de retry, o caminho normal de uma nova tentativa; \"descartada da DLQ\" é mensagem que passou 7 dias na DLQ sem ninguém tratar; \"limite de entregas\" é mensagem que derrubou o consumidor 20 vezes; \"sem rota\" é publicação com routing key que nenhuma fila escuta (contrato quebrado).",
       "type": "timeseries",
       "gridPos": {
         "h": 8,

@@ -34,6 +34,7 @@ SCHEMAS = CONTRATOS / "schemas"
 EXEMPLOS = CONTRATOS / "exemplos"
 DEFINITIONS = RAIZ / "k8s" / "base" / "rabbitmq" / "definitions.json"
 PERMISSOES = RAIZ / "k8s" / "base" / "rabbitmq" / "permissoes.json"
+RFC = RAIZ / "docs" / "arquitetura" / "rfc" / "fase4" / "rfc-004-microsservicos-saga.md"
 
 # tipo -> (comando | evento, servico emissor, servico consumidor)
 CATALOGO: dict[str, tuple[str, str, str]] = {
@@ -160,6 +161,17 @@ ORIGEM = {
 }
 EXCHANGE = {"comando": "pytstop.comandos", "evento": "pytstop.eventos"}
 FILAS_DE_TRABALHO = ["billing.comandos", "execucao.comandos", "os.eventos"]
+FILA_DO_USUARIO = {
+    "os": "os.eventos",
+    "billing": "billing.comandos",
+    "execucao": "execucao.comandos",
+}
+# Atraso, em segundos, de cada nova tentativa: a copia com x-tentativa n vai
+# para <fila>.retry.<ATRASOS[n - 1]>s; a falha seguinte a quinta vai para a DLQ.
+ATRASOS = (1, 5, 15, 60, 300)
+# Dead letter sem perda: at-least-once, que a fila quorum so aceita com
+# overflow reject-publish.
+SEM_PERDA = {"dead-letter-strategy": "at-least-once", "overflow": "reject-publish"}
 SCHEMA_2020_12 = "https://json-schema.org/draft/2020-12/schema"
 
 
@@ -182,6 +194,11 @@ def fila_do_consumidor(tipo: str) -> str:
     return f"{consumidor}.comandos" if kind == "comando" else "os.eventos"
 
 
+def filas_de_retry(fila: str) -> list[str]:
+    """Filas de retry da fila de trabalho, na ordem das tentativas."""
+    return [f"{fila}.retry.{atraso}s" for atraso in ATRASOS]
+
+
 def casa_topico(padrao: list[str], chave: list[str]) -> bool:
     """Casamento de binding key de exchange topic do AMQP (* = 1 palavra, # = 0+)."""
     if not padrao:
@@ -190,6 +207,61 @@ def casa_topico(padrao: list[str], chave: list[str]) -> bool:
     if cabeca == "#":
         return any(casa_topico(resto, chave[i:]) for i in range(len(chave) + 1))
     return bool(chave) and cabeca in ("*", chave[0]) and casa_topico(resto, chave[1:])
+
+
+def filas_alcancadas(
+    definitions: dict[str, Any], exchange: str, chave: str
+) -> set[str]:
+    """Filas do vhost / que recebem a publicacao com esta routing key no topic."""
+    return {
+        b["destination"]
+        for b in definitions["bindings"]
+        if b["source"] == exchange
+        and b["vhost"] == "/"
+        and b["destination_type"] == "queue"
+        and casa_topico(b["routing_key"].split("."), chave.split("."))
+    }
+
+
+# Objetos como o definitions.json os declara, para comparar inteiros: vhost,
+# tipo de destino ou auto-delete errados derrubam a importacao no boot, e o
+# broker nao sobe.
+def fila_quorum(nome: str, ttl_ms: int | None = None) -> dict[str, Any]:
+    """Fila quorum duravel do vhost /; o TTL so nas filas de retry."""
+    argumentos: dict[str, Any] = {"x-queue-type": "quorum"}
+    if ttl_ms is not None:
+        argumentos["x-message-ttl"] = ttl_ms
+    return {
+        "name": nome,
+        "vhost": "/",
+        "durable": True,
+        "auto_delete": False,
+        "arguments": argumentos,
+    }
+
+
+def ligacao(origem: str, destino: str, chave: str) -> dict[str, Any]:
+    """Binding de exchange para fila no vhost /, sem argumentos."""
+    return {
+        "source": origem,
+        "vhost": "/",
+        "destination": destino,
+        "destination_type": "queue",
+        "routing_key": chave,
+        "arguments": {},
+    }
+
+
+def policy_de_fila(nome: str, padrao: str, definicao: dict[str, Any]) -> dict[str, Any]:
+    """Policy do vhost / para filas, com a prioridade 0 de todas."""
+    return {
+        "vhost": "/",
+        "name": nome,
+        "pattern": padrao,
+        "apply-to": "queues",
+        "priority": 0,
+        "definition": definicao,
+    }
 
 
 def objeto_aninhado(schema: dict[str, Any], no: dict[str, Any]) -> Any:
@@ -472,13 +544,7 @@ def test_routing_key_chega_so_na_fila_do_consumidor(
     asyncapi: dict[str, Any], definitions: dict[str, Any], tipo: str
 ) -> None:
     kind, _, _ = CATALOGO[tipo]
-    chave = routing_key_esperada(tipo).split(".")
-    filas = {
-        b["destination"]
-        for b in definitions["bindings"]
-        if b["source"] == EXCHANGE[kind]
-        and casa_topico(b["routing_key"].split("."), chave)
-    }
+    filas = filas_alcancadas(definitions, EXCHANGE[kind], routing_key_esperada(tipo))
     fila = fila_do_consumidor(tipo)
     consumo = [
         o
@@ -492,106 +558,241 @@ def test_routing_key_chega_so_na_fila_do_consumidor(
 
 
 def politica(definitions: dict[str, Any], fila: str) -> dict[str, Any]:
-    """Definicao da policy que o RabbitMQ aplica na fila (re.search no nome)."""
+    """A policy que o RabbitMQ aplica na fila (re.search do padrao no nome)."""
     casadas = [p for p in definitions["policies"] if re.search(p["pattern"], fila)]
     assert len(casadas) == 1, (fila, [p["name"] for p in casadas])
-    assert casadas[0]["apply-to"] == "queues"
-    definicao: dict[str, Any] = casadas[0]["definition"]
-    return definicao
+    policy: dict[str, Any] = casadas[0]
+    return policy
 
 
 @pytest.mark.parametrize("fila", FILAS_DE_TRABALHO)
-def test_fila_de_trabalho_tem_retry_e_dlq_com_as_policies_da_plataforma(
+def test_fila_de_trabalho_e_dlq_tem_as_policies_da_plataforma(
     definitions: dict[str, Any], fila: str
 ) -> None:
     filas = {q["name"]: q for q in definitions["queues"]}
-    seguro = {"dead-letter-strategy": "at-least-once", "overflow": "reject-publish"}
-
-    def ligada(origem: str, destino: str) -> bool:
-        return {
-            "source": origem,
-            "vhost": "/",
-            "destination": destino,
-            "destination_type": "queue",
-            "routing_key": fila,
-            "arguments": {},
-        } in definitions["bindings"]
+    dlq = f"{fila}.dlq"
 
     # Argumento de fila e imutavel e a importacao no boot ignora a mudanca:
-    # so o tipo fica como argumento; o resto vem das policies, que convergem.
-    for nome in (fila, f"{fila}.retry", f"{fila}.dlq"):
-        assert filas[nome]["durable"] is True
-        assert filas[nome]["arguments"] == {"x-queue-type": "quorum"}
-    assert politica(definitions, fila) == {
-        "dead-letter-exchange": "pytstop.dlx",
-        "dead-letter-routing-key": fila,
-        "max-length": 10000,
-        **seguro,
-    }
-    # O consumidor publica a copia no pytstop.retry; sem consumidor na .retry,
-    # a mensagem expira pelo TTL dela (no maximo o da fila, 300 s) e o broker
-    # a devolve para a fila original pelo default exchange.
-    assert ligada("pytstop.retry", f"{fila}.retry")
-    assert politica(definitions, f"{fila}.retry") == {
-        "dead-letter-exchange": "",
-        "dead-letter-routing-key": fila,
-        "message-ttl": 300_000,
-        **seguro,
-    }
+    # na fila de trabalho e na DLQ so o tipo e argumento; o resto vem das
+    # policies, que convergem. Limite de 5 entregas (o padrao da fila quorum
+    # e 20): a mensagem que derruba o consumidor a cada entrega, como um
+    # header que o pika nao decodifica, vai para a DLQ na sexta, em vez de
+    # prender o consumidor em reconexoes. A copia de retry entra na fila como
+    # mensagem nova, com a contagem zerada, e nao gasta o limite.
+    assert filas[fila] == fila_quorum(fila)
+    assert filas[dlq] == fila_quorum(dlq)
+    assert politica(definitions, fila) == policy_de_fila(
+        f"trabalho-{fila}",
+        f"^{re.escape(fila)}$",
+        {
+            "dead-letter-exchange": "pytstop.dlx",
+            "dead-letter-routing-key": fila,
+            "max-length": 10000,
+            "delivery-limit": 5,
+            **SEM_PERDA,
+        },
+    )
     # DLQ guarda no maximo 7 dias: as mensagens carregam dado pessoal (placa).
-    assert ligada("pytstop.dlx", f"{fila}.dlq")
-    assert politica(definitions, f"{fila}.dlq") == {
-        "message-ttl": 7 * 24 * 60 * 60 * 1000
-    }
+    assert politica(definitions, dlq) == policy_de_fila(
+        "dlq", r"\.dlq$", {"message-ttl": 7 * 24 * 60 * 60 * 1000}
+    )
 
 
-def test_exchanges_da_plataforma(definitions: dict[str, Any]) -> None:
-    tipos = {e["name"]: e["type"] for e in definitions["exchanges"] if e["durable"]}
+@pytest.mark.parametrize("fila", FILAS_DE_TRABALHO)
+def test_fila_de_trabalho_tem_uma_fila_de_retry_por_atraso(
+    definitions: dict[str, Any], fila: str
+) -> None:
+    filas = {q["name"]: q for q in definitions["queues"]}
+    # Sem message-ttl na policy: com policy e argumento, a fila quorum usa o
+    # menor, e um valor na policy encurtaria os atrasos maiores.
+    retry = policy_de_fila(
+        f"retry-{fila}",
+        f"^{re.escape(fila)}\\.retry\\.",
+        {"dead-letter-exchange": "", "dead-letter-routing-key": fila, **SEM_PERDA},
+    )
 
+    # Uma fila de retry por atraso, com o TTL fixo no argumento: TTL por
+    # mensagem so vence na cabeca da fila, e numa fila unica uma copia de
+    # 300 s seguraria as de 1 s chegadas depois. Com TTL igual para todas, a
+    # ordem de chegada e a de expiracao. O atraso esta no nome, entao mudar um
+    # atraso e criar outra fila, nunca mudar o argumento de uma que ja existe.
+    assert {n for n in filas if n.startswith(f"{fila}.retry")} == set(
+        filas_de_retry(fila)
+    )
+    assert {n for n in filas if re.search(retry["pattern"], n)} == set(
+        filas_de_retry(fila)
+    )
+    for nome, atraso in zip(filas_de_retry(fila), ATRASOS, strict=True):
+        assert filas[nome] == fila_quorum(nome, ttl_ms=atraso * 1000)
+        assert politica(definitions, nome) == retry
+        # A routing key da copia e o nome da fila de retry e so chega nela.
+        assert filas_alcancadas(definitions, "pytstop.retry", nome) == {nome}
+
+
+def test_bindings_ligam_cada_fila_so_as_proprias_chaves(
+    definitions: dict[str, Any],
+) -> None:
+    # Comando pelo servico de destino, evento pelo de origem (todos para o
+    # OS), dead letter pelo nome da fila. No pytstop.retry, chave exata, sem
+    # curinga e sem binding a mais: a permissao de topico do usuario (abaixo)
+    # decide sozinha em quais filas de retry ele publica.
+    esperadas = [
+        *(
+            ligacao("pytstop.comandos", f"{servico}.comandos", f"comando.{servico}.#")
+            for servico in ("billing", "execucao")
+        ),
+        *(
+            ligacao("pytstop.eventos", "os.eventos", f"evento.{servico}.#")
+            for servico in ("billing", "execucao")
+        ),
+        *(
+            ligacao("pytstop.retry", nome, nome)
+            for fila in FILAS_DE_TRABALHO
+            for nome in filas_de_retry(fila)
+        ),
+        *(ligacao("pytstop.dlx", f"{fila}.dlq", fila) for fila in FILAS_DE_TRABALHO),
+    ]
+
+    def ordem(binding: dict[str, Any]) -> str:
+        return json.dumps(binding, sort_keys=True)
+
+    assert sorted(definitions["bindings"], key=ordem) == sorted(esperadas, key=ordem)
+
+
+def test_vhost_e_exchanges_da_plataforma(definitions: dict[str, Any]) -> None:
     # pytstop.retry e topic (com bindings de chave exata) so para aceitar
     # permissao por routing key: em direct, qualquer servico com escrita no
-    # exchange poria mensagem na fila de outro.
-    assert tipos == {
+    # exchange poria mensagem na fila de outro. Objeto inteiro: num exchange
+    # interno o broker recusa toda publicacao (403).
+    tipos = {
         "pytstop.comandos": "topic",
         "pytstop.eventos": "topic",
         "pytstop.retry": "topic",
         "pytstop.dlx": "direct",
     }
 
+    assert definitions["vhosts"] == [{"name": "/"}]
+    assert {e["name"]: e for e in definitions["exchanges"]} == {
+        nome: {
+            "name": nome,
+            "vhost": "/",
+            "type": tipo,
+            "durable": True,
+            "auto_delete": False,
+            "internal": False,
+            "arguments": {},
+        }
+        for nome, tipo in tipos.items()
+    }
 
-@pytest.mark.parametrize("usuario", ["os", "billing", "execucao"])
-def test_permissoes_do_usuario_cobrem_so_o_que_o_catalogo_manda(
+
+# O RabbitMQ acha o padrao de permissao em qualquer posicao do nome
+# (re.search): sem ^ ou \z, o padrao casaria tambem as filas de retry, a .dlq
+# ou um nome com sobra. O fim e \z porque o $ casa tambem antes de um \n final.
+def casam(padrao: str, nomes: set[str]) -> set[str]:
+    return {n for n in nomes if re.search(padrao, n)}
+
+
+def com_sobras(nomes: set[str]) -> set[str]:
+    """Os nomes e cada um com uma sobra antes ou depois, o \\n final incluso."""
+    return nomes | {s for n in nomes for s in (f"x{n}", f"{n}x", f"{n}\n")}
+
+
+@pytest.mark.parametrize("usuario", FILA_DO_USUARIO)
+def test_permissao_do_usuario_no_vhost_cobre_so_a_propria_fila_e_onde_publica(
     definitions: dict[str, Any], usuario: str
 ) -> None:
-    permissoes = ler_json(PERMISSOES)
-    (geral,) = [p for p in permissoes["permissions"] if p["user"] == usuario]
+    (geral,) = [p for p in ler_json(PERMISSOES)["permissions"] if p["user"] == usuario]
+    exchange = EXCHANGE["comando" if usuario == "os" else "evento"]
+    exchanges = {e["name"] for e in definitions["exchanges"]}
+    filas = {q["name"] for q in definitions["queues"]}
+
+    # Objeto inteiro: vhost e configure fixos; write e read pelo que casam.
+    assert geral | {"write": "", "read": ""} == {
+        "user": usuario,
+        "vhost": "/",
+        "configure": "^\\z",
+        "write": "",
+        "read": "",
+    }
+    assert casam(geral["write"], com_sobras(exchanges)) == {exchange, "pytstop.retry"}
+    assert casam(geral["read"], com_sobras(filas)) == {FILA_DO_USUARIO[usuario]}
+
+
+@pytest.mark.parametrize("usuario", FILA_DO_USUARIO)
+def test_permissao_de_topico_cobre_so_as_chaves_que_o_catalogo_manda(
+    definitions: dict[str, Any], usuario: str
+) -> None:
     topico = {
-        p["exchange"]: p["write"]
-        for p in permissoes["topic_permissions"]
+        p["exchange"]: p
+        for p in ler_json(PERMISSOES)["topic_permissions"]
         if p["user"] == usuario
     }
+    exchange = EXCHANGE["comando" if usuario == "os" else "evento"]
+    chaves = {routing_key_esperada(t) for t in CATALOGO}
     publica = {
         routing_key_esperada(t)
         for t, (_, emissor, _) in CATALOGO.items()
         if emissor == usuario
     }
-    exchange = EXCHANGE["comando" if usuario == "os" else "evento"]
-    fila = "os.eventos" if usuario == "os" else f"{usuario}.comandos"
-
-    # O RabbitMQ procura o padrao em qualquer posicao do nome (re.search):
-    # padrao sem ^ ou $ casaria tambem a .retry e a .dlq e reprovaria aqui.
-    def casam(padrao: str, nomes: set[str]) -> set[str]:
-        return {n for n in nomes if re.search(padrao, n)}
-
-    exchanges = {e["name"] for e in definitions["exchanges"]}
     filas = {q["name"] for q in definitions["queues"]}
-    chaves = {routing_key_esperada(t) for t in CATALOGO}
-    assert geral["configure"] == "^$"
-    assert casam(geral["write"], exchanges) == {exchange, "pytstop.retry"}
-    assert casam(geral["read"], filas) == {fila}
-    assert set(topico) == {exchange, "pytstop.retry"}
-    assert casam(topico[exchange], chaves) == publica
-    assert casam(topico["pytstop.retry"], filas) == {fila}
+
+    # Objeto inteiro: uma por exchange em que publica, so de escrita.
+    so_escrita = {"user": usuario, "vhost": "/", "write": "", "read": "^\\z"}
+    assert {nome: p | {"write": ""} for nome, p in topico.items()} == {
+        nome: so_escrita | {"exchange": nome} for nome in (exchange, "pytstop.retry")
+    }
+    # Chave de comando ou evento: o padrao e prefixo, so a sobra antes conta.
+    prefixadas = chaves | {f"x{c}" for c in chaves}
+    assert casam(topico[exchange]["write"], prefixadas) == publica
+    # No pytstop.retry a routing key e o nome da fila de retry (a varredura
+    # esta no teste seguinte).
+    assert casam(topico["pytstop.retry"]["write"], filas) == set(
+        filas_de_retry(FILA_DO_USUARIO[usuario])
+    )
+
+
+@pytest.mark.parametrize("usuario", FILA_DO_USUARIO)
+def test_permissao_no_retry_aceita_so_as_cinco_chaves_da_propria_fila(
+    usuario: str,
+) -> None:
+    (padrao,) = [
+        p["write"]
+        for p in ler_json(PERMISSOES)["topic_permissions"]
+        if p["user"] == usuario and p["exchange"] == "pytstop.retry"
+    ]
+    fila = FILA_DO_USUARIO[usuario]
+    propria = filas_de_retry(fila)[0]
+    outras = [f for f in FILAS_DE_TRABALHO if f != fila]
+    pontos = [i for i, c in enumerate(propria) if c == "."]
+
+    def aceita(chave: str) -> bool:
+        return re.search(padrao, chave) is not None
+
+    # Varredura, nao amostra: de 0 a 1000 s, com ou sem zero a esquerda, so
+    # os cinco atrasos passam; depois do numero, so o s; e nenhuma sobra de um
+    # ou dois caracteres ASCII (o \n incluso) antes ou depois de uma chave.
+    sobras = [chr(c) + resto for c in range(128) for resto in ("", "x")]
+    assert [n for n in range(1001) if aceita(f"{fila}.retry.{n}s")] == list(ATRASOS)
+    assert [n for n in range(1001) if aceita(f"{fila}.retry.0{n}s")] == []
+    for atraso in ATRASOS:
+        assert [s for s in sobras if aceita(f"{fila}.retry.{atraso}{s}")] == ["s"]
+    for chave in filas_de_retry(fila):
+        assert [s for s in sobras if aceita(chave + s) or aceita(s + chave)] == []
+    # As chaves das outras filas, a antiga (o nome da fila de trabalho), o
+    # prefixo sem atraso, cada atraso sem o s (a varredura acima nunca deixa
+    # o s de fora), a DLQ e cada ponto trocado por outro caractere (pega o
+    # ponto sem escape na regex).
+    recusadas = [
+        *(chave for outra in outras for chave in filas_de_retry(outra)),
+        *(f"{propria[:i]}-{propria[i + 1 :]}" for i in pontos),
+        *(f"{fila}.retry.{atraso}" for atraso in ATRASOS),
+        fila,
+        f"{fila}.retry",
+        f"{fila}.retry.",
+        f"{fila}.dlq",
+    ]
+    assert [c for c in recusadas if aceita(c)] == []
 
 
 @pytest.mark.parametrize(
@@ -1019,16 +1220,55 @@ def test_toda_mensagem_declara_os_headers_do_envelope(
     headers = trait["headers"]["properties"]
 
     assert set(headers) == {"traceparent", "tracestate", "x-tentativa"}
+    # Uma tentativa por fila de retry: x-tentativa n vem de <fila>.retry.<n-esimo
+    # atraso>s.
     assert headers["x-tentativa"] | {"description": ""} == {
         "type": "integer",
         "minimum": 1,
-        "maximum": 5,
+        "maximum": len(ATRASOS),
         "description": "",
     }
     for tipo, mensagem in asyncapi["components"]["messages"].items():
         assert mensagem["traits"] == [
             {"$ref": "#/components/messageTraits/envelope"}
         ], tipo
+
+
+def test_atrasos_do_retry_sao_os_da_rfc_e_os_do_asyncapi(
+    asyncapi: dict[str, Any],
+) -> None:
+    # O consumidor escolhe a fila de retry pela tentativa: a tabela de
+    # parametros da RFC (10.3) e o header x-tentativa do AsyncAPI dizem os
+    # mesmos atrasos, na mesma ordem, que as filas do definitions.json.
+    (linha,) = [
+        linha
+        for linha in RFC.read_text(encoding="utf-8").splitlines()
+        if linha.startswith("| atrasos das filas de retry |")
+    ]
+    tentativa = asyncapi["components"]["messageTraits"]["envelope"]["headers"][
+        "properties"
+    ]["x-tentativa"]["description"]
+
+    assert [int(n) for n in re.findall(r"\d+", linha.split("|")[2])] == list(ATRASOS)
+    assert [int(n) for n in re.findall(r"\.retry\.(\d+)s", tentativa)] == list(ATRASOS)
+
+
+def test_asyncapi_lista_as_filas_de_retry_e_a_dlq_de_cada_fila(
+    asyncapi: dict[str, Any], definitions: dict[str, Any]
+) -> None:
+    # O consumidor le no contrato para onde vai a copia: o info.description
+    # cita os atrasos das filas de retry, e a descricao de cada canal de fila,
+    # as filas de retry e a DLQ dela que o definitions.json declara, nem mais
+    # nem menos.
+    filas = [q["name"] for q in definitions["queues"]]
+    atrasos = {int(m[1]) for f in filas if (m := re.fullmatch(r".+\.retry\.(\d+)s", f))}
+    info = asyncapi["info"]["description"]
+
+    assert {int(n) for n in re.findall(r"\.retry\.(\d+)s", info)} == atrasos
+    for fila in FILAS_DE_TRABALHO:
+        descricao = asyncapi["channels"][fila]["description"]
+        citadas = re.findall(rf"{re.escape(fila)}\.(?:retry\.\d+s|dlq)\b", descricao)
+        assert sorted(citadas) == sorted(f for f in filas if f.startswith(f"{fila}."))
 
 
 def test_definicoes_compartilhadas_sao_iguais_em_todos_os_schemas() -> None:

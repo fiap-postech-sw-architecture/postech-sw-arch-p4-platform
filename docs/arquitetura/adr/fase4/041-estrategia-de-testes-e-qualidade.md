@@ -26,7 +26,7 @@ Cada serviço (OS Service, de ordens de serviço, OS; Billing Service; Execution
 - Unitários por camada (`dominio`, `aplicacao`, `infraestrutura`, `interfaces`), com fakes e stubs (RNF-038); os testes do p3 migram com o código de cada contexto. Cada máquina de estados (OS, saga, orçamento, pagamento, reserva, diagnóstico e execução) tem uma tabela parametrizada com as transições válidas e as inválidas, cada caso com nome (`pytest.param(..., id=...)`).
 - Integração com testcontainers: PostgreSQL 16 (OS Service e Execução), MongoDB 7 em replica set de um nó (Billing; a transação com a outbox exige replica set) e RabbitMQ nos três, cobrindo relay, consumidor, retry, fila de mensagens mortas (DLQ) e a mesma mensagem entregue duas vezes (RN-028). Teste com commit real usa banco, vhost ou fila próprios, ou limpa o que gravou no teardown, porque o isolamento por transação com SAVEPOINT do p3 não alcança relay e consumidor.
 - Resiliência: o circuit breaker da chamada ao Billing contra um servidor falso (abre com 5 falhas, responde 503, deixa passar a chamada de teste depois de 30 s) e a validação pelo conjunto de chaves públicas, o JWKS (cache, timeout, `kid` novo, 503 sem chave).
-- Propagação de contexto: o relay publica no contexto gravado na outbox, o consumidor fica filho da publicação, a retomada por pessoa mantém o `trace_id`, e a passagem pela fila de retry acrescenta spans ao mesmo trace ([ADR-043](043-observabilidade-distribuida.md)).
+- Propagação de contexto: o relay publica no contexto gravado na outbox, o consumidor fica filho da publicação, a retomada por pessoa mantém o `trace_id`, e cada passagem por uma fila de retry acrescenta spans ao mesmo trace ([ADR-043](043-observabilidade-distribuida.md)).
 
 ### Contratos
 
