@@ -6,9 +6,10 @@ script cria num cluster novo; que as fontes (rabbitmq-credenciais e
 grafana-admin) que ja existem ficam como estao; que o Secret rabbitmq de cada
 servico, derivado da fonte, e regravado a cada deploy, inclusive quando tem a
 senha antiga; que erro ao ler ou gravar no cluster, chave ausente e senha com
-caractere fora de letras e digitos param o script; e que nenhuma senha passa
-por argumento de processo ou pela saida (no GitHub Actions, so pelo
-::add-mask::).
+caractere fora de letras e digitos param o script; que KUBE_CONTEXT e
+NAMESPACE do ambiente (make deploy KUBE_CONTEXT=<contexto>) valem no lugar dos
+padroes; e que nenhuma senha passa por argumento de processo ou pela saida (no
+GitHub Actions, so pelo ::add-mask::).
 """
 
 from __future__ import annotations
@@ -25,10 +26,14 @@ from pathlib import Path
 import pytest
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "gerar-segredos.sh"
-BROKER = "rabbitmq.pytstop-plataforma.svc.cluster.local:5672"
+NAMESPACE = "pytstop-plataforma"
 USUARIOS = ("os", "billing", "execucao")
-CREDENCIAIS = "pytstop-plataforma/rabbitmq-credenciais"
-GRAFANA = "pytstop-plataforma/grafana-admin"
+CREDENCIAIS = f"{NAMESPACE}/rabbitmq-credenciais"
+GRAFANA = f"{NAMESPACE}/grafana-admin"
+# O que o make deploy passa a outro cluster, no lugar dos padroes do kind
+# (make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto do k3s>).
+CONTEXTO_OUTRO = "k3s-vm"
+NAMESPACE_OUTRO = "outro"
 
 # "<namespace>/<nome>" -> stringData do Secret.
 type Segredos = dict[str, dict[str, str]]
@@ -131,7 +136,9 @@ def roda(
     env = {
         chave: valor
         for chave, valor in os.environ.items()
-        # O CI define GITHUB_ACTIONS; contexto e namespace vem dos padroes.
+        # O CI define GITHUB_ACTIONS, e quem roda aqui pode ter KUBE_CONTEXT e
+        # NAMESPACE: os padroes do script so valem sem eles; os testes de
+        # override os passam em `ambiente`.
         if chave not in {"GITHUB_ACTIONS", "KUBE_CONTEXT", "NAMESPACE"}
     }
     env |= {
@@ -156,24 +163,26 @@ def senhas_de(segredos: Segredos) -> list[str]:
     ]
 
 
-def url(usuario: str, senha: str) -> str:
-    return f"amqp://{usuario}:{senha}@{BROKER}/%2F"
+def url(usuario: str, senha: str, ns: str = NAMESPACE) -> str:
+    return f"amqp://{usuario}:{senha}@rabbitmq.{ns}.svc.cluster.local:5672/%2F"
 
 
-def existentes() -> Segredos:
-    """Cluster de pe: credenciais, Grafana e o Secret de cada servico."""
+def existentes(ns: str = NAMESPACE) -> Segredos:
+    """Cluster de pe, com a plataforma no namespace ``ns``: credenciais, Grafana
+    e o Secret de cada servico.
+    """
     senha = {usuario: f"{usuario}{'1' * 40}" for usuario in ("admin", *USUARIOS)}
     return {
-        CREDENCIAIS: {
+        f"{ns}/rabbitmq-credenciais": {
             "admin-usuario": "admin",
             "admin-senha": senha["admin"],
             **{f"senha-{usuario}": senha[usuario] for usuario in USUARIOS},
             "admin.json": "{}",
         },
-        GRAFANA: {"GF_SECURITY_ADMIN_PASSWORD": "grafana" + "2" * 40},
+        f"{ns}/grafana-admin": {"GF_SECURITY_ADMIN_PASSWORD": "grafana" + "2" * 40},
         **{
             f"pytstop-{usuario}/rabbitmq": {
-                "RABBITMQ_URL": url(usuario, senha[usuario])
+                "RABBITMQ_URL": url(usuario, senha[usuario], ns)
             }
             for usuario in USUARIOS
         },
@@ -261,6 +270,34 @@ def test_secret_do_servico_com_a_senha_antiga_ganha_a_da_fonte(
     assert segredos["pytstop-billing/rabbitmq"] == {
         "RABBITMQ_URL": url("billing", antes[CREDENCIAIS]["senha-billing"]),
         "AMQP_URL": "valor-antigo",
+    }
+
+
+@pytest.mark.parametrize("de_pe", [False, True], ids=["cluster-novo", "cluster-de-pe"])
+def test_contexto_e_namespace_do_ambiente_valem_no_lugar_dos_padroes(
+    tmp_path: Path, de_pe: bool
+) -> None:
+    antes = existentes(NAMESPACE_OUTRO) if de_pe else {}
+
+    processo, segredos, chamadas = roda(
+        tmp_path, antes, KUBE_CONTEXT=CONTEXTO_OUTRO, NAMESPACE=NAMESPACE_OUTRO
+    )
+
+    assert processo.returncode == 0, processo.stderr
+    # Fontes no namespace pedido, derivados nos dos servicos, nada no padrao.
+    assert set(segredos) == set(existentes(NAMESPACE_OUTRO))
+    credenciais = segredos[f"{NAMESPACE_OUTRO}/rabbitmq-credenciais"]
+    for usuario in USUARIOS:
+        senha = credenciais[f"senha-{usuario}"]
+        assert segredos[f"pytstop-{usuario}/rabbitmq"] == {
+            "RABBITMQ_URL": url(usuario, senha, NAMESPACE_OUTRO)
+        }
+    # O contexto pedido em toda chamada, e toda leitura no namespace pedido.
+    assert {tuple(chamada[:2]) for chamada in chamadas} == {
+        ("--context", CONTEXTO_OUTRO)
+    }
+    assert {chamada[3] for chamada in chamadas if chamada[2] == "-n"} == {
+        NAMESPACE_OUTRO
     }
 
 
