@@ -74,7 +74,18 @@ O overlay `kind-ci` é enxuto: sem Loki, Promtail e Grafana, uma réplica por De
 
 O total estimado fica abaixo de 10 GiB no runner padrão de 16 GB, o que o GitHub dá a repositório público; os quatro repositórios da fase 4 são públicos, e o orçamento depende disso. Cada job tem `timeout-minutes`, cada etapa do deploy tem `kubectl wait --timeout`, e o `deploy-kind` mede minutos e pico de memória e os escreve no summary.
 
-A coluna medida é só a plataforma: o `kind-ci` com o smoke, sem os serviços e os bancos, no runner `ubuntu-24.04` de 16 GB, em três execuções do `deploy-kind` do `platform` em 06/10/2026 ([1](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556133536), [2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556562779) e [3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556993602)). Por componente, é o maior uso que o `kubectl top` mostrou nas amostras a cada 5 s, nas três. O job levou de 3 min 14 s a 3 min 31 s: de 39 a 46 s na criação do kind, de 50 a 54 s no deploy e de 1 min 40 s a 1 min 47 s no smoke. O nó do kind é um container, e a memória dele é a do seu cgroup, o grupo de controle do kernel que limita e conta o que os processos do container usam. O working set do nó, a memória em uso sem o cache de arquivos que o kernel devolve sob pressão (a conta que o kubelet usa para despejar pod), chegou a 1,5 GiB, cerca de 0,5 GiB dele do próprio Kubernetes (apiserver, controller-manager, etcd, scheduler, CoreDNS, kube-proxy, kindnet e metrics-server). O pico do cgroup, com esse cache, ficou em 3,5 GiB. Os serviços entram nas linhas que faltam quando o `deploy-kind` de cada um subir os três.
+A coluna medida cobre só a plataforma:
+
+- O que rodou: o `kind-ci` com o smoke, sem os serviços e os bancos, no runner `ubuntu-24.04` de 16 GB.
+- Execuções: três do `deploy-kind` do `platform`, em 06/10/2026 ([1](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556133536), [2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556562779) e [3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556993602)).
+- Por componente: o maior uso que o `kubectl top` mostrou nas amostras a cada 5 s, nas três execuções.
+- Duração do job: de 3 min 14 s a 3 min 31 s. A criação do kind levou de 39 a 46 s, o deploy de 50 a 54 s e o smoke de 1 min 40 s a 1 min 47 s.
+- Memória do nó do kind: o nó é um container, e a memória dele é a do seu cgroup, o grupo de controle do kernel que limita e conta o que os processos do container usam.
+- Working set do nó: a memória em uso sem o cache de arquivos que o kernel devolve sob pressão, a conta que o kubelet usa para despejar pod. Chegou a 1,5 GiB.
+- Parte do Kubernetes: cerca de 0,5 GiB desse working set é do próprio Kubernetes (apiserver, controller-manager, etcd, scheduler, CoreDNS, kube-proxy, kindnet e metrics-server).
+- Pico do cgroup: 3,5 GiB, porque conta também o cache de arquivos.
+
+Os serviços entram nas linhas que faltam quando o `deploy-kind` de cada um subir os três.
 
 ### Alvo persistente: k3s na Azure
 
@@ -101,7 +112,15 @@ Nenhum segredo de aplicação fica no GitHub, e o inevitável fica na organizaç
 | Senhas dos usuários semeados (`admin`, `atendente`, `mecanico`) e do Grafana | geradas no cluster; o E2E lê as dos usuários no Secret |
 | Desenvolvimento local | `.env.example` com valores de demonstração marcados (`gitleaks:allow`) |
 
-Um script do `platform` (`scripts/gerar-segredos.sh`, chamado pelo `make deploy` antes do apply) gera os valores com `openssl rand`, mascara cada um com `::add-mask::` e cria cada Secret de origem só se ele ainda não existir, ou seja, no primeiro deploy de cada cluster: o RabbitMQ lê a senha do admin (o `admin.json` das definitions) só no boot, e uma senha nova com o broker de pé deixaria sem acesso o Job que cria os usuários. A senha de cada usuário do RabbitMQ fica no namespace do broker, cujo Job cria os usuários, e o script a copia, em todo deploy, para o Secret derivado do namespace do serviço, já na URL de conexão (`RABBITMQ_URL` do Secret `rabbitmq`, `amqp://<usuario>:<senha>@rabbitmq.pytstop-plataforma.svc.cluster.local:5672/%2F`, com o vhost `/` codificado como manda a especificação de URI AMQP do RabbitMQ). No kind do CI, o script roda no runner, e os valores morrem com ele; no k3s, roda na própria VM pelo `az vm run-command`, e os valores não passam pelo GitHub. A guarda de boot do p3, que recusa literal de demonstração fora do ambiente de desenvolvimento, passa a cobrir a chave RSA.
+Um script do `platform`, o `scripts/gerar-segredos.sh`, chamado pelo `make deploy` antes do apply, trata os segredos de runtime:
+
+- Valores: gera cada um com `openssl rand` e o mascara com `::add-mask::`.
+- Secrets de origem: cria cada um só se ele ainda não existir, ou seja, no primeiro deploy de cada cluster. O RabbitMQ lê a senha do admin (o `admin.json` das definitions) só no boot, e uma senha nova com o broker de pé deixaria sem acesso o Job que cria os usuários.
+- Secret derivado: a senha de cada usuário do RabbitMQ fica no namespace do broker, cujo Job cria os usuários, e o script a copia, em todo deploy, para o Secret `rabbitmq` do namespace do serviço, já na URL de conexão.
+- URL de conexão: a chave `RABBITMQ_URL` do Secret `rabbitmq`, `amqp://<usuario>:<senha>@rabbitmq.pytstop-plataforma.svc.cluster.local:5672/%2F`, com o vhost `/` codificado como manda a especificação de URI AMQP do RabbitMQ.
+- Onde roda: no kind do CI, no runner, e os valores morrem com ele; no k3s, na própria VM pelo `az vm run-command`, e os valores não passam pelo GitHub.
+
+A guarda de boot do p3, que recusa literal de demonstração fora do ambiente de desenvolvimento, passa a cobrir a chave RSA.
 
 ### Topologia e rede
 
