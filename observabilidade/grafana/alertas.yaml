@@ -191,11 +191,12 @@ groups:
               conditions:
                 - evaluator: {type: gt, params: [0.8]}
       # Saga parada (ADR-043): prazo tecnico vencido e nao tratado ha mais de
-      # 60 s, duas vezes o PRAZOS_INTERVALO_SEGUNDOS padrao (o limiar muda junto
-      # com a variavel), ou alguma instancia em falha_na_compensacao. Uma
-      # consulta so: com o or, a serie que falta numa condicao nao esconde a
-      # outra, e o vector(0) deixa a regra com valor quando nenhuma vale. O make
-      # manifests prova cada condicao no promtool (scripts/alerta-saga-parada.sh).
+      # 60 s, duas vezes o PRAZOS_INTERVALO_SEGUNDOS padrao (o 60 e literal aqui
+      # e na summary: quem muda a variavel muda os dois), ou alguma instancia em
+      # falha_na_compensacao. Uma consulta so: com o or, a serie que falta numa
+      # condicao nao esconde a outra, e o vector(0) deixa a regra com valor
+      # quando nenhuma vale. O make manifests prova cada condicao no promtool
+      # (scripts/alerta-saga-parada.sh).
       - uid: pytstop-saga-parada
         title: Saga parada
         condition: C

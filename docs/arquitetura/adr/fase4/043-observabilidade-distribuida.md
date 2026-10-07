@@ -75,7 +75,7 @@ No Grafana, como na fase 3, separando aviso de alerta crítico, como recomenda a
 | Assinatura inválida no webhook | `pytstop_webhook_assinatura_invalida_total` crescendo | 5 min | aviso |
 | Falha na busca do conjunto de chaves públicas (JWKS) | `pytstop_jwks_falhas_total` crescendo | 5 min | aviso |
 
-A regra de saga parada é uma consulta só, `max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or vector(0)`, que dispara acima de 0. Com o `or`, a série que falta numa condição não esconde a outra, e o `vector(0)` deixa a regra com valor zero quando nenhuma condição vale, inclusive antes de o OS Service exportar as métricas da saga. Os 60 s são duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão (30 s), e o limiar muda junto quando a variável muda. O `make manifests` do `platform` prova com o promtool que cada condição dispara sozinha.
+A regra de saga parada é uma consulta só, `max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or vector(0)`, que dispara acima de 0. Com o `or`, a série que falta numa condição não esconde a outra, e o `vector(0)` deixa a regra com valor zero quando nenhuma condição vale, inclusive antes de o OS Service exportar as métricas da saga. Os 60 s são duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão (30 s); o limiar e a `summary` ficam literais em `alertas.yaml` e não acompanham a variável, então quem muda o intervalo muda também os dois. O `make manifests` do `platform` prova com o promtool que cada condição dispara sozinha.
 
 O que fazer quando "Saga parada" ou "DLQ com mensagens" dispara está no [runbook da saga](../../../operacao/runbook-saga.md).
 
