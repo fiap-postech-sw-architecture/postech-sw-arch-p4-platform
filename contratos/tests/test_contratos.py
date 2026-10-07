@@ -385,8 +385,9 @@ def test_exemplo_valido_contra_envelope_e_schema_do_tipo(tipo: str) -> None:
 
 
 # RFC-004 5.2: o comando cujo id cada evento leva no causation_id, o que ele
-# responde ou o que abriu o fluxo. O PagamentoEstornado responde ao
-# EstornarPagamento ou, no estorno automatico, aponta o SolicitarPagamento.
+# responde ou o que abriu o fluxo. O exemplo do PagamentoEstornado e a
+# resposta ao EstornarPagamento; o estorno automatico, que aponta o
+# SolicitarPagamento, nao tem exemplo.
 CAUSA_DO_EVENTO: dict[str, set[str]] = {
     "DiagnosticoIniciado": {"SolicitarDiagnostico"},
     "DiagnosticoConcluido": {"SolicitarDiagnostico"},
@@ -405,7 +406,7 @@ CAUSA_DO_EVENTO: dict[str, set[str]] = {
     "PagamentoRecusado": {"SolicitarPagamento"},
     "PagamentoExpirado": {"SolicitarPagamento"},
     "PagamentoCancelado": {"EstornarPagamento"},
-    "PagamentoEstornado": {"EstornarPagamento", "SolicitarPagamento"},
+    "PagamentoEstornado": {"EstornarPagamento"},
     "EstornoDePagamentoFalhou": {"EstornarPagamento"},
     "ExecucaoAgendada": {"AgendarExecucao"},
     "ExecucaoCancelada": {"CancelarExecucao"},
