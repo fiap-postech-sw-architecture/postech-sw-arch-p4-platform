@@ -312,6 +312,21 @@ def test_exemplo_valido_contra_envelope_e_schema_do_tipo(tipo: str) -> None:
     assert exemplo["correlation_id"] == dados.get("ordem_id", dados.get("veiculo_id"))
 
 
+def test_causation_id_dos_exemplos_aponta_a_causa() -> None:
+    # RFC-004 5.2: evento leva o id de um comando (o que ele responde ou o que
+    # abriu o fluxo), nunca null; comando leva o id do evento que o disparou, ou
+    # null quando a causa e uma requisicao HTTP ou o reenvio por prazo.
+    exemplos = {tipo: ler_json(EXEMPLOS / f"{tipo}.json") for tipo in CATALOGO}
+    kind_por_id = {e["id"]: CATALOGO[tipo][0] for tipo, e in exemplos.items()}
+
+    for tipo, exemplo in exemplos.items():
+        causa = kind_por_id.get(exemplo["causation_id"])
+        if CATALOGO[tipo][0] == "evento":
+            assert causa == "comando", tipo
+        else:
+            assert exemplo["causation_id"] is None or causa == "evento", tipo
+
+
 @pytest.mark.parametrize("tipo", CATALOGO)
 def test_campos_do_schema_sao_os_da_rfc(tipo: str) -> None:
     schema = ler_json(SCHEMAS / f"{tipo}.schema.json")
