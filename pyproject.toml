@@ -8,7 +8,7 @@ dependencies = []
 
 # So ferramentas de teste e qualidade: o repositorio nao tem codigo de
 # producao em Python, so os testes de contrato (e, depois, os E2E) e a prova
-# do retry no broker (scripts/prova_retry.py, rodada pelo make smoke).
+# do retry no broker (scripts/prova_retry.py, que o make smoke executa).
 [dependency-groups]
 dev = [
     "bandit>=1.9.4,<2",

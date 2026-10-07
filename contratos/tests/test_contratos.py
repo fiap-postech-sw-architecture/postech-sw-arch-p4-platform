@@ -34,6 +34,7 @@ SCHEMAS = CONTRATOS / "schemas"
 EXEMPLOS = CONTRATOS / "exemplos"
 DEFINITIONS = RAIZ / "k8s" / "base" / "rabbitmq" / "definitions.json"
 PERMISSOES = RAIZ / "k8s" / "base" / "rabbitmq" / "permissoes.json"
+RFC = RAIZ / "docs" / "arquitetura" / "rfc" / "fase4" / "rfc-004-microsservicos-saga.md"
 
 # tipo -> (comando | evento, servico emissor, servico consumidor)
 CATALOGO: dict[str, tuple[str, str, str]] = {
@@ -1125,6 +1126,25 @@ def test_toda_mensagem_declara_os_headers_do_envelope(
         assert mensagem["traits"] == [
             {"$ref": "#/components/messageTraits/envelope"}
         ], tipo
+
+
+def test_atrasos_do_retry_sao_os_da_rfc_e_os_do_asyncapi(
+    asyncapi: dict[str, Any],
+) -> None:
+    # O consumidor escolhe a fila de retry pela tentativa: a tabela de
+    # parametros da RFC (10.3) e o header x-tentativa do AsyncAPI dizem os
+    # mesmos atrasos, na mesma ordem, que as filas do definitions.json.
+    (linha,) = [
+        linha
+        for linha in RFC.read_text(encoding="utf-8").splitlines()
+        if linha.startswith("| atrasos das filas de retry |")
+    ]
+    tentativa = asyncapi["components"]["messageTraits"]["envelope"]["headers"][
+        "properties"
+    ]["x-tentativa"]["description"]
+
+    assert [int(n) for n in re.findall(r"\d+", linha.split("|")[2])] == list(ATRASOS)
+    assert [int(n) for n in re.findall(r"\.retry\.(\d+)s", tentativa)] == list(ATRASOS)
 
 
 def test_definicoes_compartilhadas_sao_iguais_em_todos_os_schemas() -> None:

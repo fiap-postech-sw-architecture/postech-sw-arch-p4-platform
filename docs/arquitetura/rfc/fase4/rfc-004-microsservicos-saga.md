@@ -111,7 +111,7 @@ flowchart TB
             os_db[("PostgreSQL 16<br/>banco os")] -->|"outbox"| os_relay["relay"]
         end
 
-        cmd["RabbitMQ · exchange pytstop.comandos<br/>filas execucao.comandos e billing.comandos<br/>(cada fila com .retry e .dlq)"]
+        cmd["RabbitMQ · exchange pytstop.comandos<br/>filas execucao.comandos e billing.comandos<br/>(cada fila com retry por atraso e .dlq)"]
 
         subgraph exe["execution-service"]
             direction LR
@@ -128,7 +128,7 @@ flowchart TB
             bil_db[("MongoDB 7 · replica set<br/>banco billing")] -->|"outbox"| bil_relay["relay"]
         end
 
-        evt["RabbitMQ · exchange pytstop.eventos<br/>fila os.eventos (com .retry e .dlq)"]
+        evt["RabbitMQ · exchange pytstop.eventos<br/>fila os.eventos (com retry por atraso e .dlq)"]
         mailpit["Mailpit (SMTP)"]
 
         subgraph obs["Observabilidade"]
@@ -351,7 +351,7 @@ A saga não tem o "I" do ACID (SAGA Pattern, Aula 03). Contramedidas, detalhadas
 - Reler o valor (*reread value*): toda transição da OS e da instância é condicionada à versão lida (bloqueio otimista), e o perdedor de uma corrida, como aprovação contra cancelamento, relê e é reavaliado.
 - Visão pessimista (*pessimistic view*): a ordem das compensações tira a OS da fila antes de estornar.
 - Etapas explícitas: as etapas `AGUARDANDO_*` e a `MaquinaDeStatus` do p3 recusam comandos incompatíveis (o *semantic lock* de Richardson, fora das aulas).
-- Evento fora de ordem: o de etapa já passada, ou de saga encerrada, é ignorado com log; o de etapa à frente, como `ExecucaoIniciada` antes de `ExecucaoAgendada`, volta pela `.retry` até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta.
+- Evento fora de ordem: o de etapa já passada, ou de saga encerrada, é ignorado com log; o de etapa à frente, como `ExecucaoIniciada` antes de `ExecucaoAgendada`, volta pelas filas de retry até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta.
 - Comando repetido, pelo mesmo `id` ou pela mesma chave de negócio (o reenvio do orquestrador leva `id` novo), não repete o efeito e publica de novo a resposta registrada.
 - Lápide: a compensação que chega antes do comando original cria o registro já no estado final (seção 7.1); o comando atrasado, ao chegar, encontra esse registro pelo índice único por OS e é descartado.
 - Corrida no pivot: decide a transação da Execução. Se o início vencer, o `ExecucaoIniciada` que chega com só `CancelarExecucao` pendente devolve a saga a `EM_EXECUCAO`, e o histórico registra "cancelamento recusado: execução já iniciada".
@@ -582,12 +582,12 @@ flowchart LR
     q_ex --> c_ex["consumidor da Execução"]
     q_os --> c_os["consumidor do OS"]
 
-    c_bi -.->|"erro transitório: cópia com expiration<br/>em pytstop.retry, chave billing.comandos"| rt_bi["billing.comandos.retry"]
-    c_ex -.->|"erro transitório: idem,<br/>chave execucao.comandos"| rt_ex["execucao.comandos.retry"]
-    c_os -.->|"erro transitório: idem,<br/>chave os.eventos"| rt_os["os.eventos.retry"]
-    rt_bi -.->|"TTL vence: dead-letter<br/>de volta à fila"| q_bi
-    rt_ex -.->|"TTL vence"| q_ex
-    rt_os -.->|"TTL vence"| q_os
+    c_bi -.->|"erro transitório: cópia em pytstop.retry,<br/>chave = fila do atraso da tentativa"| rt_bi["billing.comandos.retry.1s<br/>.5s · .15s · .60s · .300s"]
+    c_ex -.->|"erro transitório: idem"| rt_ex["execucao.comandos.retry.1s<br/>.5s · .15s · .60s · .300s"]
+    c_os -.->|"erro transitório: idem"| rt_os["os.eventos.retry.1s<br/>.5s · .15s · .60s · .300s"]
+    rt_bi -.->|"TTL da fila vence: dead-letter<br/>de volta à fila"| q_bi
+    rt_ex -.->|"TTL da fila vence"| q_ex
+    rt_os -.->|"TTL da fila vence"| q_os
 
     q_bi -.->|"reject: 5ª tentativa<br/>ou erro permanente"| dlx{{"pytstop.dlx<br/>(direct)"}}
     q_ex -.->|"reject"| dlx
@@ -598,9 +598,9 @@ flowchart LR
 ```
 
 - Routing keys `comando.<servico>.<acao>` e `evento.<servico>.<fato>`. Participantes só consomem comandos e só o orquestrador consome eventos, sem os ciclos que a Aula 02 de SAGA aponta na coreografia.
-- Fonte única: o `definitions.json` que o `platform` carrega no RabbitMQ declara os exchanges, as nove filas (`X`, `X.retry` e `X.dlq` para cada uma das três), os bindings e as `policies` de TTL (*time to live*), dead-letter e overflow. A policy vale também para fila que já existe, e por isso a topologia converge quando o broker reinicia. Os serviços só fazem declaração passiva, que no RabbitMQ 4.3.6 também exige permissão sobre o recurso: cada serviço confere só as filas e os exchanges em que lê ou escreve e, se a fila ainda não existir, espera com backoff, sem redeclarar argumentos. Assim, nenhuma mensagem publicada com `mandatory` volta por falta de fila na primeira subida.
-- Filas duráveis do tipo quorum, com dead-lettering *at-least-once*. A `X.retry` não tem consumidor: o consumidor publica a cópia no exchange de tópico `pytstop.retry`, com a routing key `X`, e o dead-letter da `X.retry` a devolve a `X` quando o TTL vence. A `X.dlq` guarda a mensagem por 7 dias.
-- Permissões: um usuário do RabbitMQ por serviço (`os`, `billing`, `execucao`), mais um `admin` para a operação, nenhum com permissão de configure. A permissão de tópico limita as routing keys: o `os` só publica `comando.*`, o `billing` só `evento.billing.*` e a `execucao` só `evento.execucao.*`; cada um lê só a própria fila e, no `pytstop.retry`, só usa a chave dela. Os usuários nascem de um script de inicialização a partir de Secret, fora do `definitions.json`.
+- Fonte única: o `definitions.json` que o `platform` carrega no RabbitMQ declara os exchanges, as 21 filas (para cada uma das três, `X`, as cinco filas de retry por atraso e `X.dlq`), os bindings e as `policies` de dead-letter, overflow, tamanho e TTL (*time to live*) da DLQ. A policy vale também para fila que já existe, e por isso a topologia converge quando o broker reinicia; o TTL de cada fila de retry é argumento da fila, porque o atraso está no nome dela. Os serviços só fazem declaração passiva, que no RabbitMQ 4.3.6 também exige permissão sobre o recurso: cada serviço confere só as filas e os exchanges em que lê ou escreve e, se a fila ainda não existir, espera com backoff, sem redeclarar argumentos. Assim, nenhuma mensagem publicada com `mandatory` volta por falta de fila na primeira subida.
+- Filas duráveis do tipo quorum, com dead-lettering *at-least-once*. As filas de retry, uma por atraso (`X.retry.1s`, `X.retry.5s`, `X.retry.15s`, `X.retry.60s` e `X.retry.300s`, com o TTL fixo na fila), não têm consumidor: o consumidor publica a cópia, sem `expiration`, no exchange de tópico `pytstop.retry`, com a routing key da fila do atraso da nova tentativa (`x-tentativa` de 1 a 5, na ordem), e o dead-letter da fila de retry a devolve a `X` quando o TTL vence. Uma fila por atraso porque TTL só vence na cabeça da fila: numa fila de retry única, com `expiration` por cópia, a de 300 s seguraria as de 1 s chegadas depois ([ADR-036](../../adr/fase4/036-mensageria-rabbitmq.md)). A `X.dlq` guarda a mensagem por 7 dias.
+- Permissões: um usuário do RabbitMQ por serviço (`os`, `billing`, `execucao`), mais um `admin` para a operação, nenhum com permissão de configure. A permissão de tópico limita as routing keys: o `os` só publica `comando.*`, o `billing` só `evento.billing.*` e a `execucao` só `evento.execucao.*`; cada um lê só a própria fila e, no `pytstop.retry`, só usa as chaves das filas de retry dela. Os usuários nascem de um script de inicialização a partir de Secret, fora do `definitions.json`.
 - Origem conferida: o publicador preenche a propriedade AMQP (*Advanced Message Queuing Protocol*) `user_id`, que o broker confere contra o usuário da conexão. O consumidor confere o `user_id` contra o produtor que o catálogo da [seção 5.3](#53-catálogo-de-comandos-e-eventos) associa ao `tipo` da mensagem, e divergência é erro permanente (DLQ). A cópia de retry leva o `user_id` do próprio consumidor, que a republicou, e só passa com esse usuário quando `x-tentativa` é maior que zero.
 
 ### 5.2 Envelope
@@ -1111,7 +1111,7 @@ Nomes em maiúsculas são variáveis de ambiente, definidas no ConfigMap ou no S
 | `JWKS_URL` | URL interna do OS | | Billing e Execução | endereço do `/.well-known/jwks.json` do OS |
 | `JWT_EXPIRATION_MINUTES` | 15 | min | OS | validade do access token |
 | `JWT_REFRESH_EXPIRATION_MINUTES` | 10080 | min | OS | validade do refresh, como no p3 |
-| atrasos da fila de retry | 1, 5, 15, 60 e 300 | s | todos (consumidor) | espera de cada tentativa na `.retry`; depois da quinta, DLQ |
+| atrasos das filas de retry | 1, 5, 15, 60 e 300 | s | `platform` (TTL de cada fila de retry) e todos (consumidor) | espera de cada tentativa, numa fila por atraso; a falha seguinte à quinta vai para a DLQ |
 | reconexão do relay ao broker | até 30 | s | todos (relay) | backoff de reconexão; sem conexão, o relay não reivindica linhas |
 | retenção da outbox entregue | 7 | dias | todos | linhas entregues apagadas depois disso |
 | retenção de `mensagens_processadas` | 30 | dias | todos | janela de idempotência |
@@ -1137,7 +1137,7 @@ Os limites de rate limit por rota estão no ADR-038, e os requests e limits por 
 | 4 | Consistência eventual: logo após a decisão no Billing, a OS ainda mostra o status anterior, e os resumos no OS são cópias | a consulta mostra a etapa da saga; E2E e collection esperam o evento antes de afirmar o status |
 | 5 | Orquestrador como ponto único de falha (SAGA Pattern, Aulas 02 e 05) | estado persistido, réplicas e filas duráveis: com o OS fora, as mensagens esperam e a saga segue na volta |
 | 6 | Pagamento aprovado no provedor depois do cancelamento, da expiração ou da recusa | o Billing estorna sozinho e publica `PagamentoEstornado` com motivo `pagamento_apos_encerramento`; a saga encerrada ignora o evento, e o caso aparece em `pytstop_pagamentos_estornados_total{motivo}` |
-| 7 | TTL por mensagem numa `.retry` única só expira na cabeça da fila: uma espera de 300 s atrasa as de 1 s atrás dela | aceito no volume de uma oficina; evolução: uma fila de retry por nível de atraso |
+| 7 | TTL só expira na cabeça da fila: numa fila de retry única, uma espera de 300 s atrasaria as de 1 s atrás dela | uma fila de retry por atraso, com o TTL fixo na fila ([seção 5.1](#51-topologia)); mudar um atraso é criar outra fila |
 | 8 | Um serviço com acesso ao broker poderia forjar mensagem de outro | usuário por serviço, permissão só nas próprias routing keys e `user_id` conferido pelo consumidor ([seção 5.1](#51-topologia)) |
 | 9 | Billing e Execução dependem do JWKS do OS | cache de 10 minutos; acabado o cache com o OS fora, respondem 503 com `Retry-After`, não 401, e `pytstop_jwks_falhas_total` acusa |
 | 10 | O token do link de decisão viaja no caminho da URL | `{token}` mascarado em access log, spans e logs; uso único e validade igual à do orçamento |
