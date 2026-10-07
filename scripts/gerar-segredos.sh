@@ -10,8 +10,9 @@
 # o Job rabbitmq-usuarios sem acesso a API (401) ate o proximo restart.
 #
 # Fontes dos servicos, no namespace de cada um (README, "Segredos gerados"):
-# senhas dos bancos, chave RSA do JWT, ENCRYPTION_KEY, senha do admin semeado,
-# chave HMAC do link de decisao e as credenciais e o keyfile do MongoDB.
+# senhas dos bancos (no PostgreSQL, uma por papel), chave RSA do JWT,
+# ENCRYPTION_KEY, senha do admin semeado, chave HMAC do link de decisao e as
+# credenciais e o keyfile do MongoDB.
 # Tambem so se ainda nao existem: o banco aplica a senha so na primeira
 # inicializacao do volume, e uma ENCRYPTION_KEY nova deixaria ilegivel o que
 # ja foi cifrado. Pelo mesmo motivo, a que guarda estado no banco nao nasce
@@ -120,7 +121,8 @@ confere "$NS" rabbitmq-credenciais admin-usuario admin-senha senha-os senha-bill
   senha-execucao admin.json
 confere "$NS" grafana-admin GF_SECURITY_ADMIN_PASSWORD
 for banco in os execucao; do
-  confere "pytstop-$banco" "$banco-postgres" POSTGRES_PASSWORD
+  confere "pytstop-$banco" "$banco-postgres" POSTGRES_PASSWORD POSTGRES_OWNER_PASSWORD \
+    POSTGRES_APP_PASSWORD POSTGRES_EXPORTER_PASSWORD
   sem_volume "pytstop-$banco" "$banco-postgres"
 done
 confere pytstop-os os-jwt JWT_PRIVATE_KEY JWT_PREVIOUS_PUBLIC_KEY
@@ -203,10 +205,20 @@ fi
 # assina o checkout com o ORCAMENTO_LINK_SECRET.
 for banco in os execucao; do
   if falta "pytstop-$banco" "$banco-postgres"; then
-    postgres=$(senha)
-    mascara "$postgres"
+    # Uma senha por papel: o superusuario postgres, que so inicializa o banco;
+    # o dono (DDL, Job de migracao); o da aplicacao (so DML, os processos do
+    # servico); e o do exporter (pg_monitor). Os papeis nascem no script de
+    # init do banco, nos manifests do servico.
+    superusuario=$(senha)
+    dono=$(senha)
+    aplicacao=$(senha)
+    monitor=$(senha)
+    mascara "$superusuario" "$dono" "$aplicacao" "$monitor"
     cria "pytstop-$banco" "$banco-postgres" <<YAML
-  POSTGRES_PASSWORD: "$postgres"
+  POSTGRES_PASSWORD: "$superusuario"
+  POSTGRES_OWNER_PASSWORD: "$dono"
+  POSTGRES_APP_PASSWORD: "$aplicacao"
+  POSTGRES_EXPORTER_PASSWORD: "$monitor"
 YAML
   fi
 done

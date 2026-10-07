@@ -39,10 +39,17 @@ USUARIOS = ("os", "billing", "execucao")
 CREDENCIAIS = f"{NAMESPACE}/rabbitmq-credenciais"
 GRAFANA = f"{NAMESPACE}/grafana-admin"
 NAMESPACES_DOS_SERVICOS = {f"pytstop-{usuario}" for usuario in USUARIOS}
+# Uma senha por papel do PostgreSQL: superusuario, dono, aplicacao e exporter.
+CHAVES_DO_POSTGRES = {
+    "POSTGRES_PASSWORD",
+    "POSTGRES_OWNER_PASSWORD",
+    "POSTGRES_APP_PASSWORD",
+    "POSTGRES_EXPORTER_PASSWORD",
+}
 # Fontes dos servicos ("<namespace>/<nome>") e as chaves de cada uma.
 FONTES_DOS_SERVICOS = {
-    "pytstop-os/os-postgres": {"POSTGRES_PASSWORD"},
-    "pytstop-execucao/execucao-postgres": {"POSTGRES_PASSWORD"},
+    "pytstop-os/os-postgres": CHAVES_DO_POSTGRES,
+    "pytstop-execucao/execucao-postgres": CHAVES_DO_POSTGRES,
     "pytstop-os/os-jwt": {"JWT_PRIVATE_KEY", "JWT_PREVIOUS_PUBLIC_KEY"},
     "pytstop-os/os-cripto": {"ENCRYPTION_KEY"},
     "pytstop-os/os-admin": {"ADMIN_PASSWORD"},
@@ -67,7 +74,7 @@ FONTES_DO_BANCO = {
 HEX_48 = r"[0-9a-f]{48}"
 HEX_64 = r"[0-9a-f]{64}"
 FORMATOS = {
-    "POSTGRES_PASSWORD": HEX_48,
+    **dict.fromkeys(CHAVES_DO_POSTGRES, HEX_48),
     "ADMIN_PASSWORD": HEX_48,
     "MONGO_INITDB_ROOT_PASSWORD": HEX_48,
     "MONGO_BILLING_PASSWORD": HEX_48,
