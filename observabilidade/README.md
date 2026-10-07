@@ -18,7 +18,7 @@ Dashboards, alertas e datasources do Grafana da infraestrutura compartilhada, no
 
 Os arquivos são a fonte única. No Kubernetes viram ConfigMaps com hash no nome, então mudar um dashboard troca o pod do Grafana no próximo `make deploy`; o compose monta os mesmos arquivos. Um dashboard novo entra também no `configMapGenerator`, e o `make manifests` reprova o que ficar de fora. O teste de consistência falha se um painel ficar sem descrição, se o título ou alguma consulta de um painel não estiver neste documento, ou se uma regra de alerta não estiver na tabela de alertas com UID, título e consulta, ou se severidade, janela, "sem dado" ou "onde" da tabela forem diferentes dos da regra.
 
-Para ver no kind: `make port-forward` e `http://localhost:3000/d/pytstop-plataforma`. O acesso anônimo entra como Viewer; o admin usa a senha de demonstração do Secret `grafana-admin`.
+Para ver no kind: `make port-forward` e `http://localhost:3000/d/pytstop-plataforma`. O acesso anônimo entra como Viewer; o admin usa a senha que o `make deploy` gera no primeiro deploy do cluster e que se lê do Secret `grafana-admin` ([README da raiz, Segredos gerados](../README.md#segredos-gerados)).
 
 ## Dashboard PytStop - Mensageria e Serviços (infraestrutura) (`pytstop-plataforma`)
 
@@ -67,4 +67,4 @@ Avaliadas a cada minuto e notificadas pela política padrão do Grafana, sem can
 
 ## Evidências
 
-O `make smoke` mostra, no kind, o dashboard e as regras carregados pelo Grafana e quantas séries cada consulta acima devolve, e sai com status 1 se faltar regra (a conta vem dos arquivos de `grafana/`) ou se alguma não estiver saudável; a saída de uma execução está no corpo do PR que introduziu este documento.
+O `make smoke` mostra, no overlay `kind` (o `kind-ci` do CI não tem Grafana e pula essas provas), o dashboard e as regras carregados pelo Grafana e quantas séries cada consulta acima devolve, e sai com status 1 se faltar regra (a conta vem dos arquivos de `grafana/`) ou se alguma não estiver saudável; a saída de uma execução está no corpo do PR que introduziu este documento.

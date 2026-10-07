@@ -8,7 +8,8 @@ SHELL := bash
 
 CLUSTER ?= pytstop-p4
 NAMESPACE ?= pytstop-plataforma
-# Overlay do make deploy: kind (local) ou k3s (make deploy OVERLAY=k3s
+# Overlay do make deploy e do make smoke: kind (local), kind-ci (o do CI, sem
+# Loki, Promtail e Grafana) ou k3s (make deploy OVERLAY=k3s
 # KUBE_CONTEXT=<contexto do k3s>).
 OVERLAY ?= kind
 # Contexto explicito: o deploy nunca cai no cluster que estiver ativo no

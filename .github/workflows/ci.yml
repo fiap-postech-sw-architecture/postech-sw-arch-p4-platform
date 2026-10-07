@@ -20,8 +20,10 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 # Runner fixo: o ubuntu-latest passa para o Ubuntu 26.04 a partir de
-# 19/10/2026 (actions/runner-images#14748), e a imagem do CI so muda com
-# commit aqui.
+# 19/10/2026 (actions/runner-images#14748). O sistema so muda com commit
+# aqui; as ferramentas do runner (kubectl, docker, jq) mudam com a imagem
+# semanal dele, e o que precisa de versao certa vem pinado (as imagens do
+# Makefile e, no deploy-kind, o kind e o kubectl).
 jobs:
   manifests:
     runs-on: ubuntu-24.04
