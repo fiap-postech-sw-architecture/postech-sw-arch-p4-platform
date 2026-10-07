@@ -38,13 +38,14 @@ A API, o banco e as métricas escrevem etapa e status em minúsculas (`falha_na_
    kubectl --context kind-pytstop-p4 -n pytstop-plataforma get secret rabbitmq-credenciais -o jsonpath='{.data.admin-senha}' | base64 -d; echo
    ```
 
-4. Defina os endereços das APIs, que respondem pela borda do kind, e entre como `admin` do OS Service. O e-mail e a senha do admin semeado estão nas chaves `ADMIN_EMAIL` e `ADMIN_PASSWORD` de um Secret do namespace `pytstop-os`, gerado pelo deploy ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). A função `segredo` acha a chave sem depender do nome do Secret, e a senha vai ao `curl` pela entrada padrão, sem aparecer na lista de processos:
+4. Defina os endereços das APIs, que respondem pela borda do kind, e entre como `admin` do OS Service. O e-mail do admin semeado é o `ADMIN_EMAIL` do ConfigMap do serviço, e a senha está na chave `ADMIN_PASSWORD` do Secret `os-admin`, gerado pelo deploy, os dois no namespace `pytstop-os` ([Segredos gerados](../../README.md#segredos-gerados)). O ConfigMap se acha pela chave, sem depender do nome dele, e a senha vai ao `curl` pela entrada padrão, sem aparecer na lista de processos:
 
    ```bash
    OS=http://localhost/os BILLING=http://localhost/billing EXECUCAO=http://localhost/execucao
-   segredo() { kubectl --context kind-pytstop-p4 -n pytstop-os get secrets -o json \
-     | jq -r --arg chave "$1" 'first(.items[].data[$chave] // empty) | @base64d'; }
-   export ADMIN_EMAIL="$(segredo ADMIN_EMAIL)" ADMIN_SENHA="$(segredo ADMIN_PASSWORD)"
+   export ADMIN_EMAIL="$(kubectl --context kind-pytstop-p4 -n pytstop-os get configmaps -o json \
+     | jq -r 'first(.items[].data.ADMIN_EMAIL // empty)')"
+   export ADMIN_SENHA="$(kubectl --context kind-pytstop-p4 -n pytstop-os get secret os-admin \
+     -o jsonpath='{.data.ADMIN_PASSWORD}' | base64 -d)"
    TOKEN=$(jq -n '{email: env.ADMIN_EMAIL, senha: env.ADMIN_SENHA}' \
      | curl -s "$OS/api/v1/autenticacao/login" -H 'Content-Type: application/json' -d @- \
      | jq -r .access_token)

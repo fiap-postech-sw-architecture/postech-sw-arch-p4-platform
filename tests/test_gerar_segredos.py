@@ -2,7 +2,8 @@
 
 O kubectl falso guarda os Secrets num JSON, registra os argumentos de cada
 chamada e recusa manifesto que o apiserver recusaria. O teste confere o que o
-script cria num cluster novo, com o formato de cada chave dos servicos; que
+script cria num cluster novo, com o formato de cada chave dos servicos (o
+contrato da tabela "Segredos gerados" do README, que o teste tambem le); que
 dois deploys seguidos mantem os valores; que as fontes que ja existem, da
 plataforma e dos servicos, ficam como estao, e a que falta nasce sozinha; que
 o Secret rabbitmq de cada servico, derivado da fonte, e regravado a cada
@@ -29,7 +30,8 @@ from pathlib import Path
 
 import pytest
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "gerar-segredos.sh"
+RAIZ = Path(__file__).resolve().parents[1]
+SCRIPT = RAIZ / "scripts" / "gerar-segredos.sh"
 OPENSSL = shutil.which("openssl") or "openssl"
 NAMESPACE = "pytstop-plataforma"
 USUARIOS = ("os", "billing", "execucao")
@@ -653,3 +655,23 @@ def test_no_github_actions_a_senha_lida_da_fonte_e_mascarada(tmp_path: Path) -> 
     mascaradas = re.findall(r"^::add-mask::(.*)$", processo.stdout, flags=re.MULTILINE)
     lidas = [antes[CREDENCIAIS][f"senha-{usuario}"] for usuario in USUARIOS]
     assert mascaradas == lidas
+
+
+def test_tabela_do_readme_tem_cada_fonte_dos_servicos_e_as_chaves_dela() -> None:
+    readme = (RAIZ / "README.md").read_text(encoding="utf-8")
+    secao = readme.split("### Segredos gerados\n", 1)[1].split("\n#", 1)[0]
+    tabela: dict[str, set[str]] = {}
+    for linha in secao.splitlines():
+        if not linha.startswith("| `"):
+            continue
+        secret, namespaces, chaves = linha.split("|")[1:4]
+        nome = re.findall(r"`([\w-]+)`", secret)[0]
+        for ns in re.findall(r"`([\w-]+)`", namespaces):
+            tabela[f"{ns}/{nome}"] = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", chaves))
+
+    assert {
+        fonte: chaves
+        for fonte, chaves in tabela.items()
+        if fonte.split("/")[0] in NAMESPACES_DOS_SERVICOS
+        and not fonte.endswith("/rabbitmq")
+    } == FONTES_DOS_SERVICOS

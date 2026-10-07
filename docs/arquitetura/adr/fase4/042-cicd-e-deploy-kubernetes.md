@@ -109,7 +109,7 @@ Nenhum segredo de aplicação fica no GitHub, e o inevitável fica na organizaç
 | Chave RSA do JSON Web Token (JWT) e chave HMAC (código de autenticação de mensagem com hash) do link de decisão | geradas no cluster; a HMAC gira apagando o Secret e reimplantando, a RSA em duas etapas, com a chave anterior publicada no JWKS ([ADR-039](039-autenticacao-entre-servicos.md)) |
 | `ENCRYPTION_KEY`, que cifra os dados pessoais no OS Service | gerada uma vez e nunca regenerada; girá-la exige recifrar os dados e recalcular o hash do documento |
 | Senhas dos bancos e dos usuários do RabbitMQ, um por serviço | geradas no cluster. O banco só aplica a senha do Secret na primeira inicialização do volume, e ela gira com `ALTER ROLE`; no RabbitMQ, a senha nova vai para o Secret do broker (`rabbitmq-credenciais`): a de um usuário de serviço vale no `make deploy` seguinte, que a aplica no broker, pelo Job de usuários, e no Secret `rabbitmq` do serviço, e chega aos pods dele depois do restart; a do admin, no próximo boot do broker ([passo a passo no README](../../../../README.md#troca-de-senha-do-rabbitmq)) |
-| Senhas dos usuários semeados (`admin`, `atendente`, `mecanico`) e do Grafana | geradas no cluster; o E2E lê as dos usuários no Secret |
+| Senha do `admin`, o único usuário semeado no OS Service, e a do Grafana | geradas no cluster; o E2E lê a do `admin` no Secret e, com o token dele, cadastra pela API um atendente e um mecânico, com e-mail e senha aleatórios |
 | Desenvolvimento local | `.env.example` com valores de demonstração marcados (`gitleaks:allow`) |
 
 Um script do `platform`, o `scripts/gerar-segredos.sh`, chamado pelo `make deploy` antes do apply, trata os segredos de runtime:
