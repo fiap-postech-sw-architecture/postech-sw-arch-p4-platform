@@ -38,6 +38,8 @@ PROMTAIL_IMAGE := grafana/promtail:3.6.11
 TRIVY_IMAGE := aquasec/trivy:0.72.0
 # Valida o asyncapi.yaml contra a especificacao AsyncAPI 3.0 (exige Node 24).
 ASYNCAPI_CLI := @asyncapi/cli@6.2.0
+SHELLCHECK_IMAGE := koalaman/shellcheck:v0.11.0
+ACTIONLINT_IMAGE := rhysd/actionlint:1.7.12
 
 # Schemas do Kubernetes na versao do no do kind (kind/cluster.yaml) e o do
 # KongClusterPlugin gerado das CRDs do chart (make kong-render), versionado
@@ -57,7 +59,7 @@ TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
 KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE) YQ_IMAGE=$(YQ_IMAGE) \
 	NAMESPACE=$(NAMESPACE) scripts/kong-render.sh
 
-.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint manifests check kong-render
+.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts manifests check kong-render
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -139,6 +141,13 @@ lint: ## ruff, mypy e bandit nos testes
 	uv run ruff format --check .
 	uv run mypy
 	uv run bandit -c pyproject.toml -r contratos tests -q
+
+# Pelas imagens pinadas, como no CI, onde rodam no job manifests. O actionlint
+# passa o shellcheck tambem nos run: dos workflows.
+lint: lint-scripts
+lint-scripts: ## shellcheck nos scripts e actionlint nos workflows
+	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(SHELLCHECK_IMAGE) scripts/*.sh scripts/ci/*.sh k8s/base/rabbitmq/*.sh
+	docker run --rm -v "$(CURDIR):/repo:ro" -w /repo $(ACTIONLINT_IMAGE)
 
 manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, render do Kong, versoes, dashboards
 	set -euo pipefail; \

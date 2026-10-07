@@ -247,6 +247,7 @@ fi
 titulo "RabbitMQ: x-queue-type is the only argument; TTL, dead-letter, overflow and length come from policies"
 R="$K -n pytstop-plataforma exec -i rabbitmq-0 -c rabbitmq --"
 # rabbitmqadmin como admin, com a senha lida no proprio pod (admin.json).
+# shellcheck disable=SC2016 # o sh -c roda no pod: $(...) e "$@" expandem la
 adm() {
   $R sh -c 'export RABBITMQADMIN_USERNAME=admin RABBITMQADMIN_PASSWORD="$(sed -n "s/.*\"password\": \"\([^\"]*\)\".*/\1/p" /etc/rabbitmq/definitions/admin.json)"; exec rabbitmqadmin "$@"' rabbitmqadmin "$@"
 }
@@ -354,6 +355,7 @@ prometheus() {
   $K get --raw "/api/v1/namespaces/$NS/services/prometheus:9090/proxy/api/v1/query?query=$(jq -rn --arg q "$1" '$q|@uri')" \
     | jq '.data.result | length'
 }
+# shellcheck disable=SC2016 # $__rate_interval e do Grafana, vai literal ao sed
 { jq -r '.panels[].targets[].expr' observabilidade/dashboards/*.json; sed -n 's/^ *expr: //p' observabilidade/grafana/alertas*.yaml; } \
   | sed 's/\$__rate_interval/5m/g' | sort -u | while read -r consulta; do
     printf '%3s series  %s\n' "$(prometheus "$consulta")" "$consulta"

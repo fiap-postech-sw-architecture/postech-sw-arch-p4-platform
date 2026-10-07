@@ -31,8 +31,10 @@ jobs:
         with:
           persist-credentials: false
       # kubectl (com kustomize), docker, docker compose e jq ja vem no runner;
-      # kubeconform, trivy, helm, promtool, loki e promtail rodam pelas imagens
-      # pinadas no Makefile, igual ao local.
+      # kubeconform, trivy, helm, promtool, loki, promtail, shellcheck e
+      # actionlint rodam pelas imagens pinadas no Makefile, igual ao local.
+      - name: shellcheck nos scripts e actionlint nos workflows (make lint-scripts)
+        run: make lint-scripts
       - name: Manifests, configs, render do Kong e versoes (make manifests)
         run: make manifests
 
