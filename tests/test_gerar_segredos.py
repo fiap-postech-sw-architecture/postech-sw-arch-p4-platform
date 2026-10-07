@@ -617,11 +617,23 @@ def test_contexto_e_namespace_do_ambiente_valem_no_lugar_dos_padroes(
     } == {NAMESPACE_OUTRO}
 
 
-def test_erro_ao_ler_o_cluster_aborta_sem_gravar_nada(tmp_path: Path) -> None:
-    processo, segredos, chamadas = roda(tmp_path, {}, KUBECTL_FALSO_FALHA="get")
+@pytest.mark.parametrize(
+    ("falha", "de_pe"),
+    [("get", False), ("get secret", False), ("get secret billing-mongo", True)],
+    ids=["toda-leitura", "leitura-dos-secrets", "leitura-de-uma-fonte"],
+)
+def test_erro_ao_ler_o_cluster_aborta_sem_gravar_nada(
+    tmp_path: Path, falha: str, de_pe: bool
+) -> None:
+    # Erro ao ler uma fonte nao vira "nao existe": geraria valores novos por cima
+    # dos que estao em uso.
+    antes = existentes() if de_pe else {}
+
+    processo, segredos, chamadas = roda(tmp_path, antes, KUBECTL_FALSO_FALHA=falha)
 
     assert processo.returncode != 0
-    assert segredos == {}
+    assert "connection to the server" in processo.stderr
+    assert segredos == antes
     assert gravacoes(chamadas) == []
 
 
