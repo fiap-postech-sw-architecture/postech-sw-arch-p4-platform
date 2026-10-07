@@ -50,13 +50,13 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 | [`kind/cluster.yaml`](kind/cluster.yaml) | Cluster kind `pytstop-p4` de um nó, com o Kubernetes fixo por digest e as portas 80/443 do host (só loopback) mapeadas para o Kong |
 | [`k8s/base/`](k8s/base) | Kustomize da infraestrutura compartilhada no namespace `pytstop-plataforma` |
 | [`k8s/overlays/kind`](k8s/overlays/kind), [`k8s/overlays/kind-ci`](k8s/overlays/kind-ci), [`k8s/overlays/k3s`](k8s/overlays/k3s) | StorageClass, exposição do Kong e recursos de cada ambiente; o kind leva também o metrics-server e os limites de rate limit ×10, e o `kind-ci` é o kind sem Loki, Promtail e Grafana, para o runner do CI |
-| [`k8s/exemplos/`](k8s/exemplos) | Exemplos de borda do OS e do Billing (Ingress e Services do Kong), que o `make smoke` aplica no kind |
+| [`k8s/exemplos/`](k8s/exemplos) | Exemplos de borda do OS, do Billing e da Execução (Ingress e Services do Kong), que o `make smoke` aplica no kind |
 | [`observabilidade/`](observabilidade) | Datasources, alertas e dashboards do Grafana, usados pelo Kubernetes e pelo compose; [documentação painel a painel](observabilidade/README.md) |
 | [`compose/`](compose) | Stack docker compose para desenvolver um serviço: RabbitMQ, observabilidade e Mailpit com a configuração do cluster, os bancos de cada serviço e um profile que sobe os três; sem o Kong |
 | [`contratos/`](contratos) | AsyncAPI 3.0 dos comandos e eventos, JSON Schema do envelope e de cada mensagem, exemplos e testes |
-| [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong, segredos gerados no deploy, medição do kind e checagens do `make manifests` |
+| [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong, segredos gerados no deploy, medição do kind, checagens do `make manifests` e, em [`scripts/ci/`](scripts/ci), os scripts do CD: deploy da plataforma, implantação e smoke dos serviços e diagnóstico ([Contrato com os serviços](#contrato-com-os-serviços)) |
 | [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md) e o [runbook da saga](docs/operacao/runbook-saga.md), com o procedimento para saga parada, falha na compensação, retomada e redrive da DLQ |
-| [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos e de medição do kind |
+| [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos, de medição do kind e de implantação e smoke dos serviços |
 | [`Makefile`](Makefile) | Atalhos de cluster, deploy, compose e testes (`make` lista os alvos) |
 
 ## Subir a plataforma
@@ -252,7 +252,7 @@ Do host, o MongoDB do replica set responde em `mongodb://localhost:27017/billing
 
 ## Componentes e versões
 
-Todas as imagens têm tag fixa, e a mesma versão roda no kind, no k3s e no compose: o `make manifests` reprova imagem com mais de uma tag entre `k8s/`, compose e Makefile, ou fora desta tabela.
+Todas as imagens têm tag fixa, e a mesma versão roda no kind, no k3s e no compose: o `make manifests` reprova imagem com mais de uma tag entre `k8s/`, compose e Makefile, ou fora desta tabela. Nos manifests dos serviços, o `implantar-servicos.sh` reprova imagem de terceiro fora desta tabela ([Contrato com os serviços](#contrato-com-os-serviços)).
 
 | Componente | Versão | Para que serve | Endereço no cluster |
 |---|---|---|---|
@@ -268,8 +268,10 @@ Todas as imagens têm tag fixa, e a mesma versão roda no kind, no k3s e no comp
 | metrics-server | `registry.k8s.io/metrics-server/metrics-server:v0.9.0` | Métricas de CPU e memória para o HPA dos serviços e o `kubectl top` (só no kind; o k3s traz o dele) | `kube-system` |
 | Mailpit | `axllent/mailpit:v1.31.4` | SMTP de demonstração e caixa de entrada web das notificações ao cliente | `mailpit.pytstop-plataforma.svc.cluster.local:1025` |
 | Kubernetes do kind | `kindest/node:v1.35.0` (por digest em [`kind/cluster.yaml`](kind/cluster.yaml)) | Nó do cluster local; o `make manifests` valida os manifests contra a mesma versão | - |
-| PostgreSQL (só compose) | `postgres:16.15` | Banco do OS e da Execução no compose; no Kubernetes cada serviço traz o seu | `postgres-os:5432`, `postgres-execucao:5432` |
-| MongoDB (só compose) | `mongo:7.0.43` | Banco do Billing no compose, em replica set de um nó | `mongo-billing:27017` |
+| PostgreSQL | `postgres:16.15` | Banco do OS e da Execução: no Kubernetes, o StatefulSet que cada serviço traz no próprio namespace; no compose, um container por serviço | `os-postgres.pytstop-os.svc.cluster.local:5432` e `execucao-postgres.pytstop-execucao.svc.cluster.local:5432`; no compose, `postgres-os:5432` e `postgres-execucao:5432` |
+| MongoDB | `mongo:7.0.43` | Banco do Billing, em replica set de um nó (`rs0`): StatefulSet no namespace do Billing e um container no compose | `billing-mongo-0.billing-mongo.pytstop-billing.svc.cluster.local:27017`; no compose, `mongo-billing:27017` |
+| postgres_exporter | `prometheuscommunity/postgres-exporter:v0.20.1` | Métricas do PostgreSQL (conexões, transações, locks, tamanho), sidecar do banco do OS e da Execução, porta 9187, que conecta com o papel `os_exporter` ou `execucao_exporter` (`pg_monitor`), não com o superusuário ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) | sidecar do StatefulSet do banco |
+| mongodb_exporter | `percona/mongodb_exporter:0.53.0` | Métricas do MongoDB, sidecar do banco do Billing, porta 9216, que conecta com o usuário `exporter`, com `--collector.dbstats` e `--collector.replicasetstatus` | sidecar do StatefulSet do banco |
 | SonarQube (CI dos serviços) | `sonarqube:26.9.0.129388-community` | Servidor efêmero do job `sonarqube` de cada serviço, que aplica o quality gate ([ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)) | service container do job |
 | SonarScanner (CI dos serviços) | `sonarsource/sonar-scanner-cli:12.2.0.4256_8.1.0` | Análise do código no mesmo job | - |
 
@@ -317,7 +319,7 @@ São as variáveis que o profile `servicos` do compose passa aos serviços; nos 
 | `OTEL_ENABLED`, `OTEL_SERVICE_NAME` | todos | `true`, nome do serviço (`os-service`, `billing-service`, `execution-service`) | iguais |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | todos | `http://jaeger.pytstop-plataforma.svc.cluster.local:4317` (gRPC) ou `:4318` (HTTP) | `http://jaeger:4317` |
 | `SMTP_HOST` / `SMTP_PORT` | OS | `mailpit.pytstop-plataforma.svc.cluster.local` / `1025` | `mailpit` / `1025` |
-| `DATABASE_URL` | OS e Execução | PostgreSQL do próprio serviço, no namespace dele | `postgresql://pytstop:pytstop@postgres-os:5432/os` e `...@postgres-execucao:5432/execucao` |
+| `DATABASE_URL` | OS e Execução | PostgreSQL do próprio serviço, no namespace dele, com o papel `os_app` ou `execucao_app` nos processos e o dono (`os` ou `execucao`) no Job de migração ([Contrato com os serviços](#contrato-com-os-serviços)) | `postgresql://pytstop:pytstop@postgres-os:5432/os` e `...@postgres-execucao:5432/execucao` |
 | `MONGODB_URI` | Billing | MongoDB do próprio serviço, no namespace dele | `mongodb://mongo-billing:27017/billing?replicaSet=rs0` |
 | `RUN_MIGRATIONS_ON_STARTUP` | OS e Execução | `false` (migração em Job antes do rollout) | `true` |
 | `JWKS_URL` | Billing e Execução | `http://<svc>.pytstop-os.svc.cluster.local:8000/.well-known/jwks.json` | `http://os-service:8000/.well-known/jwks.json` |
@@ -349,7 +351,7 @@ Antes de enviar ao Loki, o Promtail troca por `***` o token de `/publico/orcamen
 
 ### Gateway: como um serviço publica as rotas
 
-O serviço cria os próprios Ingress, no próprio namespace, com `ingressClassName: kong`, a partir do exemplo do OS ([`borda-os-service.yaml`](k8s/exemplos/borda-os-service.yaml)) ou do Billing ([`borda-billing-service.yaml`](k8s/exemplos/borda-billing-service.yaml), com o webhook do Mercado Pago e o checkout do simulador); a Execução segue o molde do OS, sem JWKS nem rotas públicas. O `make smoke` aplica os dois exemplos no kind como estão. Pela borda só saem os caminhos que o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md) permite: `/api/v1/*`, `/docs` e `/openapi.json` de cada serviço, o JWKS (*JSON Web Key Set*, as chaves públicas do JWT) do OS e o checkout do simulador do Billing. `/metrics` e `/api/v1/admin/*` casam um Ingress anotado com o plugin `fora-da-borda`, que responde 404 sem chamar o serviço; como o Kong escolhe o caminho mais longo, esse Ingress vence o de `/api/v1`.
+O serviço cria os próprios Ingress, no próprio namespace, com `ingressClassName: kong`, a partir do exemplo do OS ([`borda-os-service.yaml`](k8s/exemplos/borda-os-service.yaml)) ou do Billing ([`borda-billing-service.yaml`](k8s/exemplos/borda-billing-service.yaml), com o webhook do Mercado Pago e o checkout do simulador); a Execução, do dela ([`borda-execution-service.yaml`](k8s/exemplos/borda-execution-service.yaml), o molde do OS sem JWKS nem rotas públicas). O `make smoke` aplica os três exemplos no kind como estão. Pela borda só saem os caminhos que o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md) permite: `/api/v1/*`, `/docs` e `/openapi.json` de cada serviço, o JWKS (*JSON Web Key Set*, as chaves públicas do JWT) do OS e o checkout do simulador do Billing. `/metrics` e `/api/v1/admin/*` casam um Ingress anotado com o plugin `fora-da-borda`, que responde 404 sem chamar o serviço; como o Kong escolhe o caminho mais longo, esse Ingress vence o de `/api/v1`.
 
 Com `strip-path`, o Kong tira do caminho tudo o que a regra casou e põe no lugar o `konghq.com/path` do Service de destino: `/os/api/v1/x` casa a regra `/os/api/v1` e chega ao serviço como `/api/v1` + `/x`. Por isso cada prefixo publicado tem um Service próprio, todos com os mesmos pods; o Service interno do serviço (o do `JWKS_URL` e do `BILLING_URL`) fica sem a anotação.
 
@@ -534,6 +536,69 @@ Com um nó não há replicação, mas os clientes não mudam se o broker virar c
 
 Redrive: `make redrive FILA=billing.comandos` (ou `execucao.comandos`, `os.eventos`) cria um shovel no próprio broker (plugin `rabbitmq_shovel`, ligado em [`enabled_plugins`](k8s/base/rabbitmq/enabled_plugins)) que move para a fila as mensagens que estavam na DLQ quando ele começou e se apaga ao terminar. O shovel só tira a mensagem da DLQ depois de a fila confirmar o recebimento, e preserva as propriedades (`user_id`, `message_id`, `x-tentativa`), então o consumidor a trata como a última tentativa. No compose, o mesmo shovel do [`redrive.sh`](scripts/redrive.sh) roda por `docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl set_parameter shovel`; o comando completo e quando fazer o redrive estão no [runbook da saga](docs/operacao/runbook-saga.md#como).
 
+## Contrato com os serviços
+
+O que o repositório de cada serviço precisa ter para o CD dele subir os três no kind, e o que o `platform` entrega. No job `deploy-kind` de um serviço, a ordem é: o [`deploy-kind.sh`](scripts/ci/deploy-kind.sh) sobe a plataforma e gera os Secrets ([Segredos gerados](#segredos-gerados)); o [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) implanta os três serviços; o [`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh) confere cada namespace; e, se algo falha, o [`diagnostico.sh`](scripts/ci/diagnostico.sh) despeja pods, eventos e logs de todos os namespaces.
+
+### O que o `platform` entrega
+
+| Item | Onde |
+|---|---|
+| Namespace do serviço, criado vazio pelo `make deploy` se ainda não existe, com a Role do Kong | [Gateway](#gateway-como-um-serviço-publica-as-rotas) |
+| Secret `rabbitmq` com a `RABBITMQ_URL` do usuário do serviço | [Segredos gerados](#segredos-gerados) |
+| As fontes do serviço, criadas só se ainda não existem: as senhas do banco, uma por papel, as chaves e a senha do admin semeado | [Segredos gerados](#segredos-gerados) |
+| Usuário no RabbitMQ, com as permissões do serviço e a topologia pronta | [Usuário e permissões no RabbitMQ](#usuário-e-permissões-no-rabbitmq) |
+| Kong com os `KongClusterPlugin` (rate limit por classe e `fora-da-borda`), que o Ingress do serviço referencia por anotação, e um exemplo de borda por serviço | [Gateway](#gateway-como-um-serviço-publica-as-rotas) e [`k8s/exemplos/`](k8s/exemplos) |
+| Métricas pelo Prometheus (pod anotado), logs pelo Promtail, traces no Jaeger e SMTP no Mailpit | [Endereços e variáveis](#endereços-e-variáveis) |
+| Versões fixas do PostgreSQL, do MongoDB e dos exporters | [Componentes e versões](#componentes-e-versões) |
+| Scripts do CD: `deploy-kind.sh`, `implantar-servicos.sh`, `smoke-servicos.sh`, `diagnostico.sh` e o [`medir-kind.sh`](scripts/medir-kind.sh) | [`scripts/ci/`](scripts/ci) |
+
+### O que cada serviço precisa ter
+
+| | OS | Billing | Execução |
+|---|---|---|---|
+| Nome no `implantar-servicos.sh` e imagem (`pytstop-<nome>`) | `os-service` | `billing-service` | `execution-service` |
+| Namespace | `pytstop-os` | `pytstop-billing` | `pytstop-execucao` |
+| Prefixo na borda | `/os` | `/billing` | `/execucao` |
+| Banco (Service e porta), que só o próprio namespace alcança | `os-postgres:5432` | `billing-mongo:27017` | `execucao-postgres:5432` |
+| Secret com as senhas do banco, uma por papel | `os-postgres` | `billing-mongo` | `execucao-postgres` |
+| Papel dos processos (API, relay, consumidor e `prazos`) | `os_app`, só DML nas tabelas do dono | `billing` | `execucao_app`, só DML nas tabelas do dono |
+| Papel do Job de inicialização | `os`, dono do banco e das tabelas | `billing`; o root só inicia o replica set e cria os usuários | `execucao`, dono do banco e das tabelas |
+| Papel do exporter, sidecar do banco | `os_exporter`, com `pg_monitor` | `exporter` | `execucao_exporter`, com `pg_monitor` |
+| Exemplo de borda | [`borda-os-service.yaml`](k8s/exemplos/borda-os-service.yaml) | [`borda-billing-service.yaml`](k8s/exemplos/borda-billing-service.yaml) | [`borda-execution-service.yaml`](k8s/exemplos/borda-execution-service.yaml) |
+
+- `Dockerfile` na raiz, com os `ARG` `GIT_SHA` e `GIT_DATE`: quando o serviço entra como vizinho no CD de outro, a imagem dele sai do `docker build` do checkout, com o commit como tag e em paralelo com os outros builds.
+- `k8s/overlays/kind-ci/kustomization.yaml`, o overlay do CD, ao lado do `kind` e do `k3s`. Sem ele, o `implantar-servicos.sh` falha nomeando o serviço e o commit, antes de construir qualquer imagem.
+- A imagem do serviço com o nome fixo `pytstop-<nome>` e `imagePullPolicy: IfNotPresent`. A tag de verdade vem na implantação: o script gera `k8s/overlays/execucao/`, o overlay pedido com a imagem trocada pelo `images:` do kustomize, aplica e o apaga no fim; o diretório não pode existir no repositório. Toda outra imagem dos manifests (banco, exporter, initContainers) tem de estar na [tabela de versões](#componentes-e-versões), com a mesma tag: o script confere antes de construir e para nomeando a imagem que falta.
+- Nenhum `Secret` nos manifests: os do serviço vêm do `make deploy` e entram por `secretKeyRef`, com os nomes e as chaves da tabela [Segredos gerados](#segredos-gerados).
+- Um papel do banco por uso ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)): cada processo monta a `DATABASE_URL` (ou a `MONGODB_URI`) no pod, por expansão de variável, com a senha do papel da tabela acima, e nenhum processo do serviço usa o superusuário `postgres`, que só inicializa o banco. No PostgreSQL, os papéis nascem de um script de init que o serviço traz nos manifests, num ConfigMap montado em `/docker-entrypoint-initdb.d` (a imagem o roda uma vez, na primeira inicialização do volume), com as senhas lidas do ambiente do container do banco e nunca de argumento. O script abre, antes do primeiro comando com senha, com `SET log_statement = none;` e `SET log_min_error_statement = panic;`: o `psql` troca `:'senha'` pelo valor antes de enviar o comando, então o servidor recebe a senha em claro, e sem os `SET` um `log_statement` em `all` ou `ddl` a grava no log do servidor, e um comando que falha grava a linha `STATEMENT` com ela, mesmo com o `log_statement` padrão (provado no `postgres:16.15`, com `log_statement=all`, no sucesso e no erro). As tabelas nascem do Job, depois do script, e por isso o papel da aplicação ganha o DML por `ALTER DEFAULT PRIVILEGES FOR ROLE <dono>`, que cobre também a `alembic_version`, lida pelos pods para esperar a migração; um `GRANT` sobre as tabelas existentes não alcançaria nenhuma.
+- No PostgreSQL, o StatefulSet do banco define `POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256 --auth-local=scram-sha-256"`. A imagem oficial deixa o socket, o `127.0.0.1` e o `::1` em `trust`, e o exporter, sidecar do pod do banco, conecta por `127.0.0.1`: sem os argumentos, a senha do papel dele não seria conferida, e um exporter comprometido entraria como `postgres` ([Segredos gerados](#segredos-gerados)). Eles valem só na primeira inicialização do volume, o script de init dos papéis segue rodando, e o `psql` dentro do contêiner passa a pedir a senha (`PGPASSWORD="$POSTGRES_PASSWORD"` e `-w`, como na [troca de senha do banco](#troca-de-senha-do-banco)).
+- Um Job de inicialização (a migração ou a preparação do banco, com o papel dele na tabela acima) com o rótulo `app.kubernetes.io/component: inicializacao`, idempotente: o script apaga os Jobs com esse rótulo antes do apply (Job é imutável), aplica com `apply --server-side`, espera o banco (StatefulSet, 180 s), o Job completar (300 s; no erro, o log dele vai para a saída) e cada Deployment (300 s).
+- Pela borda, `GET <prefixo>/api/v1/saude` com 200 e `<prefixo>/metrics` com 404 (o Ingress `fora-da-borda` dos exemplos). O smoke espera a saúde por até 1 min: o Kong recebe a rota de um Service novo antes do alvo, e até lá responde 503.
+- Todo pod de processo (API, relay, consumidor, `prazos` e o banco, pelo exporter) anotado para o Prometheus e com `up = 1`; o pod do Job e o que está saindo de um rollout não contam. O `up` diz só que o exporter responde ao Prometheus: o `postgres_exporter` serve o `/metrics` mesmo sem entrar no banco (papel inexistente, senha errada ou banco fora: `pg_up 0`), e o `mongodb_exporter`, quando o MongoDB recusa o usuário (`mongodb_up 0`; com o servidor inalcançável na partida do exporter, ele nem serve o `/metrics`, e o `up` cai). O smoke lê `pg_up` (PostgreSQL) ou `mongodb_up` (MongoDB) no Prometheus, que raspa o `/metrics` do exporter, e reprova o namespace em que a métrica não existe ou não vale 1 (na mesma espera do `up`, de até 45 s).
+- NetworkPolicy que deixa só o próprio namespace chegar ao banco. O smoke prova pelo pod `rabbitmq-0` da plataforma: a conexão à porta do banco tem de esgotar o prazo de 3 s, porque o kindnet descarta o pacote barrado; conexão aceita, recusada ou nome que não resolve reprovam.
+
+O smoke escreve a tabela `serviço | etapa | resultado` na saída e, no GitHub Actions, no summary do job, e sai com status 1 nomeando os serviços que falharam. A chamada do CD de um serviço leva a imagem dele pelo arquivo do `docker save` e a ref gravada nele; no exemplo, a do OS, no commit `5f2a9c1`, com os vizinhos clonados ao lado:
+
+```bash
+scripts/ci/implantar-servicos.sh --overlay kind-ci \
+  --tar os-service=imagem.tar --imagem os-service=ghcr.io/fiap-postech-sw-architecture/pytstop-os-service:5f2a9c1 \
+  os-service=../os-service billing-service=../billing-service execution-service=../execution-service
+scripts/ci/smoke-servicos.sh
+```
+
+Localmente, com a plataforma no kind (`make kind-up deploy`) e os três repositórios clonados ao lado deste, sem `--tar` o script constrói as três imagens:
+
+```bash
+scripts/ci/implantar-servicos.sh --overlay kind \
+  os-service=../postech-sw-arch-p4-os-service \
+  billing-service=../postech-sw-arch-p4-billing-service \
+  execution-service=../postech-sw-arch-p4-execution-service
+scripts/ci/smoke-servicos.sh
+```
+
+Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl` e `sleep` falsos: builds em paralelo e com o commit, a carga no kind, o overlay gerado e apagado, a ordem de cada namespace, falha de build, apply, banco, Job e Deployment, e erro do cluster ao listar o banco e os Deployments, nomeando o serviço e o commit, imagem fora da tabela e argumentos recusados; e cada etapa do smoke reprovando o que deve (inclusive o exporter com `up = 1` e `pg_up` ou `mongodb_up` em 0, ou sem a série), erro do cluster sem parar o smoke, as esperas da borda e do Prometheus, o prazo de cada chamada e o certificado sem verificação só no `localhost`.
+
 ## Contratos de mensageria
 
 | Arquivo | Conteúdo |
@@ -605,5 +670,5 @@ O workflow [`cd.yml`](.github/workflows/cd.yml) tem o job `deploy-kind` ([Kind n
 - `pytstop.retry` é topic, com bindings de chave exata ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): o RabbitMQ só aplica permissão por routing key em exchange topic, e sem ela a escrita no `pytstop.retry` deixaria qualquer serviço pôr mensagem na fila de trabalho de outro. Com a chave exata (o nome da fila de retry), o roteamento é o mesmo de um direct.
 - Uma fila de retry por atraso, `<fila>.retry.1s` a `.300s` ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): são 21 filas no broker, e mudar um atraso é criar outra fila.
 - Versões de Prometheus, Grafana e Loki iguais às da fase 3. Jaeger na última 1.x: a 2.x troca a configuração pelo formato do OpenTelemetry Collector.
-- CVEs conhecidas nas imagens (trivy, HIGH e CRITICAL com correção publicada, out/2026): Prometheus v2.54.1 (96 e 6), Loki 2.9.8 (53 e 3) e kube-state-metrics v2.13.0 (44 e 1) não têm versão de correção na própria linha (o Loki 2.9.17 tem mais achados, e o Prometheus 2.55.1 tira só quatro) e ficam como estão: rodam só dentro do cluster, sem Ingress, e o acesso de fora é por port-forward ou túnel. Sair delas é trocar de linha (Prometheus 3, Loki 3, kube-state-metrics 2.17), com mudança de configuração. O Mailpit subiu para v1.31.4, sem achado HIGH.
+- CVEs conhecidas nas imagens (trivy, HIGH e CRITICAL com correção publicada, out/2026): Prometheus v2.54.1 (96 e 6), Loki 2.9.8 (53 e 3) e kube-state-metrics v2.13.0 (44 e 1) não têm versão de correção na própria linha (o Loki 2.9.17 tem mais achados, e o Prometheus 2.55.1 tira só quatro) e ficam como estão: rodam só dentro do cluster, sem Ingress, e o acesso de fora é por port-forward ou túnel. Sair delas é trocar de linha (Prometheus 3, Loki 3, kube-state-metrics 2.17), com mudança de configuração. O Mailpit subiu para v1.31.4, sem achado HIGH. Os exporters dos bancos, nas últimas versões publicadas, têm só achados HIGH com correção fora deles (postgres_exporter v0.20.1: 12; mongodb_exporter 0.53.0: 21), todos na biblioteca padrão do Go, em `golang.org/x` e no gRPC compilados no binário, que só um release novo do exporter troca: rodam como sidecar do banco, e a NetworkPolicy de cada serviço deixa só o Prometheus chegar à porta de métricas.
 - Sem persistência em Prometheus, Loki e Grafana (o estado do Grafana vem todo do provisioning; o TSDB do Prometheus fica num emptyDir). Só o RabbitMQ tem volume. Cada emptyDir tem teto (`sizeLimit`) para não encher o disco do nó, que no k3s guarda também os volumes do broker e dos bancos: o Prometheus guarda 2 dias (7 no k3s) e no máximo 1 GB, e o Loki apaga os logs com mais de 7 dias (compactor com retenção).
