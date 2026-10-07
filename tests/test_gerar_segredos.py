@@ -737,15 +737,17 @@ def test_senha_fora_de_letras_e_digitos_para_sem_mostrar_a_senha(
     assert "pytstop-os/rabbitmq" not in segredos
 
 
-def test_bash_com_trace_nao_mostra_valor_nenhum(tmp_path: Path) -> None:
-    # SHELLOPTS=xtrace no ambiente vale como bash -x: o trace mostraria cada
-    # atribuicao, antes do ::add-mask::.
-    processo, segredos, _ = roda(tmp_path, {}, SHELLOPTS="xtrace")
+def test_trace_e_allexport_herdados_nao_expoem_valor_nenhum(tmp_path: Path) -> None:
+    # SHELLOPTS no ambiente vale como bash -x -a: o trace mostraria cada
+    # atribuicao, antes do ::add-mask::, e o allexport poria cada valor no
+    # ambiente dos processos filhos.
+    processo, segredos, _ = roda(tmp_path, {}, SHELLOPTS="allexport:xtrace")
 
     assert processo.returncode == 0, processo.stderr
-    assert "+ set +x" in processo.stderr
+    assert "+ set +ax" in processo.stderr
     valores = valores_gerados(segredos)
-    assert [valor for valor in valores if valor in processo.stderr] == []
+    ambientes = (tmp_path / "ambientes.jsonl").read_text(encoding="utf-8")
+    assert [valor for valor in valores if valor in processo.stderr + ambientes] == []
 
 
 def test_senha_so_de_digitos_chega_ao_secret_como_texto(tmp_path: Path) -> None:

@@ -34,9 +34,10 @@
 # antes do uso (a chave PEM, uma linha por vez), e o log do job o mostra como
 # ***.
 set -euo pipefail
-# Sem trace, mesmo com bash -x ou SHELLOPTS=xtrace: ele mostraria cada valor
-# na atribuicao, antes do ::add-mask::.
-set +x
+# Sem trace e sem exportar tudo, mesmo com bash -x, bash -a ou SHELLOPTS
+# herdado: o trace mostraria cada valor na atribuicao, antes do ::add-mask::, e
+# o allexport poria cada valor no ambiente dos processos filhos.
+set +ax
 
 K="kubectl --context ${KUBE_CONTEXT:-kind-pytstop-p4}"
 NS="${NAMESPACE:-pytstop-plataforma}"
