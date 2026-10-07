@@ -392,8 +392,9 @@ def test_fontes_dos_servicos_nascem_no_formato_do_contrato(tmp_path: Path) -> No
 def test_chave_fernet_troca_o_alfabeto_do_base64_pelo_url_safe(
     tmp_path: Path,
 ) -> None:
-    # 32 bytes cujo base64 padrao tem "+" e "/", os dois caracteres que o
-    # Fernet recusa.
+    # 32 bytes cujo base64 padrao tem "+" e "/". O Fernet aceitaria a chave
+    # assim, mas o contrato e o base64 url-safe da chave que o proprio Fernet
+    # gera (README, Segredos gerados).
     chave = b"\xfb\xff" * 16
     padrao = base64.b64encode(chave).decode()
     assert {"+", "/"} <= set(padrao)
@@ -523,7 +524,8 @@ def test_guarda_de_volume_para_antes_de_gerar_qualquer_fonte(
 def test_chave_sem_estado_no_banco_nasce_de_novo_com_os_volumes_de_pe(
     tmp_path: Path, fonte: str
 ) -> None:
-    # A troca da chave HMAC e a da RSA de uma vez: apagar o Secret e reimplantar.
+    # Apagar o Secret e reimplantar: a troca da chave HMAC e, na os-jwt, a troca
+    # de emergencia da RSA, que derruba as sessoes.
     antes = existentes()
     del antes[fonte]
     volumes = " ".join(f"{ns}/dados-0" for ns in NAMESPACES_DOS_SERVICOS)
