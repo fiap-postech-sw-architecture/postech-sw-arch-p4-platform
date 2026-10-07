@@ -26,11 +26,15 @@
 # a mesma que o Job rabbitmq-usuarios aplica no broker: trocar a senha na
 # fonte vale no deploy seguinte (README, "Troca de senha do RabbitMQ").
 #
-# Nenhuma senha ou chave vai para argumento de processo, para a saida ou para
-# o repositorio: o Secret chega ao kubectl pela entrada padrao. No GitHub
-# Actions cada valor e registrado com ::add-mask:: antes do uso (a chave PEM,
-# uma linha por vez), e o log do job o mostra como ***.
+# Nenhuma senha ou chave vai para argumento de processo, para variavel
+# exportada, para a saida ou para o repositorio: o Secret chega ao kubectl pela
+# entrada padrao. No GitHub Actions cada valor e registrado com ::add-mask::
+# antes do uso (a chave PEM, uma linha por vez), e o log do job o mostra como
+# ***.
 set -euo pipefail
+# Sem trace, mesmo com bash -x ou SHELLOPTS=xtrace: ele mostraria cada valor
+# na atribuicao, antes do ::add-mask::.
+set +x
 
 K="kubectl --context ${KUBE_CONTEXT:-kind-pytstop-p4}"
 NS="${NAMESPACE:-pytstop-plataforma}"

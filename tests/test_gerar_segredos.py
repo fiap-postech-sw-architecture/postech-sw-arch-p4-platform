@@ -125,6 +125,9 @@ segredos = json.loads(arquivo.read_text())
 args = sys.argv[1:]
 with (estado / "chamadas.jsonl").open("a") as log:
     log.write(json.dumps(args) + "\n")
+# O ambiente de cada chamada, onde uma variavel exportada pelo script apareceria.
+with (estado / "ambientes.jsonl").open("a") as log:
+    log.write(json.dumps(dict(os.environ)) + "\n")
 resto = args[2:]  # depois do --context, que o teste confere no log
 ns = ""
 if resto[:1] == ["-n"]:
@@ -346,9 +349,10 @@ def test_cluster_novo_recebe_todos_os_secrets_com_senhas_geradas(
             "RABBITMQ_URL": url(usuario, credenciais[f"senha-{usuario}"])
         }
     assert set(segredos) == set(existentes())
-    # Nenhuma senha ou chave em argumento de processo ou na saida; contexto
-    # explicito.
-    fora = json.dumps(chamadas) + processo.stdout + processo.stderr
+    # Nenhuma senha ou chave em argumento de processo, no ambiente dos processos
+    # filhos ou na saida; contexto explicito.
+    ambientes = (tmp_path / "ambientes.jsonl").read_text(encoding="utf-8")
+    fora = json.dumps(chamadas) + ambientes + processo.stdout + processo.stderr
     assert [valor for valor in valores if valor in fora] == []
     assert {tuple(chamada[:2]) for chamada in chamadas} == {
         ("--context", "kind-pytstop-p4")
@@ -716,6 +720,17 @@ def test_senha_fora_de_letras_e_digitos_para_sem_mostrar_a_senha(
     assert "senha-os must have only letters and digits" in processo.stderr
     assert senha not in processo.stdout + processo.stderr
     assert "pytstop-os/rabbitmq" not in segredos
+
+
+def test_bash_com_trace_nao_mostra_valor_nenhum(tmp_path: Path) -> None:
+    # SHELLOPTS=xtrace no ambiente vale como bash -x: o trace mostraria cada
+    # atribuicao, antes do ::add-mask::.
+    processo, segredos, _ = roda(tmp_path, {}, SHELLOPTS="xtrace")
+
+    assert processo.returncode == 0, processo.stderr
+    assert "+ set +x" in processo.stderr
+    valores = valores_gerados(segredos)
+    assert [valor for valor in valores if valor in processo.stderr] == []
 
 
 def test_senha_so_de_digitos_chega_ao_secret_como_texto(tmp_path: Path) -> None:
