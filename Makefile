@@ -77,9 +77,10 @@ kind-down: ## remove o cluster kind
 # KongClusterPlugin quando chega no plugins.yaml. Server-side porque as CRDs
 # passam do limite de tamanho da anotacao last-applied do apply client-side.
 # Os namespaces dos servicos nascem vazios, se ainda nao existirem, para
-# receber a Role do Kong e o Secret rabbitmq; o da plataforma, para receber os
-# Secrets gerados antes do apply (scripts/gerar-segredos.sh: as fontes so se
-# ainda nao existem, o Secret rabbitmq de cada servico em todo deploy). O Job
+# receber a Role do Kong, o Secret rabbitmq e as fontes de cada servico; o da
+# plataforma, para receber as fontes dela. Todos antes do apply
+# (scripts/gerar-segredos.sh: as fontes so se ainda nao existem, o Secret
+# rabbitmq de cada servico em todo deploy). O Job
 # de usuarios do RabbitMQ e imutavel: sai antes do apply e roda de novo; se
 # nao terminar, o log dele vai para a saida.
 deploy: ## aplica k8s/overlays/$(OVERLAY) e espera os rollouts

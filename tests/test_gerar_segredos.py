@@ -1,18 +1,23 @@
 """scripts/gerar-segredos.sh contra um kubectl falso.
 
-O kubectl falso guarda os Secrets num JSON, registra os argumentos de cada
-chamada e recusa manifesto que o apiserver recusaria. O teste confere o que o
-script cria num cluster novo, com o formato de cada chave dos servicos (o
-contrato da tabela "Segredos gerados" do README, que o teste tambem le); que
-dois deploys seguidos mantem os valores; que as fontes que ja existem, da
+O kubectl falso guarda os Secrets num JSON, registra os argumentos e o
+ambiente de cada chamada e recusa manifesto que o apiserver recusaria ou com
+rotulo fora do previsto (os da plataforma com os dela, os dos servicos sem
+nenhum). O teste confere o que o script cria num cluster novo, com o formato
+de cada chave dos servicos; a tabela "Segredos gerados" do README contra essas
+fontes (nome, namespace, chaves, formato e quando o script grava); que dois
+deploys seguidos mantem os valores; que as fontes que ja existem, da
 plataforma e dos servicos, ficam como estao, e a que falta nasce sozinha; que
 o Secret rabbitmq de cada servico, derivado da fonte, e regravado a cada
-deploy, inclusive quando tem a senha antiga; que erro ao ler ou gravar no
-cluster, openssl que falha, chave ausente e senha com caractere fora de letras
-e digitos param o script; que KUBE_CONTEXT e NAMESPACE do ambiente (make
-deploy KUBE_CONTEXT=<contexto>) valem no lugar dos padroes; e que nenhuma
-senha ou chave passa por argumento de processo ou pela saida (no GitHub
-Actions, so pelo ::add-mask::, a chave PEM uma linha por vez).
+deploy, inclusive quando tem a senha antiga; que a fonte que existe sem uma
+das chaves e a do banco que falta com o volume de pe param o script antes de
+ele gravar qualquer coisa; que erro ao ler, listar os volumes ou gravar no
+cluster, openssl que falha e senha com caractere fora de letras e digitos
+param o script; que KUBE_CONTEXT e NAMESPACE do ambiente (make deploy
+KUBE_CONTEXT=<contexto>) valem no lugar dos padroes; e que nenhuma senha ou
+chave passa por argumento de processo, pelo ambiente dos processos filhos,
+pelo trace do bash ou pela saida (no GitHub Actions, so pelo ::add-mask::, a
+chave PEM uma linha por vez).
 """
 
 from __future__ import annotations
@@ -38,10 +43,17 @@ USUARIOS = ("os", "billing", "execucao")
 CREDENCIAIS = f"{NAMESPACE}/rabbitmq-credenciais"
 GRAFANA = f"{NAMESPACE}/grafana-admin"
 NAMESPACES_DOS_SERVICOS = {f"pytstop-{usuario}" for usuario in USUARIOS}
+# Uma senha por papel do PostgreSQL: superusuario, dono, aplicacao e exporter.
+CHAVES_DO_POSTGRES = {
+    "POSTGRES_PASSWORD",
+    "POSTGRES_OWNER_PASSWORD",
+    "POSTGRES_APP_PASSWORD",
+    "POSTGRES_EXPORTER_PASSWORD",
+}
 # Fontes dos servicos ("<namespace>/<nome>") e as chaves de cada uma.
 FONTES_DOS_SERVICOS = {
-    "pytstop-os/os-postgres": {"POSTGRES_PASSWORD"},
-    "pytstop-execucao/execucao-postgres": {"POSTGRES_PASSWORD"},
+    "pytstop-os/os-postgres": CHAVES_DO_POSTGRES,
+    "pytstop-execucao/execucao-postgres": CHAVES_DO_POSTGRES,
     "pytstop-os/os-jwt": {"JWT_PRIVATE_KEY", "JWT_PREVIOUS_PUBLIC_KEY"},
     "pytstop-os/os-cripto": {"ENCRYPTION_KEY"},
     "pytstop-os/os-admin": {"ADMIN_PASSWORD"},
@@ -66,7 +78,7 @@ FONTES_DO_BANCO = {
 HEX_48 = r"[0-9a-f]{48}"
 HEX_64 = r"[0-9a-f]{64}"
 FORMATOS = {
-    "POSTGRES_PASSWORD": HEX_48,
+    **dict.fromkeys(CHAVES_DO_POSTGRES, HEX_48),
     "ADMIN_PASSWORD": HEX_48,
     "MONGO_INITDB_ROOT_PASSWORD": HEX_48,
     "MONGO_BILLING_PASSWORD": HEX_48,
@@ -86,6 +98,15 @@ FORMATOS = {
     ),
     "JWT_PREVIOUS_PUBLIC_KEY": r"",
 }
+# Como a tabela "Segredos gerados" do README escreve cada formato.
+FORMATO_NO_README = {
+    HEX_48: "48 hexadecimais",
+    HEX_64: "64 hexadecimais",
+    FORMATOS["ENCRYPTION_KEY"]: "44 caracteres",
+    FORMATOS["MONGO_KEYFILE"]: "1.008 caracteres",
+    FORMATOS["JWT_PRIVATE_KEY"]: "PEM PKCS#8",
+    FORMATOS["JWT_PREVIOUS_PUBLIC_KEY"]: "vazia",
+}
 # O que o make deploy passa a outro cluster, no lugar dos padroes do kind
 # (make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto do k3s>).
 CONTEXTO_OUTRO = "k3s-vm"
@@ -95,8 +116,9 @@ NAMESPACE_OUTRO = "outro"
 type Segredos = dict[str, dict[str, str]]
 
 # kubectl falso: so as formas que o script usa. KUBECTL_FALSO_FALHA=<comando>
-# (get, create ou apply) faz esse comando falhar como um cluster fora do ar, e
-# KUBECTL_FALSO_VOLUMES ("<namespace>/<pvc> ...") lista os volumes de pe.
+# faz falhar, como um cluster fora do ar, a chamada que comeca pelas palavras
+# dele ("get", "get pvc", "create", "apply"), e KUBECTL_FALSO_VOLUMES
+# ("<namespace>/<pvc> ...") lista os volumes de pe.
 KUBECTL_FALSO = r"""
 import base64
 import json
@@ -107,17 +129,24 @@ from pathlib import Path
 
 import yaml
 
+MOLDE_DAS_CHAVES = (
+    "go-template={{.metadata.name}}:{{range $chave, $valor := .data}} {{$chave}}{{end}}"
+)
 estado = Path(os.environ["KUBECTL_FALSO"])
 arquivo = estado / "segredos.json"
 segredos = json.loads(arquivo.read_text())
 args = sys.argv[1:]
 with (estado / "chamadas.jsonl").open("a") as log:
     log.write(json.dumps(args) + "\n")
+# O ambiente de cada chamada, onde uma variavel exportada pelo script apareceria.
+with (estado / "ambientes.jsonl").open("a") as log:
+    log.write(json.dumps(dict(os.environ)) + "\n")
 resto = args[2:]  # depois do --context, que o teste confere no log
 ns = ""
 if resto[:1] == ["-n"]:
     ns, resto = resto[1], resto[2:]
-if resto[:1] and resto[0] == os.environ.get("KUBECTL_FALSO_FALHA"):
+falha = os.environ.get("KUBECTL_FALSO_FALHA", "").split()
+if falha and resto[: len(falha)] == falha:
     sys.exit("The connection to the server localhost:8080 was refused")
 
 
@@ -127,14 +156,30 @@ def manifesto():
         sys.exit(f"manifesto que nao e Secret v1 Opaque: {doc}")
     if not all(isinstance(v, str) for v in doc["stringData"].values()):
         sys.exit("stringData com valor que nao e string")
+    # Rotulos: os da plataforma levam app e part-of dela; os dos servicos,
+    # nenhum.
+    rotulos = doc["metadata"].get("labels")
+    servicos = {"pytstop-os", "pytstop-billing", "pytstop-execucao"}
+    if doc["metadata"]["namespace"] in servicos:
+        if rotulos is not None:
+            sys.exit(f"Secret de servico com rotulo: {rotulos}")
+    elif set(rotulos or {}) != {"app", "app.kubernetes.io/part-of"} or (
+        rotulos["app.kubernetes.io/part-of"] != "pytstop-plataforma"
+    ):
+        sys.exit(f"Secret da plataforma sem os rotulos dela: {rotulos}")
     return f"{doc['metadata']['namespace']}/{doc['metadata']['name']}", doc
 
 
 if resto[:2] == ["get", "secret"]:
     chave = f"{ns}/{resto[2]}"
     if "--ignore-not-found" in resto:
+        # O nome e as chaves, em ordem, como a go-template do script imprime;
+        # nada se o Secret nao existe.
+        if resto[resto.index("-o") + 1] != MOLDE_DAS_CHAVES:
+            sys.exit(f"chamada inesperada: {args}")
         if chave in segredos:
-            print(f"secret/{resto[2]}")
+            chaves = "".join(f" {c}" for c in sorted(segredos[chave]))
+            print(f"{resto[2]}:{chaves}", end="")
         sys.exit(0)
     if chave not in segredos:
         sys.exit(f'Error from server (NotFound): secrets "{resto[2]}" not found')
@@ -317,9 +362,10 @@ def test_cluster_novo_recebe_todos_os_secrets_com_senhas_geradas(
             "RABBITMQ_URL": url(usuario, credenciais[f"senha-{usuario}"])
         }
     assert set(segredos) == set(existentes())
-    # Nenhuma senha ou chave em argumento de processo ou na saida; contexto
-    # explicito.
-    fora = json.dumps(chamadas) + processo.stdout + processo.stderr
+    # Nenhuma senha ou chave em argumento de processo, no ambiente dos processos
+    # filhos ou na saida; contexto explicito.
+    ambientes = (tmp_path / "ambientes.jsonl").read_text(encoding="utf-8")
+    fora = json.dumps(chamadas) + ambientes + processo.stdout + processo.stderr
     assert [valor for valor in valores if valor in fora] == []
     assert {tuple(chamada[:2]) for chamada in chamadas} == {
         ("--context", "kind-pytstop-p4")
@@ -359,8 +405,9 @@ def test_fontes_dos_servicos_nascem_no_formato_do_contrato(tmp_path: Path) -> No
 def test_chave_fernet_troca_o_alfabeto_do_base64_pelo_url_safe(
     tmp_path: Path,
 ) -> None:
-    # 32 bytes cujo base64 padrao tem "+" e "/", os dois caracteres que o
-    # Fernet recusa.
+    # 32 bytes cujo base64 padrao tem "+" e "/". O Fernet aceitaria a chave
+    # assim, mas o contrato e o base64 url-safe da chave que o proprio Fernet
+    # gera (README, Segredos gerados).
     chave = b"\xfb\xff" * 16
     padrao = base64.b64encode(chave).decode()
     assert {"+", "/"} <= set(padrao)
@@ -428,20 +475,71 @@ def test_fonte_do_banco_que_falta_com_o_volume_de_pe_para_sem_gerar(
     del antes[fonte]
     ns = fonte.split("/")[0]
 
-    processo, segredos, _ = roda(tmp_path, antes, KUBECTL_FALSO_VOLUMES=f"{ns}/dados-0")
+    processo, segredos, chamadas = roda(
+        tmp_path, antes, KUBECTL_FALSO_VOLUMES=f"{ns}/dados-0"
+    )
 
     assert processo.returncode != 0
-    assert f"secret {fonte} is missing but {ns} already has a database volume" in (
-        processo.stderr
-    )
+    assert (
+        f"secret {fonte} is missing but {ns} has database volumes"
+        " (persistentvolumeclaim/dados-0)"
+    ) in processo.stderr
+    assert "restore the secret" in processo.stderr
+    assert "deleting the namespace destroys the database" in processo.stderr
+    assert f"delete namespace {ns}," in processo.stderr
     assert segredos == antes
+    assert gravacoes(chamadas) == []
+
+
+@pytest.mark.parametrize("fonte", sorted(FONTES_DO_BANCO))
+def test_erro_ao_listar_os_volumes_para_o_script_sem_gravar_nada(
+    tmp_path: Path, fonte: str
+) -> None:
+    # Erro do cluster nao vira "sem volume": com o banco de pe, a fonte nova
+    # perderia os dados.
+    antes = existentes()
+    del antes[fonte]
+
+    processo, segredos, chamadas = roda(tmp_path, antes, KUBECTL_FALSO_FALHA="get pvc")
+
+    assert processo.returncode != 0
+    assert "connection to the server" in processo.stderr
+    assert segredos == antes
+    assert gravacoes(chamadas) == []
+
+
+@pytest.mark.parametrize(
+    ("faltam", "volume"),
+    [
+        (["pytstop-os/os-jwt", "pytstop-os/os-cripto"], "pytstop-os/dados-0"),
+        (None, "pytstop-billing/dados-0"),
+    ],
+    ids=["os-jwt-antes-da-os-cripto", "cluster-novo"],
+)
+def test_guarda_de_volume_para_antes_de_gerar_qualquer_fonte(
+    tmp_path: Path, faltam: list[str] | None, volume: str
+) -> None:
+    # A os-jwt, que nasce de novo com o volume de pe, vem antes da os-cripto,
+    # que a guarda barra; e, num cluster novo, as fontes da plataforma vem
+    # antes da do banco do Billing: nenhuma nasce.
+    antes = existentes() if faltam else {}
+    for fonte in faltam or []:
+        del antes[fonte]
+
+    processo, segredos, chamadas = roda(tmp_path, antes, KUBECTL_FALSO_VOLUMES=volume)
+
+    assert processo.returncode != 0
+    assert "has database volumes" in processo.stderr
+    assert segredos == antes
+    assert gravacoes(chamadas) == []
 
 
 @pytest.mark.parametrize("fonte", sorted(set(FONTES_DOS_SERVICOS) - FONTES_DO_BANCO))
 def test_chave_sem_estado_no_banco_nasce_de_novo_com_os_volumes_de_pe(
     tmp_path: Path, fonte: str
 ) -> None:
-    # A troca da chave HMAC e a da RSA de uma vez: apagar o Secret e reimplantar.
+    # Apagar o Secret e reimplantar: a troca da chave HMAC e, na os-jwt, a troca
+    # de emergencia da RSA, que derruba as sessoes.
     antes = existentes()
     del antes[fonte]
     volumes = " ".join(f"{ns}/dados-0" for ns in NAMESPACES_DOS_SERVICOS)
@@ -520,11 +618,23 @@ def test_contexto_e_namespace_do_ambiente_valem_no_lugar_dos_padroes(
     } == {NAMESPACE_OUTRO}
 
 
-def test_erro_ao_ler_o_cluster_aborta_sem_gravar_nada(tmp_path: Path) -> None:
-    processo, segredos, chamadas = roda(tmp_path, {}, KUBECTL_FALSO_FALHA="get")
+@pytest.mark.parametrize(
+    ("falha", "de_pe"),
+    [("get", False), ("get secret", False), ("get secret billing-mongo", True)],
+    ids=["toda-leitura", "leitura-dos-secrets", "leitura-de-uma-fonte"],
+)
+def test_erro_ao_ler_o_cluster_aborta_sem_gravar_nada(
+    tmp_path: Path, falha: str, de_pe: bool
+) -> None:
+    # Erro ao ler uma fonte nao vira "nao existe": geraria valores novos por cima
+    # dos que estao em uso.
+    antes = existentes() if de_pe else {}
+
+    processo, segredos, chamadas = roda(tmp_path, antes, KUBECTL_FALSO_FALHA=falha)
 
     assert processo.returncode != 0
-    assert segredos == {}
+    assert "connection to the server" in processo.stderr
+    assert segredos == antes
     assert gravacoes(chamadas) == []
 
 
@@ -553,15 +663,15 @@ def test_erro_ao_gravar_no_cluster_para_o_script(
 def test_erro_ao_criar_a_fonte_de_um_servico_para_o_script(tmp_path: Path) -> None:
     antes = existentes()
     del antes["pytstop-os/os-admin"]
+    del antes["pytstop-billing/billing-link"]
 
     processo, segredos, _ = roda(tmp_path, antes, KUBECTL_FALSO_FALHA="create")
 
     assert processo.returncode != 0
     assert "connection to the server" in processo.stderr
+    # Para ali: nem a mensagem de criada, nem a fonte que vem depois.
     assert segredos == antes
-    # Para ali: nem a mensagem de criada, nem as fontes que vem depois.
-    assert "os-admin created" not in processo.stdout
-    assert "billing-link" not in processo.stdout
+    assert "created" not in processo.stdout
 
 
 @pytest.mark.parametrize(
@@ -570,15 +680,20 @@ def test_erro_ao_criar_a_fonte_de_um_servico_para_o_script(tmp_path: Path) -> No
         ("genpkey", "pytstop-os/os-jwt"),
         ("rand -base64 32", "pytstop-os/os-cripto"),
         ("rand -base64 756", "pytstop-billing/billing-mongo"),
+        ("rand -hex 24", "pytstop-os/os-postgres"),
+        ("rand -hex 32", "pytstop-billing/billing-link"),
     ],
-    ids=["chave-rsa", "chave-fernet-no-pipe", "keyfile-no-pipe"],
+    ids=["chave-rsa", "chave-fernet-no-pipe", "keyfile-no-pipe", "senha", "chave-hmac"],
 )
 def test_openssl_que_falha_para_o_script_sem_gravar_a_fonte(
     tmp_path: Path, falha: str, fonte: str
 ) -> None:
+    antes = existentes()
+    del antes[fonte]
+
     processo, segredos, _ = roda(
         tmp_path,
-        {},
+        antes,
         openssl=OPENSSL_DESVIADO,
         OPENSSL_SUBCOMANDO=falha,
         OPENSSL_REAL=OPENSSL,
@@ -586,22 +701,33 @@ def test_openssl_que_falha_para_o_script_sem_gravar_a_fonte(
 
     assert processo.returncode != 0
     assert "falha simulada" in processo.stderr
-    # Nem a fonte, nem a ultima do script, que vem depois de todas.
-    assert fonte not in segredos
-    assert "pytstop-billing/billing-link" not in segredos
+    assert segredos == antes
 
 
-def test_chave_ausente_na_fonte_para_o_script(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("fonte", "chave"),
+    [
+        (fonte, chave)
+        for fonte, chaves in existentes().items()
+        if not fonte.endswith("/rabbitmq")
+        for chave in sorted(chaves)
+    ],
+)
+def test_fonte_que_existe_sem_uma_chave_para_o_script_sem_gravar_nada(
+    tmp_path: Path, fonte: str, chave: str
+) -> None:
+    # Editada a mao, ou criada antes de a chave entrar no contrato: o pod que
+    # a le nao subiria, e o script nao reescreve a fonte.
     antes = existentes()
-    del antes[CREDENCIAIS]["senha-execucao"]
-    del antes["pytstop-execucao/rabbitmq"]
+    del antes[fonte][chave]
 
-    processo, segredos, _ = roda(tmp_path, antes)
+    processo, segredos, chamadas = roda(tmp_path, antes)
 
     assert processo.returncode != 0
-    assert "has no key senha-execucao" in processo.stderr
-    assert "pytstop-execucao/rabbitmq" not in segredos
-    assert "grafana-admin" not in processo.stdout
+    assert f"secret {fonte} has no key {chave}" in processo.stderr
+    assert f"secret {fonte} already exists: kept" not in processo.stdout
+    assert segredos == antes
+    assert gravacoes(chamadas) == []
 
 
 @pytest.mark.parametrize(
@@ -622,6 +748,19 @@ def test_senha_fora_de_letras_e_digitos_para_sem_mostrar_a_senha(
     assert "senha-os must have only letters and digits" in processo.stderr
     assert senha not in processo.stdout + processo.stderr
     assert "pytstop-os/rabbitmq" not in segredos
+
+
+def test_trace_e_allexport_herdados_nao_expoem_valor_nenhum(tmp_path: Path) -> None:
+    # SHELLOPTS no ambiente vale como bash -x -a: o trace mostraria cada
+    # atribuicao, antes do ::add-mask::, e o allexport poria cada valor no
+    # ambiente dos processos filhos.
+    processo, segredos, _ = roda(tmp_path, {}, SHELLOPTS="allexport:xtrace")
+
+    assert processo.returncode == 0, processo.stderr
+    assert "+ set +ax" in processo.stderr
+    valores = valores_gerados(segredos)
+    ambientes = (tmp_path / "ambientes.jsonl").read_text(encoding="utf-8")
+    assert [valor for valor in valores if valor in processo.stderr + ambientes] == []
 
 
 def test_senha_so_de_digitos_chega_ao_secret_como_texto(tmp_path: Path) -> None:
@@ -659,21 +798,38 @@ def test_no_github_actions_a_senha_lida_da_fonte_e_mascarada(tmp_path: Path) -> 
     assert mascaradas == lidas
 
 
-def test_tabela_do_readme_tem_cada_fonte_dos_servicos_e_as_chaves_dela() -> None:
+def test_tabela_do_readme_tem_chaves_formato_e_quando_de_cada_fonte() -> None:
     readme = (RAIZ / "README.md").read_text(encoding="utf-8")
     secao = readme.split("### Segredos gerados\n", 1)[1].split("\n#", 1)[0]
-    tabela: dict[str, set[str]] = {}
+    # "<namespace>/<nome>" -> a celula das chaves e a do "Quando o script grava".
+    tabela: dict[str, tuple[str, str]] = {}
     for linha in secao.splitlines():
         if not linha.startswith("| `"):
             continue
-        secret, namespaces, chaves = linha.split("|")[1:4]
+        secret, namespaces, chaves, _, quando = re.split(r"(?<!\\)\|", linha)[1:6]
         nome = re.findall(r"`([\w-]+)`", secret)[0]
         for ns in re.findall(r"`([\w-]+)`", namespaces):
-            tabela[f"{ns}/{nome}"] = set(re.findall(r"`([A-Z][A-Z0-9_]+)`", chaves))
-
-    assert {
-        fonte: chaves
-        for fonte, chaves in tabela.items()
+            tabela[f"{ns}/{nome}"] = (chaves, quando.strip())
+    dos_servicos = {
+        fonte: celulas
+        for fonte, celulas in tabela.items()
         if fonte.split("/")[0] in NAMESPACES_DOS_SERVICOS
         and not fonte.endswith("/rabbitmq")
+    }
+
+    assert {
+        fonte: set(re.findall(r"`([A-Z][A-Z0-9_]+)`", chaves))
+        for fonte, (chaves, _) in dos_servicos.items()
     } == FONTES_DOS_SERVICOS
+    sem_formato = [
+        f"{fonte} {chave}"
+        for fonte, (celula, _) in dos_servicos.items()
+        for chave in FONTES_DOS_SERVICOS[fonte]
+        if FORMATO_NO_README[FORMATOS[chave]] not in celula
+    ]
+    assert sem_formato == []
+    assert [
+        fonte
+        for fonte, (_, quando) in dos_servicos.items()
+        if not quando.startswith("Só se ainda não existe")
+    ] == []
