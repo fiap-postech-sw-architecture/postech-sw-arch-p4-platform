@@ -6,9 +6,9 @@ superadas por uma correcao, as dividas resolvidas, as que o README, os ADRs, a
 RFC-004, o runbook da saga ou comentarios do codigo ja registram e a regra de
 pyjwt e anyio, que vale so para os servicos. No `MEMORY.md`, as que ja estao em
 outra fonte viraram linhas que apontam essa fonte, e as entradas que nao estao
-em outro lugar seguem la sem mudanca. A referencia a um documento de planejamento fora dos repositorios
-publicos foi trocada pela fonte publica (ADR-042); o texto exato esta no
-historico do git (`git show f1f0f0a:MEMORY.md`).
+em outro lugar seguem la sem mudanca. Unica diferenca de texto em relacao ao
+`MEMORY.md` da `main` (`git show f1f0f0a:MEMORY.md`): na entrada da branch
+protection, a fonte passou a ser o ADR-042.
 
 ## Recent decisions
 
