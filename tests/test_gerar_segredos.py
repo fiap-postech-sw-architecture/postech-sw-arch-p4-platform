@@ -76,11 +76,13 @@ FORMATOS = {
     "ENCRYPTION_KEY": r"[A-Za-z0-9_-]{43}=",
     # 756 bytes em base64, numa linha so.
     "MONGO_KEYFILE": r"[A-Za-z0-9+/]{1008}",
-    # PKCS#8 sem senha; o bloco literal do YAML termina com quebra de linha.
+    # PKCS#8 sem senha; o bloco literal do YAML termina com quebra de linha. Os
+    # cinco hifens vao como -{5}: o cabecalho por extenso casa a regra de chave
+    # privada do gitleaks.
     "JWT_PRIVATE_KEY": (
-        r"-----BEGIN PRIVATE KEY-----\n"
+        r"-{5}BEGIN PRIVATE KEY-{5}\n"
         r"(?:[A-Za-z0-9+/=]{1,64}\n)+"
-        r"-----END PRIVATE KEY-----\n"
+        r"-{5}END PRIVATE KEY-{5}\n"
     ),
     "JWT_PREVIOUS_PUBLIC_KEY": r"",
 }

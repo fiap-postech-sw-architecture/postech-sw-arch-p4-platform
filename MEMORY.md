@@ -70,6 +70,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
+- 2026-10-07 - A regra `private-key` do gitleaks casa o cabecalho PEM por extenso (BEGIN e END com os cinco hifens) mesmo numa expressao regular de teste, sem chave nenhuma: o teste escreve os hifens como `-{5}`, e o commit ja enviado entra no `.gitleaksignore` pelo fingerprint, porque o job `gitleaks` varre o historico do PR e force push nao e opcao - PR #8
 - 2026-10-07 - `::add-mask::` vale ate o fim da linha: `echo "::add-mask::$pem"` mascara so a primeira e imprime o resto da chave em claro no log; valor de varias linhas se mascara linha a linha
 - 2026-10-07 - `/usr/bin/env bash` no macOS e o bash 3.2 (sem `mapfile`, `declare -A`, `${v,,}`), e os scripts rodam nele; `${pem//$'\n'/$'\n'    }` indenta a PEM no YAML no 3.2 e no 5.2
 - 2026-10-07 - `openssl genpkey` escreve pontos de progresso no stderr, e o LibreSSL do macOS (`/usr/bin/openssl`) nao tem `-quiet`; `2>/dev/null` esconderia tambem o erro de verdade
