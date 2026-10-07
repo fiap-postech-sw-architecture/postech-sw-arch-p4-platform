@@ -89,6 +89,8 @@ segredo="tokensmoke$(date +%s)"
 marca="run$(date +%s)"
 
 # eco <nome>: servidor de eco no lugar da API do servico (label app = nome).
+# O rotulo do smoke vai tambem no pod: o medir-kind.sh o tira da tabela por
+# pod, onde o eco passaria pela memoria da API.
 eco() {
   $K -n "$NS" apply -f - >/dev/null <<YAML
 apiVersion: apps/v1
@@ -105,6 +107,7 @@ spec:
     metadata:
       labels:
         app: $1
+        app.kubernetes.io/part-of: pytstop-smoke
     spec:
       securityContext:
         runAsNonRoot: true
