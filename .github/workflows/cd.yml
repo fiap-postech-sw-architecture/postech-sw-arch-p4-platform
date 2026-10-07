@@ -1,0 +1,81 @@
+name: CD
+
+# Deploy da plataforma num kind efemero dentro do runner, com o overlay
+# kind-ci e os segredos gerados no run, e o make smoke em cima dele (ADR-042).
+# Mede minutos e pico de memoria e escreve os dois no summary do job: o
+# deploy-kind de cada servico sobe esta mesma plataforma com os tres servicos.
+#
+# Sem filtro de paths: o deploy-kind pode virar check obrigatorio da main, e
+# check obrigatorio precisa rodar em todo PR.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Um run por ref: push novo num PR cancela o run anterior; na main, o deploy
+# em curso termina antes do proximo.
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  deploy-kind:
+    # Runner fixo, como no ci.yml: 4 vCPU e 16 GB, a memoria que o ADR-042
+    # orca para o deploy-kind.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      OVERLAY: kind-ci
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # A versao do kind que publicou o kindest/node:v1.35.0 pinado por digest
+      # em kind/cluster.yaml; o kind que vem no runner e mais novo.
+      - name: Instala o kind (versao e sha256 fixados)
+        run: |
+          curl -sSfL -o kind https://github.com/kubernetes-sigs/kind/releases/download/v0.31.0/kind-linux-amd64
+          echo "eb244cbafcc157dff60cf68693c14c9a75c4e6e6fedaf9cd71c58117cb93e3fa  kind" | sha256sum -c -
+          sudo install -m 0755 kind /usr/local/bin/kind
+          rm kind
+          kind version | grep -F 'kind v0.31.0 '
+      - name: Cluster kind (make kind-up)
+        run: scripts/medir-kind.sh etapa kind-up && make kind-up
+      - name: Segredos gerados e plataforma no overlay kind-ci (make deploy)
+        run: scripts/medir-kind.sh etapa deploy && make deploy
+      - name: Smoke da plataforma (make smoke)
+        run: scripts/medir-kind.sh etapa smoke && make smoke
+      - name: Minutos e pico de memoria no summary
+        if: always()
+        run: scripts/medir-kind.sh resumo
+      # Melhor esforco: um comando que falha nao esconde os seguintes.
+      - name: Pods, eventos e logs dos pods com problema
+        if: failure()
+        run: |
+          set +e
+          K="kubectl --context kind-pytstop-p4"
+          echo "::group::pods"
+          $K get pods -A -o wide
+          echo "::endgroup::"
+          echo "::group::events (last 100)"
+          $K get events -A --sort-by=.lastTimestamp | tail -n 100
+          echo "::endgroup::"
+          # Pod que nao terminou com sucesso e tem container nao pronto, que
+          # reiniciou ou que nem chegou a ser criado.
+          $K get pods -A -o json | jq -r '.items[]
+            | select(.status.phase != "Succeeded")
+            | select(.status.containerStatuses == null
+                or any(.status.containerStatuses[]; .ready == false or .restartCount > 0))
+            | "\(.metadata.namespace) \(.metadata.name)"' \
+          | while read -r ns pod; do
+              echo "::group::$ns/$pod"
+              $K -n "$ns" describe pod "$pod" | tail -n 40
+              $K -n "$ns" logs "$pod" --all-containers --tail=200
+              $K -n "$ns" logs "$pod" --all-containers --previous --tail=100 2>/dev/null
+              echo "::endgroup::"
+            done
