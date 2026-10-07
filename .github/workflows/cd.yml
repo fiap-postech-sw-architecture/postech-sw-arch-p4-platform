@@ -54,6 +54,30 @@ jobs:
       # make kind-up e make deploy no overlay kind-ci, com as etapas medidas.
       - name: kind e kubectl fixados, cluster e plataforma no overlay kind-ci
         run: scripts/ci/deploy-kind.sh
+      # O gerar-segredos.sh de novo no mesmo cluster, como num segundo make
+      # deploy: nenhuma fonte muda e o derivado e regravado igual (ADR-042). O
+      # passo compara o sha256 dos dados de cada Secret, sem imprimir valor.
+      - name: Segredos mantidos num segundo deploy
+        # inherit_errexit: o erro do kubectl dentro de $(hashes) para o passo,
+        # em vez de virar o hash de uma saida vazia nas duas leituras.
+        run: |
+          set -o pipefail
+          shopt -s inherit_errexit
+          hashes() {
+            local ns nomes nome hash
+            for ns in pytstop-plataforma pytstop-os pytstop-billing pytstop-execucao; do
+              nomes=$(kubectl --context kind-pytstop-p4 -n "$ns" get secret -o name)
+              for nome in $nomes; do
+                hash=$(kubectl --context kind-pytstop-p4 -n "$ns" get "$nome" -o jsonpath='{.data}' | sha256sum)
+                echo "$ns/$nome $hash"
+              done
+            done
+          }
+          antes=$(hashes)
+          scripts/gerar-segredos.sh
+          depois=$(hashes)
+          diff <(echo "$antes") <(echo "$depois") \
+            || { echo "::error::a Secret changed on the second run of gerar-segredos.sh"; exit 1; }
       - name: Smoke da plataforma (make smoke)
         run: scripts/medir-kind.sh etapa smoke && make smoke OVERLAY=kind-ci
       - name: Minutos e pico de memoria no summary
