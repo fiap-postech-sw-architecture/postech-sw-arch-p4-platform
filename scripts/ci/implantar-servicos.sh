@@ -81,6 +81,11 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$overlay" ] && [ "${#pares[@]}" -gt 0 ] || uso
 
+# As imagens permitidas: a coluna "Versao" da tabela "Componentes e versoes" do
+# README. So ela vale, porque o resto do README cita entre crases nomes que nao
+# sao imagem, como o papel `postgres` do banco.
+versoes=$(awk -F'|' '/^[|] Componente [|] Vers/ { t = 1 } t && !/^[|]/ { t = 0 } t { print $3 }' "$raiz/README.md")
+
 # Por servico, no mesmo indice: nome, namespace, diretorio, commit, tar e a
 # ref da imagem.
 nomes=()
@@ -109,7 +114,7 @@ for par in "${pares[@]}"; do
     | while read -r imagem; do
       # O "(" antes do padrao: sem ele, o bash 3.2 do macOS fecha o $( no ")".
       case "$imagem" in ("pytstop-$servico" | "pytstop-$servico:"*) continue ;; esac
-      grep -qF "\`$imagem\`" "$raiz/README.md" || echo "$imagem"
+      grep -qF "\`$imagem\`" <<< "$versoes" || echo "$imagem"
     done)
   if [ -n "$fora" ]; then
     echo "$servico (commit $sha): images outside the versions table of the platform README: $(tr '\n' ' ' <<< "$fora" | sed 's/ *$//')" >&2

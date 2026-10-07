@@ -628,6 +628,8 @@ def test_argumentos_recusados_sem_chamar_nada(
     assert implantacao.chamadas("kubectl") == []
 
 
+# "postgres" sem tag e o caso que separa a tabela do resto do README: o texto
+# cita o superusuario `postgres` entre crases, e so a tabela de versoes vale.
 @pytest.mark.parametrize(
     "imagem",
     ["busybox:1.37", "postgres", "postgres:16.4", "pytstop-os-service:dev"],
