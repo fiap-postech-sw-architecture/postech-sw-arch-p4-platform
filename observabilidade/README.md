@@ -53,7 +53,7 @@ Avaliadas a cada minuto e notificadas pela política padrão do Grafana, sem can
 | `pytstop-cpu-pod-alta` | CPU de pod acima de 80% do limite (10min) | `sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~"pytstop-.+", container!=""}[5m])) / sum by (namespace, pod) (kube_pod_container_resource_limits{namespace=~"pytstop-.+", resource="cpu"})` acima de 0,8 | 10 min | warning | OK | cluster e compose | nenhum (CPU por pod é do dashboard Serviços do ADR-043) |
 | `pytstop-saga-parada` | Saga parada | `max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or vector(0)` acima de 0: prazo técnico vencido e não tratado há mais de 60 s (duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão do OS Service), ou alguma instância em `falha_na_compensacao`; cada condição dispara sozinha, e sem as métricas da saga a consulta vale 0 | 5 min | critical | OK | cluster e compose | nenhum (o dashboard Saga do ADR-043 entra com as métricas do OS Service) |
 
-O procedimento para "DLQ com mensagens" e "Saga parada" está no [runbook da saga](../docs/operacao/runbook-saga.md). O `make manifests` prova a regra de saga parada no promtool (`scripts/alerta-saga-parada.sh`): cada condição dispara sozinha, e nenhuma série não dispara.
+O procedimento para "DLQ com mensagens" e "Saga parada" está no [runbook da saga](../docs/operacao/runbook-saga.md). O `make manifests` prova a regra de saga parada no promtool (`scripts/alerta-saga-parada.sh`): cada condição dispara sozinha, e sem série da saga a regra não dispara.
 
 ## De onde vêm as métricas
 

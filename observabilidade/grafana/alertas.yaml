@@ -1,7 +1,7 @@
 # Regras de alerta da plataforma (Grafana alerting, provisionadas por
 # arquivo). Cada regra: consulta no Prometheus (A) e limiar (C). Notificacao
 # pela policy default do Grafana, sem canal externo, como na fase 3. Os
-# alertas do ADR-043 que dependem de limite tirado das metricas dos servicos
+# alertas do ADR-043 sobre metricas que os servicos ainda nao exportam
 # (compensacoes acima do normal, circuito aberto, outbox parada) entram com
 # elas; a saga parada ja esta aqui e fica em OK ate o OS Service exportar as
 # metricas da saga. Este arquivo
