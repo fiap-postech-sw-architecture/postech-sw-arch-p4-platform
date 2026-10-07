@@ -227,8 +227,8 @@ Todas as imagens têm tag fixa, e a mesma versão roda no kind, no k3s e no comp
 | Kubernetes do kind | `kindest/node:v1.35.0` (por digest em [`kind/cluster.yaml`](kind/cluster.yaml)) | Nó do cluster local; o `make manifests` valida os manifests contra a mesma versão | - |
 | PostgreSQL | `postgres:16.15` | Banco do OS e da Execução: no Kubernetes, o StatefulSet que cada serviço traz no próprio namespace; no compose, um container por serviço | `os-postgres.pytstop-os.svc.cluster.local:5432` e `execucao-postgres.pytstop-execucao.svc.cluster.local:5432`; no compose, `postgres-os:5432` e `postgres-execucao:5432` |
 | MongoDB | `mongo:7.0.43` | Banco do Billing, em replica set de um nó (`rs0`): StatefulSet no namespace do Billing e um container no compose | `billing-mongo-0.billing-mongo.pytstop-billing.svc.cluster.local:27017`; no compose, `mongo-billing:27017` |
-| postgres_exporter | `prometheuscommunity/postgres-exporter:v0.20.1` | Métricas do PostgreSQL (conexões, transações, locks, tamanho), sidecar do banco do OS e da Execução, porta 9187 ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) | sidecar do StatefulSet do banco |
-| mongodb_exporter | `percona/mongodb_exporter:0.53.0` | Métricas do MongoDB, sidecar do banco do Billing, porta 9216, com `--collector.dbstats` e `--collector.replicasetstatus` | sidecar do StatefulSet do banco |
+| postgres_exporter | `prometheuscommunity/postgres-exporter:v0.20.1` | Métricas do PostgreSQL (conexões, transações, locks, tamanho), sidecar do banco do OS e da Execução, porta 9187, que conecta com o papel `os_exporter` ou `execucao_exporter` (`pg_monitor`), não com o superusuário ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) | sidecar do StatefulSet do banco |
+| mongodb_exporter | `percona/mongodb_exporter:0.53.0` | Métricas do MongoDB, sidecar do banco do Billing, porta 9216, que conecta com o usuário `exporter`, com `--collector.dbstats` e `--collector.replicasetstatus` | sidecar do StatefulSet do banco |
 | SonarQube (CI dos serviços) | `sonarqube:26.9.0.129388-community` | Servidor efêmero do job `sonarqube` de cada serviço, que aplica o quality gate ([ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)) | service container do job |
 | SonarScanner (CI dos serviços) | `sonarsource/sonar-scanner-cli:12.2.0.4256_8.1.0` | Análise do código no mesmo job | - |
 
@@ -276,7 +276,7 @@ São as variáveis que o profile `servicos` do compose passa aos serviços; nos 
 | `OTEL_ENABLED`, `OTEL_SERVICE_NAME` | todos | `true`, nome do serviço (`os-service`, `billing-service`, `execution-service`) | iguais |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | todos | `http://jaeger.pytstop-plataforma.svc.cluster.local:4317` (gRPC) ou `:4318` (HTTP) | `http://jaeger:4317` |
 | `SMTP_HOST` / `SMTP_PORT` | OS | `mailpit.pytstop-plataforma.svc.cluster.local` / `1025` | `mailpit` / `1025` |
-| `DATABASE_URL` | OS e Execução | PostgreSQL do próprio serviço, no namespace dele | `postgresql://pytstop:pytstop@postgres-os:5432/os` e `...@postgres-execucao:5432/execucao` |
+| `DATABASE_URL` | OS e Execução | PostgreSQL do próprio serviço, no namespace dele, com o papel `os_app` ou `execucao_app` nos processos e o dono (`os` ou `execucao`) no Job de migração ([Contrato com os serviços](#contrato-com-os-serviços)) | `postgresql://pytstop:pytstop@postgres-os:5432/os` e `...@postgres-execucao:5432/execucao` |
 | `MONGODB_URI` | Billing | MongoDB do próprio serviço, no namespace dele | `mongodb://mongo-billing:27017/billing?replicaSet=rs0` |
 | `RUN_MIGRATIONS_ON_STARTUP` | OS e Execução | `false` (migração em Job antes do rollout) | `true` |
 | `JWKS_URL` | Billing e Execução | `http://<svc>.pytstop-os.svc.cluster.local:8000/.well-known/jwks.json` | `http://os-service:8000/.well-known/jwks.json` |
@@ -502,7 +502,8 @@ O que o repositório de cada serviço precisa ter para o CD dele subir os três 
 | Item | Onde |
 |---|---|
 | Namespace do serviço, criado vazio pelo `make deploy` se ainda não existe, com a Role do Kong | [Gateway](#gateway-como-um-serviço-publica-as-rotas) |
-| Secret `rabbitmq` com a `RABBITMQ_URL` do usuário do serviço e as fontes dele: senha do banco, chaves e senha do admin semeado | [Segredos gerados](#segredos-gerados) |
+| Secret `rabbitmq` com a `RABBITMQ_URL` do usuário do serviço | [Segredos gerados](#segredos-gerados) |
+| As fontes do serviço, criadas só se ainda não existem: as senhas do banco, uma por papel, as chaves e a senha do admin semeado | [Segredos gerados](#segredos-gerados) |
 | Usuário no RabbitMQ, com as permissões do serviço e a topologia pronta | [Usuário e permissões no RabbitMQ](#usuário-e-permissões-no-rabbitmq) |
 | Kong com os `KongClusterPlugin` (rate limit por classe e `fora-da-borda`), que o Ingress do serviço referencia por anotação, e um exemplo de borda por serviço | [Gateway](#gateway-como-um-serviço-publica-as-rotas) e [`k8s/exemplos/`](k8s/exemplos) |
 | Métricas pelo Prometheus (pod anotado), logs pelo Promtail, traces no Jaeger e SMTP no Mailpit | [Endereços e variáveis](#endereços-e-variáveis) |
@@ -517,15 +518,20 @@ O que o repositório de cada serviço precisa ter para o CD dele subir os três 
 | Namespace | `pytstop-os` | `pytstop-billing` | `pytstop-execucao` |
 | Prefixo na borda | `/os` | `/billing` | `/execucao` |
 | Banco (Service e porta), que só o próprio namespace alcança | `os-postgres:5432` | `billing-mongo:27017` | `execucao-postgres:5432` |
+| Secret com as senhas do banco, uma por papel | `os-postgres` | `billing-mongo` | `execucao-postgres` |
+| Papel dos processos (API, relay, consumidor e `prazos`) | `os_app`, só DML nas tabelas do dono | `billing` | `execucao_app`, só DML nas tabelas do dono |
+| Papel do Job de inicialização | `os`, dono do banco e das tabelas | `billing`; o root só inicia o replica set e cria os usuários | `execucao`, dono do banco e das tabelas |
+| Papel do exporter, sidecar do banco | `os_exporter`, com `pg_monitor` | `exporter` | `execucao_exporter`, com `pg_monitor` |
 | Exemplo de borda | [`borda-os-service.yaml`](k8s/exemplos/borda-os-service.yaml) | [`borda-billing-service.yaml`](k8s/exemplos/borda-billing-service.yaml) | [`borda-execution-service.yaml`](k8s/exemplos/borda-execution-service.yaml) |
 
 - `Dockerfile` na raiz, com os `ARG` `GIT_SHA` e `GIT_DATE`: quando o serviço entra como vizinho no CD de outro, a imagem dele sai do `docker build` do checkout, com o commit como tag e em paralelo com os outros builds.
 - `k8s/overlays/kind-ci/kustomization.yaml`, o overlay do CD, ao lado do `kind` e do `k3s`. Sem ele, o `implantar-servicos.sh` falha nomeando o serviço e o commit, antes de construir qualquer imagem.
 - A imagem do serviço com o nome fixo `pytstop-<nome>` e `imagePullPolicy: IfNotPresent`. A tag de verdade vem na implantação: o script gera `k8s/overlays/execucao/`, o overlay pedido com a imagem trocada pelo `images:` do kustomize, aplica e o apaga no fim; o diretório não pode existir no repositório. Toda outra imagem dos manifests (banco, exporter, initContainers) tem de estar na [tabela de versões](#componentes-e-versões), com a mesma tag: o script confere antes de construir e para nomeando a imagem que falta.
 - Nenhum `Secret` nos manifests: os do serviço vêm do `make deploy` e entram por `secretKeyRef`, com os nomes e as chaves da tabela [Segredos gerados](#segredos-gerados).
-- Um Job de inicialização (a migração ou a preparação do banco) com o rótulo `app.kubernetes.io/component: inicializacao`, idempotente: o script apaga os Jobs com esse rótulo antes do apply (Job é imutável), aplica com `apply --server-side`, espera o banco (StatefulSet, 180 s), o Job completar (300 s; no erro, o log dele vai para a saída) e cada Deployment (300 s).
+- Um papel do banco por uso ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)): cada processo monta a `DATABASE_URL` (ou a `MONGODB_URI`) no pod, por expansão de variável, com a senha do papel da tabela acima, e nenhum processo do serviço usa o superusuário `postgres`, que só inicializa o banco. No PostgreSQL, os papéis nascem de um script de init que o serviço traz nos manifests, num ConfigMap montado em `/docker-entrypoint-initdb.d` (a imagem o roda uma vez, na primeira inicialização do volume), com as senhas lidas do ambiente do container do banco e nunca de argumento. As tabelas nascem do Job, depois do script, e por isso o papel da aplicação ganha o DML por `ALTER DEFAULT PRIVILEGES FOR ROLE <dono>`, que cobre também a `alembic_version`, lida pelos pods para esperar a migração; um `GRANT` sobre as tabelas existentes não alcançaria nenhuma.
+- Um Job de inicialização (a migração ou a preparação do banco, com o papel dele na tabela acima) com o rótulo `app.kubernetes.io/component: inicializacao`, idempotente: o script apaga os Jobs com esse rótulo antes do apply (Job é imutável), aplica com `apply --server-side`, espera o banco (StatefulSet, 180 s), o Job completar (300 s; no erro, o log dele vai para a saída) e cada Deployment (300 s).
 - Pela borda, `GET <prefixo>/api/v1/saude` com 200 e `<prefixo>/metrics` com 404 (o Ingress `fora-da-borda` dos exemplos). O smoke espera a saúde por até 1 min: o Kong recebe a rota de um Service novo antes do alvo, e até lá responde 503.
-- Todo pod de processo (API, relay, consumidor, `prazos` e o banco, pelo exporter) anotado para o Prometheus e com `up = 1`; o pod do Job e o que está saindo de um rollout não contam.
+- Todo pod de processo (API, relay, consumidor, `prazos` e o banco, pelo exporter) anotado para o Prometheus e com `up = 1`; o pod do Job e o que está saindo de um rollout não contam. O `up` diz que o exporter responde ao Prometheus; se ele entrou no banco com o papel dele, quem diz é `pg_up` (PostgreSQL) ou `mongodb_up` (MongoDB), que o smoke ainda não confere.
 - NetworkPolicy que deixa só o próprio namespace chegar ao banco. O smoke prova pelo pod `rabbitmq-0` da plataforma: a conexão à porta do banco tem de esgotar o prazo de 3 s, porque o kindnet descarta o pacote barrado; conexão aceita, recusada ou nome que não resolve reprovam.
 
 O smoke escreve a tabela `serviço | etapa | resultado` na saída e, no GitHub Actions, no summary do job, e sai com status 1 nomeando os serviços que falharam. A chamada do CD de um serviço leva a imagem dele pelo arquivo do `docker save` e a ref gravada nele; no exemplo, a do OS, no commit `5f2a9c1`, com os vizinhos clonados ao lado:
