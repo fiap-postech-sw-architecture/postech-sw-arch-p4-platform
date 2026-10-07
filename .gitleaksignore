@@ -1,0 +1,7 @@
+# O commit 78ab307, do PR #8, trazia numa expressao regular de teste o
+# cabecalho PEM por extenso, sem chave nenhuma, e a regra private-key o acusa.
+# A entrada vale so para esse commit, que o squash nao leva para a main: serve
+# ao job gitleaks dos PRs cuja branch o contem (a do #8 e as que partiram dela)
+# e a varredura semanal enquanto essas branches existirem. O arquivo sai no
+# primeiro PR depois que elas forem mergeadas e apagadas.
+78ab307295e31d541213405a342e159f9cfda3f9:tests/test_gerar_segredos.py:private-key:79
