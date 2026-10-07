@@ -33,11 +33,15 @@ Exchanges `pytstop.comandos`, `pytstop.eventos` e `pytstop.retry` (topic) e `pyt
 
 Comando vai para uma fila só (point-to-point); evento sai num exchange de tópico (publish-subscribe), e um consumidor novo entra com um binding, sem mudar o produtor. Os participantes consomem só comandos ([ADR-035](035-saga-orquestrada.md)).
 
-Cada fila `X` tem filas auxiliares de retry e uma DLQ. As de retry são uma por atraso, `X.retry.1s`, `X.retry.5s`, `X.retry.15s`, `X.retry.60s` e `X.retry.300s`, sem consumidor e com o TTL fixo como argumento da fila (`x-message-ttl`). Cada uma recebe pelo `pytstop.retry`, com binding de chave exata igual ao próprio nome, a cópia que o consumidor republica num erro transitório; quando o TTL vence, o próprio broker a devolve a `X` pelo dead letter da fila de retry (default exchange, chave `X`, numa policy por origem com o padrão `^X\.retry\.`). O `pytstop.retry` roteia como um direct, mas é de tópico porque o RabbitMQ só aplica permissão por routing key em exchange de tópico (seção seguinte). A `X.dlq`, ligada a `pytstop.dlx` pela chave `X`, recebe a mensagem rejeitada e a guarda por 7 dias.
+Cada fila `X` tem filas auxiliares de retry e uma DLQ. As de retry são uma por atraso, `X.retry.1s`, `X.retry.5s`, `X.retry.15s`, `X.retry.60s` e `X.retry.300s`, sem consumidor e com o TTL fixo como argumento da fila (`x-message-ttl`). Cada uma recebe pelo `pytstop.retry`, com binding de chave exata igual ao próprio nome, a cópia que o consumidor republica num erro transitório; quando o TTL vence, o próprio broker a devolve a `X` pelo dead letter da fila de retry (default exchange, chave `X`, numa policy por fila de trabalho, `retry-X`, com o padrão `^X\.retry\.`). O `pytstop.retry` roteia como um direct, mas é de tópico porque o RabbitMQ só aplica permissão por routing key em exchange de tópico (seção seguinte). A `X.dlq`, ligada a `pytstop.dlx` pela chave `X`, recebe a mensagem rejeitada e a guarda por 7 dias.
 
-A topologia tem uma fonte só: o `definitions.json` do `platform` declara exchanges, as 21 filas e os bindings, e o broker o carrega ao subir. Dead letter, overflow, tamanho e o TTL da DLQ vêm das `policies` do mesmo arquivo, que, ao contrário dos argumentos de fila, valem também para as filas que já existem; assim a topologia converge quando o broker reinicia. A exceção é o TTL das filas de retry, que é argumento: o atraso faz parte do nome da fila, então mudar um atraso é criar outra fila, nunca mudar o argumento de uma que já existe. Ele também não vai para a policy da origem, que vale para as cinco filas: com policy e argumento, a fila quorum usa o menor dos dois (ver Notas), e um `message-ttl` na policy cortaria os atrasos maiores. Os serviços só fazem declaração passiva, que no RabbitMQ 4.3.6 também exige permissão sobre o recurso: cada serviço confere só as filas e os exchanges em que lê ou escreve e, se a fila ainda não existir, espera com backoff.
+A topologia tem uma fonte só: o `definitions.json` do `platform` declara exchanges, as 21 filas e os bindings, e o broker o carrega ao subir.
 
-Isso evita duas falhas da declaração por serviço: o relay que publica com `mandatory` antes de o consumidor vizinho declarar a fila e acumula falhas até marcar a linha como `dead`, e a redeclaração com argumento diferente, que o broker recusa (`PRECONDITION_FAILED`). Um teste na integração contínua (CI) do `platform` confere o `definitions.json` contra o documento AsyncAPI de `contratos/`. A topologia fica junto dos contratos porque é acordo entre os serviços, como os schemas; cada serviço continua dono do seu consumidor e da sua outbox.
+- Dead letter, overflow, tamanho e o TTL da DLQ vêm das `policies` do mesmo arquivo, que, ao contrário dos argumentos de fila, valem também para as filas que já existem; assim a topologia converge quando o broker reinicia.
+- O TTL das filas de retry é a exceção e fica no argumento da fila: o atraso faz parte do nome dela, então mudar um atraso é criar outra fila, nunca mudar o argumento de uma que já existe. Ele também não vai para a policy da fila de trabalho (`retry-X`), que vale para as cinco filas de retry dela: com policy e argumento, a fila quorum usa o menor dos dois (ver Notas), e um `message-ttl` ali cortaria os atrasos maiores.
+- Os serviços só fazem declaração passiva, que no RabbitMQ 4.3.6 também exige permissão sobre o recurso: cada serviço confere só as filas e os exchanges em que lê ou escreve e, se a fila ainda não existir, espera com backoff.
+
+Isso evita duas falhas da declaração por serviço: o relay que publica com `mandatory` antes de o consumidor vizinho declarar a fila e acumula falhas até marcar a linha como `dead`, e a redeclaração com argumento diferente, que o broker recusa (`PRECONDITION_FAILED`). Um teste na integração contínua (CI) do `platform` confere o `definitions.json` contra o documento AsyncAPI de `contratos/`, e outro passo sobe um RabbitMQ avulso com ele e prova o retry como o usuário de um serviço. A topologia fica junto dos contratos porque é acordo entre os serviços, como os schemas; cada serviço continua dono do seu consumidor e da sua outbox.
 
 ### Usuários e permissões
 
@@ -71,7 +75,11 @@ As propriedades AMQP são `message_id` (= `id`), `correlation_id`, `type` (= `ti
 
 ### Entrega, retry e DLQ
 
-- Retry: erro transitório gera uma cópia, publicada no `pytstop.retry` sem `expiration`, com `x-tentativa` incrementado, a routing key da fila de retry do atraso daquela tentativa (`x-tentativa` de 1 a 5 vai para `X.retry.1s`, `.5s`, `.15s`, `.60s` e `.300s`) e confirmação antes do `ack` da original. A fila é uma por atraso porque TTL só vence na cabeça da fila: numa `X.retry` única, com `expiration` em cada cópia, a cópia de 300 s da quinta tentativa seguraria por 5 minutos as primeiras tentativas das mensagens atrás dela (a prova está em [Uma fila de retry com TTL por mensagem](#uma-fila-de-retry-com-ttl-por-mensagem)). Com o mesmo TTL em toda a fila, a ordem de chegada é a de expiração. Se o processo cair entre os dois passos, a mensagem chega duas vezes, sem se perder, e a idempotência absorve a repetição. Esgotadas as cinco tentativas, `reject` sem requeue leva a mensagem para `X.dlq`; erro permanente (validação, schema, `user_id` divergente, `versao` desconhecida) vai direto. O limite de entregas da fila quorum (`x-delivery-limit`, padrão 20 desde o RabbitMQ 4.0) desvia para a DLQ a mensagem que derruba o consumidor antes do `reject`.
+- Retry: erro transitório gera uma cópia, publicada no `pytstop.retry` sem `expiration`, com `x-tentativa` incrementado e confirmação do broker antes do `ack` da original.
+  - A routing key é a da fila de retry do atraso daquela tentativa: `x-tentativa` de 1 a 5 vai para `X.retry.1s`, `.5s`, `.15s`, `.60s` e `.300s`. A fila é uma por atraso porque TTL só vence na cabeça da fila ([Uma fila de retry com TTL por mensagem](#uma-fila-de-retry-com-ttl-por-mensagem)); com o mesmo TTL em toda a fila, a ordem de chegada é a de expiração.
+  - Se o processo cair entre publicar a cópia e dar `ack` na original, a mensagem chega duas vezes, sem se perder, e a idempotência absorve a repetição.
+  - Esgotadas as cinco tentativas, `reject` sem requeue leva a mensagem para `X.dlq`; erro permanente (validação, schema, `user_id` divergente, `versao` desconhecida) vai direto.
+  - O limite de entregas da fila quorum (`x-delivery-limit`, padrão 20 desde o RabbitMQ 4.0) desvia para a DLQ a mensagem que derruba o consumidor antes do `reject`.
 - Outbox no PostgreSQL (OS Service e Execução): o relay do p3 continua, com `pg_notify` e polling de segurança, `FOR UPDATE SKIP LOCKED`, lease, fencing e as métricas do ADR-024. A linha de mensagem só vira entregue depois do publisher confirm, e a publicação usa `mandatory`, para que mensagem sem fila de destino volte como erro em vez de ser confirmada e descartada. Queda do broker não conta como falha da linha: sem conexão, o relay não reivindica linhas e reconecta com backoff de até 30 s; só a falha da própria mensagem (sem confirmação ou devolvida pelo `mandatory`) conta, com os atrasos do p3 até `dead`.
 - E-mail ao cliente: no OS Service, a outbox tem também linhas com destino `email`, que o relay entrega pelo SMTP, como no p3, separadas da mensageria. Uma falha de SMTP retenta só aquela linha e não trava a saga.
 - Outbox no MongoDB (Billing): coleção `outbox` gravada na mesma transação multidocumento do efeito (replica set de um nó, [ADR-037](037-banco-por-servico.md)); o relay faz polling e reivindica cada documento com claim atômico (`find_one_and_update` de pendente para em entrega, com lease), sob a mesma regra de confirmação.
@@ -90,6 +98,8 @@ As propriedades AMQP são `message_id` (= `id`), `correlation_id`, `type` (= `ti
 * Ordem por fila com consumidor único ativo
 * Ordem por OS com consistent hash
 * Uma fila de retry com TTL por mensagem
+* Uma policy por fila de retry
+* Exchange de atraso do plugin `rabbitmq_delayed_message_exchange`
 * Retry nativo da fila quorum (RabbitMQ 4.3)
 
 Descartado pelo enunciado: REST síncrono entre todos os serviços, porque a l. 101 pede mensageria para a orquestração.
@@ -97,7 +107,7 @@ Descartado pelo enunciado: REST síncrono entre todos os serviços, porque a l. 
 ### RabbitMQ com outbox e consumidor idempotente
 
 * Bom, porque é o broker da prática de SAGA Pattern e um dos três que o enunciado nomeia
-* Bom, porque tópico, dead letter, TTL por mensagem, publisher confirms e `user_id` validado são nativos: retry com atraso, DLQ e conferência do produtor saem de configuração
+* Bom, porque tópico, dead letter, TTL por fila, publisher confirms e `user_id` validado são nativos: retry com atraso, DLQ e conferência do produtor saem de configuração
 * Ruim, porque é mais um componente com estado e, com um nó, sem replicação: a fila quorum dá garantias de dead letter, não alta disponibilidade
 * Ruim, porque o efetivamente uma vez depende de disciplina em todo handler, custo já assumido no ADR-022
 
@@ -139,10 +149,25 @@ O exchange `x-consistent-hash`, de um plugin que acompanha o RabbitMQ, espalha a
 
 ### Uma fila de retry com TTL por mensagem
 
-Foi a primeira versão desta topologia: uma `X.retry` por fila de trabalho, com o atraso no `expiration` de cada cópia.
+Uma `X.retry` por fila de trabalho, com o atraso no `expiration` de cada cópia.
 
 * Bom, porque são 9 filas em vez de 21, e mudar um atraso é mudar o consumidor, sem tocar na topologia
-* Ruim, porque TTL por mensagem só vence quando a mensagem chega à cabeça da fila: no RabbitMQ 4.3.6, uma cópia de 1 s publicada atrás de uma de 8 s só voltou aos 8 s. Com os atrasos de 1 a 300 s, a cópia da quinta tentativa seguraria por 5 minutos as primeiras tentativas das mensagens atrás dela, e o prazo técnico da saga (120 s) reenviaria comandos que ainda esperam o retry
+* Ruim, porque TTL por mensagem só vence quando a mensagem chega à cabeça da fila: no RabbitMQ 4.3.6, uma cópia de 1 s publicada atrás de uma de 8 s só voltou aos 8 s. Com os atrasos de 1 a 300 s, a primeira retentativa de uma mensagem que chegasse atrás de uma cópia de 300 s esperaria até 300 s, e o prazo técnico da saga (120 s) venceria já depois da primeira falha; com as filas por atraso, só a quinta espera passa dos 120 s (ver Neutras)
+
+### Uma policy por fila de retry
+
+Cada fila de retry teria a própria policy, com o dead letter da fila de trabalho e o `message-ttl` do atraso, no lugar da `retry-X` comum às cinco e do TTL no argumento (só uma policy vale por fila).
+
+* Bom, porque o TTL seguiria a regra das outras filas: fica na policy, que a importação regrava a cada boot, e nada depende de argumento imutável
+* Ruim, porque seriam 15 policies em vez de 3, cada uma repetindo o dead letter da fila de trabalho, e o atraso continuaria no nome da fila: mudar o `message-ttl` de `X.retry.5s` deixaria o nome errado, então mudar um atraso ainda seria criar outra fila, com binding e permissão, e a policy não pouparia nada
+
+### Exchange de atraso do plugin `rabbitmq_delayed_message_exchange`
+
+O plugin cria um tipo de exchange que segura cada mensagem pelo tempo do header `x-delay` antes de rotear.
+
+* Bom, porque o atraso iria em cada cópia, sem uma fila por atraso e sem head-of-line
+* Ruim, porque o repositório do plugin está arquivado, e o README dele diz que o Team RabbitMQ não o mantém mais e que ele depende do Mnesia, que saiu do RabbitMQ no ciclo do 4.3.0; a última versão publicada é a 4.2.0, e ele não vem na imagem oficial do broker (ver Notas)
+* Ruim, porque, pelo mesmo README, a mensagem em espera fica numa tabela Mnesia com uma réplica em disco só no nó atual, fora da fila quorum (perder o nó ou desligar o plugin perde as cópias que esperam), e o exchange não aceita `mandatory`, que o consumidor usa para só dar `ack` na original depois de saber que a cópia tem fila de destino
 
 ### Retry nativo da fila quorum (RabbitMQ 4.3)
 
@@ -164,6 +189,7 @@ A partir do 4.3, a fila quorum pode segurar a mensagem devolvida pelo consumidor
 ### Negativas
 
 * São 21 filas em vez de 9, e cada atraso vira nome de fila, binding e chave na permissão de tópico: mudar um atraso é criar a fila nova, ajustar a permissão e os consumidores e apagar a antiga nos brokers que já existem, porque a importação do boot não apaga fila
+* O atraso não viaja na cópia, e o teste de integração de um serviço não o encurta pelo consumidor: para não esperar até 300 s, o teste carrega no RabbitMQ dele uma cópia do `definitions.json` com `x-message-ttl` menor nas filas de retry (mesmos nomes, bindings e policies)
 * Duas implementações de outbox (PostgreSQL e MongoDB) para manter e testar
 * Uma queda longa do RabbitMQ não perde mensagem, mas para as sagas: as linhas se acumulam na outbox até o broker voltar, e o alerta de outbox parada dispara ([ADR-043](043-observabilidade-distribuida.md))
 * Cada handler classifica o erro: transitório mal classificado vai para a DLQ, permanente mal classificado gasta cinco tentativas
@@ -189,7 +215,9 @@ A partir do 4.3, a fila quorum pode segurar a mensagem devolvida pelo consumidor
 
 * Material: SAGA Pattern, Aulas 04 (p. 13-15) e 05 (p. 11, Fig. 4); Estrutura de Microsserviços, Aulas 02, 04 e 05; Data Engineering, Aula 03
 * O retry segue a política do relay do p3 (cinco tentativas com atraso crescente), com degraus próprios, de 1 a 300 s; a disciplina Resiliência em Microsserviços não tinha sido liberada até 06/10/2026
-* TTL e policies no RabbitMQ 4.3.6: a documentação diz que a fila quorum põe a mensagem expirada no dead letter quando ela chega à cabeça da fila (https://www.rabbitmq.com/docs/ttl#message-ttl-dead-lettering) e que, entre argumento do cliente e policy de usuário, prevalece o argumento (https://www.rabbitmq.com/docs/policies#operator-policy-conflicts). Para `message-ttl`, porém, a fila quorum usa o menor dos dois (`gather_policy_config` em https://github.com/rabbitmq/rabbitmq-server/blob/v4.3.6/deps/rabbit/src/rabbit_quorum_queue.erl), e o broker confirmou: argumento de 5 s com policy de 3 s expirou em 3,1 s, e argumento de 1 s com policy de 3 s, em 1,0 s. Delayed retry da fila quorum: https://www.rabbitmq.com/docs/quorum-queues#delayed-retry
+* TTL e policies, segundo a documentação do RabbitMQ: a fila quorum põe a mensagem expirada no dead letter quando ela chega à cabeça da fila (https://www.rabbitmq.com/docs/ttl#message-ttl-dead-lettering), e, entre argumento do cliente e policy de usuário, prevalece o argumento (https://www.rabbitmq.com/docs/policies#operator-policy-conflicts). Delayed retry da fila quorum: https://www.rabbitmq.com/docs/quorum-queues#delayed-retry
+* TTL e policies no código e no broker 4.3.6: para `message-ttl`, a fila quorum usa o menor dos dois (`gather_policy_config` em https://github.com/rabbitmq/rabbitmq-server/blob/v4.3.6/deps/rabbit/src/rabbit_quorum_queue.erl), e o broker confirmou: argumento de 5 s com policy de 3 s expirou em 3,1 s, e argumento de 1 s com policy de 3 s, em 1,0 s
+* Plugin `rabbitmq_delayed_message_exchange`: README do repositório oficial, arquivado (https://github.com/rabbitmq/rabbitmq-delayed-message-exchange, seções "This Project is No Longer Maintained" e "Limitations"); remoção do Mnesia no 4.3.0: https://github.com/rabbitmq/rabbitmq-server/pull/15542. A imagem `rabbitmq:4.3.6-management` traz o `rabbitmq_consistent_hash_exchange` e não traz este plugin (`rabbitmq-plugins list`)
 * RabbitMQ: TTL (https://www.rabbitmq.com/docs/ttl), filas quorum (https://www.rabbitmq.com/docs/quorum-queues), confirmações (https://www.rabbitmq.com/docs/confirms), `user_id` validado (https://www.rabbitmq.com/docs/validated-user-id), single active consumer (https://www.rabbitmq.com/docs/consumers) e consistent hash (https://github.com/rabbitmq/rabbitmq-server/tree/main/deps/rabbitmq_consistent_hash_exchange)
 * AsyncAPI: https://www.asyncapi.com/docs/reference/specification/latest; W3C Trace Context: https://www.w3.org/TR/trace-context/
 
