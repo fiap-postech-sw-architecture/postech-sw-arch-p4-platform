@@ -17,7 +17,7 @@ O script le e descarta o que houver em billing.comandos. Por isso so roda num
 broker sem consumidor nessa fila: com o Billing conectado, recusa e sai com
 status 2.
 
-    AMQP_URL=amqp://billing:<senha>@127.0.0.1:<porta>/%2F \\
+    RABBITMQ_URL=amqp://billing:<senha>@127.0.0.1:<porta>/%2F \\
         uv run python scripts/prova_retry.py
 
 O make smoke roda o script no kind, por um port-forward, e o make prova-retry
@@ -186,7 +186,7 @@ def prova_recusas(conexao: pika.BlockingConnection) -> None:
 
 def main() -> int:
     """Roda as provas: 0 se todas valeram, 1 se alguma falhou, 2 se recusou."""
-    conexao = pika.BlockingConnection(pika.URLParameters(os.environ["AMQP_URL"]))
+    conexao = pika.BlockingConnection(pika.URLParameters(os.environ["RABBITMQ_URL"]))
     try:
         declarada = conexao.channel().queue_declare(FILA, passive=True)
         if declarada.method.consumer_count:

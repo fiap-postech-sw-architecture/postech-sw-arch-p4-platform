@@ -284,7 +284,7 @@ for _ in $(seq 30); do
   sleep 1
 done
 [ -n "$porta" ] || cat "$TMP/port-forward" >&2
-if AMQP_URL="amqp://billing:$senha_billing@127.0.0.1:${porta:-0}/%2F" uv run --frozen python scripts/prova_retry.py; then
+if RABBITMQ_URL="amqp://billing:$senha_billing@127.0.0.1:${porta:-0}/%2F" uv run --frozen python scripts/prova_retry.py; then
   prova_retry=held
 else
   prova_retry=failed
