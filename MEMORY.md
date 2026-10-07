@@ -8,6 +8,8 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Recent decisions
 
+- 2026-10-06 - Retry com uma fila por atraso: `X.retry.1s`, `.5s`, `.15s`, `.60s` e `.300s`, com `x-message-ttl` como argumento da fila (excecao a entrada "argumento de fila so `x-queue-type`", mais abaixo: o atraso esta no nome, e mudar um atraso e criar fila), binding de chave exata no `pytstop.retry`, policy `retry-X` (`^X\.retry\.`) sem `message-ttl` e permissao de topico `^X\.retry\.(1|5|15|60|300)s$`; a copia sai sem `expiration`, com a chave da fila do nivel da nova `x-tentativa` - ADR-036
+- 2026-10-06 - A prova do retry no broker publica como o usuario do servico, nao como o admin: `scripts/prova_retry.py` (pika no grupo dev) roda no `make smoke` por um port-forward e igual contra container avulso. Usuario de servico nao tem tag de management (a API HTTP responde 401 "Not management user"), entao publicar como ele exige AMQP
 - 2026-10-06 - Alerta do Kong (`pytstop-kong-fora`, sem dado = alerta) so no cluster: arquivo `alertas-cluster.yaml` num grupo proprio, montado so pelo configMapGenerator; o compose monta so `alertas.yaml`, porque sem Kong a regra disparava dois minutos depois de subir (medido no compose) - ADR-043
 - 2026-10-06 - Caminho com `%2F` ou `%5C` e barrado na borda por um `pre-function` global (`bloqueia-barra-codificada`, 404 igual ao de rota inexistente, antes do rate limit e sem gastar balde); so o caminho conta, a query string passa - ADR-038
 - 2026-10-06 - Correcao da entrada "branch protection na `main` desde o commit inicial" (mais abaixo): o unico commit fora de PR e o `Initial commit` do GitHub (auto_init); a protecao e o ruleset entraram logo depois, e desde entao tudo entra por PR com squash - ADR-042
@@ -26,6 +28,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Discovered conventions
 
+- 2026-10-06 - Filtro pelo label `queue` (`=~` ou `!~`) em dashboard ou alerta entra em `FILTRO_DE_FILA` (`tests/test_observabilidade.py`), que compara as filas selecionadas com os grupos da topologia (destinos de cada exchange no definitions.json); os atrasos do retry ficam amarrados entre `ATRASOS` (test_contratos.py), a linha "atrasos das filas de retry" da RFC 10.3 e o header `x-tentativa` do AsyncAPI
 - 2026-10-06 - `make smoke` sai com status 1 quando uma prova nao vale (linha `CHECK FAILED`, o script segue ate o fim e resume no final): borda e admin em 404, `%2F` em 404, login chegando a 429, nenhuma linha com o token no Loki, regras do Grafana todas carregadas e saudaveis; as linhas do Loki desta execucao se acham por `run=<marca>` na requisicao
 - 2026-10-06 - Exemplos de borda em `k8s/exemplos/`: `borda-os-service.yaml` e `borda-billing-service.yaml` (webhook com balde proprio, simulador do checkout fora de `/api/v1`); o smoke aplica os dois e um servico novo parte de um deles
 - 2026-10-06 - Todo limite de schema (itens, tamanho, quantidade, valor, formato) tem no `test_contratos.py` o valor na fronteira aceito e o seguinte rejeitado (`FRONTEIRAS`, lista de 1 a 50 itens, regra do `decidido_por` nos dois sentidos); limite novo ou mudado entra na tabela, e o que os negativos gerados nao alcancam fica nela
@@ -39,6 +42,9 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Gotchas
 
+- 2026-10-06 - Licao do TTL por mensagem: so a cabeca da fila expira, entao atraso variavel numa fila so vira head-of-line (no 4.3.6, uma copia de 1 s publicada atras de uma de 8 s voltou aos 8 s); com atraso fixo por fila, a ordem de chegada e a de expiracao - ADR-036
+- 2026-10-06 - Fila quorum com `message-ttl` na policy e no argumento usa o menor (`gather_policy_config` com `min/2` no 4.3.6), ao contrario do que a pagina de policies diz sobre argumento contra policy de usuario; testado: argumento 5 s com policy 3 s expirou em 3,1 s - ADR-036
+- 2026-10-06 - Correcao da entrada "nack/reject com requeue nao conta no delivery-limit" (mais abaixo): no 4.3.6 so o `basic_nack` com requeue nao conta; o `basic_reject` com requeue incrementa o delivery-count e cai no dead letter ao passar do limite (com `x-delivery-limit` 2, tres entregas). O delayed retry nativo da fila quorum (4.3) segue a mesma regra: atraso linear que so cresce com reject
 - 2026-10-06 - Kong normaliza o caminho antes de casar a rota e repassa o normalizado (barras repetidas, `.` e `..`, letra codificada como `%61`); so `%2F` e `%5C` ficam como chegaram. Em 17 variantes no kind so `%2F` escapava do fora-da-borda; `%252F`, `;x=1`, `ADMIN` e `%41dmin` passam pelo Kong, e o FastAPI as roteia como outro caminho (verificado com uvicorn)
 - 2026-10-06 - O access log do Kong guarda o caminho como chegou, tambem o do pedido que um plugin barra com 404: o token em `publico%2Forcamentos/<token>` escapava da mascara do Promtail, que so olhava `/`; a mascara aceita `%2F` e o dry-run do `make manifests` roda nos dois arquivos, cluster e compose (`scripts/promtail-mascara.sh`)
 - 2026-10-06 - Kong casa rota por segmento e nao trata `%2F` como `/`, e o uvicorn decodifica o `%2F` do caminho que o FastAPI roteia: `/os/api/v1/admin%2Foutbox` escapava do fora-da-borda e `autenticacao%2Flogin`, do limite do login (o `%5C` o uvicorn deixa literal); rota por prefixo nao protege sozinha - ADR-038
@@ -78,6 +84,9 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Tech debt / TODO
 
+- 2026-10-06 - Resolvida a divida "Retry com TTL por mensagem numa fila so tem head-of-line" (mais abaixo): uma fila de retry por atraso - ADR-036
+- 2026-10-06 - MEDIUM - `make smoke` roda `uv run` (prova do retry): o job `deploy-kind`, quando entrar, precisa do setup-uv antes do smoke
+- 2026-10-06 - LOW - Broker criado antes das filas por atraso (volume do compose, PVC do kind local) guarda as `X.retry` antigas, porque a importacao nao apaga fila: apagar com `rabbitmqctl delete_queue` ou apagar o volume - README
 - 2026-10-06 - MEDIUM - O controller do Kong, no pod exposto a internet, ainda tem `list` e `watch` em Secrets dos quatro namespaces (chave RSA do JWT, segredo do webhook, credenciais de banco): risco aceito com a `watchNamespaces`; avaliar tirar a regra de Secrets das Roles (a plataforma nao usa Secret em Ingress nem em plugin) e conferir se o controller sobe sem ela - README, Decisoes e limites
 - 2026-10-06 - MEDIUM - IP real do cliente no k3s (ServiceLB com `externalTrafficPolicy: Local`) ainda a conferir com dois clientes: o rate limit por IP la e esperado, nao verificado - README, secao do gateway
 - 2026-10-06 - MEDIUM - Prometheus v2.54.1, Loki 2.9.8 e kube-state-metrics v2.13.0 com CVE HIGH/CRITICAL sem correcao na propria linha (trivy, out/2026): aceito porque rodam so dentro do cluster, sem Ingress; sair delas e trocar de linha (Prometheus 3, Loki 3) com mudanca de config - README, Decisoes e limites
@@ -89,6 +98,7 @@ Updated by AI agents at task end per `postech-ai-helper/ai/canonical/task-end-re
 
 ## Review lessons
 
+- 2026-10-06 - Head-of-line do retry com TTL por mensagem entrou como divida LOW ("so com volume"), mas basta uma mensagem esgotar as tentativas: a copia de 300 s segura as primeiras tentativas de todas atras dela, e o prazo tecnico da saga (120 s) reenviaria comandos ainda em retry. Limite conhecido do broker so vira "aceito" depois de medido com o pior caso do proprio desenho - PR #4
 - 2026-10-06 - O smoke so imprimia e saia 0 com `/os/metrics` aberto, sem 429 ou com token no Loki, e o README e o MEMORY diziam que ele "prova": script de verificacao tem de sair com status diferente de zero quando a prova nao vale, e cada prova se confirma sabotando o alvo (desligar o plugin, subir o limite, quebrar a mascara, derrubar o Prometheus) e vendo o `CHECK FAILED` certo; contar linha no Loki sem esperar as desta execucao deixa um vazamento a caminho passar calado - PR #2
 - 2026-10-06 - `noDataState` das regras de alerta nao tinha guarda: trocar `Alerting` por `OK` na regra de alvo ausente passava em todos os testes, e foi essa a regra que disparou sozinha no compose; propriedade de config que muda o comportamento e vem documentada em tabela ganha teste que compara a tabela com o arquivo (`test_tabela_de_alertas_diz_o_que_a_regra_faz`) - PR #2
 - 2026-10-06 - "22 de 22 mutantes mortos" valia so para os mutantes escolhidos a mao: o conjunto sistematico (cada palavra-chave de cada schema removida ou deslocada em 1, 996 variacoes) deixava 118 vivos, entre eles `maxItems` de seis das sete listas e o `then` de OrcamentoAprovado; afirmacao de cobertura de contrato so entra depois de mutacao sistematica - PR #2
