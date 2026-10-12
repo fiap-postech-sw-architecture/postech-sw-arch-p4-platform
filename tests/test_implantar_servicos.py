@@ -31,6 +31,7 @@ import yaml
 SCRIPT = (
     Path(__file__).resolve().parents[1] / "scripts" / "ci" / "implantar-servicos.sh"
 )
+LEITOR_DO_README = SCRIPT.with_name("imagens-do-readme.sh")
 GIT = shutil.which("git") or "git"
 SERVICOS = {
     "os-service": "pytstop-os",
@@ -646,6 +647,7 @@ def test_argumentos_recusados_sem_chamar_nada(
         "postgres:16.4",
         "pytstop-os-service:dev",
         "evil.example/x:latest",
+        "kong/kong",
     ],
     ids=[
         "outra-imagem",
@@ -653,6 +655,7 @@ def test_argumentos_recusados_sem_chamar_nada(
         "outra-versao",
         "imagem-de-outro-servico",
         "registry-de-terceiro",
+        "chart-citado-na-linha-do-kong",
     ],
 )
 def test_imagem_fora_da_tabela_de_versoes_para_antes_de_tudo(
@@ -687,6 +690,7 @@ def test_so_a_tabela_de_versoes_vale_como_lista_de_imagens(
     (plataforma / "scripts" / "ci").mkdir(parents=True)
     copia = plataforma / "scripts" / "ci" / SCRIPT.name
     shutil.copy(SCRIPT, copia)
+    shutil.copy(LEITOR_DO_README, copia.with_name(LEITOR_DO_README.name))
     imagens = {i for lista in DE_TERCEIROS.values() for i in lista.split()}
     linhas = "".join(
         f"| item | `{imagem}` | para que serve |\n"
@@ -722,3 +726,28 @@ def test_versoes_conferidas_no_overlay_pedido(implantacao: Implantacao) -> None:
         ["kustomize", str(dir_ / "k8s" / "overlays" / "kind-ci")]
         for dir_ in implantacao.dirs.values()
     )
+
+
+def test_imagens_do_readme_sao_so_o_primeiro_trecho_da_coluna_versao(
+    tmp_path: Path,
+) -> None:
+    plataforma = tmp_path / "plataforma"
+    (plataforma / "scripts" / "ci").mkdir(parents=True)
+    leitor = plataforma / "scripts" / "ci" / LEITOR_DO_README.name
+    shutil.copy(LEITOR_DO_README, leitor)
+    (plataforma / "README.md").write_text(
+        "O banco roda `postgres:16.15` no cluster.\n\n"
+        "| Componente | Versão | Para que serve |\n|---|---|---|\n"
+        "| Kong | `kong:3.9.3` (chart `kong/kong` 3.4.1) | `fora/da-coluna:1` |\n"
+        "| Sem imagem | 1.2.3 | `papel` |\n"
+        "| Mailpit | `axllent/mailpit:v1.31.4` | - |\n\n"
+        "| Item | Outra tabela |\n|---|---|\n"
+        "| a | `postgres:16.15` |\n",
+        encoding="utf-8",
+    )
+
+    processo = subprocess.run(  # noqa: S603  # nosec B603
+        [str(leitor)], capture_output=True, text=True, check=True, timeout=30
+    )
+
+    assert processo.stdout.split() == ["kong:3.9.3", "axllent/mailpit:v1.31.4"]
