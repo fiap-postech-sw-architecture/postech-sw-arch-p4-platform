@@ -207,7 +207,10 @@ for nome in "$@"; do
           detalhe="postgres on 127.0.0.1 without a password was refused"
           recusado=sim
         else
-          detalhe="refused for another reason: $(grep -v '^code=' <<< "$saida" | head -n 1)"
+          # O sed sai 0 sem texto (um grep -v sairia 1 e, com o pipefail, o set -e
+          # derrubaria o smoke no meio quando o psql morre sem escrever nada).
+          primeira=$(sed -n '/^code=/!{p;q;}' <<< "$saida")
+          detalhe="refused for another reason: ${primeira:-no message from psql (code $codigo)}"
         fi
         ;;
     esac

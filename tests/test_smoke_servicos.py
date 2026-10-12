@@ -97,7 +97,8 @@ def namespace_saudavel(servico: str) -> dict[str, Any]:
         # Consultas ao Prometheus antes de os pods aparecerem.
         "up_depois_de": 0,
         # O psql como postgres, sem senha, no pod do banco: "pede-senha",
-        # "trust", "banco-fora" ou "sem-resposta".
+        # "trust", "banco-fora", "so-codigo" (morto sem escrever nada) ou
+        # "sem-resposta".
         "loopback": "pede-senha",
         # O codigo da conexao do pod da API ao banco (o controle) e o da
         # conexao do rabbitmq-0.
@@ -229,6 +230,8 @@ elif resto[:1] == ["exec"] and resto[2:4] == ["-c", "postgres"]:
     elif modo == "banco-fora":
         print('psql: error: connection to server at "127.0.0.1", port 5432 '
               "failed: Connection refused\ncode=2")
+    elif modo == "so-codigo":
+        print("code=137")
 elif resto[:1] == ["exec"]:
     # O controle: a sonda do pod da API ao banco, do proprio namespace.
     host, porta = resto[-2:]
@@ -621,6 +624,17 @@ FALHAS: dict[
                     "FAILED: refused for another reason: psql: error: connection "
                     'to server at "127.0.0.1", port 5432 failed: Connection refused'
                 ),
+            )
+        ],
+    ),
+    # O psql morto por sinal: so o codigo, sem texto para mostrar.
+    "loopback-so-codigo": (
+        lambda e: e["pytstop-os"].update(loopback="so-codigo"),
+        OS,
+        [
+            (
+                LOOPBACK_OS,
+                "FAILED: refused for another reason: no message from psql (code 137)",
             )
         ],
     ),
