@@ -72,7 +72,8 @@ with (Path(os.environ["FALSOS"]) / "kind.jsonl").open("a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\n")
 """
 
-# kubectl falso: o kustomize devolve as imagens de imagens.txt do overlay;
+# kubectl falso: o kustomize devolve as imagens de imagens.txt do overlay (as
+# marcadas com "lista:" na forma "- image:", as outras em "image:");
 # cada namespace tem o banco, o Job de inicializacao e dois Deployments.
 # KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
 # (apply, statefulset, job, deployment, sem-job).
@@ -85,8 +86,14 @@ from pathlib import Path
 if sys.argv[1:2] == ["kustomize"]:
     with (Path(os.environ["FALSOS"]) / "kustomize.jsonl").open("a") as log:
         log.write(json.dumps(sys.argv[1:]) + "\n")
+    # O kustomize emite "image:" como chave de um item com outras chaves antes
+    # dela e como primeira chave do item ("- image:"); "lista:" no
+    # imagens.txt escolhe a segunda forma.
     for imagem in (Path(sys.argv[2]) / "imagens.txt").read_text().split():
-        print(f"        image: {imagem}")
+        if imagem.startswith("lista:"):
+            print(f"      - image: {imagem.removeprefix('lista:')}")
+        else:
+            print(f"        image: {imagem}")
     sys.exit(0)
 
 BANCOS = {"pytstop-os": "os-postgres", "pytstop-billing": "billing-mongo",
@@ -180,7 +187,7 @@ def checkout(raiz: Path, servico: str, *, overlay: str | None = "kind-ci") -> Pa
         )
         # A propria imagem sem tag e com a do kind local, e as de terceiros.
         (dir_overlay / "imagens.txt").write_text(
-            f"pytstop-{servico} pytstop-{servico}:dev {DE_TERCEIROS[servico]}\n",
+            f"lista:pytstop-{servico} pytstop-{servico}:dev {DE_TERCEIROS[servico]}\n",
             encoding="utf-8",
         )
     git("init", "-q", cwd=dir_)
@@ -630,17 +637,31 @@ def test_argumentos_recusados_sem_chamar_nada(
     assert implantacao.chamadas("kubectl") == []
 
 
+@pytest.mark.parametrize("forma", ["", "lista:"], ids=["chave", "primeira-chave"])
 @pytest.mark.parametrize(
     "imagem",
-    ["busybox:1.37", "postgres", "postgres:16.4", "pytstop-os-service:dev"],
-    ids=["outra-imagem", "sem-tag", "outra-versao", "imagem-de-outro-servico"],
+    [
+        "busybox:1.37",
+        "postgres",
+        "postgres:16.4",
+        "pytstop-os-service:dev",
+        "evil.example/x:latest",
+    ],
+    ids=[
+        "outra-imagem",
+        "sem-tag",
+        "outra-versao",
+        "imagem-de-outro-servico",
+        "registry-de-terceiro",
+    ],
 )
 def test_imagem_fora_da_tabela_de_versoes_para_antes_de_tudo(
-    implantacao: Implantacao, imagem: str
+    implantacao: Implantacao, imagem: str, forma: str
 ) -> None:
+    # Container sem args, command nem env: o kustomize abre o item com o image:.
     dir_overlay = implantacao.dirs["billing-service"] / "k8s" / "overlays" / "kind-ci"
     (dir_overlay / "imagens.txt").write_text(
-        f"pytstop-billing-service {DE_TERCEIROS['billing-service']} {imagem}\n"
+        f"pytstop-billing-service {DE_TERCEIROS['billing-service']} {forma}{imagem}\n"
     )
 
     processo = implantacao.do_cd()
