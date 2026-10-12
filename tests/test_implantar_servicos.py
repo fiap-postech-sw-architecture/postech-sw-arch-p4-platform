@@ -45,25 +45,33 @@ SERVICOS = {
 REF_DO_CD = "ghcr.io/fiap/pytstop-os-service:5f2a9c1"
 INICIALIZACAO = "app.kubernetes.io/component=inicializacao"
 
-# docker falso: build que leva 0,5 s e registra inicio e fim (o paralelismo se
-# ve na sobreposicao). DOCKER_FALSO_FALHA=<servico> faz o build dele falhar, e
-# DOCKER_FALSO_PENDURA=<servico>, pendurar.
+# docker falso: registra a chamada. Com DOCKER_FALSO_BARREIRA=<n>, cada build
+# marca que comecou e espera os n comecarem (com teto de 30 s): o paralelismo se
+# prova pelos n terem se visto, sem comparar tempos. DOCKER_FALSO_FALHA=<servico>
+# faz o build dele falhar, e DOCKER_FALSO_PENDURA=<servico>, pendurar.
 DOCKER_FALSO = r"""
 import json
 import os
 import sys
-import tarfile
 import time
 from pathlib import Path
 
 args = sys.argv[1:]
 if args[0] != "build":
     sys.exit(f"chamada inesperada: {args}")
-inicio = time.monotonic()
-time.sleep(0.5)
-registro = {"args": args, "inicio": inicio, "fim": time.monotonic()}
-with (Path(os.environ["FALSOS"]) / "docker.jsonl").open("a") as log:
-    log.write(json.dumps(registro) + "\n")
+dir_ = Path(os.environ["FALSOS"])
+juntos = True
+esperados = int(os.environ.get("DOCKER_FALSO_BARREIRA", "0"))
+if esperados:
+    (dir_ / f"inicio-{os.getpid()}").touch()
+    limite = time.monotonic() + 10
+    while len(list(dir_.glob("inicio-*"))) < esperados:
+        if time.monotonic() > limite:
+            juntos = False
+            break
+        time.sleep(0.02)
+with (dir_ / "docker.jsonl").open("a") as log:
+    log.write(json.dumps({"args": args, "juntos": juntos}) + "\n")
 ref = args[args.index("-t") + 1]
 if os.environ.get("DOCKER_FALSO_FALHA") and os.environ["DOCKER_FALSO_FALHA"] in ref:
     sys.exit("ERROR: failed to solve: process did not complete successfully")
@@ -211,13 +219,27 @@ else:
 
 
 def git(*args: str, cwd: Path) -> str:
+    """O git dos checkouts de teste, sem a configuracao de quem roda (assinatura
+    de commit, hooks globais)."""
     processo = subprocess.run(  # noqa: S603  # nosec B603
-        [GIT, "-c", "user.name=teste", "-c", "user.email=teste@exemplo.dev", *args],
+        [
+            GIT,
+            "-c",
+            "user.name=teste",
+            "-c",
+            "user.email=teste@exemplo.dev",
+            "-c",
+            "commit.gpgsign=false",
+            "-c",
+            "core.hooksPath=/dev/null",
+            *args,
+        ],
         cwd=cwd,
         capture_output=True,
         text=True,
         check=True,
         timeout=30,
+        env=os.environ | {"GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"},
     )
     return processo.stdout.strip()
 
@@ -377,7 +399,7 @@ def implantacao(tmp_path: Path) -> Implantacao:
 def test_cd_constroi_os_vizinhos_carrega_e_implanta_na_ordem(
     implantacao: Implantacao,
 ) -> None:
-    processo = implantacao.do_cd()
+    processo = implantacao.do_cd(DOCKER_FALSO_BARREIRA="2")
 
     assert processo.returncode == 0, processo.stderr
     dirs = implantacao.dirs
@@ -396,9 +418,8 @@ def test_cd_constroi_os_vizinhos_carrega_e_implanta_na_ordem(
         )
         for servico in ("billing-service", "execution-service")
     )
-    # Em paralelo: um build comeca antes de o outro terminar.
-    primeiro, segundo = sorted(builds, key=lambda build: float(build["inicio"]))
-    assert segundo["inicio"] < primeiro["fim"]
+    # Em paralelo: cada build viu o outro comecar antes de terminar.
+    assert [build["juntos"] for build in builds] == [True, True]
     assert sorted(implantacao.chamadas("kind")) == sorted(
         [
             ["load", "image-archive", str(implantacao.tar), "--name", "pytstop-p4"],
@@ -1161,3 +1182,107 @@ def test_registry_com_porta_e_tag_so_de_digitos_no_overlay_gerado(
             "newTag": "20261012",
         }
     ]
+
+
+RAIZ = SCRIPT.parents[2]
+
+
+def test_mapa_servico_namespace_dos_scripts_e_do_makefile_concorda() -> None:
+    # O mapa vive em cada script (e no Makefile): acrescentar um servico muda
+    # todos, e este teste reprova o que ficar para tras.
+    implantar = dict(
+        re.findall(r"(\w+-service)\) echo (pytstop-\w+) ;;", SCRIPT.read_text())
+    )
+    smoke = dict(
+        re.findall(
+            r'(\w+-service)\) echo "(pytstop-\w+) ',
+            SCRIPT.with_name("smoke-servicos.sh").read_text(),
+        )
+    )
+    makefile = re.search(
+        r"^NAMESPACES_SERVICOS := (.*)$", (RAIZ / "Makefile").read_text(), re.MULTILINE
+    )
+    assert makefile is not None
+
+    assert implantar == smoke == SERVICOS
+    assert set(makefile.group(1).split()) == set(SERVICOS.values())
+
+
+def test_secret_do_banco_de_cada_namespace_e_o_da_tabela_do_readme() -> None:
+    no_script = dict(
+        re.findall(r"(pytstop-\w+)\) echo ([\w-]+) ;;", SCRIPT.read_text())
+    )
+    linha = next(
+        linha
+        for linha in (RAIZ / "README.md").read_text().splitlines()
+        if linha.startswith("| Secret com as senhas do banco")
+    )
+
+    assert no_script == {
+        "pytstop-os": "os-postgres",
+        "pytstop-billing": "billing-mongo",
+        "pytstop-execucao": "execucao-postgres",
+    }
+    assert all(f"`{nome}`" in linha for nome in no_script.values())
+
+
+def test_log_do_job_que_falha_vem_dos_dois_containers_com_50_linhas(
+    implantacao: Implantacao,
+) -> None:
+    processo = implantacao.do_cd(KUBECTL_FALSO_FALHA="pytstop-billing:job")
+
+    assert processo.returncode == 1
+    logs = [
+        chamada["args"]
+        for chamada in implantacao.chamadas("kubectl")
+        if "logs" in chamada["args"]
+    ]
+    assert logs == [
+        [
+            "--context",
+            "kind-pytstop-p4",
+            "-n",
+            "pytstop-billing",
+            "logs",
+            "job.batch/billing-inicializacao",
+            "--all-containers",
+            "--tail=50",
+        ]
+    ]
+
+
+@pytest.mark.parametrize("falha", [False, True], ids=["sucesso", "falha"])
+def test_nao_deixa_temporario_para_tras(
+    implantacao: Implantacao, tmp_path: Path, falha: bool
+) -> None:
+    temporarios = tmp_path / "temporarios"
+    temporarios.mkdir()
+    # Sujo, para o indice temporario do hash da arvore tambem existir.
+    (implantacao.dirs["billing-service"] / "src.py").write_text("print('a')\n")
+
+    processo = implantacao.do_cd(
+        TMPDIR=str(temporarios),
+        KUBECTL_FALSO_FALHA="pytstop-billing:apply" if falha else "",
+    )
+
+    assert processo.returncode == (1 if falha else 0), processo.stderr
+    assert list(temporarios.iterdir()) == []
+
+
+def test_tar_no_formato_oci_tem_a_ref_no_index_json(
+    implantacao: Implantacao, tmp_path: Path
+) -> None:
+    # Um arquivo de buildx/OCI traz o nome da imagem no index.json, sem manifest.json.
+    oci = tmp_path / "oci.tar"
+    dados = json.dumps(
+        {"manifests": [{"annotations": {"io.containerd.image.name": REF_DO_CD}}]}
+    ).encode()
+    with tarfile.open(oci, "w") as arquivo:
+        info = tarfile.TarInfo("index.json")
+        info.size = len(dados)
+        arquivo.addfile(info, io.BytesIO(dados))
+    implantacao.tar = oci
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 0, processo.stderr
