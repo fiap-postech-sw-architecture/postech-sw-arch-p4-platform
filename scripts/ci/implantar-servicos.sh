@@ -121,7 +121,7 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$overlay" ] && [ "${#pares[@]}" -gt 0 ] || uso
 
-TMP=$(mktemp -d)
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/implantar-servicos.XXXXXX")
 gerados=()
 limpa() {
   rm -rf "$TMP"
@@ -292,6 +292,7 @@ segredo_do_banco() {
 # kubectl wait pelo Complete nao ve o Job Failed e esperaria os 300 s inteiros.
 espera_job() {
   local fim=$((SECONDS + ESPERA_JOB)) condicoes
+  echo "waiting for $2 (up to ${ESPERA_JOB}s)"
   while :; do
     condicoes=$(k -n "$1" get "$2" -o jsonpath='{range .status.conditions[?(@.status=="True")]}{.type} {end}') || return
     case "$condicoes" in

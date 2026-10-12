@@ -1286,3 +1286,30 @@ def test_tar_no_formato_oci_tem_a_ref_no_index_json(
     processo = implantacao.do_cd()
 
     assert processo.returncode == 0, processo.stderr
+
+
+def test_ref_so_vale_inteira_no_manifest_do_tar(
+    implantacao: Implantacao, tmp_path: Path
+) -> None:
+    # A ref pedida e prefixo da gravada: nao e a mesma imagem.
+    implantacao.tar = faz_tar(tmp_path / "maior.tar", f"{REF_DO_CD}-rc1")
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 1
+    assert f"does not hold the image {REF_DO_CD}" in processo.stderr
+
+
+@pytest.mark.parametrize(
+    ("ambiente", "segundos"),
+    [({}, 300), ({"ESPERA_JOB": "11"}, 11)],
+    ids=["padrao", "env"],
+)
+def test_espera_do_job_diz_ate_quando(
+    implantacao: Implantacao, ambiente: dict[str, str], segundos: int
+) -> None:
+    processo = implantacao.do_cd(**ambiente)
+
+    assert processo.returncode == 0, processo.stderr
+    job = "job.batch/billing-inicializacao"
+    assert f"[billing-service] waiting for {job} (up to {segundos}s)" in processo.stdout
