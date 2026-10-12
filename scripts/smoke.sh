@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 # Smoke da plataforma num cluster so com a plataforma implantada (make kind-up
 # deploy smoke). Aplica os exemplos de borda de k8s/exemplos/ (OS, Billing e
-# Execucao)
-# com um servidor de eco no lugar de cada API e confere borda, rate limiting,
-# barra codificada, mascara de token no Loki, policies, retry por atraso e
-# redrive do RabbitMQ, fallback do Kong, regras do Grafana e o endurecimento dos
-# pods. A prova do retry (scripts/prova_retry.py) roda com o uv, por um
-# port-forward ao broker.
+# Execucao) com um servidor de eco no lugar de cada API e confere borda, rate
+# limiting, barra codificada, mascara de token no Loki, policies, retry por
+# atraso e redrive do RabbitMQ, fallback do Kong, regras do Grafana e o
+# endurecimento dos pods. A prova do retry (scripts/prova_retry.py) roda com o
+# uv, por um port-forward ao broker.
 #
 # A saida e a evidencia: cada linha diz o que foi pedido e o que voltou. Prova
 # que nao vale vira uma linha CHECK FAILED; o script segue ate o fim, para a
