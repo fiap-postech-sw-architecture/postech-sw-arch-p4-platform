@@ -10,7 +10,7 @@ set -euo pipefail
 imagens=$(
   {
     for overlay in kind kind-ci k3s; do kubectl kustomize "k8s/overlays/$overlay"; done \
-      | sed -n 's/^[ -]*image: *"\{0,1\}\([^" ]*\)"\{0,1\} *$/\1/p'
+      | "$(dirname "$0")/ci/imagens-dos-manifests.sh"
     docker compose -f compose/docker-compose.yml --profile servicos config --images
     printf '%s\n' "$@"
   } | grep -v '^pytstop-' | sort -u

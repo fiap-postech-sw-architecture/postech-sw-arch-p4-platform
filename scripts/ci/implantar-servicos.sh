@@ -179,9 +179,7 @@ for par in "${pares[@]}"; do
   fi
   manifests=$(kubectl kustomize "$dir/k8s/overlays/$overlay") \
     || { echo "$servico (commit $sha): kubectl kustomize k8s/overlays/$overlay failed" >&2; exit 1; }
-  # O kustomize ordena as chaves: sem args, command, env nem envFrom antes dele,
-  # o image: abre o item da lista ("- image: x").
-  fora=$(sed -n 's/^[ -]*image: *"\{0,1\}\([^" ]*\)"\{0,1\} *$/\1/p' <<< "$manifests" | sort -u \
+  fora=$("$raiz/scripts/ci/imagens-dos-manifests.sh" <<< "$manifests" | sort -u \
     | while read -r imagem; do
       # O "(" antes do padrao: sem ele, o bash 3.2 do macOS fecha o $( no ")".
       case "$imagem" in ("pytstop-$servico" | "pytstop-$servico:"*) continue ;; esac

@@ -774,7 +774,8 @@ def test_so_a_tabela_de_versoes_vale_como_lista_de_imagens(
     (plataforma / "scripts" / "ci").mkdir(parents=True)
     copia = plataforma / "scripts" / "ci" / SCRIPT.name
     shutil.copy(SCRIPT, copia)
-    shutil.copy(LEITOR_DO_README, copia.with_name(LEITOR_DO_README.name))
+    for leitor in SCRIPT.parent.glob("imagens-*.sh"):
+        shutil.copy(leitor, copia.with_name(leitor.name))
     imagens = {i for lista in DE_TERCEIROS.values() for i in lista.split()}
     linhas = "".join(
         f"| item | `{imagem}` | para que serve |\n"
