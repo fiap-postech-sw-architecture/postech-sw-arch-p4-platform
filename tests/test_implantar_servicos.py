@@ -23,6 +23,7 @@ import shutil
 # sem shell.
 import subprocess  # nosec B404
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
@@ -43,7 +44,8 @@ REF_DO_CD = "ghcr.io/fiap/pytstop-os-service:5f2a9c1"
 INICIALIZACAO = "app.kubernetes.io/component=inicializacao"
 
 # docker falso: build que leva 0,5 s e registra inicio e fim (o paralelismo se
-# ve na sobreposicao). DOCKER_FALSO_FALHA=<servico> faz o build dele falhar.
+# ve na sobreposicao). DOCKER_FALSO_FALHA=<servico> faz o build dele falhar, e
+# DOCKER_FALSO_PENDURA=<servico>, pendurar.
 DOCKER_FALSO = r"""
 import json
 import os
@@ -62,32 +64,58 @@ with (Path(os.environ["FALSOS"]) / "docker.jsonl").open("a") as log:
 ref = args[args.index("-t") + 1]
 if os.environ.get("DOCKER_FALSO_FALHA") and os.environ["DOCKER_FALSO_FALHA"] in ref:
     sys.exit("ERROR: failed to solve: process did not complete successfully")
+if os.environ.get("DOCKER_FALSO_PENDURA") and os.environ["DOCKER_FALSO_PENDURA"] in ref:
+    time.sleep(120)
 """
 
+# kind falso: KIND_FALSO=falha faz o load falhar, e KIND_FALSO=pendura, pendurar.
 KIND_FALSO = r"""
+import json
+import os
+import sys
+import time
+from pathlib import Path
+
+with (Path(os.environ["FALSOS"]) / "kind.jsonl").open("a") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\n")
+if os.environ.get("KIND_FALSO") == "falha":
+    sys.exit("ERROR: failed to load image")
+if os.environ.get("KIND_FALSO") == "pendura":
+    time.sleep(120)
+"""
+
+# So o Linux tem timeout; o falso o poe no PATH tambem no macOS (onde o script
+# cai no alarm do perl) e registra o prazo de cada chamada.
+TIMEOUT_FALSO = r"""
 import json
 import os
 import sys
 from pathlib import Path
 
-with (Path(os.environ["FALSOS"]) / "kind.jsonl").open("a") as log:
+with (Path(os.environ["FALSOS"]) / "timeout.jsonl").open("a") as log:
     log.write(json.dumps(sys.argv[1:]) + "\n")
+os.execvp(sys.argv[2], sys.argv[2:])
 """
 
 # kubectl falso: o kustomize devolve as imagens de imagens.txt do overlay (as
 # marcadas com "lista:" na forma "- image:", as outras em "image:");
 # cada namespace tem o banco, o Job de inicializacao e dois Deployments.
 # KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
-# (apply, statefulset, job, deployment, sem-job).
+# (delete, apply, statefulset, job, deployment, sem-job...), e
+# KUBECTL_FALSO_PENDURA=<namespace>:<verbo>, pendurar. KUSTOMIZE_FALSO_FALHA=1
+# faz o kustomize falhar.
 KUBECTL_FALSO = r"""
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 if sys.argv[1:2] == ["kustomize"]:
     with (Path(os.environ["FALSOS"]) / "kustomize.jsonl").open("a") as log:
         log.write(json.dumps(sys.argv[1:]) + "\n")
+    if os.environ.get("KUSTOMIZE_FALSO_FALHA"):
+        sys.exit("error: accumulating resources")
     # O kustomize emite "image:" como chave de um item com outras chaves antes
     # dela e como primeira chave do item ("- image:"); "lista:" no
     # imagens.txt escolhe a segunda forma.
@@ -117,16 +145,19 @@ registro["ns"] = ns
 with (Path(os.environ["FALSOS"]) / "kubectl.jsonl").open("a") as log:
     log.write(json.dumps(registro) + "\n")
 falha = os.environ.get("KUBECTL_FALSO_FALHA", "")
+pendura = os.environ.get("KUBECTL_FALSO_PENDURA", "")
 
 
 def falha_em(verbo):
+    if pendura == f"{ns}:{verbo}":
+        time.sleep(120)
     if falha == f"{ns}:{verbo}":
         sys.exit(f"error: {verbo} failed in {ns}")
 
 
 servico = ns.removeprefix("pytstop-")
 if resto[:2] == ["delete", "job"]:
-    pass
+    falha_em("delete")
 elif resto[:3] == ["apply", "--server-side", "-k"]:
     falha_em("apply")
     print(f"deployment.apps/{servico}-api serverside-applied")
@@ -143,6 +174,7 @@ elif resto[:2] == ["get", "job"]:
 elif resto[0] == "wait":
     falha_em("job")
 elif resto[0] == "logs":
+    falha_em("logs")
     print(f"migration log of {resto[1]}")
 elif resto == ["get", "deployment", "-o", "name"]:
     falha_em("get-deployment")
@@ -274,6 +306,7 @@ def verbos(chamadas: list[Any], ns: str) -> list[str]:
 
 # Verbos no namespace que falhou, ate a falha: depois dela, nada.
 ATE_A_FALHA = {
+    "delete": ["delete job"],
     "apply": ["delete job", "apply --server-side"],
     "get-statefulset": ["delete job", "apply --server-side", "get statefulset"],
     "statefulset": [
@@ -829,3 +862,190 @@ def test_arvore_suja_nao_mexe_no_indice_do_checkout(implantacao: Implantacao) ->
     assert implantacao.do_cd().returncode == 0
 
     assert git("status", "--porcelain", cwd=dir_) == "?? src.py"
+
+
+# Prazo de cada chamada do kubectl, por verbo, com os padroes do script: 120 s
+# nas comuns e, nas esperas, o --timeout (180 s do banco, 300 s do Job e dos
+# Deployments) mais 120 s.
+def prazos_do_script(
+    banco: int, job: int, deployment: int, comum: int
+) -> dict[str, tuple[str, str | None]]:
+    return {
+        "delete job": (str(comum), "--timeout=60s"),
+        "apply --server-side": (str(comum), None),
+        "get statefulset": (str(comum), None),
+        "rollout statefulset": (str(banco + comum), f"--timeout={banco}s"),
+        "get job": (str(comum), None),
+        "wait": (str(job + comum), f"--timeout={job}s"),
+        "get deployment": (str(comum), None),
+        "rollout deployment": (str(deployment + comum), f"--timeout={deployment}s"),
+    }
+
+
+def verbo_com_prazo(chamada: list[str]) -> tuple[str, tuple[str, str | None]]:
+    """O verbo do kubectl de uma chamada do timeout falso e o prazo dela."""
+    prazo, args = chamada[0], chamada[chamada.index("kubectl") + 1 :]
+    resto = args[4:] if args[2] == "-n" else args[2:]
+    verbo = " ".join(resto[:2])
+    if resto[0] == "wait":
+        verbo = "wait"
+    elif resto[0] == "rollout":
+        verbo = "rollout " + resto[2].split("/")[0].split(".")[0]
+    ultimo = args[-1] if args[-1].startswith("--timeout=") else None
+    return verbo, (prazo, ultimo)
+
+
+@pytest.mark.parametrize(
+    ("ambiente", "prazos"),
+    [
+        ({}, (900, 300, 120, 180, 300, 300)),
+        (
+            {
+                "PRAZO_BUILD": "7",
+                "PRAZO_CARGA": "8",
+                "PRAZO_KUBECTL": "9",
+                "ESPERA_BANCO": "10",
+                "ESPERA_JOB": "11",
+                "ESPERA_DEPLOYMENT": "12",
+            },
+            (7, 8, 9, 10, 11, 12),
+        ),
+    ],
+    ids=["padroes", "variaveis-de-ambiente"],
+)
+def test_todo_comando_que_pode_pendurar_roda_com_prazo(
+    implantacao: Implantacao,
+    ambiente: dict[str, str],
+    prazos: tuple[int, int, int, int, int, int],
+) -> None:
+    build, carga, comum, banco, job, deployment = prazos
+    timeout = implantacao.tmp / "bin" / "timeout"
+    timeout.write_text(f"#!{sys.executable}\n{TIMEOUT_FALSO}", encoding="utf-8")
+    timeout.chmod(0o755)
+
+    processo = implantacao.do_cd(**ambiente)
+
+    assert processo.returncode == 0, processo.stderr
+    chamadas = implantacao.chamadas("timeout")
+    # docker build e kind load: o prazo e o primeiro argumento do timeout.
+    assert sorted(c[0] for c in chamadas if c[1] == "docker") == [str(build)] * 2
+    assert sorted(c[0] for c in chamadas if c[1] == "kind") == [str(carga)] * 3
+    kubectl = [c for c in chamadas if c[1] == "kubectl"]
+    esperado = prazos_do_script(banco, job, deployment, comum)
+    # Cada namespace faz as nove chamadas, e nenhuma fica sem prazo.
+    assert sorted(verbo_com_prazo(c) for c in kubectl) == sorted(
+        [(verbo, prazo) for verbo, prazo in esperado.items() for _ in SERVICOS]
+        + [("rollout deployment", esperado["rollout deployment"])] * len(SERVICOS)
+    )
+    assert len(kubectl) == 9 * len(SERVICOS)
+
+
+@pytest.mark.parametrize(
+    ("falha", "pendura"),
+    [
+        *((None, verbo) for verbo in ATE_A_FALHA if verbo != "sem-job"),
+        # O log do Job, lido depois da falha dele, tambem tem prazo.
+        ("pytstop-billing:job", "logs"),
+    ],
+    ids=[*(v for v in ATE_A_FALHA if v != "sem-job"), "logs-do-job"],
+)
+def test_chamada_ao_cluster_pendurada_estoura_o_prazo_e_nomeia_o_servico(
+    implantacao: Implantacao, falha: str | None, pendura: str
+) -> None:
+    inicio = time.monotonic()
+
+    processo = implantacao.do_cd(
+        KUBECTL_FALSO_PENDURA=f"pytstop-billing:{pendura}",
+        KUBECTL_FALSO_FALHA=falha or "",
+        PRAZO_KUBECTL="1",
+        ESPERA_BANCO="1",
+        ESPERA_JOB="1",
+        ESPERA_DEPLOYMENT="1",
+    )
+
+    assert time.monotonic() - inicio < 60
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["billing-service"])
+    assert f"deploy failed: billing-service (commit {commit})" in processo.stderr
+    assert re.search(r"\[billing-service\] kubectl .* exceeded [12]s", processo.stdout)
+    for ns in ("pytstop-os", "pytstop-execucao"):
+        assert verbos(implantacao.chamadas("kubectl"), ns).count("rollout status") == 3
+
+
+def test_build_pendurado_estoura_o_prazo_e_para_antes_do_kind(
+    implantacao: Implantacao,
+) -> None:
+    processo = implantacao.do_cd(
+        DOCKER_FALSO_PENDURA="execution-service", PRAZO_BUILD="1"
+    )
+
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["execution-service"])
+    assert (
+        f"execution-service (commit {commit}): docker build of "
+        f"pytstop-execution-service:{commit} exceeded 1s"
+    ) in processo.stderr
+    assert (
+        f"docker build failed: execution-service (commit {commit})" in processo.stderr
+    )
+    assert implantacao.chamadas("kind") == []
+    assert implantacao.chamadas("kubectl") == []
+
+
+def test_kind_load_pendurado_estoura_o_prazo_antes_de_chamar_o_cluster(
+    implantacao: Implantacao,
+) -> None:
+    processo = implantacao.do_cd(KIND_FALSO="pendura", PRAZO_CARGA="1")
+
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["os-service"])
+    assert (
+        f"os-service (commit {commit}): kind load of {REF_DO_CD} exceeded 1s"
+        in processo.stderr
+    )
+    assert implantacao.chamadas("kubectl") == []
+    for dir_ in implantacao.dirs.values():
+        assert not (dir_ / "k8s" / "overlays" / "execucao").exists()
+
+
+def test_kind_load_que_falha_para_antes_do_cluster_e_apaga_o_overlay(
+    implantacao: Implantacao,
+) -> None:
+    processo = implantacao.do_cd(KIND_FALSO="falha")
+
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["os-service"])
+    assert f"os-service (commit {commit}): kind load of {REF_DO_CD} failed" in (
+        processo.stderr
+    )
+    assert implantacao.chamadas("kubectl") == []
+    for dir_ in implantacao.dirs.values():
+        assert not (dir_ / "k8s" / "overlays" / "execucao").exists()
+
+
+def test_kustomize_que_falha_para_antes_de_construir(implantacao: Implantacao) -> None:
+    processo = implantacao.do_cd(KUSTOMIZE_FALSO_FALHA="1")
+
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["os-service"])
+    assert (
+        f"os-service (commit {commit}): kubectl kustomize k8s/overlays/kind-ci failed"
+        in processo.stderr
+    )
+    assert implantacao.chamadas("docker") == []
+    assert implantacao.chamadas("kind") == []
+
+
+def test_diretorio_sem_git_para_antes_de_tudo(
+    implantacao: Implantacao, tmp_path: Path
+) -> None:
+    sem_git = tmp_path / "sem-git"
+    sem_git.mkdir()
+    implantacao.dirs["billing-service"] = sem_git
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 1
+    assert f"billing-service: {sem_git} is not a git checkout" in processo.stderr
+    assert implantacao.chamadas("docker") == []
+    assert implantacao.chamadas("kind") == []

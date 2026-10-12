@@ -19,12 +19,24 @@
 # vao em paralelo, e a saida de cada um leva o nome do servico. Antes de
 # tudo, cada servico so pode usar, alem da propria imagem, as imagens da tabela
 # de versoes do README deste repositorio (banco, exporter, initContainers).
+#
+# Tudo o que pode pendurar roda com prazo, e o que passa dele reprova o servico
+# em vez de consumir o timeout do job do CD (variaveis de ambiente, em segundos):
+# PRAZO_BUILD (docker build, 900), PRAZO_CARGA (kind load, 300) e PRAZO_KUBECTL
+# (cada chamada ao cluster, 120; nas esperas, somado ao tempo delas). As esperas
+# de readiness: ESPERA_BANCO (180), ESPERA_JOB (300) e ESPERA_DEPLOYMENT (300).
 set -euo pipefail
 
 raiz=$(cd "$(dirname "$0")/../.." && pwd)
 CLUSTER="${CLUSTER:-pytstop-p4}"
-K="kubectl --context ${KUBE_CONTEXT:-kind-$CLUSTER}"
+CONTEXTO="${KUBE_CONTEXT:-kind-$CLUSTER}"
 INICIALIZACAO=app.kubernetes.io/component=inicializacao
+PRAZO_BUILD="${PRAZO_BUILD:-900}"
+PRAZO_CARGA="${PRAZO_CARGA:-300}"
+PRAZO_KUBECTL="${PRAZO_KUBECTL:-120}"
+ESPERA_BANCO="${ESPERA_BANCO:-180}"
+ESPERA_JOB="${ESPERA_JOB:-300}"
+ESPERA_DEPLOYMENT="${ESPERA_DEPLOYMENT:-300}"
 # Gerado dentro do repositorio do servico: o kustomize so le resources por
 # caminho relativo.
 EXECUCAO=k8s/overlays/execucao
@@ -33,6 +45,32 @@ uso() {
   echo "usage: implantar-servicos.sh --overlay <overlay> [--tar <service>=<file> --imagem <service>=<ref>]... <service>=<dir>..." >&2
   exit 2
 }
+
+# prazo <segundos> <comando>...: timeout no Linux; no macOS, sem ele, o alarm do
+# perl. Estouro: status 124 (timeout) ou 142 (SIGALRM).
+prazo() {
+  if command -v timeout >/dev/null; then timeout "$@"; else perl -e 'alarm shift; exec @ARGV' "$@"; fi
+}
+
+# motivo <status> <segundos>: por que o comando falhou.
+motivo() {
+  case "$1" in 124 | 142) echo "exceeded ${2}s" ;; *) echo "failed" ;; esac
+}
+
+# kc <segundos> <argumento>...: kubectl no contexto, com prazo; no estouro, diz
+# qual chamada.
+kc() {
+  local segundos=$1 status=0
+  shift
+  prazo "$segundos" kubectl --context "$CONTEXTO" "$@" || status=$?
+  if [ "$status" = 124 ] || [ "$status" = 142 ]; then
+    echo "kubectl $* exceeded ${segundos}s" >&2
+  fi
+  return "$status"
+}
+
+# k <argumento>...: kc com o prazo de uma chamada comum.
+k() { kc "$PRAZO_KUBECTL" "$@"; }
 
 # namespace <servico>
 namespace() {
@@ -188,25 +226,33 @@ pids=()
 for ((i = 0; i < n; i++)); do
   [ -z "${tars_de[i]}" ] || continue
   echo "${nomes[i]}: docker build of ${refs[i]} from ${dirs[i]}"
-  docker build --build-arg GIT_SHA="${tags[i]}" --build-arg GIT_DATE="$(git -C "${dirs[i]}" log -1 --format=%cI)" \
+  prazo "$PRAZO_BUILD" docker build --build-arg GIT_SHA="${tags[i]}" --build-arg GIT_DATE="$(git -C "${dirs[i]}" log -1 --format=%cI)" \
     -t "${refs[i]}" "${dirs[i]}" > "$TMP/build-$i.log" 2>&1 &
   pids[i]=$!
 done
 falharam=""
 for ((i = 0; i < n; i++)); do
   [ -n "${pids[i]:-}" ] || continue
-  if ! wait "${pids[i]}"; then
+  status=0
+  wait "${pids[i]}" || status=$?
+  if [ "$status" != 0 ]; then
     tail -n 50 "$TMP/build-$i.log" >&2
+    echo "${nomes[i]} (commit ${shas[i]}): docker build of ${refs[i]} $(motivo "$status" "$PRAZO_BUILD")" >&2
     falharam+=" ${nomes[i]} (commit ${shas[i]})"
   fi
 done
 [ -z "$falharam" ] || { echo "docker build failed:$falharam" >&2; exit 1; }
 
 for ((i = 0; i < n; i++)); do
+  status=0
   if [ -n "${tars_de[i]}" ]; then
-    kind load image-archive "${tars_de[i]}" --name "$CLUSTER"
+    prazo "$PRAZO_CARGA" kind load image-archive "${tars_de[i]}" --name "$CLUSTER" || status=$?
   else
-    kind load docker-image "${refs[i]}" --name "$CLUSTER"
+    prazo "$PRAZO_CARGA" kind load docker-image "${refs[i]}" --name "$CLUSTER" || status=$?
+  fi
+  if [ "$status" != 0 ]; then
+    echo "${nomes[i]} (commit ${shas[i]}): kind load of ${refs[i]} $(motivo "$status" "$PRAZO_CARGA")" >&2
+    exit 1
   fi
   mkdir "${dirs[i]}/$EXECUCAO"
   gerados+=("${dirs[i]}/$EXECUCAO")
@@ -225,29 +271,30 @@ YAML
 done
 
 # implanta <namespace> <dir do overlay>: a ordem do namespace. Cada lista vem
-# antes do laco: erro do cluster dentro do $( ) do for passaria calado.
+# antes do laco: erro do cluster dentro do $( ) do for passaria calado. Nas
+# esperas, o prazo da chamada e o --timeout dela mais o de uma chamada comum.
 implanta() {
   local ns=$1 recurso recursos jobs
-  $K -n "$ns" delete job -l "$INICIALIZACAO" --ignore-not-found --timeout=60s || return
-  $K apply --server-side -k "$2" || return
-  recursos=$($K -n "$ns" get statefulset -o name) || return
+  k -n "$ns" delete job -l "$INICIALIZACAO" --ignore-not-found --timeout=60s || return
+  k apply --server-side -k "$2" || return
+  recursos=$(k -n "$ns" get statefulset -o name) || return
   for recurso in $recursos; do
-    $K -n "$ns" rollout status "$recurso" --timeout=180s || return
+    kc $((ESPERA_BANCO + PRAZO_KUBECTL)) -n "$ns" rollout status "$recurso" --timeout="${ESPERA_BANCO}s" || return
   done
-  jobs=$($K -n "$ns" get job -l "$INICIALIZACAO" -o name) || return
+  jobs=$(k -n "$ns" get job -l "$INICIALIZACAO" -o name) || return
   if [ -z "$jobs" ]; then
     echo "no Job labeled $INICIALIZACAO in $ns" >&2
     return 1
   fi
   for recurso in $jobs; do
-    if ! $K -n "$ns" wait --for=condition=Complete "$recurso" --timeout=300s; then
-      $K -n "$ns" logs "$recurso" --all-containers --tail=50 >&2 || true
+    if ! kc $((ESPERA_JOB + PRAZO_KUBECTL)) -n "$ns" wait --for=condition=Complete "$recurso" --timeout="${ESPERA_JOB}s"; then
+      k -n "$ns" logs "$recurso" --all-containers --tail=50 >&2 || true
       return 1
     fi
   done
-  recursos=$($K -n "$ns" get deployment -o name) || return
+  recursos=$(k -n "$ns" get deployment -o name) || return
   for recurso in $recursos; do
-    $K -n "$ns" rollout status "$recurso" --timeout=300s || return
+    kc $((ESPERA_DEPLOYMENT + PRAZO_KUBECTL)) -n "$ns" rollout status "$recurso" --timeout="${ESPERA_DEPLOYMENT}s" || return
   done
 }
 
