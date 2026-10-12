@@ -81,16 +81,44 @@ while [ "$#" -gt 0 ]; do
 done
 [ -n "$overlay" ] && [ "${#pares[@]}" -gt 0 ] || uso
 
+TMP=$(mktemp -d)
+gerados=()
+limpa() {
+  rm -rf "$TMP"
+  local dir
+  for dir in ${gerados[@]+"${gerados[@]}"}; do rm -rf "$dir"; done
+}
+trap limpa EXIT
+
 # As imagens permitidas: as da tabela "Componentes e versoes" do README.
 versoes=$("$raiz/scripts/ci/imagens-do-readme.sh")
 
-# Por servico, no mesmo indice: nome, namespace, diretorio, commit, tar e a
-# ref da imagem.
+# tag_de <dir> <commit>: a tag da imagem construida do checkout. Arvore limpa, o
+# commit; com mudanca ou arquivo novo fora do .gitignore, <commit>-sujo-<12
+# primeiros caracteres do hash da arvore de trabalho>, de modo que um segundo
+# deploy local depois de editar o codigo muda a tag (e reinicia os Deployments),
+# e o mesmo codigo sujo repete a tag. O hash sai de um indice temporario, sem
+# mexer no indice do checkout.
+tag_de() {
+  local indice arvore
+  if [ -z "$(git -C "$1" status --porcelain)" ]; then
+    echo "$2"
+    return
+  fi
+  indice=$(mktemp -d "$TMP/indice.XXXXXX")
+  GIT_INDEX_FILE="$indice/index" git -C "$1" add -A
+  arvore=$(GIT_INDEX_FILE="$indice/index" git -C "$1" write-tree)
+  echo "$2-sujo-${arvore:0:12}"
+}
+
+# Por servico, no mesmo indice: nome, namespace, diretorio, commit, tar, a tag
+# da imagem construida e a ref da imagem.
 nomes=()
 nss=()
 dirs=()
 shas=()
 tars_de=()
+tags=()
 refs=()
 for par in "${pares[@]}"; do
   servico=${par%%=*}
@@ -135,14 +163,18 @@ for par in "${pares[@]}"; do
       echo "$servico: --imagem needs <name>:<tag>, got $ref" >&2
       exit 2
     fi
+    tag=""
   else
-    ref="pytstop-$servico:$sha"
+    tag=$(tag_de "$dir" "$sha") || { echo "$servico (commit $sha): could not hash the working tree of $dir" >&2; exit 1; }
+    [ "$tag" = "$sha" ] || echo "$servico (commit $sha): uncommitted changes in $dir; image tag $tag" >&2
+    ref="pytstop-$servico:$tag"
   fi
   nomes+=("$servico")
   nss+=("$ns")
   dirs+=("$dir")
   shas+=("$sha")
   tars_de+=("$tar")
+  tags+=("$tag")
   refs+=("$ref")
 done
 for par in ${tars[@]+"${tars[@]}"} ${refs_dadas[@]+"${refs_dadas[@]}"}; do
@@ -150,22 +182,13 @@ for par in ${tars[@]+"${tars[@]}"} ${refs_dadas[@]+"${refs_dadas[@]}"}; do
 done
 n=${#nomes[@]}
 
-TMP=$(mktemp -d)
-gerados=()
-limpa() {
-  rm -rf "$TMP"
-  local dir
-  for dir in ${gerados[@]+"${gerados[@]}"}; do rm -rf "$dir"; done
-}
-trap limpa EXIT
-
 # Builds em paralelo, cada um com o proprio log; o log de quem falha vai para
 # a saida.
 pids=()
 for ((i = 0; i < n; i++)); do
   [ -z "${tars_de[i]}" ] || continue
   echo "${nomes[i]}: docker build of ${refs[i]} from ${dirs[i]}"
-  docker build --build-arg GIT_SHA="${shas[i]}" --build-arg GIT_DATE="$(git -C "${dirs[i]}" log -1 --format=%cI)" \
+  docker build --build-arg GIT_SHA="${tags[i]}" --build-arg GIT_DATE="$(git -C "${dirs[i]}" log -1 --format=%cI)" \
     -t "${refs[i]}" "${dirs[i]}" > "$TMP/build-$i.log" 2>&1 &
   pids[i]=$!
 done

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 
 # subprocess so roda o script do repositorio e o git dos checkouts de teste,
@@ -192,6 +193,7 @@ def checkout(raiz: Path, servico: str, *, overlay: str | None = "kind-ci") -> Pa
             encoding="utf-8",
         )
     git("init", "-q", cwd=dir_)
+    git("add", "-A", cwd=dir_)
     git("commit", "-q", "--allow-empty", "-m", "teste", cwd=dir_)
     return dir_
 
@@ -751,3 +753,79 @@ def test_imagens_do_readme_sao_so_o_primeiro_trecho_da_coluna_versao(
     )
 
     assert processo.stdout.split() == ["kong:3.9.3", "axllent/mailpit:v1.31.4"]
+
+
+def tags_dos_builds(implantacao: Implantacao) -> dict[str, str]:
+    """A tag de cada imagem construida, na ultima chamada do docker por servico."""
+    tags: dict[str, str] = {}
+    for build in implantacao.chamadas("docker"):
+        args = build["args"]
+        ref = args[args.index("-t") + 1]
+        git_sha = args[args.index("--build-arg") + 1].removeprefix("GIT_SHA=")
+        assert ref.split(":")[1] == git_sha
+        tags[ref.split(":")[0].removeprefix("pytstop-")] = git_sha
+    return tags
+
+
+def test_arvore_suja_vira_tag_sujo_com_o_hash_e_o_aviso(
+    implantacao: Implantacao,
+) -> None:
+    dir_ = implantacao.dirs["billing-service"]
+    (dir_ / "src.py").write_text("print('a')\n")
+    commit = sha(dir_)
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 0, processo.stderr
+    tags = tags_dos_builds(implantacao)
+    assert re.fullmatch(f"{commit}-sujo-[0-9a-f]{{12}}", tags["billing-service"])
+    # A arvore limpa do outro vizinho segue com o commit puro.
+    assert tags["execution-service"] == sha(implantacao.dirs["execution-service"])
+    assert f"uncommitted changes in {dir_}; image tag {tags['billing-service']}" in (
+        processo.stderr
+    )
+    kubectl = implantacao.chamadas("kubectl")
+    novas = {
+        yaml.safe_load(c["kustomization"])["images"][0]["newTag"]
+        for c in kubectl
+        if "kustomization" in c
+    }
+    assert tags["billing-service"] in novas
+
+
+def test_tag_sujo_muda_com_o_codigo_e_repete_com_o_mesmo_codigo(
+    implantacao: Implantacao,
+) -> None:
+    dir_ = implantacao.dirs["billing-service"]
+    tags = []
+    for conteudo in ("a", "b", "b"):
+        (dir_ / "src.py").write_text(conteudo)
+        assert implantacao.do_cd().returncode == 0
+        tags.append(tags_dos_builds(implantacao)["billing-service"])
+
+    assert tags[0] != tags[1]
+    assert tags[1] == tags[2]
+
+
+def test_arquivo_ignorado_nao_suja_a_arvore(implantacao: Implantacao) -> None:
+    dir_ = implantacao.dirs["billing-service"]
+    (dir_ / ".gitignore").write_text("cache/\n")
+    git("add", "-A", cwd=dir_)
+    git("commit", "-q", "-m", "ignora", cwd=dir_)
+    (dir_ / "cache").mkdir()
+    (dir_ / "cache" / "x").write_text("x")
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 0, processo.stderr
+    assert tags_dos_builds(implantacao)["billing-service"] == sha(dir_)
+    assert "uncommitted" not in processo.stderr
+
+
+def test_arvore_suja_nao_mexe_no_indice_do_checkout(implantacao: Implantacao) -> None:
+    dir_ = implantacao.dirs["billing-service"]
+    (dir_ / "src.py").write_text("print('a')\n")
+
+    assert implantacao.do_cd().returncode == 0
+
+    assert git("status", "--porcelain", cwd=dir_) == "?? src.py"
