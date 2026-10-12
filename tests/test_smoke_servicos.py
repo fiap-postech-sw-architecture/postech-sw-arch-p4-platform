@@ -462,7 +462,7 @@ def test_conexao_ao_banco_sai_do_rabbitmq_0_com_prazo_no_pod(smoke: Smoke) -> No
         assert chamada[12].startswith('timeout 3 bash -c "</dev/tcp/$0/$1"')
 
 
-def test_controle_sai_do_pod_da_api_e_a_prova_do_d88_do_pod_do_banco(
+def test_controle_sai_da_api_e_o_loopback_do_banco_nao_tem_trust(
     smoke: Smoke,
 ) -> None:
     processo = smoke.roda(cluster_saudavel())
@@ -503,7 +503,8 @@ def test_kubectl_exec_vai_com_prazo_em_volta(smoke: Smoke) -> None:
 
     assert processo.returncode == 0, processo.stderr
     prazos = smoke.chamadas("timeout")
-    # A prova do D88 (so os PostgreSQL), o controle e a conexao do rabbitmq-0.
+    # A prova do loopback sem trust (so os PostgreSQL), o controle e a conexao
+    # do rabbitmq-0.
     assert len(prazos) == 2 + len(SERVICOS) * 2
     for chamada in prazos:
         assert chamada[:2] == ["20", "kubectl"]
