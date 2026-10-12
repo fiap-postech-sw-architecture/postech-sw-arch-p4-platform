@@ -913,6 +913,43 @@ def test_arvore_suja_nao_mexe_no_indice_do_checkout(implantacao: Implantacao) ->
     assert git("status", "--porcelain", cwd=dir_) == "?? src.py"
 
 
+# git falso: falha no comando que GIT_FALSO_FALHA nomeia (status, add ou
+# write-tree) e repassa os outros ao git de verdade (GIT_REAL).
+GIT_FALSO = r"""
+import os
+import sys
+
+if os.environ["GIT_FALSO_FALHA"] in sys.argv:
+    sys.exit("fatal: unable to read the working tree")
+os.execv(os.environ["GIT_REAL"], ["git", *sys.argv[1:]])
+"""
+
+
+@pytest.mark.parametrize("comando", ["status", "add", "write-tree"])
+def test_arvore_que_o_git_nao_le_para_antes_de_construir_em_vez_de_virar_tag_vazia(
+    implantacao: Implantacao, comando: str
+) -> None:
+    # Sem o status, a arvore suja pareceria limpa; sem o add ou o write-tree, a
+    # tag sairia do hash da arvore vazia, igual para qualquer codigo.
+    dir_ = implantacao.dirs["billing-service"]
+    (dir_ / "src.py").write_text("print('a')\n")
+    falso = implantacao.tmp / "bin" / "git"
+    falso.write_text(f"#!{sys.executable}\n{GIT_FALSO}", encoding="utf-8")
+    falso.chmod(0o755)
+
+    processo = implantacao.do_cd(GIT_FALSO_FALHA=comando, GIT_REAL=GIT)
+
+    assert processo.returncode == 1
+    assert (
+        f"billing-service (commit {sha(dir_)}): could not hash the working tree "
+        f"of {dir_}"
+    ) in processo.stderr
+    assert "uncommitted changes" not in processo.stderr
+    assert implantacao.chamadas("docker") == []
+    assert implantacao.chamadas("kind") == []
+    assert implantacao.chamadas("kubectl") == []
+
+
 # Prazo de cada chamada do kubectl, por verbo, com os padroes do script: 120 s
 # nas comuns e, nas esperas, o --timeout (180 s do banco, 300 s dos
 # Deployments) mais 120 s. O Job e lido de 2 em 2 s, cada leitura com 120 s.

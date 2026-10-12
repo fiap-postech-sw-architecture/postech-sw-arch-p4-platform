@@ -138,16 +138,19 @@ versoes=$("$raiz/scripts/ci/imagens-do-readme.sh")
 # primeiros caracteres do hash da arvore de trabalho>, de modo que um segundo
 # deploy local depois de editar o codigo muda a tag (e reinicia os Deployments),
 # e o mesmo codigo sujo repete a tag. O hash sai de um indice temporario, sem
-# mexer no indice do checkout.
+# mexer no indice do checkout. Quem chama a le dentro de um $( ) e de um ||, onde
+# o set -e nao vale: cada comando que falha devolve o status com o return, ou a
+# tag sairia do hash da arvore vazia, igual para qualquer codigo.
 tag_de() {
-  local indice arvore
-  if [ -z "$(git -C "$1" status --porcelain)" ]; then
+  local estado indice arvore
+  estado=$(git -C "$1" status --porcelain) || return
+  if [ -z "$estado" ]; then
     echo "$2"
     return
   fi
-  indice=$(mktemp -d "$TMP/indice.XXXXXX")
-  GIT_INDEX_FILE="$indice/index" git -C "$1" add -A
-  arvore=$(GIT_INDEX_FILE="$indice/index" git -C "$1" write-tree)
+  indice=$(mktemp -d "$TMP/indice.XXXXXX") || return
+  GIT_INDEX_FILE="$indice/index" git -C "$1" add -A || return
+  arvore=$(GIT_INDEX_FILE="$indice/index" git -C "$1" write-tree) || return
   echo "$2-sujo-${arvore:0:12}"
 }
 
