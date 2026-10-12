@@ -145,6 +145,8 @@ BANCOS = {"pytstop-os": "os-postgres", "pytstop-billing": "billing-mongo",
           "pytstop-execucao": "execucao-postgres"}
 JOBS = {"pytstop-os": "os-migracao", "pytstop-billing": "billing-inicializacao",
         "pytstop-execucao": "execucao-migracao"}
+SEGREDOS_DO_BANCO = {"pytstop-os": "os-postgres", "pytstop-billing": "billing-mongo",
+                     "pytstop-execucao": "execucao-postgres"}
 args = sys.argv[1:]
 resto = args[2:]
 ns = ""
@@ -201,6 +203,8 @@ elif resto[0] == "get" and resto[1].startswith("job.batch/"):
     elif os.environ.get("KUBECTL_FALSO_JOB_PENDENTE") != ns:
         print("Complete ", end="")
 elif resto[:2] == ["get", "secret"]:
+    # Os dois Secrets que o make deploy cria no namespace: o rabbitmq e o do banco.
+    assert resto[2:] == ["rabbitmq", SEGREDOS_DO_BANCO[ns], "-o", "name"], resto
     falha_em("secret")
     print("secret/rabbitmq")
 elif resto[0] == "logs":
