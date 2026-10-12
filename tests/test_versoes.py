@@ -5,8 +5,8 @@ O versoes.sh roda numa copia da plataforma (README com a tabela de versoes,
 kind/cluster.yaml, e os scripts), com kubectl e docker falsos que devolvem os
 manifests e as imagens do compose do teste. O teste confere que ele reprova a
 imagem de terceiro fora da tabela em cada forma que o kustomize a emite (chave
-de um item com outras antes, primeira chave do item, valor entre aspas), e que
-o leitor devolve so as imagens.
+de um item com outras antes, primeira chave do item, valor entre aspas, volume
+de imagem), e que o leitor devolve so as imagens.
 """
 
 from __future__ import annotations
@@ -79,12 +79,16 @@ spec:
     # image: comentado:9
     imagePullPolicy: IfNotPresent
   volumes:
+  - image:
+      pullPolicy: IfNotPresent
+      reference: vol.example/e:5
+    name: volume
   - configMap:
       name: image
     name: outro
 """
 
-    assert le(manifests) == ["a:1", "b:2", "123", "d:4"]
+    assert le(manifests) == ["a:1", "b:2", "123", "d:4", "vol.example/e:5"]
 
 
 class Plataforma:
@@ -137,7 +141,7 @@ def test_versoes_aceita_as_imagens_da_tabela_em_qualquer_forma(
     processo = plataforma.roda(
         "      - image: busybox:1.37\n        name: a\n"
         '        image: "123"\n'
-        "      - image: postgres:16.15\n"
+        "  volumes:\n  - image:\n      reference: postgres:16.15\n"
     )
 
     assert processo.returncode == 0, processo.stdout
@@ -150,8 +154,9 @@ def test_versoes_aceita_as_imagens_da_tabela_em_qualquer_forma(
         ("        image: evil.example/x:1\n", "evil.example/x:1"),
         ("      - image: evil.example/x:1\n", "evil.example/x:1"),
         ('        image: "456"\n', "456"),
+        ("  - image:\n      reference: evil.example/v:1\n", "evil.example/v:1"),
     ],
-    ids=["chave", "primeira-chave", "aspas"],
+    ids=["chave", "primeira-chave", "aspas", "volume-de-imagem"],
 )
 def test_versoes_reprova_a_imagem_fora_da_tabela_em_qualquer_forma(
     plataforma: Plataforma, trecho: str, imagem: str

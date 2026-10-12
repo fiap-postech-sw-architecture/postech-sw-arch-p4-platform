@@ -112,7 +112,7 @@ os.execvp(sys.argv[2], sys.argv[2:])
 """
 
 # kubectl falso: o kustomize devolve as imagens de imagens.txt do overlay (cada
-# uma na forma que o prefixo escolhe: "image:", "lista:" ou "aspas:");
+# uma na forma que o prefixo escolhe: "image:", "lista:", "aspas:" ou "volume:");
 # cada namespace tem o banco, o Job de inicializacao e dois Deployments.
 # KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
 # (secret, delete, apply, statefulset, job, deployment; job e o Job que falha, e
@@ -134,14 +134,17 @@ if sys.argv[1:2] == ["kustomize"]:
     if os.environ.get("KUSTOMIZE_FALSO_FALHA"):
         sys.exit("error: accumulating resources")
     # O kustomize emite "image:" como chave de um item com outras chaves antes
-    # dela e como primeira chave do item ("- image:") e entre aspas quando o nome
-    # e so de digitos. No imagens.txt, o prefixo "lista:" ou "aspas:" escolhe a
-    # forma.
+    # dela e como primeira chave do item ("- image:"), entre aspas quando o
+    # nome e so de digitos, e o volume de imagem com a ref em "reference:". No
+    # imagens.txt, o prefixo "lista:", "aspas:" ou "volume:" escolhe a forma.
     for imagem in (Path(sys.argv[2]) / "imagens.txt").read_text().split():
         if imagem.startswith("lista:"):
             print("      - image: " + imagem.removeprefix("lista:"))
         elif imagem.startswith("aspas:"):
             print('        image: "' + imagem.removeprefix("aspas:") + '"')
+        elif imagem.startswith("volume:"):
+            print("      - image:\n          pullPolicy: IfNotPresent")
+            print("          reference: " + imagem.removeprefix("volume:"))
         else:
             print("        image: " + imagem)
     sys.exit(0)
@@ -727,8 +730,8 @@ def test_argumentos_recusados_sem_chamar_nada(
 
 FORMAS_DA_IMAGEM = pytest.mark.parametrize(
     "forma",
-    ["", "lista:", "aspas:"],
-    ids=["chave", "primeira-chave", "aspas"],
+    ["", "lista:", "aspas:", "volume:"],
+    ids=["chave", "primeira-chave", "aspas", "volume-de-imagem"],
 )
 
 
