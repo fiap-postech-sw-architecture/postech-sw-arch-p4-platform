@@ -565,6 +565,8 @@ O que o repositório de cada serviço precisa ter para o CD dele subir os três 
 | Nome no `implantar-servicos.sh` e imagem (`pytstop-<nome>`) | `os-service` | `billing-service` | `execution-service` |
 | Namespace | `pytstop-os` | `pytstop-billing` | `pytstop-execucao` |
 | Prefixo na borda | `/os` | `/billing` | `/execucao` |
+| Rótulo do pod da API (seletor dos Services de borda, das NetworkPolicies e do smoke) | `app: os-service-api` | `app: billing-service-api` | `app: execution-service-api` |
+| Service interno da API, porta 8000, sem a anotação do Kong (alvo do `JWKS_URL` e do `BILLING_URL`) | `os-service` | `billing-service` | `execution-service` |
 | Banco (Service e porta), que só o próprio namespace alcança | `os-postgres:5432` | `billing-mongo:27017` | `execucao-postgres:5432` |
 | Secret com as senhas do banco, uma por papel | `os-postgres` | `billing-mongo` | `execucao-postgres` |
 | Papel dos processos (API, relay, consumidor e `prazos`) | `os_app`, só DML nas tabelas do dono | `billing` | `execucao_app`, só DML nas tabelas do dono |
@@ -572,18 +574,44 @@ O que o repositório de cada serviço precisa ter para o CD dele subir os três 
 | Papel do exporter, sidecar do banco | `os_exporter`, com `pg_monitor` | `exporter` | `execucao_exporter`, com `pg_monitor` |
 | Exemplo de borda | [`borda-os-service.yaml`](k8s/exemplos/borda-os-service.yaml) | [`borda-billing-service.yaml`](k8s/exemplos/borda-billing-service.yaml) | [`borda-execution-service.yaml`](k8s/exemplos/borda-execution-service.yaml) |
 
-- `Dockerfile` na raiz, com os `ARG` `GIT_SHA` e `GIT_DATE`: quando o serviço entra como vizinho no CD de outro, a imagem dele sai do `docker build` do checkout, com o commit como tag e em paralelo com os outros builds.
-- `k8s/overlays/kind-ci/kustomization.yaml`, o overlay do CD, ao lado do `kind` e do `k3s`. Sem ele, o `implantar-servicos.sh` falha nomeando o serviço e o commit, antes de construir qualquer imagem.
-- A imagem do serviço com o nome fixo `pytstop-<nome>` e `imagePullPolicy: IfNotPresent`. A tag de verdade vem na implantação: o script gera `k8s/overlays/execucao/`, o overlay pedido com a imagem trocada pelo `images:` do kustomize, aplica e o apaga no fim; o diretório não pode existir no repositório. Toda outra imagem dos manifests (banco, exporter, initContainers) tem de estar na [tabela de versões](#componentes-e-versões), com a mesma tag: o script confere antes de construir e para nomeando a imagem que falta.
-- Nenhum `Secret` nos manifests: os do serviço vêm do `make deploy` e entram por `secretKeyRef`, com os nomes e as chaves da tabela [Segredos gerados](#segredos-gerados).
-- Um papel do banco por uso ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)): cada processo monta a `DATABASE_URL` (ou a `MONGODB_URI`) no pod, por expansão de variável, com a senha do papel da tabela acima, e nenhum processo do serviço usa o superusuário `postgres`, que só inicializa o banco. No PostgreSQL, os papéis nascem de um script de init que o serviço traz nos manifests, num ConfigMap montado em `/docker-entrypoint-initdb.d` (a imagem o roda uma vez, na primeira inicialização do volume), com as senhas lidas do ambiente do container do banco e nunca de argumento. O script abre, antes do primeiro comando com senha, com `SET log_statement = none;` e `SET log_min_error_statement = panic;`: o `psql` troca `:'senha'` pelo valor antes de enviar o comando, então o servidor recebe a senha em claro, e sem os `SET` um `log_statement` em `all` ou `ddl` a grava no log do servidor, e um comando que falha grava a linha `STATEMENT` com ela, mesmo com o `log_statement` padrão (provado no `postgres:16.15`, com `log_statement=all`, no sucesso e no erro). As tabelas nascem do Job, depois do script, e por isso o papel da aplicação ganha o DML por `ALTER DEFAULT PRIVILEGES FOR ROLE <dono>`, que cobre também a `alembic_version`, lida pelos pods para esperar a migração; um `GRANT` sobre as tabelas existentes não alcançaria nenhuma.
-- No PostgreSQL, o StatefulSet do banco define `POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256 --auth-local=scram-sha-256"`. A imagem oficial deixa o socket, o `127.0.0.1` e o `::1` em `trust`, e o exporter, sidecar do pod do banco, conecta por `127.0.0.1`: sem os argumentos, a senha do papel dele não seria conferida, e um exporter comprometido entraria como `postgres` ([Segredos gerados](#segredos-gerados)). Eles valem só na primeira inicialização do volume, o script de init dos papéis segue rodando, e o `psql` dentro do contêiner passa a pedir a senha (`PGPASSWORD="$POSTGRES_PASSWORD"` e `-w`, como na [troca de senha do banco](#troca-de-senha-do-banco)).
-- Um Job de inicialização (a migração ou a preparação do banco, com o papel dele na tabela acima) com o rótulo `app.kubernetes.io/component: inicializacao`, idempotente: o script apaga os Jobs com esse rótulo antes do apply (Job é imutável), aplica com `apply --server-side`, espera o banco (StatefulSet, 180 s), o Job completar (300 s; no erro, o log dele vai para a saída) e cada Deployment (300 s).
-- Pela borda, `GET <prefixo>/api/v1/saude` com 200 e `<prefixo>/metrics` com 404 (o Ingress `fora-da-borda` dos exemplos). O smoke espera a saúde por até 1 min: o Kong recebe a rota de um Service novo antes do alvo, e até lá responde 503.
-- Todo pod de processo (API, relay, consumidor, `prazos` e o banco, pelo exporter) anotado para o Prometheus e com `up = 1`; o pod do Job e o que está saindo de um rollout não contam. O `up` diz só que o exporter responde ao Prometheus: o `postgres_exporter` serve o `/metrics` mesmo sem entrar no banco (papel inexistente, senha errada ou banco fora: `pg_up 0`), e o `mongodb_exporter`, quando o MongoDB recusa o usuário (`mongodb_up 0`; com o servidor inalcançável na partida do exporter, ele nem serve o `/metrics`, e o `up` cai). O smoke lê `pg_up` (PostgreSQL) ou `mongodb_up` (MongoDB) no Prometheus, que raspa o `/metrics` do exporter, e reprova o namespace em que a métrica não existe ou não vale 1 (na mesma espera do `up`, de até 45 s).
-- NetworkPolicy que deixa só o próprio namespace chegar ao banco. O smoke prova pelo pod `rabbitmq-0` da plataforma: a conexão à porta do banco tem de esgotar o prazo de 3 s, porque o kindnet descarta o pacote barrado; conexão aceita, recusada ou nome que não resolve reprovam.
+DML (*data manipulation language*) é `SELECT`, `INSERT`, `UPDATE` e `DELETE`; DDL (*data definition language*), criar e alterar tabelas. Para escrever os manifests de um serviço novo, nesta ordem:
 
-O smoke escreve a tabela `serviço | etapa | resultado` na saída e, no GitHub Actions, no summary do job, e sai com status 1 nomeando os serviços que falharam. A chamada do CD de um serviço leva a imagem dele pelo arquivo do `docker save` e a ref gravada nele; no exemplo, a do OS, no commit `5f2a9c1`, com os vizinhos clonados ao lado:
+1. **Imagem e overlays.** `Dockerfile` na raiz, com os `ARG` `GIT_SHA` e `GIT_DATE`: quando o serviço entra como vizinho no CD de outro, a imagem dele sai do `docker build` do checkout, em paralelo com os outros builds. `k8s/overlays/kind-ci/kustomization.yaml`, o overlay do CD, ao lado de `kind` e `k3s`: sem ele, o `implantar-servicos.sh` falha nomeando o serviço e o commit, antes de construir qualquer imagem. A imagem do serviço leva o nome fixo `pytstop-<nome>` e `imagePullPolicy: IfNotPresent`.
+   - A tag vem na implantação: o script gera `k8s/overlays/execucao/` (o overlay pedido com a imagem trocada pelo `images:` do kustomize), aplica e o apaga no fim. O diretório não pode existir no repositório e entra no `.gitignore`; se uma execução morreu no meio, apague `k8s/overlays/execucao` antes da próxima.
+   - Toda outra imagem dos manifests (banco, exporter, initContainers) tem de estar na [tabela de versões](#componentes-e-versões), com a mesma tag: o script confere antes de construir e para nomeando a imagem que falta.
+2. **Secrets.** Nenhum `Secret` nos manifests: os do serviço vêm do `make deploy` e entram por `secretKeyRef`, com os nomes e as chaves da tabela [Segredos gerados](#segredos-gerados). Sem o `rabbitmq` e o do banco, o script para antes do apply pedindo o `make deploy`.
+3. **Banco.** StatefulSet, Service e o exporter como sidecar, no mesmo pod.
+   - Um papel por uso ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)): cada processo monta a `DATABASE_URL` (ou a `MONGODB_URI`) no pod, por expansão de variável, com a senha do papel da tabela acima, e nenhum processo do serviço usa o superusuário `postgres`, que só inicializa o banco.
+   - No PostgreSQL, os papéis nascem de um script de init que o serviço traz num ConfigMap montado em `/docker-entrypoint-initdb.d`: a imagem o roda uma vez, na primeira inicialização do volume, com as senhas lidas do ambiente do contêiner do banco, nunca de argumento. Se o init falhar no meio, o volume fica inicializado sem os papéis: apague o PVC do banco.
+   - O script abre, antes do primeiro comando com senha, desligando todo parâmetro que grava o texto do comando (o `psql` troca `:'senha'` pelo valor antes de enviá-lo, e o servidor a recebe em claro; o mecanismo está em [Troca de senha do banco](#troca-de-senha-do-banco)):
+
+     ```sql
+     SET log_statement = 'none';
+     SET log_min_error_statement = 'panic';
+     SET log_min_duration_statement = -1;
+     SET log_min_duration_sample = -1;
+     SET log_transaction_sample_rate = 0;
+     ```
+
+   - As tabelas nascem do Job, depois do script, e por isso o papel da aplicação ganha o DML por `ALTER DEFAULT PRIVILEGES FOR ROLE <dono>`, que cobre também a `alembic_version`, lida pelos pods para esperar a migração. Um `GRANT` sobre as tabelas existentes não alcançaria nenhuma.
+   - O StatefulSet do PostgreSQL define `POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256 --auth-local=scram-sha-256"` (requisito do ADR-042). A imagem oficial deixa o socket, o `127.0.0.1` e o `::1` em `trust`, e o exporter conecta por `127.0.0.1`: sem os argumentos, a senha do papel dele não seria conferida, e um exporter comprometido entraria como `postgres`. Os argumentos valem só na primeira inicialização do volume, e o `psql` dentro do contêiner passa a pedir a senha (`PGPASSWORD="$POSTGRES_PASSWORD"` e `-w`, como na [troca de senha do banco](#troca-de-senha-do-banco)).
+4. **Job de inicialização**, a migração ou a preparação do banco, com o papel dele na tabela acima, o rótulo `app.kubernetes.io/component: inicializacao` e idempotente. O script apaga os Jobs com esse rótulo antes do apply (Job é imutável), aplica com `apply --server-side` e espera o banco (StatefulSet, 180 s), o Job (300 s; se ele falha, a espera acaba na hora, e o log dele vai para a saída) e cada Deployment (300 s).
+5. **Deployments** (API, relay, consumidor e `prazos`). O pod da API leva o rótulo `app: <nome>-api` e responde `GET /api/v1/saude`, `/docs` e `/openapi.json` com o `--root-path` do prefixo. Todo pod de processo, e o do banco pelo exporter, vem anotado para o Prometheus.
+6. **NetworkPolicy de entrada**, que nega tudo e libera só o previsto: na API, o Kong (`app: kong` no `pytstop-plataforma`) e o Prometheus, na porta 8000; no relay, no consumidor e no `prazos`, o Prometheus na 9100; no banco, o próprio namespace na porta do banco e o Prometheus na do exporter. Sem a regra do Kong, a saúde pela borda fica em 503; sem as do Prometheus, o `up` não chega a 1.
+7. **Borda.** O Ingress e os Services de borda saem do exemplo da tabela acima, copiado sem mudança (o `make smoke` já valida os três). Pela borda, `GET <prefixo>/api/v1/saude`, `<prefixo>/docs` e `<prefixo>/openapi.json` respondem 200; `<prefixo>/metrics` e `<prefixo>/api/v1/admin/*` respondem 404 (o Ingress `fora-da-borda` dos exemplos).
+8. **Conferir** com o `implantar-servicos.sh` e o `smoke-servicos.sh` (exemplos abaixo) ou com o `make kind-deploy` do próprio serviço, que chama o script só para ele.
+
+O smoke confere, por namespace e nesta ordem:
+
+- o Job de inicialização completo e cada Deployment e StatefulSet com todas as réplicas prontas e atualizadas, na geração atual do objeto;
+- a borda: a saúde em 200 (o Kong recebe a rota de um Service novo antes do alvo e responde 503 até lá, então o smoke espera até 1 min), o Swagger em 200, e o `/metrics` e o `/api/v1/admin/outbox` em 404 (o 404 do Kong sem rota é igual, mas o serviço de verdade responderia 401 ou 403 ao `admin/outbox`, então o 404 prova o Ingress `fora-da-borda`);
+- cada pod anotado em `up = 1` no Prometheus (o pod do Job e o que está saindo de um rollout não contam) e o exporter do banco com `pg_up` (PostgreSQL) ou `mongodb_up` (MongoDB) em 1, as duas esperas juntas por até 45 s. O `up` diz só que o exporter responde ao Prometheus: o `postgres_exporter` serve o `/metrics` mesmo sem entrar no banco (papel inexistente, senha errada ou banco fora: `pg_up 0`), e o `mongodb_exporter`, quando o MongoDB recusa o usuário (`mongodb_up 0`; com o servidor inalcançável na partida do exporter, ele nem serve o `/metrics`, e o `up` cai);
+- no PostgreSQL, o `psql` como `postgres`, sem senha, no `127.0.0.1` do pod do banco, recusado por falta de senha (sem `trust`);
+- a NetworkPolicy do banco: um controle, em que o pod da API (do próprio namespace) conecta à porta do banco, e a prova, em que o `rabbitmq-0` da plataforma não conecta. A conexão do `rabbitmq-0` tem de esgotar o prazo de 3 s, porque o kindnet (a rede do kind) descarta o pacote barrado; conexão aceita, recusada ou nome que não resolve reprovam, e o prazo esgotado só vale se o controle conectou.
+
+O smoke escreve a tabela `Service | Stage | Result` na saída e, no GitHub Actions, no summary do job, uma linha por etapa, com `ok: <detalhe>` ou `FAILED: <detalhe>`, e sai com status 1 nomeando os serviços que falharam, ou com 2 se faltar `jq`, `curl` ou `timeout` (no macOS, `perl`). O `BORDA` (padrão `https://localhost`) e o `KUBE_CONTEXT` (padrão `kind-$CLUSTER`) vêm do ambiente; o certificado só deixa de ser verificado para `localhost`, com ou sem porta.
+
+A chamada do CD de um serviço leva a imagem dele pelo arquivo do `docker save` e a ref gravada nele, que o script confere contra o `manifest.json` do arquivo; no exemplo, a do OS, no commit `5f2a9c1`, com os vizinhos clonados ao lado:
 
 ```bash
 scripts/ci/implantar-servicos.sh --overlay kind-ci \
@@ -592,7 +620,7 @@ scripts/ci/implantar-servicos.sh --overlay kind-ci \
 scripts/ci/smoke-servicos.sh
 ```
 
-Localmente, com a plataforma no kind (`make kind-up deploy`) e os três repositórios clonados ao lado deste, sem `--tar` o script constrói as três imagens:
+Localmente, com a plataforma no kind (`make kind-up deploy`) e os três repositórios clonados ao lado deste, sem `--tar` o script constrói as três imagens, com o commit como tag. Com mudança não commitada ou arquivo novo, a tag vira `<commit>-sujo-<hash da árvore>` e o script avisa: um segundo deploy depois de editar o código reinicia os Deployments, em vez de reaproveitar a imagem de mesma tag.
 
 ```bash
 scripts/ci/implantar-servicos.sh --overlay kind \
@@ -602,7 +630,11 @@ scripts/ci/implantar-servicos.sh --overlay kind \
 scripts/ci/smoke-servicos.sh
 ```
 
-Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl` e `sleep` falsos: builds em paralelo e com o commit, a carga no kind, o overlay gerado e apagado, a ordem de cada namespace, falha de build, apply, banco, Job e Deployment, e erro do cluster ao listar o banco e os Deployments, nomeando o serviço e o commit, imagem fora da tabela e argumentos recusados; e cada etapa do smoke reprovando o que deve (inclusive o exporter com `up = 1` e `pg_up` ou `mongodb_up` em 0, ou sem a série), erro do cluster sem parar o smoke, as esperas da borda e do Prometheus, o prazo de cada chamada e o certificado sem verificação só no `localhost`.
+Um cluster com os serviços implantados não serve ao `make smoke`, que recusa um namespace de serviço com Ingress (ele aplica os exemplos de borda com servidores de eco). Para voltar a um cluster só da plataforma: `kubectl --context kind-pytstop-p4 delete namespace pytstop-os pytstop-billing pytstop-execucao` e `make deploy`, que recria os namespaces vazios.
+
+Tudo o que pode pendurar no `implantar-servicos.sh` roda com prazo, e o estouro reprova o serviço nomeando a chamada, em vez de consumir o timeout do job: `PRAZO_BUILD` (900 s, o `docker build`), `PRAZO_CARGA` (300 s, o `kind load`) e `PRAZO_KUBECTL` (120 s por chamada ao cluster; nas esperas, somado ao tempo delas) e, nas esperas, `ESPERA_BANCO` (180 s), `ESPERA_JOB` (300 s) e `ESPERA_DEPLOYMENT` (300 s).
+
+Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl`, `sleep` e `date` falsos e conferem a ordem de cada namespace, os prazos, cada etapa reprovando o que deve (cada código HTTP errado, cada réplica fora do lugar), as esperas pelo tempo e o nome do serviço em toda falha.
 
 ## Contratos de mensageria
 
