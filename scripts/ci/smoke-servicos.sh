@@ -2,26 +2,44 @@
 # Smoke dos servicos implantados no kind (scripts/ci/implantar-servicos.sh),
 # por namespace: o Job de inicializacao completo; os Deployments e o banco com
 # todas as replicas prontas e atualizadas; pela borda, a saude em 200 (ate 1
-# min) e o /metrics em 404; cada pod anotado com up = 1 no Prometheus e o
+# min), o Swagger (/docs e /openapi.json) em 200 e o /metrics e o
+# /api/v1/admin/* em 404; cada pod anotado com up = 1 no Prometheus e o
 # exporter do banco com pg_up (PostgreSQL) ou mongodb_up (MongoDB) em 1, as
-# duas esperas juntas por ate 45 s; e a NetworkPolicy barrando o banco a quem
-# vem de outro namespace, numa conexao do rabbitmq-0 da plataforma que tem de
-# esgotar o prazo (recusa ou nome que nao resolve nao provam a regra). README,
-# "Contrato com os servicos".
+# duas esperas juntas por ate 45 s; no PostgreSQL, o 127.0.0.1 do pod do banco
+# pedindo senha (sem trust); e a NetworkPolicy barrando o banco a quem vem de
+# outro namespace, numa conexao do rabbitmq-0 da plataforma que tem de esgotar
+# o prazo (recusa ou nome que nao resolve nao provam a regra), depois de uma
+# conexao do pod da API ao mesmo banco ter funcionado (sem esse controle, o
+# prazo esgotado poderia ser a sonda quebrada). README, "Contrato com os
+# servicos".
 #
 #   scripts/ci/smoke-servicos.sh [<servico>...]   (sem argumento, os tres)
 #
-# A tabela servico | etapa | resultado sai na saida e, no GitHub Actions, no
-# summary do job; o script sai com status 1 nomeando os servicos que falharam.
+# A tabela Service | Stage | Result sai na saida e, no GitHub Actions, no
+# summary do job; o script sai com status 1 nomeando os servicos que falharam,
+# e com 2 se falta jq, curl, timeout ou perl.
 set -euo pipefail
 
-K="kubectl --context ${KUBE_CONTEXT:-kind-pytstop-p4} --request-timeout=20s"
+CLUSTER="${CLUSTER:-pytstop-p4}"
+K="kubectl --context ${KUBE_CONTEXT:-kind-$CLUSTER} --request-timeout=20s"
 BORDA="${BORDA:-https://localhost}"
 PLATAFORMA=pytstop-plataforma
 INICIALIZACAO=app.kubernetes.io/component=inicializacao
+# Esperas, em segundos, e o intervalo entre as tentativas de cada uma.
+ESPERA_SAUDE=60
+INTERVALO_SAUDE=2
+ESPERA_PROMETHEUS=45
+INTERVALO_PROMETHEUS=5
+
+for ferramenta in jq curl; do
+  command -v "$ferramenta" >/dev/null || { echo "$ferramenta is required" >&2; exit 2; }
+done
+command -v timeout >/dev/null || command -v perl >/dev/null || { echo "timeout or perl is required" >&2; exit 2; }
+
 # O Kong do kind responde com o certificado padrao dele: sem verificacao so
-# para o localhost.
-case "$BORDA" in https://localhost | https://localhost:*) tls=-k ;; *) tls="" ;; esac
+# para o localhost, com porta ou sem (nada depois dela: "@" faria de outro host o
+# destino).
+if [[ "$BORDA" =~ ^https://localhost(:[0-9]+)?$ ]]; then tls=-k; else tls=""; fi
 
 # servico <nome>: namespace, prefixo na borda, host e porta do banco e a metrica
 # com que o exporter dele diz se entrou no banco.
@@ -55,8 +73,15 @@ registra() {
 # junta: as linhas da entrada numa so, para a celula da tabela.
 junta() { tr '\n' ' ' | sed 's/ *$//'; }
 
-# status <caminho>: o status HTTP pela borda, 000 sem resposta.
-status() { curl -s ${tls:+"$tls"} --max-time 10 -o /dev/null -w '%{http_code}' "$BORDA$1" || true; }
+# status <caminho> <segundos>: o status HTTP pela borda, 000 sem resposta.
+status() { curl -s ${tls:+"$tls"} --max-time "$2" -o /dev/null -w '%{http_code}' "$BORDA$1" || true; }
+
+# borda <servico> <caminho> <status esperado>: um GET pela borda.
+borda() {
+  local obtido
+  obtido=$(status "$2" 10)
+  registra "$1" "GET $2" "$obtido" "$([ "$obtido" = "$3" ] && echo sim)"
+}
 
 # serie <metrica> <namespace>: "<pod> <valor>" de cada pod do namespace com a
 # metrica no Prometheus.
@@ -69,6 +94,14 @@ serie() {
 
 # ups <namespace>: os pods do namespace com up = 1 no Prometheus.
 ups() { serie up "$1" | sed -n 's/ 1$//p'; }
+
+# no_pod <argumento do kubectl>...: a saida de um kubectl exec, com prazo (vazia
+# se ele falhou). $K separa as palavras de proposito (o comando com o contexto).
+# shellcheck disable=SC2086
+no_pod() { prazo 20 $K "$@" || true; }
+
+# codigo <saida>: o "code=" que o sh -c do pod imprime; vazio se nao imprimiu.
+codigo_de() { sed -n 's/^code=//p' <<< "$1"; }
 
 if [ "$#" -eq 0 ]; then set -- os-service billing-service execution-service; fi
 for nome in "$@"; do
@@ -97,30 +130,41 @@ for nome in "$@"; do
 
   # O Kong recebe a rota de um Service novo antes do alvo, que so chega com os
   # endpoints dele: ate la a rota responde 503 (ou 404, sem rota). Espera a
-  # saude por ate 1 min antes de reprovar.
-  for _ in $(seq 30); do
-    obtido=$(status "$prefixo/api/v1/saude")
+  # saude pelo tempo de ESPERA_SAUDE antes de reprovar.
+  fim=$(($(date +%s) + ESPERA_SAUDE))
+  while :; do
+    obtido=$(status "$prefixo/api/v1/saude" 3)
     [ "$obtido" = 200 ] && break
-    sleep 2
+    [ "$(date +%s)" -lt "$fim" ] || break
+    sleep "$INTERVALO_SAUDE"
   done
   registra "$nome" "GET $prefixo/api/v1/saude" "$obtido" "$([ "$obtido" = 200 ] && echo sim)"
-  obtido=$(status "$prefixo/metrics")
-  registra "$nome" "GET $prefixo/metrics" "$obtido" "$([ "$obtido" = 404 ] && echo sim)"
+  # Rotas que o Ingress fora-da-borda responde com 404 sem chamar o servico
+  # (um 404 do Kong sem rota seria igual: o admin/outbox existe no servico e
+  # responderia 401 ou 403), e o Swagger, que so sai pela borda com o
+  # --root-path do servico certo.
+  borda "$nome" "$prefixo/metrics" 404
+  borda "$nome" "$prefixo/api/v1/admin/outbox" 404
+  borda "$nome" "$prefixo/docs" 200
+  borda "$nome" "$prefixo/openapi.json" 200
 
   # O Prometheus raspa a cada 15 s: pod que acabou de subir ainda pode faltar,
   # e o exporter que subiu antes do banco ainda pode dizer pg_up 0. Pod saindo
   # (o de antes de um rollout) nao conta.
-  esperados=$($K -n "$ns" get pods -o json | jq -r '.items[]
+  pods=$($K -n "$ns" get pods -o json || true)
+  esperados=$(jq -r '.items[]
     | select(.metadata.annotations["prometheus.io/scrape"] == "true" and .status.phase == "Running"
         and .metadata.deletionTimestamp == null)
-    | .metadata.name' | sort -u || true)
+    | .metadata.name' <<< "$pods" | sort -u || true)
   faltam=$esperados
-  for _ in $(seq 9); do
+  fim=$(($(date +%s) + ESPERA_PROMETHEUS))
+  while :; do
     faltam=$(comm -23 <(printf '%s\n' "$esperados") <(ups "$ns") | grep . || true)
     conexoes=$(serie "$conexao" "$ns" || true)
     desligados=$(awk 'NF && $2 != 1 { print $1 }' <<< "$conexoes")
     [ -z "$faltam" ] && [ -z "$desligados" ] && break
-    sleep 5
+    [ "$(date +%s)" -lt "$fim" ] || break
+    sleep "$INTERVALO_PROMETHEUS"
   done
   if [ -z "$esperados" ]; then
     detalhe="no annotated pod running"
@@ -144,20 +188,68 @@ for nome in "$@"; do
   fi
   registra "$nome" "$conexao = 1 in Prometheus" "$detalhe" "$([ -n "$conexoes" ] && [ -z "$desligados" ] && echo sim)"
 
-  # 124 e o codigo do timeout: o pacote sumiu, a NetworkPolicy barrou.
-  # $K separa as palavras de proposito (o comando com o contexto); $0, $1 e
+  # PostgreSQL sem trust (POSTGRES_INITDB_ARGS com scram-sha-256): o exporter e
+  # sidecar do pod do banco e entra por 127.0.0.1, onde a imagem oficial deixa
+  # trust; o pg_up acima passa com a senha certa do proprio papel mesmo assim.
+  # O psql como postgres, sem senha, tem de ser recusado por falta dela.
+  if [ "$conexao" = pg_up ]; then
+    sts=${banco%%.*}
+    # shellcheck disable=SC2016
+    saida=$(no_pod -n "$ns" exec "$sts-0" -c postgres -- \
+      sh -c 'psql -h 127.0.0.1 -U postgres -w -c "select 1" 2>&1; echo "code=$?"')
+    codigo=$(codigo_de "$saida")
+    recusado=""
+    case "$codigo" in
+      "") detalhe="no answer from $sts-0" ;;
+      0) detalhe="postgres connected from 127.0.0.1 without a password: trust" ;;
+      *)
+        if grep -qi password <<< "$saida"; then
+          detalhe="postgres on 127.0.0.1 without a password was refused"
+          recusado=sim
+        else
+          detalhe="refused for another reason: $(grep -v '^code=' <<< "$saida" | head -n 1)"
+        fi
+        ;;
+    esac
+    registra "$nome" "$sts-0 127.0.0.1 asks for a password" "$detalhe" "$recusado"
+  fi
+
+  # Controle da prova abaixo: o pod da API, do proprio namespace, tem de chegar
+  # ao banco com a mesma sonda que, a partir de outro namespace, tem de falhar.
+  api=$(jq -r --arg app "$nome-api" '.items[]
+    | select(.metadata.labels.app == $app and .status.phase == "Running"
+        and .metadata.deletionTimestamp == null)
+    | .metadata.name' <<< "$pods" | head -n 1 || true)
+  if [ -z "$api" ]; then
+    controle=""
+    detalhe="no running pod labeled app=$nome-api"
+  else
+    # shellcheck disable=SC2016
+    controle=$(codigo_de "$(no_pod -n "$ns" exec "$api" -- sh -c \
+      'python -c "import socket, sys; socket.create_connection((sys.argv[1], int(sys.argv[2])), 3)" "$0" "$1" 2>/dev/null; echo "code=$?"' "$banco" "$porta")")
+    case "$controle" in
+      0) detalhe="connected (the namespace itself reaches the database)" ;;
+      "") detalhe="no answer from $api" ;;
+      *) detalhe="could not connect (code $controle)" ;;
+    esac
+  fi
+  registra "$nome" "$nome-api pod -> $banco:$porta" "$detalhe" "$([ "$controle" = 0 ] && echo sim)"
+
+  # 124 e o codigo do timeout: o pacote sumiu, a NetworkPolicy barrou. $0, $1 e
   # $? expandem no bash do pod.
-  # shellcheck disable=SC2016,SC2086
-  codigo=$(prazo 20 $K -n "$PLATAFORMA" exec rabbitmq-0 -c rabbitmq -- \
-    bash -c 'timeout 3 bash -c "</dev/tcp/$0/$1" 2>/dev/null; echo "code=$?"' "$banco" "$porta" \
-    | sed -n 's/^code=//p' || true)
+  # shellcheck disable=SC2016
+  codigo=$(codigo_de "$(no_pod -n "$PLATAFORMA" exec rabbitmq-0 -c rabbitmq -- \
+    bash -c 'timeout 3 bash -c "</dev/tcp/$0/$1" 2>/dev/null; echo "code=$?"' "$banco" "$porta")")
   case "$codigo" in
     124) detalhe="blocked (connection timed out)" ;;
     0) detalhe="connected: no NetworkPolicy denies it" ;;
     "") detalhe="no answer from rabbitmq-0" ;;
     *) detalhe="refused or unknown host (code $codigo), which does not prove the rule" ;;
   esac
-  registra "$nome" "rabbitmq-0 -> $banco:$porta" "$detalhe" "$([ "$codigo" = 124 ] && echo sim)"
+  if [ "$codigo" = 124 ] && [ "$controle" != 0 ]; then
+    detalhe="timed out, but the control from $nome-api did not connect: the probe proves nothing"
+  fi
+  registra "$nome" "rabbitmq-0 -> $banco:$porta" "$detalhe" "$([ "$codigo" = 124 ] && [ "$controle" = 0 ] && echo sim)"
 done
 
 {
