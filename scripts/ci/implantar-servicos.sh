@@ -148,7 +148,7 @@ tag_de() {
     echo "$2"
     return
   fi
-  indice=$(mktemp -d "$TMP/indice.XXXXXX") || return
+  indice=$(mktemp -d "$TMP/indice.XXXXXX")
   GIT_INDEX_FILE="$indice/index" git -C "$1" add -A || return
   arvore=$(GIT_INDEX_FILE="$indice/index" git -C "$1" write-tree) || return
   echo "$2-sujo-${arvore:0:12}"
