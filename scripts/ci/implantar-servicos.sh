@@ -9,16 +9,18 @@
 #
 # <servico> e os-service, billing-service ou execution-service, e <dir>, o
 # checkout do repositorio dele. Sem --tar, a imagem pytstop-<servico> sai do
-# docker build do <dir>, com o commit como tag e GIT_SHA (os builds rodam em
-# paralelo); com --tar, vem do arquivo do docker save, com a ref de --imagem.
+# docker build do <dir>, com o commit como tag (<commit>-sujo-<hash> se a
+# arvore tem mudanca nao commitada) e GIT_SHA (os builds rodam em paralelo);
+# com --tar, vem do arquivo do docker save, e --imagem e a ref que ele gravou.
 # Cada imagem entra no kind por kind load. O overlay da execucao,
 # <dir>/k8s/overlays/execucao, parte do <overlay> do servico e troca a imagem;
-# o script o apaga no fim. Em cada namespace, na ordem: apaga os Jobs de
-# inicializacao (Job e imutavel), apply server-side, espera o banco
-# (StatefulSet), o Job (log dele no erro) e cada Deployment. Os namespaces
-# vao em paralelo, e a saida de cada um leva o nome do servico. Antes de
-# tudo, cada servico so pode usar, alem da propria imagem, as imagens da tabela
-# de versoes do README deste repositorio (banco, exporter, initContainers).
+# o script o apaga no fim. Em cada namespace, na ordem: confere os Secrets da
+# plataforma, apaga os Jobs de inicializacao (Job e imutavel), apply
+# server-side, espera o banco (StatefulSet), o Job (log dele no erro) e cada
+# Deployment. Os namespaces vao em paralelo, e a saida de cada um leva o nome
+# do servico. Antes de tudo, cada servico so pode usar, alem da propria imagem,
+# as imagens da tabela de versoes do README deste repositorio (banco, exporter,
+# initContainers).
 #
 # Tudo o que pode pendurar roda com prazo, e o que passa dele reprova o servico
 # em vez de consumir o timeout do job do CD (variaveis de ambiente, em segundos):
@@ -201,6 +203,12 @@ for par in "${pares[@]}"; do
       echo "$servico: --imagem needs <name>:<tag>, got $ref" >&2
       exit 2
     fi
+    # O kind load carrega a ref que o docker save gravou no arquivo; com outra
+    # em --imagem, o Deployment tentaria puxar do registry e o erro viria como
+    # timeout do rollout, minutos depois.
+    gravadas=$(tar -xOf "$tar" manifest.json index.json 2>/dev/null || true)
+    grep -qF "\"$ref\"" <<< "$gravadas" \
+      || { echo "$servico (commit $sha): $tar does not hold the image $ref (--imagem must be the ref docker save wrote)" >&2; exit 1; }
     tag=""
   else
     tag=$(tag_de "$dir" "$sha") || { echo "$servico (commit $sha): could not hash the working tree of $dir" >&2; exit 1; }
@@ -270,14 +278,51 @@ YAML
   echo "${nomes[i]}: $EXECUCAO = $overlay with image ${refs[i]}"
 done
 
+# segredo_do_banco <namespace>: o Secret das senhas do banco do servico.
+segredo_do_banco() {
+  case "$1" in
+    pytstop-os) echo os-postgres ;;
+    pytstop-billing) echo billing-mongo ;;
+    pytstop-execucao) echo execucao-postgres ;;
+  esac
+}
+
+# espera_job <namespace> <job>: 0 quando o Job completa, 1 quando ele falha
+# (backoffLimit ou prazo esgotados) ou nao completa em ESPERA_JOB segundos. Um
+# kubectl wait pelo Complete nao ve o Job Failed e esperaria os 300 s inteiros.
+espera_job() {
+  local fim=$((SECONDS + ESPERA_JOB)) condicoes
+  while :; do
+    condicoes=$(k -n "$1" get "$2" -o jsonpath='{range .status.conditions[?(@.status=="True")]}{.type} {end}') || return
+    case "$condicoes" in
+      *Complete*) return 0 ;;
+      *Failed*) echo "$2 failed" >&2; return 1 ;;
+    esac
+    if [ "$SECONDS" -ge "$fim" ]; then
+      echo "$2 not complete after ${ESPERA_JOB}s" >&2
+      return 1
+    fi
+    sleep 2
+  done
+}
+
 # implanta <namespace> <dir do overlay>: a ordem do namespace. Cada lista vem
 # antes do laco: erro do cluster dentro do $( ) do for passaria calado. Nas
 # esperas, o prazo da chamada e o --timeout dela mais o de uma chamada comum.
 implanta() {
-  local ns=$1 recurso recursos jobs
+  local ns=$1 recurso recursos jobs banco
+  banco=$(segredo_do_banco "$ns")
+  # Sem os Secrets (o make deploy os cria), os pods ficariam em
+  # CreateContainerConfigError e o erro viria como timeout do banco.
+  k -n "$ns" get secret rabbitmq "$banco" -o name > /dev/null \
+    || { echo "Secrets rabbitmq and $banco are missing in $ns: run make deploy first" >&2; return 1; }
   k -n "$ns" delete job -l "$INICIALIZACAO" --ignore-not-found --timeout=60s || return
   k apply --server-side -k "$2" || return
   recursos=$(k -n "$ns" get statefulset -o name) || return
+  if [ -z "$recursos" ]; then
+    echo "no StatefulSet in $ns" >&2
+    return 1
+  fi
   for recurso in $recursos; do
     kc $((ESPERA_BANCO + PRAZO_KUBECTL)) -n "$ns" rollout status "$recurso" --timeout="${ESPERA_BANCO}s" || return
   done
@@ -287,12 +332,16 @@ implanta() {
     return 1
   fi
   for recurso in $jobs; do
-    if ! kc $((ESPERA_JOB + PRAZO_KUBECTL)) -n "$ns" wait --for=condition=Complete "$recurso" --timeout="${ESPERA_JOB}s"; then
+    if ! espera_job "$ns" "$recurso"; then
       k -n "$ns" logs "$recurso" --all-containers --tail=50 >&2 || true
       return 1
     fi
   done
   recursos=$(k -n "$ns" get deployment -o name) || return
+  if [ -z "$recursos" ]; then
+    echo "no Deployment in $ns" >&2
+    return 1
+  fi
   for recurso in $recursos; do
     kc $((ESPERA_DEPLOYMENT + PRAZO_KUBECTL)) -n "$ns" rollout status "$recurso" --timeout="${ESPERA_DEPLOYMENT}s" || return
   done

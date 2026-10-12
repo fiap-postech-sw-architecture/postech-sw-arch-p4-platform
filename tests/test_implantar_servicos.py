@@ -14,6 +14,7 @@ dele), falha antes de tudo; e os argumentos recusados.
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import re
@@ -23,6 +24,7 @@ import shutil
 # sem shell.
 import subprocess  # nosec B404
 import sys
+import tarfile
 import time
 from pathlib import Path
 from typing import Any
@@ -50,6 +52,7 @@ DOCKER_FALSO = r"""
 import json
 import os
 import sys
+import tarfile
 import time
 from pathlib import Path
 
@@ -73,6 +76,7 @@ KIND_FALSO = r"""
 import json
 import os
 import sys
+import tarfile
 import time
 from pathlib import Path
 
@@ -101,13 +105,16 @@ os.execvp(sys.argv[2], sys.argv[2:])
 # marcadas com "lista:" na forma "- image:", as outras em "image:");
 # cada namespace tem o banco, o Job de inicializacao e dois Deployments.
 # KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
-# (delete, apply, statefulset, job, deployment, sem-job...), e
-# KUBECTL_FALSO_PENDURA=<namespace>:<verbo>, pendurar. KUSTOMIZE_FALSO_FALHA=1
-# faz o kustomize falhar.
+# (secret, delete, apply, statefulset, job, deployment; job e o Job que falha, e
+# sem-statefulset, sem-job e sem-deployment, a lista vazia), e
+# KUBECTL_FALSO_PENDURA=<namespace>:<verbo>, pendurar.
+# KUBECTL_FALSO_JOB_PENDENTE=<namespace> deixa o Job rodando para sempre.
+# KUSTOMIZE_FALSO_FALHA=1 faz o kustomize falhar.
 KUBECTL_FALSO = r"""
 import json
 import os
 import sys
+import tarfile
 import time
 from pathlib import Path
 
@@ -148,9 +155,13 @@ falha = os.environ.get("KUBECTL_FALSO_FALHA", "")
 pendura = os.environ.get("KUBECTL_FALSO_PENDURA", "")
 
 
-def falha_em(verbo):
+def pendura_em(verbo):
     if pendura == f"{ns}:{verbo}":
         time.sleep(120)
+
+
+def falha_em(verbo):
+    pendura_em(verbo)
     if falha == f"{ns}:{verbo}":
         sys.exit(f"error: {verbo} failed in {ns}")
 
@@ -163,7 +174,8 @@ elif resto[:3] == ["apply", "--server-side", "-k"]:
     print(f"deployment.apps/{servico}-api serverside-applied")
 elif resto == ["get", "statefulset", "-o", "name"]:
     falha_em("get-statefulset")
-    print(f"statefulset.apps/{BANCOS[ns]}")
+    if falha != f"{ns}:sem-statefulset":
+        print(f"statefulset.apps/{BANCOS[ns]}")
 elif resto[:2] == ["rollout", "status"] and resto[2].startswith("statefulset"):
     falha_em("statefulset")
     print(f"{resto[2]} rolling update complete")
@@ -171,14 +183,25 @@ elif resto[:2] == ["get", "job"]:
     falha_em("get-job")
     if falha != f"{ns}:sem-job":
         print(f"job.batch/{JOBS[ns]}")
-elif resto[0] == "wait":
-    falha_em("job")
+elif resto[0] == "get" and resto[1].startswith("job.batch/"):
+    # As condicoes verdadeiras do Job: Failed no namespace de "job", nenhuma
+    # (ainda rodando) no de KUBECTL_FALSO_JOB_PENDENTE.
+    pendura_em("job")
+    falha_em("poll-job")
+    if falha == f"{ns}:job":
+        print("Failed ", end="")
+    elif os.environ.get("KUBECTL_FALSO_JOB_PENDENTE") != ns:
+        print("Complete ", end="")
+elif resto[:2] == ["get", "secret"]:
+    falha_em("secret")
+    print("secret/rabbitmq")
 elif resto[0] == "logs":
     falha_em("logs")
     print(f"migration log of {resto[1]}")
 elif resto == ["get", "deployment", "-o", "name"]:
     falha_em("get-deployment")
-    print(f"deployment.apps/{servico}-api\ndeployment.apps/{servico}-relay")
+    if falha != f"{ns}:sem-deployment":
+        print(f"deployment.apps/{servico}-api\ndeployment.apps/{servico}-relay")
 elif resto[:2] == ["rollout", "status"] and resto[2].startswith("deployment"):
     falha_em("deployment")
     print(f"{resto[2]} successfully rolled out")
@@ -234,6 +257,17 @@ def sha(dir_: Path) -> str:
     return git("rev-parse", "HEAD", cwd=dir_)
 
 
+def faz_tar(destino: Path, *refs: str) -> Path:
+    """Um arquivo no formato do docker save, com o manifest.json das refs."""
+    manifest = json.dumps([{"Config": "c.json", "RepoTags": list(refs), "Layers": []}])
+    dados = manifest.encode()
+    with tarfile.open(destino, "w") as arquivo:
+        info = tarfile.TarInfo("manifest.json")
+        info.size = len(dados)
+        arquivo.addfile(info, io.BytesIO(dados))
+    return destino
+
+
 class Implantacao:
     """Falsos no PATH, checkouts dos tres servicos e o tar do CD no tmp_path."""
 
@@ -258,8 +292,8 @@ class Implantacao:
             "FALSOS": str(tmp_path),
         }
         self.dirs = {servico: checkout(tmp_path, servico) for servico in SERVICOS}
-        self.tar = tmp_path / "imagem.tar"
-        self.tar.write_bytes(b"tar")
+        self.tar = faz_tar(tmp_path / "imagem.tar", REF_DO_CD)
+        self.imagem = REF_DO_CD
         self.script = SCRIPT
 
     def roda(self, *args: str, **ambiente: str) -> subprocess.CompletedProcess[str]:
@@ -280,7 +314,7 @@ class Implantacao:
             "--tar",
             f"os-service={self.tar}",
             "--imagem",
-            f"os-service={REF_DO_CD}",
+            f"os-service={self.imagem}",
             *(f"{servico}={dir_}" for servico, dir_ in self.dirs.items()),
             **ambiente,
         )
@@ -300,63 +334,38 @@ def verbos(chamadas: list[Any], ns: str) -> list[str]:
             continue
         args: list[str] = chamada["args"]
         resto = args[4:] if args[2] == "-n" else args[2:]
-        resultado.append(" ".join(resto[:2]) if resto[0] != "wait" else "wait")
+        if resto[0] == "get" and resto[1].startswith("job.batch/"):
+            resultado.append("poll job")
+        else:
+            resultado.append(" ".join(resto[:2]))
     return resultado
 
 
 # Verbos no namespace que falhou, ate a falha: depois dela, nada.
+_ANTES_DO_BANCO = ["get secret", "delete job", "apply --server-side"]
+_ANTES_DO_JOB = [*_ANTES_DO_BANCO, "get statefulset", "rollout status", "get job"]
+_ANTES_DOS_DEPLOYMENTS = [*_ANTES_DO_JOB, "poll job", "get deployment"]
 ATE_A_FALHA = {
-    "delete": ["delete job"],
-    "apply": ["delete job", "apply --server-side"],
-    "get-statefulset": ["delete job", "apply --server-side", "get statefulset"],
-    "statefulset": [
-        "delete job",
-        "apply --server-side",
-        "get statefulset",
-        "rollout status",
-    ],
-    "sem-job": [
-        "delete job",
-        "apply --server-side",
-        "get statefulset",
-        "rollout status",
-        "get job",
-    ],
-    "get-job": [
-        "delete job",
-        "apply --server-side",
-        "get statefulset",
-        "rollout status",
-        "get job",
-    ],
-    "job": [
-        "delete job",
-        "apply --server-side",
-        "get statefulset",
-        "rollout status",
-        "get job",
-        "wait",
-        "logs job.batch/billing-inicializacao",
-    ],
-    "deployment": [
-        "delete job",
-        "apply --server-side",
-        "get statefulset",
-        "rollout status",
-        "get job",
-        "wait",
-        "get deployment",
-        "rollout status",
-    ],
-    "get-deployment": [
-        "delete job",
-        "apply --server-side",
-        "get statefulset",
-        "rollout status",
-        "get job",
-        "wait",
-        "get deployment",
-    ],
+    "secret": ["get secret"],
+    "delete": ["get secret", "delete job"],
+    "apply": _ANTES_DO_BANCO,
+    "get-statefulset": [*_ANTES_DO_BANCO, "get statefulset"],
+    "sem-statefulset": [*_ANTES_DO_BANCO, "get statefulset"],
+    "statefulset": [*_ANTES_DO_BANCO, "get statefulset", "rollout status"],
+    "get-job": _ANTES_DO_JOB,
+    "sem-job": _ANTES_DO_JOB,
+    # Job que falha, ou erro do cluster ao le-lo: o log vem do mesmo jeito.
+    "poll-job": [*_ANTES_DO_JOB, "poll job", "logs job.batch/billing-inicializacao"],
+    "job": [*_ANTES_DO_JOB, "poll job", "logs job.batch/billing-inicializacao"],
+    "get-deployment": _ANTES_DOS_DEPLOYMENTS,
+    "sem-deployment": _ANTES_DOS_DEPLOYMENTS,
+    "deployment": [*_ANTES_DOS_DEPLOYMENTS, "rollout status"],
+}
+# A lista vazia que cada verbo "sem-" provoca, e a mensagem do script.
+SEM_RECURSO = {
+    "sem-statefulset": "no StatefulSet in pytstop-billing",
+    "sem-job": f"no Job labeled {INICIALIZACAO} in pytstop-billing",
+    "sem-deployment": "no Deployment in pytstop-billing",
 }
 
 
@@ -445,12 +454,13 @@ def test_cd_constroi_os_vizinhos_carrega_e_implanta_na_ordem(
     }
     for servico, ns in SERVICOS.items():
         assert verbos(kubectl, ns) == [
+            "get secret",
             "delete job",
             "apply --server-side",
             "get statefulset",
             "rollout status",
             "get job",
-            "wait",
+            "poll job",
             "get deployment",
             "rollout status",
             "rollout status",
@@ -493,10 +503,10 @@ def test_job_de_inicializacao_apagado_esperado_pelo_rotulo(
         "kind-pytstop-p4",
         "-n",
         "pytstop-billing",
-        "wait",
-        "--for=condition=Complete",
+        "get",
         "job.batch/billing-inicializacao",
-        "--timeout=300s",
+        "-o",
+        'jsonpath={range .status.conditions[?(@.status=="True")]}{.type} {end}',
     ] in kubectl
 
 
@@ -504,7 +514,11 @@ def test_job_de_inicializacao_apagado_esperado_pelo_rotulo(
 def test_falha_num_namespace_nomeia_o_servico_e_os_outros_seguem(
     implantacao: Implantacao, verbo: str
 ) -> None:
-    processo = implantacao.do_cd(KUBECTL_FALSO_FALHA=f"pytstop-billing:{verbo}")
+    # Com o prazo do Job curto, um Job Failed que fosse esperado ate o fim
+    # estouraria o timeout do teste.
+    processo = implantacao.do_cd(
+        KUBECTL_FALSO_FALHA=f"pytstop-billing:{verbo}", ESPERA_JOB="5"
+    )
 
     assert processo.returncode == 1
     commit = sha(implantacao.dirs["billing-service"])
@@ -520,10 +534,18 @@ def test_falha_num_namespace_nomeia_o_servico_e_os_outros_seguem(
             "[billing-service] migration log of job.batch/billing-inicializacao"
             in processo.stdout
         )
-    # Sem Job, a mensagem diz isso; com erro do cluster, so o erro dele.
-    assert (
-        f"no Job labeled {INICIALIZACAO} in pytstop-billing" in processo.stdout
-    ) == (verbo == "sem-job")
+        # O Job que falha para a espera na hora, sem esperar o prazo todo.
+        assert "[billing-service] job.batch/billing-inicializacao failed" in (
+            processo.stdout
+        )
+    # Lista vazia diz qual; com erro do cluster, so o erro dele.
+    for sem, mensagem in SEM_RECURSO.items():
+        assert (mensagem in processo.stdout) == (verbo == sem)
+    if verbo == "secret":
+        assert (
+            "[billing-service] Secrets rabbitmq and billing-mongo are missing in "
+            "pytstop-billing: run make deploy first"
+        ) in processo.stdout
     for dir_ in implantacao.dirs.values():
         assert not (dir_ / "k8s" / "overlays" / "execucao").exists()
 
@@ -865,18 +887,19 @@ def test_arvore_suja_nao_mexe_no_indice_do_checkout(implantacao: Implantacao) ->
 
 
 # Prazo de cada chamada do kubectl, por verbo, com os padroes do script: 120 s
-# nas comuns e, nas esperas, o --timeout (180 s do banco, 300 s do Job e dos
-# Deployments) mais 120 s.
+# nas comuns e, nas esperas, o --timeout (180 s do banco, 300 s dos
+# Deployments) mais 120 s. O Job e lido de 2 em 2 s, cada leitura com 120 s.
 def prazos_do_script(
-    banco: int, job: int, deployment: int, comum: int
+    banco: int, deployment: int, comum: int
 ) -> dict[str, tuple[str, str | None]]:
     return {
         "delete job": (str(comum), "--timeout=60s"),
         "apply --server-side": (str(comum), None),
         "get statefulset": (str(comum), None),
         "rollout statefulset": (str(banco + comum), f"--timeout={banco}s"),
+        "get secret": (str(comum), None),
         "get job": (str(comum), None),
-        "wait": (str(job + comum), f"--timeout={job}s"),
+        "poll job": (str(comum), None),
         "get deployment": (str(comum), None),
         "rollout deployment": (str(deployment + comum), f"--timeout={deployment}s"),
     }
@@ -887,8 +910,8 @@ def verbo_com_prazo(chamada: list[str]) -> tuple[str, tuple[str, str | None]]:
     prazo, args = chamada[0], chamada[chamada.index("kubectl") + 1 :]
     resto = args[4:] if args[2] == "-n" else args[2:]
     verbo = " ".join(resto[:2])
-    if resto[0] == "wait":
-        verbo = "wait"
+    if resto[0] == "get" and resto[1].startswith("job.batch/"):
+        verbo = "poll job"
     elif resto[0] == "rollout":
         verbo = "rollout " + resto[2].split("/")[0].split(".")[0]
     ultimo = args[-1] if args[-1].startswith("--timeout=") else None
@@ -918,7 +941,7 @@ def test_todo_comando_que_pode_pendurar_roda_com_prazo(
     ambiente: dict[str, str],
     prazos: tuple[int, int, int, int, int, int],
 ) -> None:
-    build, carga, comum, banco, job, deployment = prazos
+    build, carga, comum, banco, _job, deployment = prazos
     timeout = implantacao.tmp / "bin" / "timeout"
     timeout.write_text(f"#!{sys.executable}\n{TIMEOUT_FALSO}", encoding="utf-8")
     timeout.chmod(0o755)
@@ -931,23 +954,23 @@ def test_todo_comando_que_pode_pendurar_roda_com_prazo(
     assert sorted(c[0] for c in chamadas if c[1] == "docker") == [str(build)] * 2
     assert sorted(c[0] for c in chamadas if c[1] == "kind") == [str(carga)] * 3
     kubectl = [c for c in chamadas if c[1] == "kubectl"]
-    esperado = prazos_do_script(banco, job, deployment, comum)
-    # Cada namespace faz as nove chamadas, e nenhuma fica sem prazo.
+    esperado = prazos_do_script(banco, deployment, comum)
+    # Cada namespace faz as dez chamadas, e nenhuma fica sem prazo.
     assert sorted(verbo_com_prazo(c) for c in kubectl) == sorted(
         [(verbo, prazo) for verbo, prazo in esperado.items() for _ in SERVICOS]
         + [("rollout deployment", esperado["rollout deployment"])] * len(SERVICOS)
     )
-    assert len(kubectl) == 9 * len(SERVICOS)
+    assert len(kubectl) == 10 * len(SERVICOS)
 
 
 @pytest.mark.parametrize(
     ("falha", "pendura"),
     [
-        *((None, verbo) for verbo in ATE_A_FALHA if verbo != "sem-job"),
+        *((None, verbo) for verbo in ATE_A_FALHA if verbo not in SEM_RECURSO),
         # O log do Job, lido depois da falha dele, tambem tem prazo.
         ("pytstop-billing:job", "logs"),
     ],
-    ids=[*(v for v in ATE_A_FALHA if v != "sem-job"), "logs-do-job"],
+    ids=[*(v for v in ATE_A_FALHA if v not in SEM_RECURSO), "logs-do-job"],
 )
 def test_chamada_ao_cluster_pendurada_estoura_o_prazo_e_nomeia_o_servico(
     implantacao: Implantacao, falha: str | None, pendura: str
@@ -1049,3 +1072,92 @@ def test_diretorio_sem_git_para_antes_de_tudo(
     assert f"billing-service: {sem_git} is not a git checkout" in processo.stderr
     assert implantacao.chamadas("docker") == []
     assert implantacao.chamadas("kind") == []
+
+
+def test_job_que_nao_completa_no_prazo_mostra_o_log_e_nomeia_o_servico(
+    implantacao: Implantacao,
+) -> None:
+    inicio = time.monotonic()
+
+    processo = implantacao.do_cd(
+        KUBECTL_FALSO_JOB_PENDENTE="pytstop-billing", ESPERA_JOB="3"
+    )
+
+    assert time.monotonic() - inicio >= 3
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["billing-service"])
+    assert f"deploy failed: billing-service (commit {commit})" in processo.stderr
+    assert (
+        "[billing-service] job.batch/billing-inicializacao not complete after 3s"
+        in processo.stdout
+    )
+    assert (
+        "[billing-service] migration log of job.batch/billing-inicializacao"
+        in processo.stdout
+    )
+    verbos_billing = verbos(implantacao.chamadas("kubectl"), "pytstop-billing")
+    assert verbos_billing.count("poll job") >= 2
+    assert verbos_billing[-1] == "logs job.batch/billing-inicializacao"
+    # Os outros namespaces seguem ate o fim.
+    for ns in ("pytstop-os", "pytstop-execucao"):
+        assert verbos(implantacao.chamadas("kubectl"), ns).count("rollout status") == 3
+
+
+def test_tar_que_nao_tem_a_ref_de_imagem_para_antes_de_tudo(
+    implantacao: Implantacao,
+) -> None:
+    ref = "ghcr.io/fiap/pytstop-os-service:outra"
+    implantacao.imagem = ref
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 1
+    commit = sha(implantacao.dirs["os-service"])
+    assert (
+        f"os-service (commit {commit}): {implantacao.tar} does not hold the image {ref}"
+        in processo.stderr
+    )
+    assert implantacao.chamadas("docker") == []
+    assert implantacao.chamadas("kind") == []
+    assert implantacao.chamadas("kubectl") == []
+
+
+def test_tar_inexistente_para_antes_de_tudo(
+    implantacao: Implantacao, tmp_path: Path
+) -> None:
+    inexistente = tmp_path / "nao-existe.tar"
+    implantacao.tar = inexistente
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 1
+    assert f"os-service: {inexistente} not found" in processo.stderr
+    assert implantacao.chamadas("docker") == []
+    assert implantacao.chamadas("kubectl") == []
+
+
+def test_registry_com_porta_e_tag_so_de_digitos_no_overlay_gerado(
+    implantacao: Implantacao, tmp_path: Path
+) -> None:
+    ref = "localhost:5000/pytstop-os-service:20261012"
+    implantacao.tar = faz_tar(tmp_path / "porta.tar", ref)
+    implantacao.imagem = ref
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 0, processo.stderr
+    overlays = [
+        yaml.safe_load(c["kustomization"])
+        for c in implantacao.chamadas("kubectl")
+        if "kustomization" in c
+    ]
+    (do_os,) = (o for o in overlays if o["images"][0]["name"] == "pytstop-os-service")
+    # newName vai ate a ultima barra-e-dois-pontos (a porta e do registry), e a
+    # tag de digitos entra como texto, nao como numero do YAML.
+    assert do_os["images"] == [
+        {
+            "name": "pytstop-os-service",
+            "newName": "localhost:5000/pytstop-os-service",
+            "newTag": "20261012",
+        }
+    ]
