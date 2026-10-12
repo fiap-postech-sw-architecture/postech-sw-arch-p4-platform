@@ -23,7 +23,7 @@ O único commit da `main` fora de pull request é o `Initial commit` que o GitHu
 |---|---|
 | Mensageria assíncrona para eventos e integração desacoplada (l. 66) e para a orquestração da saga (l. 101) | RabbitMQ em [`k8s/base/rabbitmq/`](k8s/base/rabbitmq), com topologia, policies e um usuário por serviço ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)); o contrato das mensagens em [`contratos/`](contratos) |
 | Nenhum serviço acessa o banco de outro (l. 67) | Os serviços trocam só mensagens e chamadas REST pela borda; as permissões do broker limitam o que cada usuário publica e lê |
-| Deploy automatizado em Kubernetes (l. 94 e 100) | `make kind-up deploy` com o overlay `kind-ci`, que o CD de cada serviço chama pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh) (`make -C platform kind-up deploy OVERLAY=kind-ci`), e o mesmo `make deploy` com o overlay `k3s` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)); o job `deploy-kind` do [CD](.github/workflows/cd.yml) implanta a plataforma no kind do runner, com o overlay `kind-ci`, em todo PR e push na `main` |
+| Deploy automatizado em Kubernetes (l. 94 e 100) | `make kind-up deploy` com o overlay `kind-ci`, que o CD de cada serviço chama pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh) (`make -C platform kind-up deploy OVERLAY=kind-ci`), e o mesmo `make deploy` com o overlay `k3s` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)); o job `deploy-kind` do [CD](.github/workflows/cd.yml) implanta a plataforma no kind do runner, com o overlay `kind-ci`, em todo PR e push na `main`; os serviços entram em seguida pelo [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) (no CD de cada serviço, ou pelo `make kind-deploy` que cada serviço traz), conferidos pelo [`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh) ([Contrato com os serviços](#contrato-com-os-serviços)) |
 | Ferramentas de monitoramento e observabilidade da fase 3 (l. 102) | Prometheus, Grafana, Loki, Promtail e Jaeger em [`k8s/base/observabilidade/`](k8s/base/observabilidade); dashboards e alertas documentados em [`observabilidade/`](observabilidade/README.md) ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) |
 | `main` com PR obrigatório e checagens automáticas (l. 95) | Ruleset da `main` com os checks `manifests` e `contratos` do CI, que roda também o `gitleaks` |
 | Diagrama geral, estratégia da saga e justificativa da divisão (l. 131 a 133) | [RFC-004](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) e ADRs em [`docs/arquitetura/`](docs/arquitetura) |
@@ -71,6 +71,8 @@ make status         # pods, serviços, volumes e filas do RabbitMQ
 make port-forward   # Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025
 make kind-down      # apaga o cluster
 ```
+
+O `make smoke` pede um cluster só com a plataforma: ele recusa um namespace de serviço com Ingress. Para implantar os serviços no mesmo cluster, depois do `make deploy`, veja o [Contrato com os serviços](#contrato-com-os-serviços) (o `make kind-deploy` de cada serviço); para voltar ao cluster só da plataforma, apague os namespaces `pytstop-os`, `pytstop-billing` e `pytstop-execucao`.
 
 O cluster se chama `pytstop-p4` para não colidir com o `pytstop` que o `make cd-local` da fase 3 cria na mesma máquina. Todo `kubectl` do Makefile usa o contexto `kind-pytstop-p4` explicitamente; para olhar outro cluster, `make status KUBE_CONTEXT=<contexto>`.
 
