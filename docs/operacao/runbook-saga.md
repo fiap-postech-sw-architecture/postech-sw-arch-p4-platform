@@ -85,13 +85,13 @@ As métricas não levam o `ordem_id`, porque os labels são fechados. Para chega
 
 1. No Explore do Grafana, com o datasource Loki, `{namespace="pytstop-os"} |= "falha_na_compensacao" | json` traz as linhas do OS Service que citam essa etapa; o campo `correlation_id` de cada linha é o `ordem_id`.
 2. Na mensagem parada numa DLQ, a propriedade `correlation_id` ([seção 4](#4-mensagem-na-dlq-e-redrive)).
-3. No banco do OS Service, a lista completa, com uma consulta só de leitura. O comando acha o pod e o container do PostgreSQL pela imagem, sem depender do nome que o manifesto lhes der. A consulta junta cada instância à linha da outbox do envio mais recente do comando em voo (o último de `mensagem_ids`) e lista as instâncias em `falha_na_compensacao` e as com o prazo vencido há mais de 60 s, contado do `entregue_em` mais 120 s, o `SAGA_PRAZO_RESPOSTA_SEGUNDOS` padrão; se a configuração mudou, troque os dois números:
+3. No banco do OS Service, a lista completa, com uma consulta só de leitura. O comando acha o pod e o container do PostgreSQL pela imagem, sem depender do nome que o manifesto lhes der, e entra como `os_app` (só DML), com a senha que o container do banco já recebe do Secret em `POSTGRES_APP_PASSWORD`: o PostgreSQL do OS pede senha até no socket local (`scram-sha-256`, [Contrato com os serviços](../../README.md#o-que-cada-serviço-precisa-ter)), e ela chega ao `psql` por `PGPASSWORD`, sem passar pelo terminal nem por argumento. A consulta junta cada instância à linha da outbox do envio mais recente do comando em voo (o último de `mensagem_ids`) e lista as instâncias em `falha_na_compensacao` e as com o prazo vencido há mais de 60 s, contado do `entregue_em` mais 120 s, o `SAGA_PRAZO_RESPOSTA_SEGUNDOS` padrão; se a configuração mudou, troque os dois números:
 
    ```bash
    kos() { kubectl --context kind-pytstop-p4 -n pytstop-os "$@"; }
    read -r PG_POD PG_CONTAINER < <(kos get pods -o json | jq -r 'first(.items[] | .metadata.name as $pod
      | .spec.containers[] | select(.image | test("(^|/)postgres:")) | "\($pod) \(.name)")')
-   kos exec -i "$PG_POD" -c "$PG_CONTAINER" -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' <<'SQL'
+   kos exec -i "$PG_POD" -c "$PG_CONTAINER" -- sh -c 'PGPASSWORD="$POSTGRES_APP_PASSWORD" exec psql -w -U os_app -d "$POSTGRES_DB"' <<'SQL'
    SELECT s.ordem_id, s.etapa, s.falha, s.comando_em_voo->>'tipo' AS comando, s.reenvios,
           o.entregue_em, o.entregue_em + interval '120 seconds' AS venceu_em
      FROM sagas s
