@@ -37,6 +37,7 @@ SCRIPT = (
 )
 LEITOR_DO_README = SCRIPT.with_name("imagens-do-readme.sh")
 GIT = shutil.which("git") or "git"
+SLEEP = shutil.which("sleep") or "/bin/sleep"
 SERVICOS = {
     "os-service": "pytstop-os",
     "billing-service": "pytstop-billing",
@@ -96,6 +97,18 @@ if os.environ.get("KIND_FALSO") == "falha":
     sys.exit("ERROR: failed to load image")
 if os.environ.get("KIND_FALSO") == "pendura":
     time.sleep(120)
+"""
+
+# sleep falso: registra o argumento e dorme de verdade (SLEEP_REAL).
+SLEEP_FALSO = r"""
+import json
+import os
+import sys
+from pathlib import Path
+
+with (Path(os.environ["FALSOS"]) / "sleep.jsonl").open("a") as log:
+    log.write(json.dumps(sys.argv[1:]) + "\n")
+os.execv(os.environ["SLEEP_REAL"], ["sleep", *sys.argv[1:]])
 """
 
 # So o Linux tem timeout; o falso o poe no PATH tambem no macOS (onde o script
@@ -1201,13 +1214,20 @@ def test_job_que_nao_completa_no_prazo_mostra_o_log_e_nomeia_o_servico(
     implantacao: Implantacao,
 ) -> None:
     inicio = time.monotonic()
+    sleep = implantacao.tmp / "bin" / "sleep"
+    sleep.write_text(f"#!{sys.executable}\n{SLEEP_FALSO}", encoding="utf-8")
+    sleep.chmod(0o755)
 
     processo = implantacao.do_cd(
-        KUBECTL_FALSO_JOB_PENDENTE="pytstop-billing", ESPERA_JOB="3"
+        KUBECTL_FALSO_JOB_PENDENTE="pytstop-billing", ESPERA_JOB="3", SLEEP_REAL=SLEEP
     )
 
     # O SECONDS do bash conta segundos inteiros: 3 s de espera podem ser 2 s e pouco.
     assert time.monotonic() - inicio >= 2
+    # O Job e lido de 2 em 2 s: sem pausa, o laco consultaria o API server sem parar.
+    pausas = implantacao.chamadas("sleep")
+    assert pausas
+    assert all(pausa == ["2"] for pausa in pausas)
     assert processo.returncode == 1
     commit = sha(implantacao.dirs["billing-service"])
     assert f"deploy failed: billing-service (commit {commit})" in processo.stderr
