@@ -70,8 +70,10 @@ if esperados:
             juntos = False
             break
         time.sleep(0.02)
+# Onde o script guarda o log do build: sob o TMPDIR, se o teste o definiu.
+tmp = len(list(Path(os.environ.get("TMPDIR", "/nao/existe")).glob("*/build-*.log")))
 with (dir_ / "docker.jsonl").open("a") as log:
-    log.write(json.dumps({"args": args, "juntos": juntos}) + "\n")
+    log.write(json.dumps({"args": args, "juntos": juntos, "tmp": tmp}) + "\n")
 ref = args[args.index("-t") + 1]
 if os.environ.get("DOCKER_FALSO_FALHA") and os.environ["DOCKER_FALSO_FALHA"] in ref:
     sys.exit("ERROR: failed to solve: process did not complete successfully")
@@ -1108,7 +1110,8 @@ def test_job_que_nao_completa_no_prazo_mostra_o_log_e_nomeia_o_servico(
         KUBECTL_FALSO_JOB_PENDENTE="pytstop-billing", ESPERA_JOB="3"
     )
 
-    assert time.monotonic() - inicio >= 3
+    # O SECONDS do bash conta segundos inteiros: 3 s de espera podem ser 2 s e pouco.
+    assert time.monotonic() - inicio >= 2
     assert processo.returncode == 1
     commit = sha(implantacao.dirs["billing-service"])
     assert f"deploy failed: billing-service (commit {commit})" in processo.stderr
@@ -1270,6 +1273,11 @@ def test_nao_deixa_temporario_para_tras(
     )
 
     assert processo.returncode == (1 if falha else 0), processo.stderr
+    # O temporario nasceu sob o TMPDIR (o log de cada build ja estava la quando
+    # o docker rodou) e nao sobrou nada.
+    builds = implantacao.chamadas("docker")
+    assert len(builds) == 2
+    assert all(build["tmp"] >= 1 for build in builds)
     assert list(temporarios.iterdir()) == []
 
 
