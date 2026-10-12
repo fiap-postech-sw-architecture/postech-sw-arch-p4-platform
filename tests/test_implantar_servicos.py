@@ -111,8 +111,8 @@ with (Path(os.environ["FALSOS"]) / "timeout.jsonl").open("a") as log:
 os.execvp(sys.argv[2], sys.argv[2:])
 """
 
-# kubectl falso: o kustomize devolve as imagens de imagens.txt do overlay (as
-# marcadas com "lista:" na forma "- image:", as outras em "image:");
+# kubectl falso: o kustomize devolve as imagens de imagens.txt do overlay (cada
+# uma na forma que o prefixo escolhe: "image:", "lista:" ou "aspas:");
 # cada namespace tem o banco, o Job de inicializacao e dois Deployments.
 # KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
 # (secret, delete, apply, statefulset, job, deployment; job e o Job que falha, e
@@ -134,13 +134,16 @@ if sys.argv[1:2] == ["kustomize"]:
     if os.environ.get("KUSTOMIZE_FALSO_FALHA"):
         sys.exit("error: accumulating resources")
     # O kustomize emite "image:" como chave de um item com outras chaves antes
-    # dela e como primeira chave do item ("- image:"); "lista:" no
-    # imagens.txt escolhe a segunda forma.
+    # dela e como primeira chave do item ("- image:") e entre aspas quando o nome
+    # e so de digitos. No imagens.txt, o prefixo "lista:" ou "aspas:" escolhe a
+    # forma.
     for imagem in (Path(sys.argv[2]) / "imagens.txt").read_text().split():
         if imagem.startswith("lista:"):
-            print(f"      - image: {imagem.removeprefix('lista:')}")
+            print("      - image: " + imagem.removeprefix("lista:"))
+        elif imagem.startswith("aspas:"):
+            print('        image: "' + imagem.removeprefix("aspas:") + '"')
         else:
-            print(f"        image: {imagem}")
+            print("        image: " + imagem)
     sys.exit(0)
 
 BANCOS = {"pytstop-os": "os-postgres", "pytstop-billing": "billing-mongo",
@@ -722,7 +725,26 @@ def test_argumentos_recusados_sem_chamar_nada(
     assert implantacao.chamadas("kubectl") == []
 
 
-@pytest.mark.parametrize("forma", ["", "lista:"], ids=["chave", "primeira-chave"])
+FORMAS_DA_IMAGEM = pytest.mark.parametrize(
+    "forma",
+    ["", "lista:", "aspas:"],
+    ids=["chave", "primeira-chave", "aspas"],
+)
+
+
+def copia_da_plataforma(tmp_path: Path, readme: str) -> Path:
+    """Uma copia do script e dos leitores de imagem ao lado do README dado."""
+    plataforma = tmp_path / "plataforma"
+    (plataforma / "scripts" / "ci").mkdir(parents=True)
+    copia = plataforma / "scripts" / "ci" / SCRIPT.name
+    shutil.copy(SCRIPT, copia)
+    for leitor in SCRIPT.parent.glob("imagens-*.sh"):
+        shutil.copy(leitor, copia.with_name(leitor.name))
+    (plataforma / "README.md").write_text(readme, encoding="utf-8")
+    return copia
+
+
+@FORMAS_DA_IMAGEM
 @pytest.mark.parametrize(
     "imagem",
     [
@@ -732,6 +754,7 @@ def test_argumentos_recusados_sem_chamar_nada(
         "pytstop-os-service:dev",
         "evil.example/x:latest",
         "kong/kong",
+        "123",
     ],
     ids=[
         "outra-imagem",
@@ -740,6 +763,7 @@ def test_argumentos_recusados_sem_chamar_nada(
         "imagem-de-outro-servico",
         "registry-de-terceiro",
         "chart-citado-na-linha-do-kong",
+        "so-digitos",
     ],
 )
 def test_imagem_fora_da_tabela_de_versoes_para_antes_de_tudo(
@@ -763,6 +787,44 @@ def test_imagem_fora_da_tabela_de_versoes_para_antes_de_tudo(
     assert implantacao.chamadas("kubectl") == []
 
 
+@FORMAS_DA_IMAGEM
+def test_imagem_da_tabela_passa_em_qualquer_forma_em_que_o_kustomize_a_emite(
+    implantacao: Implantacao, forma: str
+) -> None:
+    dir_overlay = implantacao.dirs["billing-service"] / "k8s" / "overlays" / "kind-ci"
+    (dir_overlay / "imagens.txt").write_text(
+        f"pytstop-billing-service {DE_TERCEIROS['billing-service']} "
+        f"{forma}postgres:16.15\n"
+    )
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 0, processo.stderr
+
+
+def test_nome_so_de_digitos_entre_aspas_vale_se_esta_na_tabela(
+    implantacao: Implantacao, tmp_path: Path
+) -> None:
+    # O kustomize emite `image: "123"` para o nome so de digitos: sem as aspas
+    # tiradas, a guarda leria a imagem `"123"` e a reprovaria.
+    imagens = {i for lista in DE_TERCEIROS.values() for i in lista.split()}
+    linhas = "".join(f"| item | `{imagem}` | serve |\n" for imagem in sorted(imagens))
+    implantacao.script = copia_da_plataforma(
+        tmp_path,
+        "| Componente | Versão | Para que serve |\n|---|---|---|\n"
+        + linhas
+        + "| digitos | `123` | serve |\n",
+    )
+    dir_overlay = implantacao.dirs["billing-service"] / "k8s" / "overlays" / "kind-ci"
+    (dir_overlay / "imagens.txt").write_text(
+        f"pytstop-billing-service {DE_TERCEIROS['billing-service']} aspas:123\n"
+    )
+
+    processo = implantacao.do_cd()
+
+    assert processo.returncode == 0, processo.stderr
+
+
 def test_so_a_tabela_de_versoes_vale_como_lista_de_imagens(
     implantacao: Implantacao, tmp_path: Path
 ) -> None:
@@ -770,26 +832,19 @@ def test_so_a_tabela_de_versoes_vale_como_lista_de_imagens(
     # de terceiros dos tres servicos menos a postgres:16.15, que so aparece na
     # prosa e na segunda coluna de outra tabela, depois da de versoes, como o
     # `postgres` do superusuario no README de verdade.
-    plataforma = tmp_path / "plataforma"
-    (plataforma / "scripts" / "ci").mkdir(parents=True)
-    copia = plataforma / "scripts" / "ci" / SCRIPT.name
-    shutil.copy(SCRIPT, copia)
-    for leitor in SCRIPT.parent.glob("imagens-*.sh"):
-        shutil.copy(leitor, copia.with_name(leitor.name))
     imagens = {i for lista in DE_TERCEIROS.values() for i in lista.split()}
     linhas = "".join(
         f"| item | `{imagem}` | para que serve |\n"
         for imagem in sorted(imagens - {"postgres:16.15"})
     )
-    (plataforma / "README.md").write_text(
+    implantacao.script = copia_da_plataforma(
+        tmp_path,
         "| Componente | Versão | Para que serve |\n|---|---|---|\n"
         + linhas
         + "\nO banco roda `postgres:16.15`.\n\n"
         "| Item | Outra tabela |\n|---|---|\n"
         "| a | `postgres:16.15` |\n",
-        encoding="utf-8",
     )
-    implantacao.script = copia
 
     processo = implantacao.do_cd()
 
