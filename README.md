@@ -186,12 +186,15 @@ kubectl --context kind-pytstop-p4 -n pytstop-os get secret os-postgres -o json \
   | kubectl --context kind-pytstop-p4 replace -f -
 ```
 
-Aplique no banco, como `postgres`: o contêiner do banco já tem a senha dele em `POSTGRES_PASSWORD`, e o `-w` impede o `psql` de pedir senha de conexão, que sem terminal ele leria do próprio script. A saída esperada é `SET`, `SET` e `ALTER ROLE`:
+Aplique no banco, como `postgres`: o contêiner do banco já tem a senha dele em `POSTGRES_PASSWORD`, e o `-w` impede o `psql` de pedir senha de conexão, que sem terminal ele leria do próprio script. A saída esperada é cinco `SET` e um `ALTER ROLE`:
 
 ```bash
 { printf '%s\n' "$senha"; cat <<'SQL'
-SET log_statement = none;
-SET log_min_error_statement = panic;
+SET log_statement = 'none';
+SET log_min_error_statement = 'panic';
+SET log_min_duration_statement = -1;
+SET log_min_duration_sample = -1;
+SET log_transaction_sample_rate = 0;
 \getenv senha SENHA_NOVA
 ALTER ROLE os_app PASSWORD :'senha';
 SQL
@@ -199,7 +202,7 @@ SQL
     sh -c 'read -r SENHA_NOVA && [ -n "$SENHA_NOVA" ] && export SENHA_NOVA && PGPASSWORD=$POSTGRES_PASSWORD exec psql -w -U postgres -v ON_ERROR_STOP=1'
 ```
 
-O `psql` troca `:'senha'` pelo valor antes de enviar o comando (o `psql -c` do 16 não faz essa troca), então o servidor recebe a senha em claro. Os dois `SET`, que valem só para a sessão, a tiram do log do servidor: sem eles, um `log_statement` em `all` ou `ddl` registra o comando, e um comando que falha registra a linha `STATEMENT` com a senha. Por fim, reinicie quem usa o papel, como diz a coluna "Como girar" da tabela; para o `os_app`, `kubectl --context kind-pytstop-p4 -n pytstop-os rollout restart deployment`.
+O `psql` troca `:'senha'` pelo valor antes de enviar o comando (o `psql -c` do 16 não faz essa troca), então o servidor recebe a senha em claro. Os cinco `SET`, que valem só para a sessão, a tiram do log do servidor: sem eles, um `log_statement` em `all` ou `ddl` registra o comando, um comando que falha registra a linha `STATEMENT` com a senha, e `log_min_duration_statement`, `log_min_duration_sample` ou `log_transaction_sample_rate` ligados registram o texto do comando pela duração ou por amostragem. A regra é desligar todo parâmetro que grava o texto do comando. Por fim, reinicie quem usa o papel, como diz a coluna "Como girar" da tabela; para o `os_app`, `kubectl --context kind-pytstop-p4 -n pytstop-os rollout restart deployment`.
 
 MongoDB (o exemplo troca a do `billing` e supõe o usuário no banco `admin`; se o init o criou em outro, troque o `admin` da segunda linha do script. O root autentica com as variáveis do próprio contêiner). Grave a senha nova na chave `MONGO_BILLING_PASSWORD` do `billing-mongo`, no `pytstop-billing`, com o mesmo `jq` acima, e aplique:
 
