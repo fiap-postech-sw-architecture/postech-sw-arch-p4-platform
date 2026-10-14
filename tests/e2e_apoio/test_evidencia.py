@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import errno
 import json
 import os
 
@@ -778,6 +779,49 @@ def test_varredura_apaga_o_arquivo_com_o_token_do_ambiente_e_nao_o_repete(
     assert CHAVE_APP_USR not in erro
     assert ASSINATURA not in erro
     assert sorted(p.name for p in tmp_path.iterdir()) == ["resumo.md"]
+
+
+class TerminalQueSumiu:
+    """Um stdout ou stderr cuja janela fechou: escrever levanta ``OSError`` (EIO)."""
+
+    def write(self, texto: str) -> int:
+        raise OSError(errno.EIO, "Input/output error", texto)
+
+    def flush(self) -> None:
+        raise OSError(errno.EIO, "Input/output error")
+
+
+def test_varredura_apaga_o_arquivo_com_segredo_mesmo_com_o_terminal_fechado(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # SIGHUP: o make segue e roda a varredura depois do pytest, sem terminal. O aviso
+    # levanta OSError, e o arquivo com segredo nao pode ficar por causa dele.
+    segredos.esquecer_todos()
+    (tmp_path / "junit.xml").write_text(f"x {CHAVE_APP_USR}\n")
+    (tmp_path / "resumo.md").write_text("limpo\n")
+    monkeypatch.setattr(sys, "stderr", TerminalQueSumiu())
+
+    codigo = principal_da_varredura([str(tmp_path)], {})
+
+    assert codigo == 1
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["resumo.md"]
+
+
+def test_varredura_limpa_com_o_terminal_fechado_sai_com_zero(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "resumo.md").write_text("limpo\n")
+    monkeypatch.setattr(sys, "stdout", TerminalQueSumiu())
+
+    assert principal_da_varredura([str(tmp_path)], {}) == 0
+
+
+def test_varredura_sem_a_pasta_e_sem_terminal_ainda_sai_com_dois(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "stderr", TerminalQueSumiu())
+
+    assert principal_da_varredura([], {}) == 2
 
 
 def test_varredura_sem_as_credenciais_no_ambiente_ainda_acha_os_padroes(

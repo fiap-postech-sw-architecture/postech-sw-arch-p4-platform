@@ -14,6 +14,7 @@ primeira impede o campo de entrar, a segunda pega o que passou por engano.
 from __future__ import annotations
 
 import base64
+import contextlib
 import json
 import re
 import sys
@@ -427,6 +428,16 @@ def gravar_evidencia(
     (pasta / "evidencia.json").write_text(dados + "\n", encoding="utf-8")
 
 
+def _dizer(texto: str, *, erro: bool = False) -> None:
+    """Diz ``texto`` a quem roda; sem terminal (a janela fechou), a ninguem.
+
+    Com o terminal fechado o ``print`` levanta ``OSError``, e a varredura ja tera feito
+    o que importa (apagar o arquivo com segredo) antes de avisar.
+    """
+    with contextlib.suppress(OSError):
+        print(texto, file=sys.stderr if erro else sys.stdout)
+
+
 def principal_da_varredura(argumentos: list[str], ambiente: Mapping[str, str]) -> int:
     """``python -m e2e.varredura <pasta>``: apaga o arquivo que tem segredo.
 
@@ -436,7 +447,7 @@ def principal_da_varredura(argumentos: list[str], ambiente: Mapping[str, str]) -
     ambiente do shell, e os padroes de credencial e de e-mail.
     """
     if len(argumentos) != 1:
-        print("uso: python -m e2e.varredura <pasta dos relatorios>", file=sys.stderr)
+        _dizer("uso: python -m e2e.varredura <pasta dos relatórios>", erro=True)
         return 2
     pasta = Path(argumentos[0])
     extras = [
@@ -446,16 +457,18 @@ def principal_da_varredura(argumentos: list[str], ambiente: Mapping[str, str]) -
         for formato in (valor, base64.b64encode(valor.encode()).decode())
     ]
     problemas = varrer_pasta(pasta, extras)
+    # Apaga primeiro e avisa depois: o aviso e o que falha com o terminal fechado.
+    for nome in problemas:
+        (pasta / nome).unlink()
     for nome, achados in problemas.items():
         onde = ", ".join(f"linha {a.linha} ({a.tipo})" for a in achados[:10])
-        print(f"segredo em {nome}: {onde}", file=sys.stderr)
-        (pasta / nome).unlink()
+        _dizer(f"segredo em {nome}: {onde}", erro=True)
     if problemas:
-        print(
-            "arquivos com segredo APAGADOS; nao compartilhe a pasta antes de rodar "
+        _dizer(
+            "arquivos com segredo APAGADOS; não compartilhe a pasta antes de rodar "
             "de novo.",
-            file=sys.stderr,
+            erro=True,
         )
         return 1
-    print(f"varredura de {pasta}: nenhum segredo")
+    _dizer(f"varredura de {pasta}: nenhum segredo")
     return 0
