@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 from e2e.apoio.kube import (
+    FILAS_MORTAS,
     ErroDeComandoError,
     Kubectl,
     ler_filas_mortas,
@@ -166,3 +167,19 @@ def test_kubectl_segredo_de_chave_ausente_diz_qual_chave_falta() -> None:
         Kubectl("c", executor=executor).segredo(
             "pytstop-os", "os-admin", "ADMIN_PASSWORD"
         )
+
+
+@pytest.mark.parametrize("ausente", FILAS_MORTAS)
+def test_kubectl_filas_mortas_exige_cada_uma_das_tres_dlq(ausente: str) -> None:
+    saida = "".join(f"{fila}\t0\n" for fila in FILAS_MORTAS if fila != ausente)
+
+    with pytest.raises(ErroDeComandoError, match=ausente.replace(".", r"\.")):
+        Kubectl("c", executor=ExecutorFalso({"rabbitmqctl": saida})).filas_mortas()
+
+
+def test_as_dlq_conhecidas_sao_as_tres_do_broker() -> None:
+    assert set(FILAS_MORTAS) == {
+        "billing.comandos.dlq",
+        "execucao.comandos.dlq",
+        "os.eventos.dlq",
+    }

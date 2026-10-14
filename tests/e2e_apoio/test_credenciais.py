@@ -156,3 +156,8 @@ def test_login_recusado_reprova_com_a_resposta_mascarada(relogio: Relogio) -> No
 
     with pytest.raises(AssertionError, match="HTTP 401"):
         credenciais.token("admin")
+
+
+def test_vida_do_token_fica_abaixo_dos_15_minutos_do_jwt() -> None:
+    assert VIDA_DO_TOKEN == 12 * 60
+    assert VIDA_DO_TOKEN < 15 * 60

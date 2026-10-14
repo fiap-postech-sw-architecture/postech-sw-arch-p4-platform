@@ -193,7 +193,8 @@ def test_pedir_429_retry_after_zero_ou_negativo_tem_piso_de_espera(
 
     _cliente(lambda _: next(respostas), relogio).pedir("GET", "/x", esperado=[200])
 
-    assert relogio.dormidas == [PISO_DA_ESPERA_429]
+    assert relogio.dormidas == [1.0]
+    assert PISO_DA_ESPERA_429 == 1.0
 
 
 def test_descrever_mascara_o_corpo_inteiro_antes_de_cortar(relogio: Relogio) -> None:

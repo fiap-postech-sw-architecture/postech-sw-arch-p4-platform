@@ -168,3 +168,17 @@ def test_executar_processo_mascara_o_erro_inteiro_antes_de_cortar() -> None:
 
     assert "segredo" not in str(erro.value)
     assert "***" in str(erro.value)
+
+
+def test_port_forward_encerrar_fecha_o_arquivo_do_stderr(kubectl_falso: Path) -> None:
+    ponte = PortForward(
+        Kubectl("kind-x", binario=str(kubectl_falso)), "ns", "svc/mailpit", 8025
+    ).iniciar()
+    erros = ponte._erros
+    assert erros is not None
+    assert not erros.closed
+
+    ponte.encerrar()
+
+    assert erros.closed
+    assert ponte._erros is None
