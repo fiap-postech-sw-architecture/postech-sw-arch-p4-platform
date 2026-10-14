@@ -201,7 +201,7 @@ Resultado esperado: no ciclo seguinte do `prazos`, em até 30 s, o que venceu é
 1. `make status` lista as filas com mensagens e consumidores.
 2. No console do RabbitMQ (`http://localhost:15672`, usuário `admin`), em *Queues and Streams*, abra a `<fila>.dlq` e use *Get messages* com *Ack Mode* em *Nack message requeue true*: o console mostra a mensagem e a devolve à DLQ.
 3. Anote as propriedades `type` (o tipo da mensagem), `correlation_id` (o `ordem_id`; no `AnonimizarVeiculo`, o `veiculo_id`), `message_id` e `user_id` e os headers `x-tentativa` e `x-death`. O motivo da rejeição está no log do consumidor que a recusou, pelo `correlation_id` ([seção 5](#5-o-trace-e-os-logs-pelo-correlation_id)).
-4. O corpo pode trazer a placa (`SolicitarDiagnostico`): não o copie para fora do cluster.
+4. O corpo pode trazer a placa e a descrição do problema (`SolicitarDiagnostico`) ou texto livre com nome e endereço (`observacoes` do `DiagnosticoConcluido`, na `os.eventos.dlq`): não o copie para fora do cluster. A DLQ guarda a mensagem por 7 dias, e só a expiração a apaga.
 
 ### O que a mensagem parada significa para a saga
 
@@ -209,7 +209,7 @@ Resultado esperado: no ciclo seguinte do `prazos`, em até 30 s, o que venceu é
 |---|---|---|
 | `billing.comandos.dlq`, `execucao.comandos.dlq` | comando com prazo técnico: `GerarOrcamento`, `ReservarPecas`, `SolicitarPagamento`, `AgendarExecucao` e as compensações | o `prazos` reenvia com `id` novo; se a causa persistir, os reenvios também caem na DLQ e, esgotados, a saga compensa ou vai a `falha_na_compensacao` |
 | `execucao.comandos.dlq` | `SolicitarDiagnostico` | sem prazo técnico, porque o diagnóstico espera um mecânico: a saga fica em `aguardando_diagnostico`, com a OS `recebida`, até o redrive ou o cancelamento ([RFC-004, seção 4.3](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#43-passos-compensações-e-tipos)) |
-| `execucao.comandos.dlq` | `AnonimizarVeiculo` | fora da saga e sem resposta: a placa só é anonimizada na Execução depois do redrive, que precisa sair antes de a DLQ descartar a mensagem, em 7 dias |
+| `execucao.comandos.dlq` | `AnonimizarVeiculo` | fora da saga e sem resposta: a placa e os textos livres só são anonimizados na Execução se o comando for reenviado, e só ele, nunca pelo redrive da fila; deixá-lo expirar perde a eliminação, e o `DELETE` repetido do OS Service não o reemite ([AnonimizarVeiculo parado](#anonimizarveiculo-parado-na-execucaocomandosdlq)) |
 | `os.eventos.dlq` | resposta a comando com prazo técnico | o `prazos` reenvia o comando, e o participante republica o desfecho com `id` novo; se o defeito for do OS Service, a republicação também cai na DLQ |
 | `os.eventos.dlq` | evento que nenhum comando pede de novo: ações do mecânico, decisão ou expiração do orçamento, confirmação, recusa ou expiração do pagamento | nada o reenvia: a saga espera o redrive |
 | `os.eventos.dlq` | evento adiantado que esgotou as tentativas | o evento anterior da mesma OS não chegou; muitas vezes está na mesma DLQ |
@@ -232,6 +232,37 @@ O domínio do participante recusa um comando de três jeitos, e só o último ch
 2. Falha de negócio com evento no contrato (`GeracaoDeOrcamentoFalhou`, `ReservaDePecasFalhou`, `EstornoDePagamentoFalhou`): o evento chega ao OS Service, e a saga compensa ou, no estorno, vai a `falha_na_compensacao`. Aparece nos passos da instância e em `pytstop_saga_compensacoes_total`.
 3. Falha permanente sem evento no contrato, como o provedor recusar a criação da cobrança: a mensagem vai para a DLQ e dispara "DLQ com mensagens", e o prazo técnico compensa a saga, com `motivo=prazo_tecnico`. Provedor fora do ar não é recusa: o comando volta pelas filas de retry ([ADR-040](../arquitetura/adr/fase4/040-integracao-mercado-pago.md)).
 
+### `AnonimizarVeiculo` parado na `execucao.comandos.dlq`
+
+O comando leva só o `veiculo_id` (o `correlation_id` da mensagem): não tem dado pessoal. O dado pessoal está nas outras mensagens da mesma DLQ, como o `SolicitarDiagnostico` com a placa e a descrição do problema. Por isso os dois caminhos óbvios estão errados: o redrive da fila inteira recriaria a placa na Execução, e deixar o comando expirar perderia a eliminação, porque o `DELETE` do OS Service repetido não reemite o comando e nenhum alerta acusa depois que a mensagem some. O procedimento reenvia só esse comando:
+
+1. Anote o `correlation_id` da mensagem, que é o `veiculo_id`, e ache a causa da recusa no log `message rejected to dlq` do consumidor da Execução, por esse id ([seção 5](#5-o-trace-e-os-logs-pelo-correlation_id)). Corrija-a antes: sem isso o reenvio volta para a DLQ.
+2. Não rode `make redrive FILA=execucao.comandos`.
+3. Reenvie só o comando, com o script do OS Service (`scripts/reenviar_anonimizacao.py`, na `main` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service)). Ele grava o comando de novo na outbox do OS, e o relay o publica como o usuário `os`, o único produtor que a Execução aceita para esse tipo: o console do RabbitMQ não serve, porque publicar como `admin` com `user_id` `os` volta 406. Troque o `VEICULO_ID` pelo da mensagem; a senha do banco já está no ambiente do pod:
+
+   ```bash
+   VEICULO_ID=3277db7e-8283-4dd9-89e7-df3eeacb8710
+   perl -e 'alarm shift; exec @ARGV' 60 kubectl --context kind-pytstop-p4 -n pytstop-os exec deploy/os-service-consumidor -- python scripts/reenviar_anonimizacao.py "$VEICULO_ID"
+   ```
+
+   O script sai com 0 e imprime `AnonimizarVeiculo do veiculo <id> gravado na outbox`, ou sai com 1, sem enviar nada, se o veículo não existe ou o OS Service ainda não o anonimizou (o comando de um veículo vivo apagaria a placa dele na Execução).
+4. Confira a placa na Execução: a do retrato do veículo tem de ser `ANONIMIZADO:` e o `veiculo_id`, e a descrição do problema e as observações do diagnóstico, `[removido na eliminacao de dados pessoais]`. A consulta é de leitura e entra como `execucao_app`; o `veiculo_id` chega como `$0` do `sh` do container:
+
+   ```bash
+   kex() { kubectl --context kind-pytstop-p4 -n pytstop-execucao "$@"; }
+   kex exec -i statefulset/execucao-postgres -c postgres -- sh -c 'PGPASSWORD="$POSTGRES_APP_PASSWORD" PGOPTIONS="-c lock_timeout=2s -c statement_timeout=10s" exec psql -w -U execucao_app -d "$POSTGRES_DB" -v veiculo_id="$0"' "$VEICULO_ID" <<'SQL'
+   SELECT 'diagnostico' AS registro, ordem_id, veiculo->>'placa' AS placa, descricao_problema, observacoes
+     FROM diagnosticos WHERE veiculo->>'veiculo_id' = :'veiculo_id'
+   UNION ALL
+   SELECT 'execucao', ordem_id, veiculo->>'placa', NULL, NULL
+     FROM execucoes WHERE veiculo->>'veiculo_id' = :'veiculo_id';
+   SQL
+   ```
+
+   Uma linha com a placa original (`ABC1D23`, por exemplo) quer dizer que a Execução ainda não consumiu o comando: veja o log do consumidor dela e a DLQ de novo.
+5. A cópia original do comando continua na DLQ, e o alerta "DLQ com mensagens" fica até ela expirar, em 7 dias. Silencie esse alerta no Grafana (Alerting, Silences) por 7 dias, só para `queue=execucao.comandos.dlq`, e confira a fila no `make status` antes de encerrar o incidente. A placa do `SolicitarDiagnostico` que estiver nessa DLQ também some pela expiração, e só por ela.
+6. Se o comando já expirou sem reenvio, o titular continua com a placa e os textos livres na Execução, e o mesmo script o reenvia: o veículo já está anonimizado no OS Service.
+
 ### Quando fazer o redrive
 
 O redrive move a DLQ inteira, não uma mensagem. Faça-o depois de corrigida a causa de cada mensagem dela:
@@ -241,7 +272,7 @@ O redrive move a DLQ inteira, não uma mensagem. Faça-o depois de corrigida a c
 - `versao` nova de mensagem: depois de implantar o consumidor que a conhece;
 - `sem_tratador_nesta_versao` na `os.eventos.dlq`: depois de implantar a versão do OS Service com as compensações, em todas as réplicas. O comando `make redrive FILA=os.eventos` não filtra por motivo: as mensagens dos outros motivos voltam juntas e, se falharem de novo, caem outra vez na DLQ. Se a implantação conviveu com réplicas antigas, repita o redrive no fim dela. A `os.eventos.dlq` expira em 7 dias, e sem o redrive o evento se perde;
 - evento adiantado com o anterior na mesma DLQ: o redrive devolve os dois. Se o adiantado for processado antes, volta à DLQ, porque chega com as tentativas esgotadas; um segundo redrive, depois que o anterior passar, resolve;
-- `execucao.comandos.dlq` depois de uma eliminação de dados do cliente (`AnonimizarVeiculo`): não faça o redrive. A cópia do `SolicitarDiagnostico` que ficou na DLQ (7 dias) ainda tem a placa e a descrição do problema, e o redrive a recriaria na Execução depois da anonimização; deixe a mensagem expirar;
+- `execucao.comandos.dlq` depois de uma eliminação de dados do cliente: não faça o redrive da fila, que devolveria o `SolicitarDiagnostico` com a placa e a descrição do problema originais e os recriaria na Execução depois da anonimização. Se o `AnonimizarVeiculo` está nessa DLQ, também não o deixe expirar: reenvie só ele, como em [AnonimizarVeiculo parado](#anonimizarveiculo-parado-na-execucaocomandosdlq);
 - mensagem com `user_id` que o consumidor não aceita: pode ser forjada ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md#usuários-e-permissões)). Anote `type`, `message_id`, `user_id` e `correlation_id` antes do redrive e antes de a DLQ a descartar, e veja [Quando pedir ajuda](#quando-pedir-ajuda).
 
 A mensagem que o consumidor recusa de novo volta à DLQ, e o alerta continua: a inválida para o schema, a de `versao` desconhecida e a de `user_id` que ele não aceita (nem o do produtor do tipo nem, numa cópia de retry, o do próprio consumidor).
