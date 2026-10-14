@@ -2,8 +2,9 @@ name: CI
 
 # PR para a main roda aqui; no merge quem chama este workflow e o CD
 # (workflow_call), entao o CI nao roda duas vezes. Sem paths-ignore de
-# proposito: `manifests` e `contratos` sao checks obrigatorios da branch
-# protection e precisam existir em todo PR, inclusive nos so de docs.
+# proposito: `manifests`, `contratos` e `gitleaks` sao checks obrigatorios do
+# ruleset da main (o quarto, `deploy-kind`, e do cd.yml) e precisam existir em
+# todo PR, inclusive nos so de docs.
 on:
   pull_request:
     branches: [main]

@@ -356,7 +356,7 @@
     {
       "id": 8,
       "title": "Dead-letter por motivo (msg/s)",
-      "description": "Mensagens que saíram de uma fila por dead-letter, por motivo. \"rejeitada\" vai para a DLQ; \"volta do retry\" é o TTL vencendo nas filas de retry, o caminho normal de uma nova tentativa; \"descartada da DLQ\" é mensagem que passou 7 dias na DLQ sem ninguém tratar; \"limite de entregas\" é mensagem que derrubou o consumidor 20 vezes; \"sem rota\" é publicação com routing key que nenhuma fila escuta (contrato quebrado).",
+      "description": "Mensagens que saíram de uma fila por dead-letter, por motivo. \"rejeitada\" vai para a DLQ; \"volta do retry\" é o TTL vencendo nas filas de retry, o caminho normal de uma nova tentativa; \"descartada da DLQ\" é mensagem que passou 7 dias na DLQ sem ninguém tratar; \"limite de entregas\" é mensagem que chegou ao limite de 5 entregas das filas de trabalho (`delivery-limit`), em geral porque derrubou o consumidor a cada entrega, e vai para a DLQ na sexta; \"sem rota\" é publicação com routing key que nenhuma fila escuta (contrato quebrado).",
       "type": "timeseries",
       "gridPos": {
         "h": 8,

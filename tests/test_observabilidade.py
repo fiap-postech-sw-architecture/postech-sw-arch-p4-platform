@@ -123,6 +123,20 @@ def test_tabela_de_alertas_diz_o_que_a_regra_faz(
     assert linha["Onde"] == ONDE[arquivo]
 
 
+def test_saga_parada_dispara_acima_de_zero_depois_de_5_min() -> None:
+    # O scripts/alerta-saga-parada.sh le o limiar e a janela do proprio arquivo e
+    # so modela o tipo gt; este teste prende a forma da regra e o valor que a
+    # tabela do README e o runbook dizem (acima de 0, 5 min).
+    regra = next(r for _, r in REGRAS if r["uid"] == "pytstop-saga-parada")
+    (limiar,) = [d["model"] for d in regra["data"] if d["refId"] == "C"]
+
+    assert regra["condition"] == "C"
+    assert regra["for"] == "5m"
+    assert limiar["type"] == "threshold"
+    assert limiar["expression"] == "A"
+    assert limiar["conditions"] == [{"evaluator": {"type": "gt", "params": [0]}}]
+
+
 def test_tabela_de_alertas_nao_tem_regra_que_nenhum_arquivo_define() -> None:
     assert set(linhas_de_alerta()) == set(IDS_DAS_REGRAS)
 
