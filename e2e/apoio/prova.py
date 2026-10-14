@@ -34,6 +34,7 @@ from e2e.apoio.humano import (
     esperar_pagamento,
     instrucoes_de_pagamento,
 )
+from e2e.apoio.mercadopago import ErroDoMercadoPagoError
 from e2e.apoio.modo_billing import NAMESPACE_BILLING
 from e2e.apoio.segredos import mascarar, registrar
 
@@ -70,6 +71,21 @@ PRINTS_DO_ENSAIO: Final = (
     "Nenhum: o ensaio não fala com o Mercado Pago. Os prints são do `make mp-sandbox`.",
 )
 SEM_CONSULTA: Final = "[ensaio] sem consulta ao Mercado Pago neste passo"
+
+
+def _referencia(pagamento: Json, campo: str, rotulo: str) -> str:
+    """O id que o Billing guardou do Mercado Pago, ou a falha que diz que faltou.
+
+    Sem ele a consulta iria a ``/v1/payments/None`` e o 404 esconderia a causa.
+    """
+    valor = pagamento.get(campo)
+    if not valor:
+        msg = (
+            f"o Billing não guardou {rotulo} deste pagamento ({campo} vazio): "
+            "sem ela não há o que conferir no Mercado Pago"
+        )
+        raise AssertionError(msg)
+    return str(valor)
 
 
 class Prova:
@@ -172,7 +188,9 @@ class Prova:
         )
         self.registro.anotar("Billing mostra o pagamento CONFIRMADO")
         if self.real:
-            self.registro.pagamento_mp_id = str(pagamento["referencia_pagamento"])
+            self.registro.pagamento_mp_id = str(
+                pagamento.get("referencia_pagamento") or ""
+            )
         return dict(pagamento)
 
     def conferir_aprovado(self, pagamento: Json) -> None:
@@ -181,7 +199,9 @@ class Prova:
             self._avisar(SEM_CONSULTA)
             return
         assert self.sandbox.mercadopago is not None
-        mp = self.sandbox.mercadopago.pagamento(str(pagamento["referencia_pagamento"]))
+        mp = self.sandbox.mercadopago.pagamento(
+            _referencia(pagamento, "referencia_pagamento", "o id do pagamento")
+        )
         # Guarda antes de conferir: o que o Mercado Pago disse fica na evidencia mesmo
         # quando a conferencia reprova.
         self.registro.mercadopago = mp.para_evidencia()
@@ -201,7 +221,7 @@ class Prova:
             return
         assert self.sandbox.mercadopago is not None
         mercadopago = self.sandbox.mercadopago
-        referencia = str(pagamento["referencia_pagamento"])
+        referencia = _referencia(pagamento, "referencia_pagamento", "o id do pagamento")
 
         def estornado() -> bool:
             mp = mercadopago.pagamento(referencia)
@@ -214,7 +234,9 @@ class Prova:
                 prazo=PRAZO_DO_ESTORNO,
                 intervalo=3.0,
                 descricao="estorno visível no Mercado Pago",
-                ignorar=(httpx.TransportError,),
+                # O cliente troca o erro de rede por este; o que persistir volta
+                # na leitura final, com a causa.
+                ignorar=(ErroDoMercadoPagoError,),
                 relogio=self._relogio,
                 dormir=self._dormir,
             )
@@ -232,7 +254,9 @@ class Prova:
         assert self.sandbox.mercadopago is not None
         pagamento = self.api.billing.pagamento(self.cenario.pagamento_id)
         preferencia = self.sandbox.mercadopago.preferencia(
-            str(pagamento["referencia_preferencia"])
+            _referencia(
+                pagamento, "referencia_preferencia", "a preferência do checkout"
+            )
         )
         self.registro.preferencia = preferencia.para_evidencia()
         nao_provada = conferir_preferencia_expirada(preferencia, agora=self._agora())

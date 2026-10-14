@@ -16,7 +16,7 @@ from e2e.apoio.conferencias import DivergenciaComOMercadoPagoError
 from e2e.apoio.espera import TempoEsgotadoError
 from e2e.apoio.evidencia import RegistroDoCenario
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
-from e2e.apoio.mercadopago import ClienteMercadoPago
+from e2e.apoio.mercadopago import ClienteMercadoPago, ErroDoMercadoPagoError
 from e2e.apoio.preflight_mp import Sandbox
 from e2e.apoio.prova import PRAZO_DO_ESTORNO, SEM_CONSULTA, Prova
 from e2e.servicos import Cenario
@@ -502,6 +502,61 @@ def test_preferencia_ainda_valida_reprova_mas_guarda_o_que_viu(
         prova.conferir_preferencia_expirada()
 
     assert prova.registro.preferencia["id"] == "pref-1"
+
+
+def test_conferir_estornado_segue_esperando_se_o_mp_falha_uma_vez(
+    relogio: Relogio,
+) -> None:
+    def leitura(n: int) -> dict[str, Any]:
+        if n == 1:
+            msg = "rede fora"
+            raise httpx.ConnectError(msg)
+        return _pagamento_mp(status="refunded")
+
+    mundo = Mundo()
+    mundo.mp_pagamento = leitura
+    prova, _, _ = _prova(mundo, relogio, real=True)
+
+    prova.conferir_estornado(_pagamento_billing(referencia_pagamento=999))
+
+    assert relogio.dormidas == [3.0]
+    assert prova.registro.mercadopago["status"] == "refunded"
+
+
+def test_conferir_estornado_com_o_mp_fora_do_ar_reprova_dizendo_o_status(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.mp_status = 503
+    prova, _, _ = _prova(mundo, relogio, real=True)
+
+    with pytest.raises(ErroDoMercadoPagoError, match="HTTP 503"):
+        prova.conferir_estornado(_pagamento_billing(referencia_pagamento=999))
+
+    assert len(relogio.dormidas) > 1, "insistiu ate o prazo antes de reprovar"
+
+
+@pytest.mark.parametrize(
+    ("passo", "campo"),
+    [
+        ("conferir_aprovado", "referencia_pagamento"),
+        ("conferir_estornado", "referencia_pagamento"),
+        ("conferir_preferencia_expirada", "referencia_preferencia"),
+    ],
+)
+def test_billing_sem_o_id_do_mp_reprova_antes_de_consultar(
+    relogio: Relogio, passo: str, campo: str
+) -> None:
+    mundo = Mundo()
+    mundo.billing = _pagamento_billing(**{campo: None})
+    prova, _, _ = _prova(mundo, relogio, real=True)
+    prova.cenario.pagamento_id = "p-1"
+    argumentos = () if passo == "conferir_preferencia_expirada" else (mundo.billing,)
+
+    with pytest.raises(AssertionError, match=f"o Billing não guardou .*{campo} vazio"):
+        getattr(prova, passo)(*argumentos)
+
+    assert mundo.chamadas_ao_mp == []
 
 
 # --- o diagnostico -------------------------------------------------------------------
