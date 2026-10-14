@@ -29,11 +29,13 @@ Três workflows em cada repositório de serviço (OS Service, de ordens de servi
 
 | Workflow | Gatilho | Jobs |
 |---|---|---|
-| `ci.yml` | PR; chamado pelo `cd.yml` na `main` | `lint` (ruff e import-linter), `type-check` (mypy strict), `security` (bandit), `test` (unitário, integração, contrato e BDD, *behavior-driven development*, com gate de 90% e `diff-cover`), `sonarqube` (depois de `test`), `build` |
+| `ci.yml` | PR; chamado pelo `cd.yml` na `main` | `lint` (ruff e import-linter), `type-check` (mypy strict), `security` (bandit), `test` (unitário, integração, contrato e BDD, *behavior-driven development*, com gate de cobertura de 95% e `diff-cover` de 90% no código novo, [ADR-041](041-estrategia-de-testes-e-qualidade.md)), `sonarqube` (depois de `test`), `build` |
 | `security.yml` | PR; chamado pelo `cd.yml` na `main`; semanal | `pip-audit`, `gitleaks`, `trivy` |
 | `cd.yml` | push na `main`; `workflow_dispatch` com SHAs fixos | `ci` e `security-scan` → `image` → `deploy-kind` → `deploy-k3s` ou `k3s-skipped` |
 | `ci.yml` do `platform` | PR; chamado pelo `cd.yml` do `platform` na `main` | `manifests`, `contratos`, `gitleaks` |
-| `cd.yml` do `platform` | PR, push na `main` e `workflow_dispatch`, sem filtro de caminhos, para poder virar check obrigatório | `ci` (só fora de PR) → `deploy-kind` (a plataforma no `kind-ci` e o `make smoke`) |
+| `cd.yml` do `platform` | PR, push na `main` e `workflow_dispatch`, sem filtro de caminhos, porque o `deploy-kind` é check obrigatório e tem de rodar em todo PR | `ci` (só fora de PR) → `deploy-kind` (a plataforma no `kind-ci` e o `make smoke`) |
+
+No `platform`, os checks obrigatórios do ruleset da `main` são `manifests`, `contratos` e `gitleaks`, do `ci.yml`, e `deploy-kind`, do `cd.yml`.
 
 Os testes seguem o [ADR-041](041-estrategia-de-testes-e-qualidade.md). Os nomes de job ficam em inglês, o padrão técnico do ADR-009 do p3. A execução semanal do `security.yml` acha vulnerabilidade publicada (CVE) em dependência ou imagem base sem esperar o próximo PR. O `cd.yml` tem `concurrency` por repositório, sem cancelar a execução em curso, para que dois pushes seguidos não implantem fora de ordem. O `platform` tem pipeline próprio para a infraestrutura compartilhada, os testes ponta a ponta (E2E) e a varredura OWASP ZAP (RNF-049).
 
@@ -71,6 +73,8 @@ O overlay `kind-ci` é enxuto: sem Loki, Promtail e Grafana, uma réplica por De
 | Jaeger | 128/512 Mi | p3 | 11 Mi |
 | Mailpit e kube-state-metrics | 64/128 Mi cada | p3 | 12 e 13 Mi |
 | Total, sem metrics-server e Jobs | cerca de 3,4/8,7 GiB | | só a plataforma, sem os três serviços e os bancos: nó do kind inteiro, working set de até 1,5 GiB e pico de 3,5 GiB no cgroup |
+
+O Prometheus retém 15 dias, num PVC (volume persistente do Kubernetes) no lugar do `emptyDir` da fase 3: o painel de volume diário de OS pede dias de histórico, e com a retenção de 2 dias mostraria no máximo duas barras. Está decidido e ainda não aplicado: os manifestos retêm hoje 2 dias num `emptyDir`, e a troca entra com os painéis de negócio. O volume não muda a tabela de memória.
 
 O total estimado fica abaixo de 10 GiB no runner padrão de 16 GB, o que o GitHub dá a repositório público; os quatro repositórios da fase 4 são públicos, e o orçamento depende disso. Cada job tem `timeout-minutes`, cada etapa do deploy tem `kubectl wait --timeout`, e o `deploy-kind` mede minutos e pico de memória e os escreve no summary.
 
