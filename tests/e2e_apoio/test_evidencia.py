@@ -9,6 +9,7 @@ import os
 # subprocess roda o pytest do proprio repositorio, sem shell.
 import subprocess  # nosec B404
 import sys
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -24,7 +25,6 @@ from e2e.apoio.evidencia import (
     EvidenciaComSegredoError,
     RegistroDoCenario,
     gerar_resumo,
-    gravar,
     gravar_evidencia,
     pagamento_do_billing,
     permitidos,
@@ -241,15 +241,17 @@ def test_registro_para_json_ordena_as_transicoes_e_nao_perde_campo() -> None:
         pagamento_id="p-1",
         pagamento_mp_id="999",
     )
+    # O texto que vem primeiro na hora e o ultimo em ordem alfabetica: a ordem e a da
+    # hora, e nao a do texto.
     registro.transicoes = [
-        (datetime(2026, 10, 20, 12, 0, 5, tzinfo=UTC), "depois"),
-        (datetime(2026, 10, 20, 12, 0, 1, tzinfo=UTC), "antes"),
+        (datetime(2026, 10, 20, 12, 0, 5, tzinfo=UTC), "alfa: depois"),
+        (datetime(2026, 10, 20, 12, 0, 1, tzinfo=UTC), "zeta: antes"),
     ]
     registro.mercadopago = {"status": "approved"}
 
     dados = registro.para_json()
 
-    assert [t["evento"] for t in dados["transicoes"]] == ["antes", "depois"]
+    assert [t["evento"] for t in dados["transicoes"]] == ["zeta: antes", "alfa: depois"]
     assert dados["duracao_s"] == 12.3
     assert dados["pagamento_mercadopago_id"] == "999"
     assert dados["mercadopago"] == {"status": "approved"}
@@ -474,6 +476,41 @@ def test_gravar_evidencia_recusa_segredo_que_so_esta_no_resumo(tmp_path: Path) -
     assert list(tmp_path.iterdir()) == []
 
 
+def test_gravar_evidencia_recusa_a_assinatura_passada_como_extra(
+    tmp_path: Path,
+) -> None:
+    registro = RegistroDoCenario(nome="Cenário", resultado="passou")
+    registro.observacoes = [f"a assinatura {ASSINATURA} apareceu"]
+
+    with pytest.raises(EvidenciaComSegredoError) as erro:
+        gravar_evidencia(
+            tmp_path,
+            [registro],
+            modo="real",
+            contexto="kind-x",
+            prints=[],
+            extras=[ASSINATURA],
+        )
+
+    assert "segredo registrado" in str(erro.value)
+    assert ASSINATURA not in str(erro.value)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_gravar_evidencia_lista_no_maximo_dez_achados_na_mensagem(
+    tmp_path: Path,
+) -> None:
+    registro = RegistroDoCenario(nome="Cenário", resultado="passou")
+    registro.observacoes = [f"contato{n}" + chr(64) + "example.com" for n in range(12)]
+
+    with pytest.raises(EvidenciaComSegredoError) as erro:
+        gravar_evidencia(
+            tmp_path, [registro], modo="real", contexto="kind-x", prints=[]
+        )
+
+    assert str(erro.value).count("(e-mail)") == 10
+
+
 # --- varredura -----------------------------------------------------------------------
 
 
@@ -514,41 +551,32 @@ def test_varrer_uma_linha_com_dois_tipos_conta_os_dois() -> None:
     assert tipos == {"Bearer", "token do Mercado Pago", "e-mail"}
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        pytest.param('{"Authorization": f"Bearer {token}"}', id="codigo-da-requisicao"),
+        pytest.param("Authorization: Bearer ***", id="valor-ja-mascarado"),
+        pytest.param("o Bearer chegou", id="palavra-solta"),
+    ],
+)
+def test_varrer_nao_confunde_a_palavra_bearer_com_um_token(texto: str) -> None:
+    # O traceback de uma falha mostra o codigo do cliente HTTP, e o relatorio inteiro
+    # nao pode ser apagado por causa de uma linha que so cita o cabecalho.
+    assert varrer(texto) == []
+
+
+def test_o_achado_da_varredura_nao_muda_depois_de_achado() -> None:
+    achado = varrer("comprador" + chr(64) + "testuser.com")[0]
+
+    with pytest.raises(FrozenInstanceError):
+        achado.linha = 9  # type: ignore[misc]  # a classe e congelada de proposito
+
+
 def test_varrer_texto_limpo_nao_acha_nada() -> None:
     assert (
         varrer("## Evidência\n\n- `ordem_id`: `abc`\n| 12:30:00 | OS: recebida |\n")
         == []
     )
-
-
-# --- gravar --------------------------------------------------------------------------
-
-
-def test_gravar_escreve_o_texto_limpo(tmp_path: Path) -> None:
-    gravar(tmp_path / "a.md", "tudo limpo\n")
-
-    assert (tmp_path / "a.md").read_text() == "tudo limpo\n"
-
-
-def test_gravar_recusa_se_achar_o_token_diz_onde_e_nao_grava(tmp_path: Path) -> None:
-    segredos.registrar(CHAVE_APP_USR)
-
-    with pytest.raises(EvidenciaComSegredoError) as erro:
-        gravar(tmp_path / "resumo.md", f"linha 1\nlinha 2 com {CHAVE_APP_USR}\n")
-
-    texto = str(erro.value)
-    assert "resumo.md" in texto
-    assert "linha 2" in texto
-    assert CHAVE_APP_USR not in texto
-    assert "Nada foi gravado" in texto
-    assert not (tmp_path / "resumo.md").exists()
-
-
-def test_gravar_recusa_a_assinatura_secreta_passada_como_extra(tmp_path: Path) -> None:
-    with pytest.raises(EvidenciaComSegredoError, match="linha 1"):
-        gravar(tmp_path / "x.json", f'{{"a": "{ASSINATURA}"}}', extras=[ASSINATURA])
-
-    assert not (tmp_path / "x.json").exists()
 
 
 # --- a evidencia inteira -------------------------------------------------------------
@@ -572,6 +600,9 @@ def test_gravar_evidencia_escreve_o_resumo_e_o_json(tmp_path: Path) -> None:
     assert dados["cenarios"][0]["pagamento_mercadopago_id"] == "999"
     assert "ç" in (pasta / "evidencia.json").read_text(encoding="utf-8"), (
         "acentos legiveis"
+    )
+    assert '\n  "modo": "real"' in (pasta / "evidencia.json").read_text(), (
+        "JSON indentado, para a pessoa ler"
     )
 
 
@@ -669,6 +700,17 @@ def test_varredura_da_pasta_limpa_sai_com_zero(
     assert codigo == 0
     assert "nenhum segredo" in capsys.readouterr().out
     assert (tmp_path / "resumo.md").exists()
+
+
+def test_varredura_lista_no_maximo_dez_achados_por_arquivo(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    linhas = [f"contato{n}" + chr(64) + "example.com" for n in range(12)]
+    (tmp_path / "junit.xml").write_text("\n".join(linhas))
+
+    assert principal_da_varredura([str(tmp_path)], {}) == 1
+
+    assert capsys.readouterr().err.count("(e-mail)") == 10
 
 
 def test_varredura_apaga_o_arquivo_com_o_token_do_ambiente_e_nao_o_repete(
@@ -784,23 +826,40 @@ def test_varredura_nao_confunde_uuid_data_nem_id_numerico_com_user_id(
 # --- o e-mail nao vaza pelo traceback -----------------------------------------
 
 
+@pytest.mark.parametrize(
+    "gravacao",
+    [
+        pytest.param(
+            "gravar_evidencia(Path({saida!r}), [registro], modo='real',\n"
+            "                     contexto='kind-x', prints=[])\n",
+            id="direto",
+        ),
+        pytest.param(
+            "gravar_evidencia_da_sessao(Path({saida!r}), [registro],\n"
+            "                               Sandbox(modo='ensaio'),\n"
+            "                               contexto='kind-x')\n",
+            id="pela-sessao-do-sandbox",
+        ),
+    ],
+)
 def test_email_achado_na_evidencia_nao_vaza_pelo_traceback_nem_pelo_junit(
-    tmp_path: Path,
+    gravacao: str, tmp_path: Path
 ) -> None:
     usuario, dominio = "joao.silva", "example.com"
     email = f"{usuario}@{dominio}"
     saida = tmp_path / "saida"
     (tmp_path / "test_x.py").write_text(
         "from pathlib import Path\n\n"
-        "from e2e.apoio.evidencia import RegistroDoCenario, gravar_evidencia\n\n\n"
+        "from e2e.apoio.evidencia import RegistroDoCenario, gravar_evidencia\n"
+        "from e2e.apoio.preflight_mp import Sandbox\n"
+        "from e2e.apoio.prova import gravar_evidencia_da_sessao\n\n\n"
         "def test_grava_com_email():\n"
         "    registro = RegistroDoCenario(nome='Cenario', resultado='passou')\n"
         # O endereco nasce em tempo de execucao: o pytest mostra o codigo-fonte do
         # teste no traceback, e o literal apareceria ali sem nenhum vazamento.
         f"    email = {usuario!r} + chr(64) + {dominio!r}\n"
         "    registro.observacoes = ['contato ' + email + ' no pagamento']\n"
-        f"    gravar_evidencia(Path({str(saida)!r}), [registro], modo='real',\n"
-        "                     contexto='kind-x', prints=[])\n"
+        "    " + gravacao.replace("{saida!r}", repr(str(saida)))
     )
 
     resultado = subprocess.run(  # noqa: S603  # nosec B603

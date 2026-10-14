@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import FrozenInstanceError
 from decimal import Decimal
 from typing import Any
 
@@ -306,7 +307,14 @@ def test_comando_morto_por_outro_motivo_nao_acusa_a_criacao_da_cobranca() -> Non
         ]
     )
 
-    assert "notification_url" not in " ".join(dicas(sinais))
+    assert "recusou criar a cobrança" not in " ".join(dicas(sinais))
+
+
+def test_a_linha_do_log_lida_nao_muda_depois_de_lida() -> None:
+    linha = filtrar_log(_log("command_dead_lettered", "error", codigo="X"))[0]
+
+    with pytest.raises(FrozenInstanceError):
+        linha.evento = "outro"  # type: ignore[misc]  # a classe e congelada de proposito
 
 
 def test_get_com_4xx_nao_e_criacao_recusada() -> None:
@@ -314,7 +322,7 @@ def test_get_com_4xx_nao_e_criacao_recusada() -> None:
         consumidor=[_mp("GET", "/checkout/preferences", 404, "Not Found")]
     )
 
-    assert "notification_url" not in " ".join(dicas(sinais))
+    assert "recusou criar a cobrança" not in " ".join(dicas(sinais))
 
 
 @pytest.mark.parametrize(

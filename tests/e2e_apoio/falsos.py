@@ -19,6 +19,8 @@ CHAVE_APP_USR = (
     "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
 )
 ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
+# Sem prefixo de token conhecido: a mascara central so a pega se foi registrada.
+CHAVE_OPACA = "opaco-0123456789-abcdef"
 
 
 class Relogio:

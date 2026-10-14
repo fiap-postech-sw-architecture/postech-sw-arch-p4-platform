@@ -1010,6 +1010,15 @@ def test_diagnostico_no_ensaio_nao_consulta_o_mercado_pago(relogio: Relogio) -> 
     assert "Mercado Pago: (sem leitura)" not in texto
 
 
+def test_diagnostico_corta_o_texto_do_erro_em_600_caracteres(relogio: Relogio) -> None:
+    prova, _, _ = _prova(Mundo(), relogio, real=True)
+
+    texto = prova.diagnostico("Então algo", AssertionError("y" * 900))
+
+    falhou = next(linha for linha in texto.splitlines() if linha.startswith("Falhou: "))
+    assert len(falhou) == len("Falhou: ") + 600
+
+
 def test_diagnostico_sem_pagamento_ainda_nao_le_o_billing(relogio: Relogio) -> None:
     prova, _, _ = _prova(Mundo(), relogio, real=True)
 

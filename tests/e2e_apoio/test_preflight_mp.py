@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from dataclasses import FrozenInstanceError
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
@@ -30,7 +31,13 @@ from e2e.apoio.preflight_mp import (
     preparar_sandbox,
     retirar_credenciais,
 )
-from e2e_apoio.falsos import ASSINATURA, CHAVE_DO_MP, ExecutorFalso, Relogio
+from e2e_apoio.falsos import (
+    ASSINATURA,
+    CHAVE_DO_MP,
+    CHAVE_OPACA,
+    ExecutorFalso,
+    Relogio,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -159,6 +166,17 @@ def test_ambiente_do_sandbox_registra_as_credenciais_antes_de_conferir() -> None
     assert segredos.mascarar(f"{CHAVE_DO_MP} {ASSINATURA}") == "*** ***"
 
 
+def test_ambiente_do_sandbox_registra_o_token_mal_lido_sem_depender_do_prefixo() -> (
+    None
+):
+    # Sem prefixo de token conhecido: so o registro explicito mascara.
+    ambiente_do_sandbox(
+        {"MP_ACCESS_TOKEN": CHAVE_OPACA + "\n", "MP_WEBHOOK_SECRET": ASSINATURA}
+    )
+
+    assert segredos.mascarar(CHAVE_OPACA) == "***"
+
+
 def test_ambiente_do_sandbox_sem_as_chaves_devolve_vazio_sem_quebrar() -> None:
     assert ambiente_do_sandbox({"PATH": "/usr/bin"}) == {}
 
@@ -171,6 +189,16 @@ def test_credenciais_do_ambiente_devolve_e_registra_na_mascara() -> None:
 
     assert (token, assinatura) == (CHAVE_DO_MP, ASSINATURA)
     assert segredos.mascarar(f"{CHAVE_DO_MP} {ASSINATURA}") == "*** ***"
+
+
+def test_credenciais_do_ambiente_registram_o_token_mesmo_sem_prefixo_conhecido() -> (
+    None
+):
+    credenciais_do_ambiente(
+        {"MP_ACCESS_TOKEN": CHAVE_OPACA, "MP_WEBHOOK_SECRET": ASSINATURA}
+    )
+
+    assert segredos.mascarar(f"{CHAVE_OPACA} {ASSINATURA}") == "*** ***"
 
 
 def test_credenciais_ausentes_ou_vazias_dizem_o_nome_e_como_ler_sem_expor_valor() -> (
@@ -652,6 +680,23 @@ def test_preparar_sandbox_nao_poe_o_token_no_repr() -> None:
 
     assert CHAVE_DO_MP not in repr(sandbox)
     assert ASSINATURA not in repr(sandbox)
+
+
+def test_o_repr_do_sandbox_tambem_nao_mostra_o_cliente_do_mercado_pago() -> None:
+    class ClienteComSegredoNoRepr:
+        def __repr__(self) -> str:
+            return "cliente com SEGREDO-NO-REPR"
+
+    sandbox = Sandbox(modo="real", mercadopago=cast("Any", ClienteComSegredoNoRepr()))
+
+    assert "SEGREDO-NO-REPR" not in repr(sandbox)
+
+
+def test_o_sandbox_decidido_nao_muda_durante_a_sessao() -> None:
+    sandbox = Sandbox(modo="real", token=CHAVE_DO_MP)
+
+    with pytest.raises(FrozenInstanceError):
+        sandbox.manter = True  # type: ignore[misc]  # a classe e congelada de proposito
 
 
 def test_preparar_sandbox_ensaio_nao_pede_credencial_nem_fala_com_o_mercado_pago(

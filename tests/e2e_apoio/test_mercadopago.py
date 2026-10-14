@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import FrozenInstanceError
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
@@ -127,7 +128,7 @@ def test_o_cliente_http_tem_prazo_tls_ligado_e_nao_segue_redirecionamento(
     ClienteMercadoPago(CHAVE_APP_USR)
 
     assert opcoes["base_url"] == URL_DA_API == "https://api.mercadopago.com"
-    assert opcoes["timeout"] == PRAZO
+    assert opcoes["timeout"] == PRAZO == 10.0, "o README promete 10 s"
     assert opcoes["verify"] is True
     assert opcoes["follow_redirects"] is False
 
@@ -153,6 +154,8 @@ def test_pagamento_estornado_pelo_status_ou_pelo_valor_estornado() -> None:
     assert not com(transaction_amount_refunded=100.5).estornado
     assert not com().estornado
     assert not com(transaction_amount=None, transaction_amount_refunded=10).estornado
+    assert com(transaction_amount=0.5, transaction_amount_refunded=0.5).estornado
+    assert not com(transaction_amount=0, transaction_amount_refunded=0).estornado
 
 
 def test_buscar_por_referencia_lista_as_tentativas_em_ordem() -> None:
@@ -496,6 +499,48 @@ def test_campos_opcionais_ausentes_viram_none_e_live_mode_so_aceita_booleano() -
     assert minimo.valor_estornado == 0
     assert minimo.para_evidencia()["transaction_amount"] is None
     assert estranho.live_mode is None
+
+
+def test_detalhe_longo_do_erro_sai_cortado_em_300_caracteres() -> None:
+    corpo = {"message": "x" * 400}
+
+    with pytest.raises(ErroDoMercadoPagoError) as erro:
+        _cliente(lambda _: _json(corpo, 400)).pagamento("1")
+
+    assert "x" * 300 in str(erro.value)
+    assert "x" * 301 not in str(erro.value)
+
+
+def test_id_invalido_aparece_cortado_na_mensagem() -> None:
+    cliente = _cliente(lambda _: _json(PAGAMENTO))
+
+    with pytest.raises(ErroDoMercadoPagoError) as erro:
+        cliente.pagamento("1" * 20 + "9" * 50 + "/")
+
+    assert "1" * 20 in str(erro.value)
+    assert "9" not in str(erro.value)
+
+
+@pytest.mark.parametrize(
+    "lido",
+    [
+        pytest.param(lambda c: c.pagamento("1"), id="pagamento"),
+        pytest.param(lambda c: c.preferencia("1"), id="preferencia"),
+    ],
+)
+def test_o_que_se_le_do_mercado_pago_nao_muda_depois_de_lido(
+    lido: Callable[[ClienteMercadoPago], Any],
+) -> None:
+    resposta = {
+        **PAGAMENTO,
+        "expires": True,
+        "expiration_date_to": "2026-10-20T12:00:00.000-04:00",
+    }
+    objeto = lido(_cliente(lambda _: _json(resposta)))
+
+    with pytest.raises(FrozenInstanceError):
+        objeto.id = "outro"
+    assert not hasattr(objeto, "__dict__"), "sem dicionario por instancia"
 
 
 def test_id_com_caracteres_que_mudam_o_caminho_nem_sai_da_maquina() -> None:
