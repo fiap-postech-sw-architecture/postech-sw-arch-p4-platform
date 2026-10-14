@@ -222,10 +222,13 @@ class Escalas:
 
     def restaurar(self, namespace: str, deployment: str) -> None:
         """Volta ao numero original de replicas e espera ficarem prontas."""
-        original = self._originais.pop((namespace, deployment), None)
+        original = self._originais.get((namespace, deployment))
         if original is None:
             return
         self._kubectl.escalar(namespace, deployment, original)
+        # So esquece depois de escalar: uma falha do kubectl deixa o registro
+        # para o teardown da sessao tentar de novo.
+        del self._originais[(namespace, deployment)]
         self._kubectl.aguardar_pronto(namespace, deployment)
 
     def restaurar_todas(self) -> list[str]:

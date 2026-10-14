@@ -42,6 +42,11 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Gotchas
 
+- 2026-10-14 - O E2E espera a etapa da saga antes de afirmar que ela ficou parada: o `DiagnosticoConcluido` chega ao OS pelo consumidor, e logo depois do 200 da Execucao a OS ainda esta em `aguardando_diagnostico`; o status `aguardando_pagamento` tambem aparece um salto antes do resumo do pagamento (`solicitado`), que e o que traz o `checkout_url` - e2e/test_saga.py
+- 2026-10-14 - O que um cenario do E2E derruba (`kubectl scale`) volta no teardown de cada cenario, nao so da sessao: o consumidor do Billing ficou em 0 depois de um cenario reprovado e o seguinte esperou a vida toda por um orcamento que nunca saiu - e2e/conftest.py (`desfazer_falhas`)
+- 2026-10-14 - O login do OS tem limite proprio de 5 por minuto (slowapi, 429 `RATE_LIMIT_EXCEDIDO` sem `Retry-After`), alem do rate limit do Kong: duas sessoes do E2E com menos de um minuto de distancia recebem 429, e o cliente HTTP do E2E espera a janela em vez de reprovar - e2e/apoio/http.py
+- 2026-10-14 - O pytest imprime o `repr` das fixtures e os dois lados de um `assert` quando um passo falha: o link de decisao e o `token=` do checkout ficam fora do `repr` do cenario e a comparacao dos links vai para uma variavel antes do `assert` - e2e/servicos.py
+
 - 2026-10-12 - Funcao chamada dentro de `$( )` na esquerda de `||` (`tag=$(tag_de ...) || { ...; exit 1; }`) roda sem `set -e`: o `git add -A` que falhava no meio nao parava nada, e a tag saia do hash da arvore vazia, a mesma para qualquer codigo, com o tratamento de erro do chamador inalcancavel. O `git status`, o `git add` e o `write-tree` da funcao levam `|| return`, e o teste falha cada um por um `git` falso no PATH que repassa o resto ao de verdade. Do mesmo tipo, `grep -v` sem linha para mostrar sai 1 e, com o `pipefail`, derruba o script no meio de uma substituicao (o smoke perdia a tabela e o summary quando o `psql` morria sem escrever): `sed -n '/x/!{p;q;}'` sai 0 - `scripts/ci/implantar-servicos.sh`, `scripts/ci/smoke-servicos.sh`
 - 2026-10-12 - Sao cinco os `SET` que tiram a senha do log do servidor na troca de senha pelo `psql` e no init dos papeis (`log_statement`, `log_min_error_statement`, `log_min_duration_statement`, `log_min_duration_sample` e `log_transaction_sample_rate`), nao os dois da entrada de 2026-10-07 sobre a senha de papel trocada pelo `psql`: o log por duracao e por amostragem grava o texto do comando tambem - README, Troca de senha do banco e Contrato com os servicos
 - 2026-10-12 - `tar -xOf arquivo | grep -q` com `pipefail`: o grep sai no primeiro achado, o tar morre por SIGPIPE e o pipeline falha mesmo com achado; ler o conteudo para uma variavel e fazer o grep nela
@@ -86,6 +91,9 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 - 2026-10-06 - ruff 0.16 formata blocos python dentro de Markdown: `ruff format --check .` pega snippet do README
 
 ## Tech debt / TODO
+
+- 2026-10-14 - MEDIUM - O job `deploy-kind` ainda nao roda o `make e2e` (nem o ZAP); o `resumo.md` ja e anexado ao `$GITHUB_STEP_SUMMARY` quando a variavel existe, e falta o passo do workflow - README, E2E da saga
+- 2026-10-14 - LOW - O `@expiracao` espera o vencimento de 72 s do overlay `kind-ci` e responde por quase metade do tempo do E2E; em runner lento o prazo de 180 s do passo ainda cobre, mas e a primeira coisa a cortar se o tempo apertar - e2e/test_saga.py
 
 - 2026-10-12 - LOW - Execucao #5: o `papeis.sql` abre com dois `SET` de log e o do OS #7 com cinco (falta `log_min_duration_statement = -1`, `log_min_duration_sample = -1` e `log_transaction_sample_rate = 0`, que tambem gravam a senha), e o `.gitignore` nao tem `k8s/overlays/execucao/`, que o OS #7 e o Billing #5 tem - README, Contrato com os servicos
 - 2026-10-07 - LOW - Tirar o `.gitleaksignore` (fingerprint do commit 78ab307 do PR #8) no primeiro PR depois que a branch do #8 e as que partiram dela, como a do #10, forem mergeadas e apagadas; antes disso, o job gitleaks delas e a varredura semanal reprovariam - comentario do `.gitleaksignore`

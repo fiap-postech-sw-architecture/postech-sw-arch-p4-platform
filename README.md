@@ -651,8 +651,8 @@ Precisa do cluster com a plataforma **no overlay `kind-ci`** e os três serviço
 make kind-up deploy OVERLAY=kind-ci
 scripts/ci/implantar-servicos.sh --overlay kind-ci \
   os-service=<checkout> billing-service=<checkout> execution-service=<checkout>
-make e2e      # todos os cenários, de 5 a 6 min; relatórios em reports/e2e
-make demo     # só os cenários @demo (blocos 1 e 2 do vídeo), com o status da OS a cada passo; relatórios em reports/demo
+make e2e      # os 13 cenários, cerca de 3 min (a expiração do orçamento, 75 s, e a resiliência dominam); relatórios em reports/e2e
+make demo     # só os cenários @demo (blocos 1 e 2 do vídeo), cerca de 1,5 min, com o status da OS a cada passo; relatórios em reports/demo
 ```
 
 `KUBE_CONTEXT` escolhe o cluster (padrão `kind-pytstop-p4`). Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado.

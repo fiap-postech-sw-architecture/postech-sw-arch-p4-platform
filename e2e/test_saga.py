@@ -24,7 +24,7 @@ from e2e.apoio.dados import (
     email_de_cliente,
     placa_mercosul,
 )
-from e2e.apoio.espera import esperar, manter
+from e2e.apoio.espera import TempoEsgotadoError, esperar, manter
 from e2e.apoio.jaeger import SERVICOS, melhor_trace, servicos_do_trace
 from e2e.apoio.metricas import valor_da_serie
 from e2e.apoio.segredos import mascarar, registrar
@@ -76,6 +76,10 @@ ERROS_DE_REDE: Final = (httpx.TransportError,)
 # --- ajudantes ------------------------------------------------------------------
 
 
+class OsCanceladaError(AssertionError):
+    """A OS foi cancelada pela saga antes de chegar ao status esperado."""
+
+
 def diagnostico(api: Api, cenario: Cenario) -> str:
     """Onde a OS e a saga estao, para a mensagem de um cenario que nao chegou la."""
     try:
@@ -104,7 +108,7 @@ def esperar_status(
                 f"a OS foi cancelada antes de chegar a {status}: "
                 f"{diagnostico(api, cenario)}"
             )
-            raise AssertionError(msg)
+            raise OsCanceladaError(msg)
         return None
 
     try:
@@ -115,9 +119,7 @@ def esperar_status(
             descricao=f"{cenario.resumo} com status {status}",
             ignorar=ERROS_DE_REDE,
         )
-    except AssertionError as erro:
-        if "cancelada antes" in str(erro):
-            raise
+    except TempoEsgotadoError as erro:
         raise AssertionError(f"{erro}; {diagnostico(api, cenario)}") from erro
     cenario.orcamento_id = (ordem["orcamento"] or {}).get(
         "orcamento_id", cenario.orcamento_id
@@ -143,7 +145,7 @@ def esperar_saga(
             descricao=f"saga da {cenario.resumo} na etapa {etapa}",
             ignorar=ERROS_DE_REDE,
         )
-    except AssertionError as erro:
+    except TempoEsgotadoError as erro:
         raise AssertionError(f"{erro}; {diagnostico(api, cenario)}") from erro
 
 
