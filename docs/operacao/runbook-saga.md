@@ -2,15 +2,17 @@
 
 > [↑ Raiz do projeto](../../README.md)
 
-Vale a partir da versão do OS Service com o orquestrador da saga, implantada no kind. Antes dela não existem as rotas `/api/v1/sagas`, a tabela `sagas`, o processo `prazos`, as métricas `pytstop_saga_*` e os logs da saga, e os passos que os usam não têm o que mostrar. A fila, a DLQ, o redrive e o alerta "DLQ com mensagens" já valem.
+Vale a partir da versão do OS Service com o orquestrador e as compensações da saga, implantada no kind. Antes dela não existem a rota `GET /api/v1/sagas/{ordem_id}`, a tabela `sagas`, as métricas da saga e os logs da saga, e os passos que os usam não têm o que mostrar. A fila, a DLQ, o redrive e o alerta "DLQ com mensagens" já valem.
+
+Ainda não existem na `main` do OS Service o processo `prazos`, o reenvio por prazo, `POST /api/v1/sagas/{ordem_id}/compensacao` e as métricas `pytstop_saga_prazo_vencido_segundos`, `pytstop_saga_reenvios_total` e `pytstop_saga_prazos_esgotados_total`: entram com o PR de prazos e retomada do OS Service, ainda aberto. As seções 2 e 3 descrevem esse desenho decidido, e cada passo que depende dele diz "ainda não existe".
 
 Procedimento para os alertas "Saga parada" e "DLQ com mensagens" e para a ordem de serviço que não anda. As regras citadas estão na [RFC-004](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), seções 4.3, 4.5 a 4.7, 6.1, 7.2 e 9; métricas e alertas, no [ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md); retry, DLQ e redrive, no [ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md).
 
 | Sinal | Seção |
 |---|---|
 | Alerta "Saga parada", com instância em `falha_na_compensacao` | [1](#1-achar-a-saga-parada) e [2](#2-falha-na-compensação-e-retomada) |
-| Alerta "Saga parada", com prazo técnico vencido | [1](#1-achar-a-saga-parada) e [3](#3-prazo-técnico-vencido-sem-reenvio) |
-| Alerta "Saga parada", com o coletor das sagas indisponível (`pytstop_saga_coletor_disponivel` em 0) | [1](#1-achar-a-saga-parada) |
+| Alerta "Saga parada", com prazo técnico vencido (a métrica `pytstop_saga_prazo_vencido_segundos` ainda não existe) | [1](#1-achar-a-saga-parada) e [3](#3-prazo-técnico-vencido-sem-reenvio) |
+| Alerta "Saga parada", com o coletor das sagas indisponível (`pytstop_saga_coletor_disponivel` em 0, ou ausente com a API de pé) | [1](#1-achar-a-saga-parada) |
 | Alerta "DLQ com mensagens" (`pytstop-dlq-com-mensagens`) | [4](#4-mensagem-na-dlq-e-redrive) |
 | `outbox_dead` acima de zero (ainda sem alerta) | [Linha `dead` na outbox](#linha-dead-na-outbox) |
 | OS que não anda, relatada pelo atendente | [1](#1-achar-a-saga-parada) e [5](#5-o-trace-e-os-logs-pelo-correlation_id) |
@@ -72,12 +74,12 @@ No Prometheus (`http://localhost:9090`) ou no Explore do Grafana, entrando como 
 
 | Consulta | Leitura |
 |---|---|
-| `max(pytstop_saga_prazo_vencido_segundos)` | maior atraso de prazo técnico, em segundos; até cerca de 30 s é normal |
+| `max(pytstop_saga_prazo_vencido_segundos)` (ainda não existe) | maior atraso de prazo técnico, em segundos; até cerca de 30 s é normal |
 | `min(pytstop_saga_coletor_disponivel)` | 1: o coletor leu as sagas na última raspagem; 0: a leitura falhou em alguma réplica, e os gauges de etapa e de idade somem ([abaixo](#coletor-das-sagas-indisponível)) |
 | `max by (etapa) (pytstop_saga_ativas)` | instâncias em cada etapa |
 | `max by (etapa) (pytstop_saga_etapa_mais_antiga_segundos)` | idade da instância mais antiga em cada etapa; nas esperas humanas ela cresce sem problema |
-| `sum by (comando) (increase(pytstop_saga_reenvios_total[1h]))` | comandos que precisaram de reenvio: participante lento |
-| `sum by (comando) (increase(pytstop_saga_prazos_esgotados_total[1h]))` | comandos que esgotaram os reenvios: participante mudo |
+| `sum by (comando) (increase(pytstop_saga_reenvios_total[1h]))` (ainda não existe) | comandos que precisaram de reenvio: participante lento |
+| `sum by (comando) (increase(pytstop_saga_prazos_esgotados_total[1h]))` (ainda não existe) | comandos que esgotaram os reenvios: participante mudo |
 | `sum by (motivo) (increase(pytstop_saga_compensacoes_total[1h]))` | por que as sagas compensam; `prazo_tecnico` subindo é participante sem responder |
 | `rabbitmq_queue_consumers{queue="os.eventos"}` | zero: o consumidor do OS Service está fora, e o `prazos` fica em pausa |
 | `sum by (queue) (rabbitmq_queue_messages{queue=~".+[.]dlq"})` | mensagem em alguma DLQ ([seção 4](#4-mensagem-na-dlq-e-redrive)) |
@@ -85,11 +87,52 @@ No Prometheus (`http://localhost:9090`) ou no Explore do Grafana, entrando como 
 
 ### Coletor das sagas indisponível
 
-O coletor lê a tabela `sagas` na hora de cada raspagem, numa conexão própria, com prazo de 2 s para a consulta e de 1 s para esperar um lock. Se a leitura falha, ele omite `pytstop_saga_ativas` e `pytstop_saga_etapa_mais_antiga_segundos`, que ficam ausentes e nunca em zero, soma uma falha em `pytstop_saga_coletor_falhas_total` e publica `pytstop_saga_coletor_disponivel` em 0. Para achar a causa:
+O coletor lê a tabela `sagas` na hora de cada raspagem, numa conexão própria, com prazo de 2 s para a consulta e de 1 s para esperar um lock. Se a leitura falha, ele omite os gauges da saga que calcula (`pytstop_saga_ativas` e `pytstop_saga_etapa_mais_antiga_segundos`; o do prazo vencido, quando existir, sai ausente do mesmo jeito), que ficam ausentes e nunca em zero, soma uma falha em `pytstop_saga_coletor_falhas_total` e publica `pytstop_saga_coletor_disponivel` em 0. O alerta tem dois caminhos, e cada um tem o seu procedimento.
+
+**A série em 0** (`min(pytstop_saga_coletor_disponivel) == 0`): a leitura falhou em alguma réplica da API.
 
 1. `sum(increase(pytstop_saga_coletor_falhas_total[10m]))` acima de zero confirma que a falha se repete.
-2. O log da API do OS Service, no Loki (`{namespace="pytstop-os"} |= "saga gauges unavailable"`), traz a linha `saga gauges unavailable` com o tipo do erro: banco fora, tabela travada por um lock, que a leitura espera por 1 s, ou consulta acima de 2 s.
-3. Corrija a causa no banco. Enquanto o coletor estiver fora, as consultas de gauge desta seção não valem; a consulta ao banco do passo 3 de "O `ordem_id`" (abaixo) não depende dele.
+2. O log da API do OS Service, no Loki (`{namespace="pytstop-os"} |= "saga gauges unavailable"`), traz a linha `saga gauges unavailable` com o tipo do erro.
+3. Um comando por causa:
+   - Banco fora: o pod do banco e o StatefulSet dizem o estado, e o `rollout status` espera até 60 s:
+
+     ```bash
+     kos() { kubectl --context kind-pytstop-p4 -n pytstop-os "$@"; }
+     kos get pods
+     kos rollout status statefulset/os-postgres --timeout=60s
+     ```
+
+   - Tabela travada por um lock (o coletor espera 1 s e desiste): as transações abertas do banco e quem trava quem, como `postgres`. A que tem `travado_por` vazio e a `transacao` mais antiga é quem segura o lock. Chame quem mantém o OS Service antes de qualquer `pg_terminate_backend`, porque o relay e o consumidor seguram transações legítimas:
+
+     ```bash
+     kos exec -i statefulset/os-postgres -c postgres -- sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" PGOPTIONS="-c lock_timeout=2s -c statement_timeout=10s" exec psql -w -U postgres -d "$POSTGRES_DB"' <<'SQL'
+     SELECT pid, state, wait_event_type, now() - xact_start AS transacao, pg_blocking_pids(pid) AS travado_por, left(query, 70) AS consulta
+       FROM pg_stat_activity
+      WHERE datname = current_database() AND pid <> pg_backend_pid() AND state <> 'idle'
+      ORDER BY xact_start;
+     SQL
+     ```
+
+   - Consulta acima de 2 s: o plano da consulta do coletor, como `os_app`. Ele deve usar o índice parcial `ix_sagas_ativas` e terminar em milissegundos; um `Seq Scan` demorado quer dizer tabela inchada ou índice ausente, e quem mantém o OS Service decide:
+
+     ```bash
+     kos exec -i statefulset/os-postgres -c postgres -- sh -c 'PGPASSWORD="$POSTGRES_APP_PASSWORD" PGOPTIONS="-c lock_timeout=2s -c statement_timeout=10s" exec psql -w -U os_app -d "$POSTGRES_DB"' <<'SQL'
+     EXPLAIN (ANALYZE, BUFFERS)
+     SELECT etapa, count(*), extract(epoch FROM now() - min(etapa_desde))
+       FROM sagas WHERE etapa NOT IN ('concluida', 'compensada') GROUP BY etapa;
+     SQL
+     ```
+
+**A série ausente com a API de pé** (`up` em 1 e nenhuma `pytstop_saga_coletor_disponivel`): o `pytstop_saga_coletor_falhas_total` também falta, porque sai do mesmo coletor, e o log `saga gauges unavailable` só aparece quando a leitura falha. A API não está exportando o coletor:
+
+1. Confira o `/metrics` de uma réplica, com o Python da imagem:
+
+   ```bash
+   perl -e 'alarm shift; exec @ARGV' 30 kubectl --context kind-pytstop-p4 -n pytstop-os exec deploy/os-service-api -c api -- python -c "import urllib.request as u; print(u.urlopen('http://127.0.0.1:8000/metrics', timeout=5).read().decode())" | grep pytstop_saga_coletor
+   ```
+
+2. Com a linha `pytstop_saga_coletor_disponivel`, a série existe: o Prometheus ainda não a raspou (espere duas raspagens, 30 s), ou o caso é o da série em 0.
+3. Sem a linha, a imagem implantada é anterior ao coletor, ou a réplica é de uma versão antiga no meio de um rollout. Veja a imagem com `kos get deployment os-service-api -o jsonpath='{.spec.template.spec.containers[0].image}'` e implante a versão com o coletor.
 
 Resultado esperado: `min(pytstop_saga_coletor_disponivel)` volta a 1 na raspagem seguinte, e o alerta resolve na avaliação seguinte.
 
@@ -99,13 +142,13 @@ As métricas não levam o `ordem_id`, porque os labels são fechados. Para chega
 
 1. No Explore do Grafana, com o datasource Loki, `{namespace="pytstop-os"} |= "falha_na_compensacao" | json` traz as linhas do OS Service que citam essa etapa; o campo `correlation_id` de cada linha é o `ordem_id`.
 2. Na mensagem parada numa DLQ, a propriedade `correlation_id` ([seção 4](#4-mensagem-na-dlq-e-redrive)).
-3. No banco do OS Service, a lista completa, com uma consulta só de leitura. O comando acha o pod e o container do PostgreSQL pela imagem, sem depender do nome que o manifesto lhes der, e entra como `os_app` (só DML), com a senha que o container do banco já recebe do Secret em `POSTGRES_APP_PASSWORD`: o PostgreSQL do OS pede senha até no socket local (`scram-sha-256`, [Contrato com os serviços](../../README.md#o-que-cada-serviço-precisa-ter)), e ela chega ao `psql` por `PGPASSWORD`, sem passar pelo terminal nem por argumento. A consulta junta cada instância à linha da outbox do envio mais recente do comando em voo (o último de `mensagem_ids`) e lista as instâncias em `falha_na_compensacao` e as com o prazo vencido há mais de 60 s, contado do `entregue_em` mais 120 s, o `SAGA_PRAZO_RESPOSTA_SEGUNDOS` padrão; se a configuração mudou, troque os dois números:
+3. No banco do OS Service, a lista completa, com uma consulta só de leitura. O comando acha o pod e o container do PostgreSQL pela imagem, sem depender do nome que o manifesto lhes der, e entra como `os_app` (só DML), com a senha que o container do banco já recebe do Secret em `POSTGRES_APP_PASSWORD`: o PostgreSQL do OS pede senha até no socket local (`scram-sha-256`, [Contrato com os serviços](../../README.md#o-que-cada-serviço-precisa-ter)), e ela chega ao `psql` por `PGPASSWORD`, sem passar pelo terminal nem por argumento. O `PGOPTIONS` limita a espera por um lock a 2 s e a consulta a 10 s: o lock que faz o coletor desistir é o mesmo que prenderia o `psql` do operador. A consulta junta cada instância à linha da outbox do envio mais recente do comando em voo (o último de `mensagem_ids`) e lista as instâncias em `falha_na_compensacao` e as com o prazo vencido há mais de 60 s, contado do `entregue_em` mais 120 s, o `SAGA_PRAZO_RESPOSTA_SEGUNDOS` padrão; se a configuração mudou, troque os dois números:
 
    ```bash
    kos() { kubectl --context kind-pytstop-p4 -n pytstop-os "$@"; }
    read -r PG_POD PG_CONTAINER < <(kos get pods -o json | jq -r 'first(.items[] | .metadata.name as $pod
      | .spec.containers[] | select(.image | test("(^|/)postgres:")) | "\($pod) \(.name)")')
-   kos exec -i "$PG_POD" -c "$PG_CONTAINER" -- sh -c 'PGPASSWORD="$POSTGRES_APP_PASSWORD" exec psql -w -U os_app -d "$POSTGRES_DB"' <<'SQL'
+   kos exec -i "$PG_POD" -c "$PG_CONTAINER" -- sh -c 'PGPASSWORD="$POSTGRES_APP_PASSWORD" PGOPTIONS="-c lock_timeout=2s -c statement_timeout=10s" exec psql -w -U os_app -d "$POSTGRES_DB"' <<'SQL'
    SELECT s.ordem_id, s.etapa, s.falha, s.comando_em_voo->>'tipo' AS comando, s.reenvios,
           o.entregue_em, o.entregue_em + interval '120 seconds' AS venceu_em
      FROM sagas s
@@ -167,7 +210,7 @@ A sequência parou na compensação pendente. O que já foi compensado continua 
    - A OS ainda está na fila: a execução não começou. Retome (passo 3).
    - A OS saiu da fila e os logs da Execução, pelo `correlation_id`, mostram o início: não retome. A Execução dá `ack` no `CancelarExecucao` que chega depois do início e o ignora, sem resposta (log `command_ignored`). O `ExecucaoIniciada` devolve a saga a `em_execucao` sozinho, mesmo em `falha_na_compensacao` (corrida do pivot, [RFC-004, seção 4.5](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#45-contramedidas-de-isolamento)); se ele estiver na `os.eventos.dlq`, faça o redrive dela.
    - A OS saiu da fila e os logs mostram o cancelamento: retome (passo 3). A Execução responde ao novo envio com o `ExecucaoCancelada` registrado.
-3. Resolvida a causa, retome:
+3. Resolvida a causa, retome (a rota ainda não existe na `main` do OS Service; entra com o PR de prazos e retomada, e até lá este passo não está disponível: chame quem mantém o OS Service):
 
    ```bash
    curl -s -X POST "$OS/api/v1/sagas/$ORDEM_ID/compensacao" -H "Authorization: Bearer $TOKEN" | jq
@@ -179,7 +222,7 @@ Resultado esperado: `GET $OS/api/v1/sagas/$ORDEM_ID` chega a `compensada`, com a
 
 ## 3. Prazo técnico vencido sem reenvio
 
-Com tudo de pé, o `prazos` reenvia o comando a cada prazo vencido, e o atraso não passa do intervalo dele (`PRAZOS_INTERVALO_SEGUNDOS`, 30 s por padrão). Atraso acima de 60 s quer dizer que o prazo não está sendo tratado. Confira as causas nesta ordem:
+O processo `prazos` e o reenvio por prazo ainda não existem na `main` do OS Service; esta seção descreve o desenho decidido. Com tudo de pé, o `prazos` reenvia o comando a cada prazo vencido, e o atraso não passa do intervalo dele (`PRAZOS_INTERVALO_SEGUNDOS`, 30 s por padrão). Atraso acima de 60 s quer dizer que o prazo não está sendo tratado. Confira as causas nesta ordem:
 
 | Causa | Como confirmar | O que fazer |
 |---|---|---|
@@ -241,11 +284,12 @@ Os e-mails ao cliente que esgotaram as tentativas ficam na tabela `notificacoes`
 
 ### Motivos de recusa no consumidor do OS Service
 
-O motivo de cada recusa sai em código no log `message rejected to dlq` do consumidor e no status de erro do span do consumo. Três pedem uma decisão antes do redrive, porque ele devolve a fila inteira e a mensagem que o consumidor recusar de novo volta à DLQ:
+O motivo de cada recusa sai em código no log `message rejected to dlq` do consumidor e no status de erro do span do consumo. Cinco pedem uma decisão antes do redrive, porque ele devolve a fila inteira e a mensagem que o consumidor recusar de novo volta à DLQ:
 
 | Motivo | O que é | O que fazer |
 |---|---|---|
 | `sem_tratador_nesta_versao` | falha de negócio (por exemplo `OrcamentoRecusado` ou `ReservaDePecasFalhou`) ou resposta de compensação (por exemplo `ExecucaoCancelada`) que uma réplica de versão anterior à das compensações recebeu: consumi-la sem tratador perderia o evento, e por isso ela foi para a DLQ | implante a versão com as compensações em todas as réplicas e só então faça o redrive de `os.eventos`; antes disso a versão antiga a recusa de novo e os 7 dias da DLQ recomeçam |
+| `ordem_id_divergente`, `saga_inexistente` | o `ordem_id` dos dados é diferente do `correlation_id` (mensagem de outra OS), ou a OS não tem saga | o redrive não resolve, a mensagem volta à DLQ: peça o `ordem_id` e o `message_id` a quem mantém o OS Service ([Quando pedir ajuda](#quando-pedir-ajuda)) |
 | `ordem_encerrada` | evento do fluxo para uma OS `cancelada` ou `entregue` com a saga ainda viva, estado que o cancelamento pela API não produz (alguém alterou a OS por fora do serviço) | o redrive não resolve, a mensagem volta à DLQ: corrija o estado da OS ou chame quem mantém o OS Service ([Quando pedir ajuda](#quando-pedir-ajuda)) |
 | `transicao_invalida` | a OS ou a saga recusam o fato, por exemplo `PagamentoSolicitado` com a OS fora de `aguardando_pagamento` | estado e evento não combinam: chame quem mantém o OS Service com o `ordem_id` e o `message_id`; o redrive só adianta se o estado mudar |
 
