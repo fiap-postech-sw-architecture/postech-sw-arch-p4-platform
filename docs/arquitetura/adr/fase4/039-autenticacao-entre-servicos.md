@@ -75,7 +75,7 @@ O token do link é `orcamento_id` e `exp` assinados com HMAC-SHA256 por uma chav
 
 ### Auditoria e propagação
 
-Decisão em nome do cliente e ação privilegiada deixam o `sub` de quem agiu. `OrcamentoAprovado` e `OrcamentoRecusado` levam `decidido_por` quando `canal=atendente`, o histórico da OS guarda o `ator` de cada transição, e cancelamento, ajuste de estoque, mudança de preço, ação do `admin` em nome do mecânico e retomada de compensação geram log de auditoria com `sub`, ação e alvo, como a API administrativa do p3 já fazia (`src/compartilhado/interfaces/router_admin.py:82-86`).
+Decisão em nome do cliente e ação privilegiada deixam o `sub` de quem agiu. `OrcamentoAprovado` e `OrcamentoRecusado` levam `decidido_por` quando `canal=atendente`, o histórico da OS guarda o `ator` de cada transição, e cancelamento, ajuste de estoque, mudança de preço, ação do `admin` em nome do mecânico e retomada de compensação geram log de auditoria com `sub`, ação e alvo, como a API administrativa do p3 já fazia (`src/compartilhado/interfaces/router_admin.py:82-86`). O reprocessamento de uma linha `dead` da outbox não tem rota nem esse log: é um `UPDATE` direto no banco do serviço, e quem o faz registra no ticket do incidente o `id` e o `message_id` da linha, quem, quando e por quê ([runbook da saga](../../../operacao/runbook-saga.md#linha-dead-na-outbox)).
 
 Na chamada síncrona de negócio, a Execução repassa ao Billing o `Authorization` do mecânico ([ADR-038](038-borda-e-comunicacao-sincrona.md)). Não existe identidade de serviço.
 
