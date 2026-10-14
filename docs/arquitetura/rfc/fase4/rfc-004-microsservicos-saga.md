@@ -158,7 +158,7 @@ flowchart TB
     bil -->|"HTTPS: preferência, consulta,<br/>conciliação, estorno"| mp
     mp -->|"webhook payment<br/>(x-signature)"| kong
     cliente -->|"paga no checkout"| mp
-    os -->|"e-mail pela outbox (SMTP)"| mailpit
+    os -->|"e-mail pelo notificador (SMTP)"| mailpit
     os & exe & bil -.->|"OTLP · /metrics · logs"| obs
 ```
 
@@ -173,7 +173,7 @@ No formato da Aula 01 de Microsserviços I (serviço, operações, integrações
 
 | Serviço | Operações | Integrações | Banco |
 |---|---|---|---|
-| [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service) | Abrir a OS; atualizar o status pelas respostas da saga; consultar status, histórico, etapa e tempo médio por status; cancelar antes do pivot; registrar a entrega; clientes, veículos e consentimentos da LGPD (Lei Geral de Proteção de Dados); login interno e emissão de JWT; orquestrar a saga; notificar o cliente por e-mail, inclusive com o orçamento | Envia comandos à Execução e ao Billing e consome os eventos dos dois; publica o JWKS; e-mail pelo relay (SMTP) | PostgreSQL 16 |
+| [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service) | Abrir a OS; atualizar o status pelas respostas da saga; consultar status, histórico, etapa e tempo médio por status; cancelar antes do pivot; registrar a entrega; clientes, veículos e consentimentos da LGPD (Lei Geral de Proteção de Dados); login interno e emissão de JWT; orquestrar a saga; notificar o cliente por e-mail, inclusive com o orçamento | Envia comandos à Execução e ao Billing e consome os eventos dos dois; publica o JWKS; e-mail pelo `notificador` (SMTP) | PostgreSQL 16 |
 | [Billing Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service) | Preços de serviços e peças; validação de códigos; orçamento com preços congelados, link de decisão e validade; decisão do cliente (link ou atendente); solicitação, confirmação, recusa, expiração, cancelamento e estorno de pagamento; conciliação com o Mercado Pago | Mercado Pago (Checkout Pro, consulta, estorno, webhook); atende a Execução por REST; lê o JWKS do OS; comandos e eventos | MongoDB 7 |
 | [Execution Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service) | Fila de diagnóstico, com o retrato do veículo; reserva, liberação e baixa de peças; fila de execução (agendamento, início, finalização); estoque físico | Valida preços no Billing por REST; lê o JWKS do OS; comandos e eventos | PostgreSQL 16 |
 
@@ -358,7 +358,7 @@ A saga não tem o "I" do ACID (SAGA Pattern, Aula 03). Contramedidas, detalhadas
 - Evento fora de ordem: o de etapa já passada, ou de saga encerrada, é ignorado com log; o de etapa à frente, como `ExecucaoIniciada` antes de `ExecucaoAgendada`, volta pelas filas de retry até a saga alcançá-lo e, esgotadas as tentativas, vai para a DLQ com alerta. Dentro da mesma etapa vale o mesmo critério: `DiagnosticoConcluido` com a OS ainda `RECEBIDA` (antes do `DiagnosticoIniciado`) e `PagamentoConfirmado`, `PagamentoRecusado` ou `PagamentoExpirado` antes do `PagamentoSolicitado` também são adiantados e voltam pelo retry do consumidor; `DiagnosticoIniciado` com a OS já `EM_DIAGNOSTICO` e `PagamentoSolicitado` repetido são ignorados.
 - Comando repetido, pelo mesmo `id` ou pela mesma chave de negócio (o reenvio do orquestrador leva `id` novo), não repete o efeito e publica de novo a resposta registrada. Vale para a compensação repetida, que não é descompasso de estado: o participante republica o desfecho, em vez de ignorar o comando (seções [5.4](#54-garantias-de-entrega) e [7.1](#71-estados-dos-agregados)).
 - Lápide: a compensação que chega antes do comando original cria o registro já no estado final (seção 7.1); o comando atrasado, ao chegar, encontra esse registro pelo índice único por OS e é descartado.
-- Corrida no pivot: decide a transação da Execução. Se o início vencer, o `ExecucaoIniciada` que chega com só `CancelarExecucao` pendente devolve a saga a `EM_EXECUCAO`, o pedido de cancelamento guardado na OS é descartado, e o histórico registra "cancelamento recusado: execução já iniciada". Vale também em `FALHA_NA_COMPENSACAO` quando a compensação parada é o `CancelarExecucao`: nada foi desfeito, e a Execução não cancela execução iniciada, então ignorar o evento deixaria a OS parada, com uma retomada que nunca concluiria. A Execução dá `ack` no `CancelarExecucao` que chega depois do início e o ignora, sem resposta ([seção 5.4](#54-garantias-de-entrega)): quem resolve a corrida é o `ExecucaoIniciada`.
+- Corrida no pivot: decide a transação da Execução. Se o início vencer, o `ExecucaoIniciada` que chega com só `CancelarExecucao` pendente devolve a saga a `EM_EXECUCAO`, o pedido de cancelamento guardado na OS é descartado, e o registro da saga para essa volta leva o gatilho `cancelamento_recusado`, com o `id` do `ExecucaoIniciada`, no lugar do tipo do evento. Quem consulta o encontra em `passos`, no `GET .../historico` e no `GET /api/v1/sagas/{ordem_id}`; a recusa em si não tem linha em `mudancas`, que só traz a mudança normal da OS para `EM_EXECUCAO`. Vale também em `FALHA_NA_COMPENSACAO` quando a compensação parada é o `CancelarExecucao`: nada foi desfeito, e a Execução não cancela execução iniciada, então ignorar o evento deixaria a OS parada, com uma retomada que nunca concluiria. A Execução dá `ack` no `CancelarExecucao` que chega depois do início e o ignora, sem resposta ([seção 5.4](#54-garantias-de-entrega)): quem resolve a corrida é o `ExecucaoIniciada`.
 - Reserva tudo ou nada, com o lock pessimista do p3 (RN-012, [ADR-008](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/008-bloqueio-pessimista-estoque.md)) sem o `NOWAIT`: `SELECT ... FOR UPDATE` bloqueante, limitado por `lock_timeout`, com os itens travados em ordem de `sku`, para que duas reservas nunca travem em ordem oposta. Quem perde a disputa pela última unidade recebe `ReservaDePecasFalhou`, e não um erro de lock.
 
 ### 4.6 Prazos
@@ -431,7 +431,7 @@ sequenceDiagram
         Note over OS,BI: T3 e T4: orçamento e decisão do cliente
         OS-)BI: GerarOrcamento
         BI-)OS: OrcamentoGerado
-        Note over OS,EX: OS AGUARDANDO_APROVACAO, e-mail com link_decisao pela outbox
+        Note over OS,EX: OS AGUARDANDO_APROVACAO, e-mail com link_decisao pela tabela de notificações
         CL->>BI: POST /api/v1/publico/orcamentos/{token}/decisao (aprova)
         BI-)OS: OrcamentoAprovado
     end
@@ -445,7 +445,7 @@ sequenceDiagram
         BI->>MP: POST /checkout/preferences
         MP-->>BI: init_point
         BI-)OS: PagamentoSolicitado
-        Note over OS,EX: e-mail com checkout_url pela outbox
+        Note over OS,EX: e-mail com checkout_url pela tabela de notificações
         CL->>MP: paga no Checkout Pro
         MP->>BI: POST /api/v1/webhooks/mercadopago (x-signature)
         BI->>MP: GET /v1/payments/{id}
@@ -689,7 +689,7 @@ A routing key deriva do nome, em snake_case: `GerarOrcamento` → `comando.billi
 - O participante localiza o recurso a compensar pelo `ordem_id` quando o comando chega sem `orcamento_id` ou `pagamento_id`, o caso do passo em voo.
 - Nos comandos de compensação, `motivo` é um código da enumeração de `pytstop_saga_compensacoes_total` ([seção 9](#9-observabilidade)); o texto que o atendente escreve no cancelamento fica só na OS ([seção 7.2](#72-os-service-postgresql-16)).
 - `AgendarExecucao` sai sempre com `prioridade: normal` nesta fase: a OS não tem dado que justifique `alta`, e nenhuma rota escolhe a prioridade. O schema mantém `alta`, que a fila da Execução já atende antes de `normal` ([seção 7.3](#73-execution-service-postgresql-16)), para quando houver regra.
-- Dados pessoais: as mensagens não levam nome, documento nem contato do cliente, e o OS, dono desses dados, envia as notificações. A exceção é a placa, no retrato do veículo que a Execução guarda para o mecânico achar o carro no pátio; na eliminação de dados da LGPD, o OS envia `AnonimizarVeiculo`, e a Execução troca a placa por `ANONIMIZADO:{veiculo_id}`, o marcador do p3 (`src/cliente_veiculo/dominio/placa_anonimizada.py`). Texto livre (`descricao_problema`, `observacoes`, `motivo`) nunca vai para log.
+- Dados pessoais: as mensagens não levam nome, documento nem contato do cliente, e o OS, dono desses dados, envia as notificações. A exceção é a placa, no retrato do veículo que a Execução guarda para o mecânico achar o carro no pátio; na eliminação de dados da LGPD, o OS envia `AnonimizarVeiculo`, e a Execução troca a placa dos retratos do veículo (diagnósticos e execuções) por `ANONIMIZADO:{veiculo_id}`, o marcador do p3 (`src/cliente_veiculo/dominio/placa_anonimizada.py`). Os textos livres dos diagnósticos dele, `descricao_problema` e `observacoes`, que podem trazer nome, endereço ou a placa, viram `[removido na eliminacao de dados pessoais]`, inclusive as `observacoes` dos `DiagnosticoConcluido` ainda guardados na outbox; marca, modelo e ano ficam. Texto livre (`descricao_problema`, `observacoes`, `motivo`) nunca vai para log.
 
 ### 5.4 Garantias de entrega
 
@@ -723,13 +723,13 @@ Papel exigido em cada rota: matriz única do [ADR-039](../../adr/fase4/039-auten
 | `GET /.well-known/jwks.json`, lido por Billing e Execução | público |
 | `/api/v1/clientes` (clientes, veículos e rotas da LGPD do p3; CPF ou CNPJ validado pelo dígito verificador, módulo 11, e placa validada antes de consultar; a eliminação de dados envia `AnonimizarVeiculo`) | JWT |
 | `POST /api/v1/ordens-de-servico` (abre a OS e inicia a saga); `GET /api/v1/ordens-de-servico` (fila por prioridade de status) | JWT |
-| `GET /api/v1/ordens-de-servico/{id}` (com resumo de orçamento, pagamento e etapa); `GET .../{id}/historico` (status, passos da saga, ator e motivo) | JWT |
+| `GET /api/v1/ordens-de-servico/{id}` (com resumo de orçamento, pagamento e etapa); `GET .../{id}/historico` (duas listas, cada uma na sua ordem: `mudancas`, as transições de status com ator e motivo, e `passos`, os registros da saga) | JWT |
 | `GET /api/v1/ordens-de-servico/metricas` (tempo médio por status, calculado do histórico; RF-008 da fase 1) | JWT (admin) |
 | `POST /api/v1/ordens-de-servico/{id}/cancelamento` (202 com a etapa; 409 depois do pivot; respostas abaixo); `POST .../{id}/entrega` (T10) | JWT |
 | `GET /api/v1/sagas/{ordem_id}` (etapa, motivo, falha, plano restante com a compensação pendente primeiro, comando em voo com tipo e hora do envio, reenvios, prazo e passos); `POST /api/v1/sagas/{ordem_id}/compensacao` (retoma a compensação suspensa; respostas abaixo) | JWT (admin) |
 | `POST /api/v1/publico/acompanhamento` (placa e documento no corpo, nunca na URL; documento validado pelo módulo 11 e placa pelo formato antes da consulta, com o mesmo 404 para dado inválido e para OS não encontrada) | sem JWT |
 
-Respostas do cancelamento e da retomada, conforme a etapa da saga. O 409 usa o código `TRANSICAO_STATUS_INVALIDA`, o mesmo que o OS já devolve às transições de status recusadas, com mensagem própria:
+Respostas do cancelamento e da retomada, conforme a etapa da saga. O 409 de transição recusada usa o código `TRANSICAO_STATUS_INVALIDA`, o mesmo que o OS já devolve às transições de status recusadas, com mensagem própria; o 409 de concorrência usa `CONFLITO_DE_CONCORRENCIA`, e o 404, `ENTIDADE_NAO_ENCONTRADA`, como nos outros serviços:
 
 | Pedido | Etapa | Resposta |
 |---|---|---|
@@ -737,6 +737,8 @@ Respostas do cancelamento e da retomada, conforme a etapa da saga. O 409 usa o c
 | cancelamento, inclusive repetido | `COMPENSANDO` ou `FALHA_NA_COMPENSACAO` | 202 com a etapa atual, sem novo efeito: a compensação já começou |
 | cancelamento | `EM_EXECUCAO` ou `CONCLUIDA` | 409, "Cancelamento recusado: execução já iniciada" (RN-029) |
 | cancelamento | `COMPENSADA` | 409, "Ordem já cancelada" |
+| cancelamento | qualquer, com uma escrita concorrente (o consumidor grava a mesma OS ou saga) que persiste nas três leituras | 409 `CONFLITO_DE_CONCORRENCIA`; o pedido relê e é reavaliado, e só chega ao 409 se perder as três vezes (seção 4.5, reler o valor) |
+| cancelamento | OS inexistente (toda OS aberta tem saga, e não há cancelamento direto) | 404 `ENTIDADE_NAO_ENCONTRADA` |
 | retomada | `FALHA_NA_COMPENSACAO` | 202 com a etapa `COMPENSANDO`; a compensação pendente sai de novo, com `id` novo, prazo novo e contador de reenvios zerado ([seção 4.7](#47-falha-na-compensação-e-retomada)) |
 | retomada | qualquer outra | 409 |
 
@@ -857,17 +859,30 @@ erDiagram
         timestamptz prazo_resposta_em "agora mais o prazo, gravado pela saga no envio"
         timestamptz iniciada_em
         timestamptz etapa_desde "entrada na etapa atual"
+        timestamptz atualizada_em "hora da última transição"
         varchar traceparent
         int versao
     }
     outbox {
         bigint id PK
         uuid mensagem_id UK
-        varchar destino "rabbitmq ou email"
+        uuid correlation_id "ordem_id"
+        varchar exchange
         varchar routing_key
-        jsonb envelope
-        jsonb headers "traceparent"
+        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
+        varchar traceparent
+        varchar tracestate
         varchar status
+        timestamptz entregue_em
+    }
+    notificacoes {
+        uuid id PK
+        uuid ordem_id FK
+        varchar modelo "situacao, orcamento, pagamento ou cancelamento"
+        varchar status_da_ordem
+        varchar motivo "código, nunca texto livre"
+        varchar situacao "pendente, entregue ou dead"
+        timestamptz criada_em
         timestamptz entregue_em
     }
     mensagens_processadas {
@@ -881,16 +896,18 @@ erDiagram
     veiculos ||--o{ ordens_de_servico : "atendido em"
     ordens_de_servico ||--o{ historico_status_ordem : "linha do tempo"
     ordens_de_servico ||--|| sagas : "saga_id = ordem_id"
+    ordens_de_servico ||--o{ notificacoes : "e-mails ao cliente (ainda não implementada)"
 ```
 
 - As tabelas de cliente, veículo, consentimento, usuário e token vêm do p3 sem mudança.
 - A OS perde o orçamento em JSONB e ganha versão otimista e o resumo de orçamento e pagamento copiado dos eventos, para responder sem chamar o Billing.
 - `historico_status_ordem` só recebe inserções, na transação de cada transição (RF-030), com o ator: o `sub` do JWT ou o processo. A única exceção é da LGPD: a eliminação de dados do cliente reescreve o `motivo`, texto livre, com o marcador de anonimização, como faz com a descrição do problema e o motivo de cancelamento da OS.
-- A instância da saga guarda a linha do tempo dos passos, que o `GET .../historico` junta às transições de status, o plano de compensação, o comando em voo, que só existe para comando com prazo técnico e não tem texto livre, com a hora e o `id` de cada envio (o original, os reenvios e o da retomada, com os quais a resposta casa pelo `causation_id`), os itens do diagnóstico e o `traceparent` da mensagem que a pôs em espera. A posição na fila que chega no `ExecucaoAgendada` fica só no passo desse evento; a fila atual é a do `GET /api/v1/fila` da Execução.
+- A instância da saga guarda a linha do tempo dos passos, que o `GET .../historico` devolve em `passos`, ao lado das transições de status (`mudancas`) e sem misturar as duas listas, o plano de compensação, o comando em voo, que só existe para comando com prazo técnico e não tem texto livre, com a hora e o `id` de cada envio (o original, os reenvios e o da retomada, com os quais a resposta casa pelo `causation_id`), os itens do diagnóstico e o `traceparent` da mensagem que a pôs em espera. A posição na fila que chega no `ExecucaoAgendada` fica só no passo desse evento; a fila atual é a do `GET /api/v1/fila` da Execução.
+- Cada registro de `passos` traz só códigos: `seq`, `em`, a etapa de e para, o `gatilho`, o `id` da mensagem, o comando enviado e seu `id`, o `motivo` e o `ator`. O `gatilho` é o tipo da mensagem que provocou a transição ou uma de seis palavras fechadas, `abertura`, `cancelamento_solicitado`, `cancelamento_recusado`, `reenvio`, `prazo_esgotado` e `retomada`; a saga recusa outro valor. `atualizada_em` é a hora da última transição aplicada.
 - `etapa` guarda o nome em minúsculas (`falha_na_compensacao`), como a coluna `status` da OS guarda `cancelada`; a API e o label `etapa` das métricas usam o mesmo valor, e esta RFC escreve os nomes em maiúsculas.
 - `prazo_resposta_em` é gravado pela saga a cada envio do comando em voo (o original, cada reenvio e o da retomada) e vale `agora` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS`. É um limite inferior do vencimento, porque o comando só chega ao participante depois de sair da outbox, e é por ele que o `prazos` acha as candidatas por índice; fica nulo sem comando com prazo e em `FALHA_NA_COMPENSACAO`. O relay é genérico e não conhece a saga: quem decide o vencimento é o `prazos`, que lê a linha da outbox do envio mais recente (o último de `mensagem_ids`) e só vence a instância se ela estiver entregue e `entregue_em` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS` já tiver passado. Envio pendente na outbox, ou entregue há menos que o prazo, não vence. `etapa_desde`, a entrada na etapa atual, dá a idade da instância mais antiga e a duração de cada etapa ([seção 9](#9-observabilidade)); `iniciada_em` é a abertura da saga.
 - A saga guarda só códigos (etapa, motivo da compensação, falha), nunca texto livre. O texto que o atendente escreve no cancelamento vai para `ordens_de_servico.motivo_cancelamento` já no pedido, antes de a compensação terminar, e passa ao histórico quando a OS chega a `CANCELADA` (na corrida do pivot, o pedido é descartado); assim a eliminação de dados da LGPD o alcança sem tocar `sagas`.
-- A outbox tem dois destinos: `rabbitmq`, para os comandos, e `email`, para as notificações ao cliente, que o relay entrega por SMTP como no p3, separadas da mensageria. Falha de SMTP não trava a saga, porque a ordem do relay vale por destino: um e-mail em backoff segura só os e-mails seguintes da mesma OS, nunca os comandos dela.
+- A outbox é só AMQP: toda linha tem `exchange` e `routing_key`, e o relay não conhece o e-mail nem o cliente. As notificações ao cliente vão para a tabela `notificacoes`, gravada na transação da própria transição, e um processo `notificador` (um Deployment, com laço, heartbeat e readiness próprios) as entrega por SMTP como no p3, lendo o contato por projeção SQL de `nome` e `contato`, sem a `ENCRYPTION_KEY`. Falha de SMTP retenta só aquela linha e não trava a saga nem o relay, e a ordem de entrega vale só entre os e-mails da mesma OS. A tabela é própria por duas razões: um relay de versão anterior (rolling update ou `rollout undo`) nunca vê linha de e-mail, e SMTP lento não prende a conexão AMQP do relay. Está decidido e ainda não existe no código: a tabela (migração `004_notificacoes`) e o `notificador` entram com o PR de notificações do OS Service.
 
 ### 7.3 Execution Service (PostgreSQL 16)
 
@@ -913,12 +930,14 @@ erDiagram
     diagnosticos {
         uuid ordem_id PK
         jsonb veiculo "retrato: veiculo_id, placa, marca, modelo e ano"
-        text descricao_problema
+        text descricao_problema "texto livre: marcador na eliminação LGPD"
         varchar status
         uuid mecanico_id
         jsonb itens
-        text observacoes
+        text observacoes "texto livre: marcador na eliminação LGPD"
+        uuid solicitacao_id "id do SolicitarDiagnostico"
         varchar traceparent
+        varchar tracestate
     }
     execucoes {
         uuid ordem_id PK
@@ -927,14 +946,20 @@ erDiagram
         varchar prioridade "normal ou alta"
         uuid mecanico_id
         timestamptz iniciada_em
+        uuid agendamento_id "id do AgendarExecucao"
         varchar traceparent
+        varchar tracestate
     }
     outbox {
         bigint id PK
         uuid mensagem_id UK
+        uuid correlation_id "ordem_id"
+        varchar tipo
+        varchar exchange
         varchar routing_key
-        jsonb envelope
-        jsonb headers "traceparent"
+        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
+        varchar traceparent
+        varchar tracestate
         varchar status
         timestamptz entregue_em
     }
@@ -948,7 +973,7 @@ erDiagram
 
 Ao contrário do p3, reservar não consome o saldo: a reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. A reserva guarda os itens em JSONB e, quando recusada, os faltantes que seguem em `ReservaDePecasFalhou`. `ordem_id` é referência lógica, sem chave estrangeira, e único por tabela (a chave primária de diagnóstico e execução), o que torna reserva, diagnóstico e execução idempotentes por OS e sustenta a lápide.
 
-Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent`. O diagnóstico guarda o retrato do veículo, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois. Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
+Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent` e o `tracestate` e o `id` do comando que os abriu (`solicitacao_id` e `agendamento_id`), de onde saem o `causation_id` e o pai do trace dos eventos que o mecânico provoca. O diagnóstico guarda o retrato do veículo, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois e, no diagnóstico, também `descricao_problema` e `observacoes`, que são texto livre (seção 5.3). Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
 
 ### 7.4 Billing Service (MongoDB 7)
 
@@ -969,7 +994,8 @@ Dinheiro em `Decimal128`, datas em UTC; exemplos em Extended JSON. As coleções
   "moeda": "BRL",
   "valido_ate": {"$date": "2026-10-09T14:32:06Z"},
   "decisao": {"resultado": "APROVADO", "canal": "link", "decidido_em": {"$date": "2026-10-06T15:02:11Z"}},
-  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  "aberto_por": {"mensagem_id": "8f6b1c2e-4d3a-4e8b-9f1a-2b7c5d9e0a13",
+                 "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 }
 ```
 
@@ -985,7 +1011,8 @@ Dinheiro em `Decimal128`, datas em UTC; exemplos em Extended JSON. As coleções
   "referencia_provedor": "sim-000173",
   "recusas": 0,
   "expira_em": {"$date": "2026-10-06T16:02:12Z"},
-  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-5c3d1e8a2b7f9046-01",
+  "aberto_por": {"mensagem_id": "c4e9a7d2-6b1f-4a30-9d58-3e7f1b2a8c60",
+                 "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-5c3d1e8a2b7f9046-01"},
   "historico": [{"status": "SOLICITADO", "em": {"$date": "2026-10-06T15:02:12Z"}},
                 {"status": "CONFIRMADO", "em": {"$date": "2026-10-06T15:05:40Z"}}]
 }
@@ -998,7 +1025,7 @@ Dinheiro em `Decimal128`, datas em UTC; exemplos em Extended JSON. As coleções
 | `pagamentos` | único `{orcamento_id: 1}` (uma cobrança por orçamento, RF-032); único `{ordem_id: 1}`, pelo qual a compensação acha a cobrança; único e esparso `{referencia_provedor: 1}` para o webhook; `{status: 1, expira_em: 1}` para a expiração e a conciliação |
 | `outbox`, `mensagens_processadas` | `{status: 1, proxima_tentativa_em: 1}` para o *claim*; `_id` igual ao `id` da mensagem |
 
-- Orçamento e pagamento são os registros que esperam o cliente e guardam o `traceparent`.
+- Orçamento e pagamento são os registros que esperam o cliente. Cada um guarda em `aberto_por` o `id` do comando que o criou (`GerarOrcamento` e `SolicitarPagamento`) e o contexto de trace dele (`traceparent` e `tracestate`): é de lá que saem o `causation_id` e o pai do trace dos eventos que o Billing emite sem comando (decisão do cliente, webhook, conciliação, prazo), que ainda levam um span link para o contexto de quem retomou o passo. O campo é gravado uma vez, na criação, e as gravações seguintes não o alteram.
 - Do provedor, o pagamento guarda só id, status e seu detalhe, valor, moeda e datas; dados do pagador e do cartão são descartados antes de persistir e de logar.
 - O Job de inicialização do Billing cria o replica set (`rs.initiate`), os índices e a validação `$jsonSchema` (nível `moderate`, só mudanças aditivas) antes do rollout ([seção 10.2](#102-pipeline-e-deploy)).
 
@@ -1010,7 +1037,7 @@ Resumo; o detalhe está no [ADR-039](../../adr/fase4/039-autenticacao-entre-serv
 - Link de decisão assinado com HMAC-SHA256, de uso único, com o mesmo 404 para token inválido, expirado ou já usado e o `{token}` mascarado em logs e spans (evolução do canal assinado do p3, [ADR-021](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/021-aprovacao-externa-orcamento.md)). Webhook: `x-signature` conferido e estado sempre lido em `GET /v1/payments/{id}`; estorno com `X-Idempotency-Key = estorno-{pagamento_id}`.
 - Simulador só com `MP_MODE=simulado`, que o boot recusa com `ENVIRONMENT=production` sem `SIMULADOR_PERMITIDO=true`; as rotas dele exigem o token HMAC do `checkout_url` e têm rate limit.
 - Broker com usuário por serviço, permissão só nas próprias routing keys e `user_id` conferido ([seção 5.1](#51-topologia)). NetworkPolicy de entrada por namespace, que libera só o tráfego previsto; o tráfego interno sem TLS (criptografia da conexão) é risco aceito do ambiente de demonstração.
-- LGPD e auditoria: placa na Execução com anonimização por comando ([seção 5.3](#53-catálogo-de-comandos-e-eventos)), retenção limitada ([seção 5.4](#54-garantias-de-entrega)) e texto livre fora dos logs; `decidido_por` na decisão em nome do cliente, `ator` no histórico e log de auditoria nas ações privilegiadas.
+- LGPD e auditoria: placa e textos livres na Execução com anonimização por comando ([seção 5.3](#53-catálogo-de-comandos-e-eventos)), retenção limitada ([seção 5.4](#54-garantias-de-entrega)) e texto livre fora dos logs; `decidido_por` na decisão em nome do cliente, `ator` no histórico e log de auditoria nas ações privilegiadas.
 - Segredos: nenhum segredo de aplicação fica no GitHub; os de runtime nascem no cluster, só se ausentes, e a tabela, com a regra de rotação, está no ADR-042.
 
 ## 9. Observabilidade
@@ -1063,12 +1090,14 @@ Métricas novas levam o prefixo `pytstop_`; as herdadas do p3 mantêm o nome (`o
 | `pytstop_saga_ativas{etapa}` | gauge: instâncias em cada etapa não final | coletor da API |
 | `pytstop_saga_etapa_mais_antiga_segundos{etapa}` | gauge: idade da instância mais antiga em cada etapa | coletor da API |
 | `pytstop_saga_prazo_vencido_segundos` | gauge: maior atraso, `agora` menos (`entregue_em` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS`) da linha da outbox do envio mais recente, entre as instâncias com esse envio entregue e o prazo vencido; zero sem atraso | coletor da API |
+| `pytstop_saga_coletor_disponivel` | gauge: 1 se o coletor leu as sagas nesta raspagem, 0 se falhou | coletor da API |
+| `pytstop_saga_coletor_falhas_total` | contador: raspagens em que o coletor não leu as sagas | coletor da API |
 
-Os três gauges saem de uma consulta que o coletor da API faz na hora da raspagem, à tabela `sagas` e, no prazo vencido, também à `outbox` (o envio mais recente de cada instância), e por isso continuam certos com o `prazos` fora do ar. O comando que ainda espera na outbox não entra no prazo vencido: quem o acusa é o alerta de outbox parada. O label `etapa` leva o valor gravado na coluna, em minúsculas (`falha_na_compensacao`, [seção 7.2](#72-os-service-postgresql-16)), e o `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. Mensageria, Mercado Pago, circuit breaker, webhook, JWKS, Kong e bancos têm métricas próprias, com os nomes no ADR-043.
+Os três gauges saem de uma consulta que o coletor da API faz na hora da raspagem, à tabela `sagas` e, no prazo vencido, também à `outbox` (o envio mais recente de cada instância), e por isso continuam certos com o `prazos` fora do ar. O comando que ainda espera na outbox não entra no prazo vencido: quem o acusa é o alerta de outbox parada. Se a leitura falha (banco fora, tabela travada, prazo de 2 s esgotado), o coletor omite os gauges de contagem e de idade, que ficam ausentes e nunca zero, soma uma falha em `pytstop_saga_coletor_falhas_total` e publica `pytstop_saga_coletor_disponivel` em 0; o alerta de saga parada olha essa série, para não ficar mudo com o coletor quebrado. O label `etapa` leva o valor gravado na coluna, em minúsculas (`falha_na_compensacao`, [seção 7.2](#72-os-service-postgresql-16)), e o `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. Mensageria, Mercado Pago, circuit breaker, webhook, JWKS, Kong e bancos têm métricas próprias, com os nomes no ADR-043.
 
 Coleta: o Prometheus raspa por pod, com `kubernetes_sd`, a porta `metrics` de todo Deployment nos namespaces `pytstop-*` e no da plataforma, com o label `processo` (api, relay, consumidor, `prazos`).
 
-Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do `platform`, documentados painel a painel: Saga, Mensageria, Serviços (taxa, erros e duração, o RED, mais recursos e respostas 401, 403 e 429 do Kong) e Negócio (inclusive o tempo médio por status do RF-008). Alertas, com níveis de aviso e de alerta (Microsserviços II, Aula 06): DLQ com mensagens, compensações acima do normal, saga parada, 5xx acima de 1%, circuit breaker aberto, outbox parada (`outbox_pendentes` acima de zero por 5 minutos), assinatura inválida no webhook e falha na busca do JWKS. Saga parada é prazo técnico vencido e não tratado há mais de 60 s (duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão), em qualquer etapa, ou alguma instância em `FALHA_NA_COMPENSACAO`, por 5 minutos; cada condição dispara sozinha, mesmo sem a série da outra. O procedimento está no [runbook da saga](../../../operacao/runbook-saga.md). Expressões e janelas ficam no ADR-043.
+Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do `platform`, documentados painel a painel: Saga, Mensageria, Serviços (taxa, erros e duração, o RED, mais recursos e respostas 401, 403 e 429 do Kong) e Negócio (inclusive o tempo médio por status do RF-008). Alertas, com níveis de aviso e de alerta (Microsserviços II, Aula 06): DLQ com mensagens, compensações acima do normal, saga parada, 5xx acima de 1%, circuit breaker aberto, outbox parada (idade da linha pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, acima de 300 s por 5 minutos), fila de trabalho sem consumidor, assinatura inválida no webhook e falha na busca do JWKS. Saga parada é prazo técnico vencido e não tratado há mais de 60 s (duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão), em qualquer etapa, ou alguma instância em `FALHA_NA_COMPENSACAO`, ou o coletor das sagas indisponível (`pytstop_saga_coletor_disponivel` em 0, ou a série ausente com a API de pé), por 5 minutos; cada condição dispara sozinha, mesmo sem a série da outra. O procedimento está no [runbook da saga](../../../operacao/runbook-saga.md). Expressões e janelas ficam no ADR-043.
 
 ## 10. Implantação
 
@@ -1085,7 +1114,7 @@ Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do
 
 A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows, e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
 
-- `ci.yml`, em todo pull request (PR): `lint`, `type-check`, `security`, `test` (gate de 90% e `diff-cover` de 90% no código novo), `sonarqube` e `build`;
+- `ci.yml`, em todo pull request (PR): `lint`, `type-check`, `security`, `test` (gate de cobertura de 95% e `diff-cover` de 90% no código novo; cada serviço sobe de 90% para 95% no PR de endurecimento dele), `sonarqube` e `build`;
 - `security.yml`, em todo PR e semanal: `pip-audit`, `gitleaks` e `trivy`;
 - `cd.yml`, a cada push na `main`: `ci` e `security-scan`, que chamam os dois anteriores, `image`, `deploy-kind`, `deploy-k3s` e `k3s-skipped`.
 
@@ -1145,7 +1174,7 @@ Nomes em maiúsculas são variáveis de ambiente, definidas no ConfigMap ou no S
 
 | Parâmetro | Padrão | Unidade | Serviço | Efeito |
 |---|---|---|---|---|
-| `SAGA_PRAZO_RESPOSTA_SEGUNDOS` | 120 | s | OS (`prazos`) | espera por resposta a comando, contada da saída da outbox, antes de cada reenvio |
+| `SAGA_PRAZO_RESPOSTA_SEGUNDOS` | 120 | s | OS (api, consumidor e `prazos`) | espera por resposta a comando, contada da saída da outbox, antes de cada reenvio. A saga grava o prazo a cada envio, a api na primeira compensação do cancelamento e o consumidor nos comandos seguintes, e o `prazos` e o coletor da api o leem para vencer a instância: o valor tem de ser o mesmo nos três processos |
 | `SAGA_MAX_REENVIOS` | 5 | reenvios | OS (`prazos`) | esgotados, compensa; numa compensação, vai a `FALHA_NA_COMPENSACAO` |
 | `ORCAMENTO_VALIDADE_HORAS` | 72 | h | Billing | validade do orçamento e do link de decisão |
 | `PAGAMENTO_VALIDADE_MINUTOS` | 60 | min | Billing | validade da cobrança e da preferência no Mercado Pago |
@@ -1224,7 +1253,7 @@ Também aceitos:
 | Pivot | o ponto sem retorno (RN-029): o início da execução física, T8; depois dele não há compensação, e o cancelamento responde 409 |
 | Reserva | separação de peças para uma OS: move quantidade de disponível para reservada, sem consumir o saldo; a liberação devolve, e a finalização dá baixa. No p3, reservar decrementava o saldo |
 | Lápide | registro criado já no estado final quando a compensação chega antes do comando original, que é descartado ao chegar |
-| Outbox | tabela ou coleção gravada na mesma transação do efeito, de onde o relay publica as mensagens e envia os e-mails |
+| Outbox | tabela ou coleção gravada na mesma transação do efeito, de onde o relay publica as mensagens |
 | DLQ | fila de mensagens mortas (*dead letter queue*): destino da mensagem com erro permanente ou com as tentativas esgotadas |
 | Reenvio | nova emissão de um comando pelo orquestrador quando o prazo técnico vence |
 | Retomada | nova emissão, pelo operador, da compensação parada em `FALHA_NA_COMPENSACAO`, com `id` novo, prazo novo e contador de reenvios zerado ([seção 4.7](#47-falha-na-compensação-e-retomada)) |
