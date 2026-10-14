@@ -82,8 +82,9 @@ class UrlDeNotificacaoInvalidaError(ValueError):
 def _host_publico(host: str) -> bool:
     """Nome com ponto fora dos dominios locais, ou IP global.
 
-    Recusa loopback, rede privada, link-local, ``0.0.0.0``, o IPv4 dentro de IPv6
-    (``::ffff:127.0.0.1``), nome sem ponto e as formas legadas de IP.
+    Recusa loopback, rede privada, link-local, ``0.0.0.0``, nome sem ponto e as
+    formas legadas de IP. O IPv4 dentro de IPv6 (``::ffff:127.0.0.1``) o proprio
+    ``is_global`` do Python 3.13 em diante ja trata pelo IPv4 (o teste o cobre).
     """
     host = host.rstrip(".")
     if not host or host in HOSTS_LOCAIS or host.endswith(SUFIXOS_LOCAIS):
@@ -95,8 +96,6 @@ def _host_publico(host: str) -> bool:
         return len(rotulos) > 1 and not all(
             _NUMERO_LEGADO.fullmatch(rotulo) for rotulo in rotulos
         )
-    if isinstance(endereco, ipaddress.IPv6Address) and endereco.ipv4_mapped:
-        endereco = endereco.ipv4_mapped
     return endereco.is_global
 
 
