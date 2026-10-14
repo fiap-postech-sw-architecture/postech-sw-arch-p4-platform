@@ -749,7 +749,56 @@ Eventos e nível de cada linha de log (`kubectl -n pytstop-os logs deploy/os-ser
 
 ## Provas avulsas
 
-Saídas de comandos avulsos, reformatadas em linhas curtas, nos dois clusters (a mesma em ambos).
+Duas origens. As linhas de `smoke OK` e `kong-check` vêm dos arquivos de saída dos scripts do ensaio. As demais são saídas de comandos avulsos, coladas do terminal e reformatadas em linhas curtas; a saída não foi gravada em arquivo.
+
+Fim da saída de `make deploy` e de `make smoke` da plataforma, nas duas execuções e no segundo deploy:
+
+```text
+kind-ci, make deploy:           kong-check: no object with configuration rejected by Kong in the last 15 minutes
+kind-ci, make smoke:            smoke OK: every check held (2 group(s) of checks skipped: Loki and Promtail; Grafana)
+kind-ci, segundo make deploy:   kong-check: no object with configuration rejected by Kong in the last 15 minutes
+kind, make deploy:              kong-check: no object with configuration rejected by Kong in the last 15 minutes
+kind, make smoke:               smoke OK: every check held
+```
+
+Duração dos Jobs na segunda execução (`status.completionTime` menos `status.startTime` de `kubectl get job -A -o json`):
+
+```text
+pytstop-billing/billing-inicializacao 36s
+pytstop-execucao/execucao-migracao 12s
+pytstop-os/os-migracao 28s
+pytstop-plataforma/rabbitmq-usuarios 90s
+```
+
+Tamanho das imagens dos serviços (`docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}'`, só as construídas no ensaio):
+
+```text
+pytstop-billing-service:0fed78b5e24694402ed71b79f9a9238e1c471e66 357MB
+pytstop-execution-service:0c34ed75443f0824d14a80dbf20600d2774471ba 406MB
+pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4 437MB
+```
+
+Linhas de log do namespace do Billing nos últimos 10 min da segunda execução (`kubectl -n pytstop-billing logs <pod> --all-containers --since=10m | wc -l`, um pod por vez; no `billing-mongo-0`, o container `mongo` deu 1.392 linhas e o `exporter`, 1):
+
+```text
+pod/billing-mongo-0 1393
+pod/billing-service-api-65fd4bf888-lfp4g 69
+pod/billing-service-consumidor-779cd4569-2knhc 8
+pod/billing-service-prazos-844fcb544d-79jwp 7
+pod/billing-service-relay-6c7cfcd656-94772 8
+```
+
+Alvos do Prometheus na primeira execução, 90 s depois do smoke dos serviços (consulta `count by (namespace) (up==1)` e a lista dos alvos ativos com `health != up`, pela API do Prometheus):
+
+```text
+[null,"2"]
+["pytstop-plataforma","2"]
+["pytstop-execucao","4"]
+["pytstop-billing","5"]
+["pytstop-os","4"]
+alvos com health != up: nenhum (a consulta devolveu vazio)
+```
+
 
 Swagger, pela borda (`curl -k https://localhost/<prefixo>/docs` e `.../openapi.json`):
 
