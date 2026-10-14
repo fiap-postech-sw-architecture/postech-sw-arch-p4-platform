@@ -415,7 +415,8 @@ class Prova:
             self._avisar(SEM_CONSULTA)
             return
         assert self.sandbox.mercadopago is not None
-        pagamento = self._pagamento_do_billing(self.cenario.pagamento_id)
+        pagamento = self.api.billing.pagamento(self.cenario.pagamento_id)
+        # ``preferencia`` poe o User ID da vendedora na mascara antes de qualquer falha.
         preferencia = self.sandbox.mercadopago.preferencia(
             _referencia(
                 pagamento, "referencia_preferencia", "a preferência do checkout"
