@@ -16,9 +16,13 @@ import os
 import subprocess  # nosec B404
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
+from e2e import ambiente
+from e2e import conftest as conftest_do_e2e
 from e2e_apoio.falsos import criar_cluster_falso
 
 RAIZ = Path(__file__).resolve().parents[2]
@@ -172,3 +176,39 @@ def test_dlq_com_mensagem_reprova_antes_do_primeiro_scale(
     assert resultado.returncode != 0
     assert "DLQs com mensagem antes do primeiro cenario" in resultado.stdout
     assert _escalas(estado) == []
+
+
+@pytest.mark.parametrize(
+    ("tipo", "imprime"), [("given", False), ("when", False), ("then", True)]
+)
+def test_narracao_mostra_o_status_da_os_so_depois_de_um_entao(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tipo: str,
+    imprime: bool,
+) -> None:
+    ordens = SimpleNamespace(
+        ordem=lambda ordem_id: {"status": "recebida", "etapa": "aguardando_diagnostico"}
+    )
+    fixtures: dict[str, Any] = {
+        "cenario": SimpleNamespace(ordem_id="abc", resumo="OS abc"),
+        "api": SimpleNamespace(os=ordens),
+    }
+    request = SimpleNamespace(getfixturevalue=fixtures.__getitem__)
+    passo = SimpleNamespace(type=tipo, line_number=30)
+    monkeypatch.setattr(ambiente, "NARRAR", True)
+    monkeypatch.setattr(conftest_do_e2e, "NARRAR", True)
+
+    conftest_do_e2e.pytest_bdd_after_step(
+        request,  # type: ignore[arg-type]  # fake com so o getfixturevalue
+        SimpleNamespace(background=None),  # type: ignore[arg-type]  # fake sem Contexto
+        SimpleNamespace(),  # type: ignore[arg-type]  # o hook nao le o cenario
+        passo,  # type: ignore[arg-type]  # fake com so o tipo e a linha
+        None,
+        {},
+    )
+
+    saida = capsys.readouterr().out
+    assert (
+        "-> OS abc: status=recebida etapa=aguardando_diagnostico" in saida
+    ) is imprime
