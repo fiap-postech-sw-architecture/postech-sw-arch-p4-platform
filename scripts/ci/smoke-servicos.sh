@@ -266,7 +266,7 @@ for nome in "$@"; do
     detalhe="no running pod labeled app=$nome-api"
   else
     # shellcheck disable=SC2016
-    controle=$(codigo_de "$(no_pod -n "$ns" exec "$api" -- sh -c \
+    controle=$(codigo_de "$(no_pod -n "$ns" exec "$api" -c api -- sh -c \
       'python -c "import socket, sys; socket.create_connection((sys.argv[1], int(sys.argv[2])), 3)" "$0" "$1" 2>/dev/null; echo "code=$?"' "$banco" "$porta")")
     case "$controle" in
       0) detalhe="connected (the namespace itself reaches the database)" ;;
