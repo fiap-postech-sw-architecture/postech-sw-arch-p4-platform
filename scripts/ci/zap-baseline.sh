@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
 # ZAP baseline na borda do kind (job e2e do cd.yml, ADR-041, RNF-049): um scan
-# passivo por servico, no /openapi.json que o Kong publica (o /docs e o HTML do
-# Swagger e nao lista rota), com as regras de e2e/zap/regras.conf. O alvo e a
-# borda como um cliente de fora a ve, https://localhost no runner, onde o Kong
+# por servico, no /openapi.json que o Kong publica (o /docs e o HTML do Swagger
+# e nao lista rota), com as regras de e2e/zap/regras.conf. O alvo e a borda
+# como um cliente de fora a ve, https://localhost no runner, onde o Kong
 # responde com o certificado padrao dele: o ZAP tem de aceita-lo, e um scan que
 # nao leu pagina nenhuma (certificado recusado, borda fora) reprova em vez de
 # passar por "nada a reportar".
+#
+# Os alertas sao so de varredura passiva, sem ataque, mas o spider importa o
+# openapi.json e chama cada operacao dele uma vez com dados de exemplo, POST,
+# PUT e DELETE inclusive (a maioria responde 4xx). Por isso o script so roda
+# num kind descartavel, depois do E2E, nunca num ambiente com dados.
 #
 #   scripts/ci/zap-baseline.sh [<servico>...]   (sem argumento, os tres)
 #

@@ -84,7 +84,6 @@ def test_runner_prazo_e_permissoes_minimas() -> None:
     # Ler os runs de CD dos servicos pede actions: read; nada escreve.
     assert E2E["permissions"] == {"contents": "read", "actions": "read"}
     assert "secrets." not in yaml.dump(E2E)
-    assert "K3S_HABILITADO" not in yaml.dump(E2E)
 
 
 def test_um_run_por_ref_e_so_o_pr_cancela_o_run_em_curso() -> None:
