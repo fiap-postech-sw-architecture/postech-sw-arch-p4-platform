@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 import subprocess  # nosec B404
@@ -249,9 +250,10 @@ def test_executar_processo_roda_em_sessao_propria_e_o_ctrl_c_do_terminal_nao_o_a
         os.killpg(processo.pid, signal.SIGINT)
         processo.wait(timeout=30)
     finally:
-        if processo.poll() is None:  # pragma: no cover - so se o teste falhar
+        # Sobra de grupo so se o teste falhar; com o grupo ja vazio, nao ha o que matar.
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(processo.pid, signal.SIGKILL)
-            processo.wait()
+        processo.wait()
 
     assert processo.returncode == 0
     assert (tmp_path / "fim").exists()

@@ -274,16 +274,19 @@ def test_esperar_avisa_o_progresso_antes_de_cada_pausa(relogio: Relogio) -> None
 
 
 def test_esperar_sem_progresso_nem_ve_o_gancho(relogio: Relogio) -> None:
+    avisos: list[object] = []
+
     resultado = esperar(
         lambda: "pronto",
         prazo=10,
         descricao="x",
-        progresso=lambda *_: pytest.fail("nao devia avisar"),  # pragma: no cover
+        progresso=lambda *args: avisos.append(args),
         relogio=relogio,
         dormir=relogio.dormir,
     )
 
     assert resultado == "pronto"
+    assert avisos == []
 
 
 def test_esperar_nao_avisa_progresso_quando_o_prazo_acabou(relogio: Relogio) -> None:

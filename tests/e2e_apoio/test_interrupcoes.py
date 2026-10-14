@@ -7,6 +7,7 @@ que faltam. Aqui cada caso roda como no ``make mp-sandbox``, num subprocesso.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import signal
 
@@ -228,9 +229,10 @@ def test_sinal_ao_grupo_durante_o_rollout_do_desfazer_nao_o_interrompe(
         os.killpg(processo.pid, sinal)
         _, erros = processo.communicate(timeout=60)
     finally:
-        if processo.poll() is None:  # pragma: no cover - so se o teste falhar
+        # Sobra de grupo so se o teste falhar; com o grupo ja vazio, nao ha o que matar.
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(processo.pid, signal.SIGKILL)
-            processo.wait()
+        processo.wait()
 
     assert processo.returncode == 0, erros
     assert not (tmp_path / "sigint").exists(), "o kubectl recebeu o sinal do grupo"

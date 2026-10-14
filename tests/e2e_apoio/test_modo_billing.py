@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import signal
+from contextlib import ExitStack
 from typing import TYPE_CHECKING
 
 import httpx
@@ -495,11 +496,11 @@ def test_sessao_real_desfaz_mesmo_quando_ligar_falha_no_meio(relogio: Relogio) -
     modo, _ = _modo(cluster, relogio)
     cluster.modo = MODO_REAL
 
-    with (
-        pytest.raises(DesfazerFalhouError) as erro,
-        modo.sessao(real=True, token=CHAVE_DO_MP, assinatura=ASSINATURA),
-    ):
-        pytest.fail("o corpo nao devia rodar")  # pragma: no cover
+    # Entrar na sessao ja falha: sem corpo, nada fica sem rodar.
+    with pytest.raises(DesfazerFalhouError) as erro:
+        ExitStack().enter_context(
+            modo.sessao(real=True, token=CHAVE_DO_MP, assinatura=ASSINATURA)
+        )
 
     # O desfazer tambem falhou no restart; o apagar e o tirar variaveis rodaram.
     assert "reiniciar" in str(erro.value)
@@ -512,11 +513,10 @@ def test_sessao_real_com_falha_do_apply_desfaz_e_propaga_o_erro_original(
     cluster = Cluster(falhas=("apply",))
     modo, _ = _modo(cluster, relogio)
 
-    with (
-        pytest.raises(ErroDeComandoError, match="apply"),
-        modo.sessao(real=True, token=CHAVE_DO_MP, assinatura=ASSINATURA),
-    ):
-        pytest.fail("o corpo nao devia rodar")  # pragma: no cover
+    with pytest.raises(ErroDeComandoError, match="apply"):
+        ExitStack().enter_context(
+            modo.sessao(real=True, token=CHAVE_DO_MP, assinatura=ASSINATURA)
+        )
 
     assert any("delete secret" in c for c in cluster.comandos())
 
@@ -573,11 +573,12 @@ def test_sessao_real_com_manter_mas_ligar_que_falha_desfaz_assim_mesmo(
     cluster = Cluster(falhas=("apply",))
     modo, avisos = _modo(cluster, relogio)
 
-    with (
-        pytest.raises(ErroDeComandoError),
-        modo.sessao(real=True, token=CHAVE_DO_MP, assinatura=ASSINATURA, manter=True),
-    ):
-        pytest.fail("o corpo nao devia rodar")  # pragma: no cover
+    with pytest.raises(ErroDeComandoError):
+        ExitStack().enter_context(
+            modo.sessao(
+                real=True, token=CHAVE_DO_MP, assinatura=ASSINATURA, manter=True
+            )
+        )
 
     assert any("delete secret" in c for c in cluster.comandos())
     assert not any("E2E_MP_MANTER" in aviso for aviso in avisos)
