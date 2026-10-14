@@ -11,11 +11,13 @@ from pathlib import Path
 from typing import Final
 
 from e2e.apoio.http import Cliente
-from e2e.apoio.jaeger import Jaeger
+from e2e.apoio.jaeger import Jaeger, validar_trace_id
 from e2e.apoio.kube import NAMESPACE_DA_PLATAFORMA, Kubectl, PortForward
 from e2e.apoio.mailpit import Mailpit
 
-CONTEXTO: Final = os.environ.get("KUBE_CONTEXT", "kind-pytstop-p4")
+# O padrao do Makefile (CLUSTER ?= pytstop-p4); test_ambiente.py confere.
+CONTEXTO_PADRAO: Final = "kind-pytstop-p4"
+CONTEXTO: Final = os.environ.get("KUBE_CONTEXT", CONTEXTO_PADRAO)
 URL_DA_BORDA: Final = os.environ.get("E2E_URL", "https://localhost")
 RELATORIOS: Final = Path(os.environ.get("E2E_RELATORIOS", "reports/e2e"))
 NARRAR: Final = os.environ.get("E2E_NARRAR") == "1"
@@ -58,9 +60,15 @@ class Portas:
         self._clientes: dict[str, Cliente] = {}
 
     def iniciar(self) -> None:
-        for nome, ponte in self._pontes.items():
-            ponte.iniciar()
-            self._clientes[nome] = Cliente(ponte.url)
+        """Abre os tres; se um falha, fecha os que ja abriu (o pytest nao roda o
+        teardown de uma fixture que levantou antes do ``yield``)."""
+        try:
+            for nome, ponte in self._pontes.items():
+                ponte.iniciar()
+                self._clientes[nome] = Cliente(ponte.url)
+        except BaseException:
+            self.encerrar()
+            raise
 
     def encerrar(self) -> None:
         for cliente in self._clientes.values():
@@ -82,9 +90,10 @@ class Portas:
 
     def baixar_trace(self, trace_id: str) -> str:
         """JSON do trace, como o Jaeger o serve em ``/api/traces/<id>``."""
+        validado = validar_trace_id(trace_id)
         return (
             self._cliente("jaeger")
-            .pedir("GET", f"/api/traces/{trace_id}", esperado=[200])
+            .pedir("GET", f"/api/traces/{validado}", esperado=[200])
             .text
         )
 

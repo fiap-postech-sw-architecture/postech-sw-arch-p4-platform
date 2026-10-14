@@ -65,7 +65,7 @@ KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE)
 .PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render e2e demo
 
 help:
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
 
 kind-up: ## cria o cluster kind (nao faz nada se ja existir)
 	@kind get clusters | grep -qx '$(CLUSTER)' || kind create cluster --name $(CLUSTER) --config kind/cluster.yaml --wait 120s
@@ -137,8 +137,19 @@ down: ## derruba a stack compose (os volumes ficam; docker compose down -v apaga
 	$(COMPOSE) --profile servicos down
 
 # CI=true desliga a telemetria anonima do @asyncapi/cli.
-test: ## testes dos contratos e da observabilidade, validacao do asyncapi.yaml
+# O E2E so roda contra o cluster, mas a coleta e offline: import quebrado, tag
+# sem marker (--strict-markers) e step sem definicao reprovam aqui, no CI, e nao
+# no primeiro make e2e. O --generate-missing sai com 0 mesmo com step faltando,
+# entao a saida e que decide.
+test: ## testes dos contratos, da observabilidade e do codigo auxiliar do E2E, coleta do E2E, validacao do asyncapi.yaml
 	uv run pytest
+	@echo ">> E2E: cenarios coletados e todo step definido (sem cluster)"
+	uv run pytest -c e2e/pytest.ini e2e --collect-only -q > /dev/null
+	set -euo pipefail; \
+	saida=$$(uv run pytest -c e2e/pytest.ini --generate-missing --feature e2e/features e2e); \
+	if printf '%s' "$$saida" | grep -q 'is not defined'; then \
+		printf '%s\n' "$$saida"; echo "E2E: step sem definicao" >&2; exit 1; \
+	fi
 	CI=true npx --yes $(ASYNCAPI_CLI) validate contratos/asyncapi.yaml
 
 lint: ## ruff, mypy e bandit nos testes e na prova do retry, mais o lint-scripts

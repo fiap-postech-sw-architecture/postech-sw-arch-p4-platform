@@ -6,11 +6,18 @@ import json
 from typing import TYPE_CHECKING, Any
 
 import httpx
+import pytest
 
 from e2e.apoio.http import (
     Cliente,
 )
-from e2e.apoio.jaeger import Jaeger, melhor_trace, servicos_do_trace
+from e2e.apoio.jaeger import (
+    Jaeger,
+    TraceIdInvalidoError,
+    melhor_trace,
+    servicos_do_trace,
+    validar_trace_id,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -96,3 +103,31 @@ def test_jaeger_resposta_sem_data_vira_lista_vazia(relogio: Relogio) -> None:
     )
 
     assert jaeger.traces_da_ordem("ordem-1") == []
+
+
+@pytest.mark.parametrize(
+    "valido",
+    [
+        pytest.param("882c4f49b09d3f41a2d7f57c7493014c", id="32-hex"),
+        pytest.param("a2d7f57c7493014c", id="16-hex"),
+    ],
+)
+def test_validar_trace_id_aceita_hexadecimal(valido: str) -> None:
+    assert validar_trace_id(valido) == valido
+
+
+@pytest.mark.parametrize(
+    "invalido",
+    [
+        pytest.param("../../etc/passwd", id="caminho"),
+        pytest.param("882c4f49b09d3f41a2d7f57c7493014c/../x", id="sufixo"),
+        pytest.param("882C4F49B09D3F41A2D7F57C7493014C", id="maiusculas"),
+        pytest.param("abc123", id="curto"),
+        pytest.param("a" * 33, id="longo"),
+        pytest.param("", id="vazio"),
+        pytest.param("882c4f49b09d3f41\n", id="quebra-de-linha"),
+    ],
+)
+def test_validar_trace_id_recusa_o_que_nao_e_hexadecimal(invalido: str) -> None:
+    with pytest.raises(TraceIdInvalidoError, match="fora do formato"):
+        validar_trace_id(invalido)

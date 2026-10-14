@@ -7,10 +7,11 @@ from typing import TYPE_CHECKING
 import pytest
 
 from e2e.apoio import segredos
-from e2e_apoio.falsos import Relogio
+from e2e_apoio.falsos import Relogio, criar_kubectl_falso
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+    from pathlib import Path
 
 
 @pytest.fixture
@@ -23,3 +24,8 @@ def _sem_segredos_registrados() -> Iterator[None]:
     segredos.esquecer_todos()
     yield
     segredos.esquecer_todos()
+
+
+@pytest.fixture
+def kubectl_falso(tmp_path: Path) -> Path:
+    return criar_kubectl_falso(tmp_path)

@@ -11,6 +11,7 @@ from __future__ import annotations
 import base64
 import socket
 import subprocess  # nosec B404
+import tempfile
 import time
 from typing import TYPE_CHECKING, Final
 
@@ -20,10 +21,18 @@ from e2e.apoio.segredos import mascarar
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from types import TracebackType
+    from typing import IO
 
     type Executor = Callable[[Sequence[str], float], str]
 
 NAMESPACE_DA_PLATAFORMA: Final = "pytstop-plataforma"
+# As DLQs do broker (k8s/base/rabbitmq): uma ausente na leitura e nome que mudou, e
+# "nenhuma mensagem nova" nao vale se a fila nem aparece.
+FILAS_MORTAS: Final = (
+    "billing.comandos.dlq",
+    "execucao.comandos.dlq",
+    "os.eventos.dlq",
+)
 _TAMANHO_DO_ERRO: Final = 400
 
 
@@ -41,13 +50,16 @@ def executar_processo(argumentos: Sequence[str], prazo: float) -> str:
             text=True,
             timeout=prazo,
             check=False,
+            stdin=subprocess.DEVNULL,
         )
     except subprocess.TimeoutExpired as erro:
         raise ErroDeComandoError(
             mascarar(f"{comando}: passou de {prazo:g} s")
         ) from erro
     if processo.returncode != 0:
-        detalhe = processo.stderr.strip()[:_TAMANHO_DO_ERRO]
+        # Mascara o texto inteiro e so entao corta: um JWT cortado ao meio nao casa
+        # com o padrao nem com o valor registrado.
+        detalhe = mascarar(processo.stderr.strip())[:_TAMANHO_DO_ERRO]
         raise ErroDeComandoError(
             mascarar(f"{comando}: saiu com {processo.returncode}: {detalhe}")
         )
@@ -88,6 +100,9 @@ class Kubectl:
         bruto = self.executar(
             "-n", namespace, "get", "secret", nome, "-o", f"jsonpath={{.data.{chave}}}"
         )
+        if not bruto.strip():
+            msg = f"a chave {chave} nao existe no Secret {nome} de {namespace}"
+            raise ErroDeComandoError(msg)
         return base64.b64decode(bruto.strip()).decode()
 
     def valor_de_configmap(self, namespace: str, chave: str) -> str | None:
@@ -160,7 +175,12 @@ class Kubectl:
             "messages",
             prazo=40,
         )
-        return ler_filas_mortas(saida)
+        filas = ler_filas_mortas(saida)
+        ausentes = [fila for fila in FILAS_MORTAS if fila not in filas]
+        if ausentes:
+            msg = f"o rabbitmqctl nao listou as DLQs {ausentes}: {sorted(filas)}"
+            raise ErroDeComandoError(msg)
+        return filas
 
     def logs(
         self, namespace: str, app: str, *, container: str, desde: str = "10m"
@@ -232,11 +252,22 @@ class Escalas:
         self._kubectl.aguardar_pronto(namespace, deployment)
 
     def restaurar_todas(self) -> list[str]:
-        """Restaura tudo o que ficou derrubado; devolve os nomes restaurados."""
-        nomes = []
+        """Restaura tudo o que ficou derrubado e devolve os nomes restaurados.
+
+        Tenta todos mesmo que um falhe, e so no fim levanta um erro com as falhas
+        juntas: o teardown nao deixa um Deployment em 0 por causa de outro.
+        """
+        nomes: list[str] = []
+        falhas: list[str] = []
         for namespace, deployment in list(self._originais):
-            nomes.append(deployment)
-            self.restaurar(namespace, deployment)
+            try:
+                self.restaurar(namespace, deployment)
+            except ErroDeComandoError as erro:
+                falhas.append(f"{deployment}: {erro}")
+            else:
+                nomes.append(deployment)
+        if falhas:
+            raise ErroDeComandoError("nao restaurei: " + "; ".join(falhas))
         return nomes
 
 
@@ -259,12 +290,17 @@ class PortForward:
         self._porta_remota = porta_remota
         self.porta = porta_livre()
         self._processo: subprocess.Popen[str] | None = None
+        # O stderr do kubectl vai para um arquivo: e dele a causa de um port-forward
+        # que morre ("address already in use", "pods not found", "forbidden").
+        self._erros: IO[str] | None = None
 
     @property
     def url(self) -> str:
         return f"http://127.0.0.1:{self.porta}"
 
     def iniciar(self, prazo: float = 30.0) -> PortForward:
+        """Sobe o kubectl e espera a porta; se nao abre, nao deixa processo orfao."""
+        self._erros = tempfile.TemporaryFile("w+")  # noqa: SIM115 - fecha em encerrar()
         self._processo = subprocess.Popen(  # noqa: S603  # nosec B603
             [
                 self._kubectl.binario,
@@ -278,21 +314,37 @@ class PortForward:
                 self._alvo,
                 f"{self.porta}:{self._porta_remota}",
             ],
+            stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+            stderr=self._erros,
             text=True,
         )
-        esperar(
-            self._aceita_conexao,
-            prazo=prazo,
-            intervalo=0.2,
-            descricao=f"port-forward de {self._alvo} aceitando conexoes",
-        )
+        try:
+            esperar(
+                self._aceita_conexao,
+                prazo=prazo,
+                intervalo=0.2,
+                descricao=f"port-forward de {self._alvo} aceitando conexoes",
+            )
+        except BaseException:
+            # Sem isto o kubectl que nao chegou a escutar sobrevive ao pytest.
+            self.encerrar()
+            raise
         return self
+
+    def _ultimas_linhas_do_erro(self) -> str:
+        if self._erros is None:
+            return ""
+        self._erros.seek(0)
+        return mascarar(self._erros.read().strip())[-_TAMANHO_DO_ERRO:]
 
     def _aceita_conexao(self) -> bool:
         if self._processo is None or self._processo.poll() is not None:
-            msg = f"o kubectl port-forward de {self._alvo} terminou"
+            codigo = None if self._processo is None else self._processo.returncode
+            msg = (
+                f"o kubectl port-forward de {self._alvo} terminou (codigo {codigo}): "
+                f"{self._ultimas_linhas_do_erro()}"
+            )
             raise ErroDeComandoError(msg)
         try:
             with socket.create_connection(("127.0.0.1", self.porta), timeout=1):
@@ -307,15 +359,21 @@ class PortForward:
         self.iniciar()
 
     def encerrar(self) -> None:
+        """Mata o kubectl, se vivo, e fecha o arquivo do stderr."""
         processo, self._processo = self._processo, None
-        if processo is None:
-            return
-        processo.terminate()
+        erros, self._erros = self._erros, None
         try:
-            processo.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            processo.kill()
-            processo.wait(timeout=5)
+            if processo is None:
+                return
+            processo.terminate()
+            try:
+                processo.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                processo.kill()
+                processo.wait(timeout=5)
+        finally:
+            if erros is not None:
+                erros.close()
 
     def __enter__(self) -> PortForward:
         return self.iniciar()

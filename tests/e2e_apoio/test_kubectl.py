@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import base64
 from typing import TYPE_CHECKING
 
+import pytest
+
 from e2e.apoio.kube import (
+    ErroDeComandoError,
     Kubectl,
     ler_filas_mortas,
 )
@@ -24,7 +28,9 @@ def test_kubectl_executar_sempre_leva_o_contexto() -> None:
 
 
 def test_kubectl_segredo_decodifica_o_base64() -> None:
-    executor = ExecutorFalso({"get secret": "c2VuaGEtMTIz\n"})
+    executor = ExecutorFalso(
+        {"get secret": base64.b64encode(b"senha-123").decode() + "\n"}
+    )
 
     valor = Kubectl("c", executor=executor).segredo(
         "pytstop-os", "os-admin", "ADMIN_PASSWORD"
@@ -136,3 +142,27 @@ def test_kubectl_filas_mortas_executa_no_pod_do_broker() -> None:
         "-n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl -q "
         "list_queues" in comando
     )
+
+
+def test_kubectl_filas_mortas_falha_se_uma_dlq_conhecida_nao_aparece() -> None:
+    saida = "os.eventos.dlq\t0\nbilling.comandos.dlq\t0\n"
+    executor = ExecutorFalso({"rabbitmqctl": saida})
+
+    with pytest.raises(ErroDeComandoError, match=r"execucao\.comandos\.dlq"):
+        Kubectl("c", executor=executor).filas_mortas()
+
+
+def test_kubectl_filas_mortas_saida_vazia_nao_vira_zero_mensagens() -> None:
+    with pytest.raises(ErroDeComandoError, match="nao listou as DLQs"):
+        Kubectl("c", executor=ExecutorFalso()).filas_mortas()
+
+
+def test_kubectl_segredo_de_chave_ausente_diz_qual_chave_falta() -> None:
+    executor = ExecutorFalso({"get secret": "\n"})
+
+    with pytest.raises(
+        ErroDeComandoError, match=r"ADMIN_PASSWORD.*os-admin.*pytstop-os"
+    ):
+        Kubectl("c", executor=executor).segredo(
+            "pytstop-os", "os-admin", "ADMIN_PASSWORD"
+        )

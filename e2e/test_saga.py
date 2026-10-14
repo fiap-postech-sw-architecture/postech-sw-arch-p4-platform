@@ -31,7 +31,12 @@ from e2e.apoio.dados import (
     placa_mercosul,
 )
 from e2e.apoio.espera import TempoEsgotadoError, esperar, manter
-from e2e.apoio.jaeger import SERVICOS, melhor_trace, servicos_do_trace
+from e2e.apoio.jaeger import (
+    SERVICOS,
+    melhor_trace,
+    servicos_do_trace,
+    validar_trace_id,
+)
 from e2e.apoio.metricas import valor_da_serie
 from e2e.apoio.segredos import mascarar, registrar
 from e2e.apoio.texto import sem_acentos
@@ -72,6 +77,7 @@ COMPENSACOES: Final = frozenset(
 PRAZO_DO_SALTO: Final = 30.0
 PRAZO_DA_EXPIRACAO: Final = 180.0
 PRAZO_DO_TRACE: Final = 90.0
+DURACAO_DA_AMOSTRA_DAS_DLQ: Final = 8.0
 CIRCUITO_ABERTO: Final = 1.0
 CIRCUITO_FECHADO: Final = 0.0
 # Os mesmos 503 do circuito: a Execucao devolve 503 com o Billing fora.
@@ -91,10 +97,10 @@ def diagnostico(api: Api, cenario: Cenario) -> str:
     try:
         ordem = api.os.ordem(cenario.ordem_id)
         saga = api.os.saga(cenario.ordem_id)
-    except AssertionError as erro:
-        return f"({erro})"
+    except (AssertionError, httpx.TransportError) as erro:
+        return mascarar(f"({type(erro).__name__}: {erro})")
     passos = [f"{p['gatilho']}->{p['para']}" for p in saga["passos"][-4:]]
-    return (
+    return mascarar(
         f"{cenario.resumo}: status={ordem['status']} etapa={saga['etapa']} "
         f"motivo={saga['motivo']} falha={saga['falha']} ultimos passos={passos}"
     )
@@ -802,18 +808,34 @@ def _request_id_no_log(kubectl: Kubectl, cenario: Cenario) -> None:
     "e do execution-service"
 )
 def _trace(portas: Portas, cenario: Cenario) -> None:
+    ultima_contagem = -1
+
+    def trace_estavel() -> Json | None:
+        """O trace com os tres servicos, depois de duas leituras com os mesmos spans.
+
+        O Jaeger recebe os spans em lote: a evidencia (o JSON do trace) so e gravada
+        quando a segunda leitura nao traz span novo.
+        """
+        nonlocal ultima_contagem
+        trace = melhor_trace(portas.jaeger.traces_da_ordem(cenario.ordem_id))
+        if trace is None:
+            return None
+        contagem = len(trace["spans"])
+        anterior, ultima_contagem = ultima_contagem, contagem
+        return trace if contagem == anterior else None
+
     trace = esperar(
-        lambda: melhor_trace(portas.jaeger.traces_da_ordem(cenario.ordem_id)),
+        trace_estavel,
         prazo=PRAZO_DO_TRACE,
         intervalo=3.0,
         descricao=f"trace da {cenario.resumo} no Jaeger com {', '.join(SERVICOS)}",
         ignorar=ERROS_DE_REDE,
     )
     assert servicos_do_trace(trace) >= set(SERVICOS)
-    cenario.trace_id = str(trace["traceID"])
+    cenario.trace_id = validar_trace_id(str(trace["traceID"]))
     RELATORIOS.mkdir(parents=True, exist_ok=True)
     (RELATORIOS / f"trace-{cenario.trace_id}.json").write_text(
-        portas.baixar_trace(cenario.trace_id)
+        mascarar(portas.baixar_trace(cenario.trace_id))
     )
     narrar(f"      . trace {cenario.trace_id} com {len(trace['spans'])} spans")
 
@@ -823,14 +845,26 @@ def _trace(portas: Portas, cenario: Cenario) -> None:
 
 @then("nenhuma mensagem nova foi parar nas filas de mensagens mortas")
 def _sem_mensagens_mortas(kubectl: Kubectl, cenario: Cenario) -> None:
-    depois = kubectl.filas_mortas()
-    novas = {
-        fila: total - cenario.filas_mortas_antes.get(fila, 0)
-        for fila, total in depois.items()
-        if total > cenario.filas_mortas_antes.get(fila, 0)
-    }
-    assert not novas, f"mensagens novas nas DLQs: {novas}"
-    narrar(f"      . DLQs: {depois}")
+    def sem_novas() -> bool:
+        depois = kubectl.filas_mortas()
+        novas = {
+            fila: total - cenario.filas_mortas_antes.get(fila, 0)
+            for fila, total in depois.items()
+            if total > cenario.filas_mortas_antes.get(fila, 0)
+        }
+        assert not novas, f"mensagens novas nas DLQs: {novas}"
+        return True
+
+    # A contagem de uma fila quorum (as DLQs) atualiza a cada ~5 s no
+    # rabbitmqctl: uma amostra so, logo depois da volta, deixaria passar a
+    # mensagem que morre em seguida.
+    manter(
+        sem_novas,
+        duracao=DURACAO_DA_AMOSTRA_DAS_DLQ,
+        intervalo=2.0,
+        descricao="nenhuma mensagem nova nas DLQs",
+    )
+    narrar(f"      . DLQs: {kubectl.filas_mortas()}")
 
 
 @then("as duas respostas são 503")

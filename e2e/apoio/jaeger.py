@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
@@ -11,10 +12,24 @@ if TYPE_CHECKING:
     from e2e.apoio.http import Cliente
 
 SERVICOS: Final = ("os-service", "billing-service", "execution-service")
+# Vira nome de arquivo e caminho de URL: so hexadecimal, nunca "../".
+_TRACE_ID: Final = re.compile(r"[0-9a-f]{16,32}")
 # Atributo do span de mensagem: o ordem_id (= correlation_id da saga).
 ATRIBUTO_DA_SAGA: Final = "messaging.message.conversation_id"
 
 type Trace = dict[str, Any]
+
+
+class TraceIdInvalidoError(AssertionError):
+    """O Jaeger devolveu um ``traceID`` que nao e hexadecimal."""
+
+
+def validar_trace_id(texto: str) -> str:
+    """``texto`` se for um trace id (16 a 32 hexadecimais minusculos); senao, erro."""
+    if not _TRACE_ID.fullmatch(texto):
+        msg = f"traceID fora do formato esperado: {texto[:40]!r}"
+        raise TraceIdInvalidoError(msg)
+    return texto
 
 
 def servicos_do_trace(trace: Trace) -> set[str]:

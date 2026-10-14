@@ -149,3 +149,28 @@ def test_escalas_recuperar_do_inicio_religa_so_o_que_ficou_em_zero(
     assert religados == [("ns", "parado")]
     assert cluster.replicas == {"parado": 1, "de-pe": 1}
     assert cluster.prontos() == ["deployment/parado"]
+
+
+def test_escalas_restaurar_todas_tenta_todas_e_levanta_um_erro_so(
+    relogio: Relogio,
+) -> None:
+    cluster = ClusterFalso({"a": 1, "b": 2})
+    escalas = _escalas(cluster, relogio)
+    escalas.zerar("ns", "a")
+    escalas.zerar("ns", "b")
+    falhas = {"a": 1}
+
+    def executor(argumentos: Sequence[str], prazo: float) -> str:
+        if "scale" in argumentos and "deployment/a" in argumentos and falhas["a"]:
+            falhas["a"] -= 1
+            raise ErroDeComandoError("kubectl fora do ar")
+        return cluster(argumentos, prazo)
+
+    escalas._kubectl = Kubectl("c", executor=executor)
+
+    with pytest.raises(ErroDeComandoError, match=r"nao restaurei: a: .*fora do ar"):
+        escalas.restaurar_todas()
+
+    assert cluster.replicas == {"a": 0, "b": 2}
+    assert escalas.restaurar_todas() == ["a"]
+    assert cluster.replicas == {"a": 1, "b": 2}
