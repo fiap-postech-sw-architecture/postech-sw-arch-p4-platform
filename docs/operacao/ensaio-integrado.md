@@ -2,7 +2,9 @@
 
 > [↑ Raiz do projeto](../../README.md)
 
-Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a `main` de cada repositório) no mesmo cluster kind, com os scripts de implantação e de smoke do [Contrato com os serviços](../../README.md#contrato-com-os-serviços), e a memória e a CPU de cada pod medidas contra o orçamento do [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). Na época do ensaio, o OS Service ainda não tinha os processos `prazos` e `notificador` na `main`; a medida deles, feita com as branches então abertas, está em [Medida adicional](#medida-adicional-prazos-e-notificador-do-os-service). Os dois já entraram na `main` do OS Service (b310889 e 593471d): o que mudou nos repositórios desde o ensaio está em [Depois do ensaio](#depois-do-ensaio).
+Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a `main` de cada repositório) no mesmo cluster kind, com os scripts de implantação e de smoke do [Contrato com os serviços](../../README.md#contrato-com-os-serviços). Mediu a memória e a CPU de cada pod contra o orçamento do [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md).
+
+Na época do ensaio, o OS Service ainda não tinha os processos `prazos` e `notificador` na `main`; a medida deles, feita com as branches então abertas, está em [Medida adicional](#medida-adicional-prazos-e-notificador-do-os-service). Os dois já entraram na `main` do OS Service (`notificador` em `b310889`, `prazos` em `593471d`). O que mudou nos repositórios desde o ensaio está em [Depois do ensaio](#depois-do-ensaio).
 
 ## Termos
 
@@ -23,7 +25,7 @@ Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a
 - Memória, uso contra reserva: os 13 pods usam 0,84 GiB em repouso (0,94 GiB somando os maiores valores amostrados), contra 2,2 GiB de requests. O nó do kind inteiro (control plane, plataforma e serviços) fica em 3,1 GiB de working set no `kind-ci`, com pico de cgroup de 5,35 GiB, nos 16 GB do runner. Contra os 3,3 a 3,4 GiB de requests do orçamento a folga é de só 6% a 9%, mas essa conta compara o uso do nó, que inclui o control plane e o metrics-server (fora do orçamento), com a reserva dos pods; a conclusão se apoia nos pods e no limite do runner.
 - CPU: o nó usou 0,3 CPU em repouso, e nenhum pod de serviço passou de 20% dos limits de CPU nas amostras de 5 s (o maior foi o consumidor do OS, com 40m de 250m).
 - Só um defeito apareceu, no próprio `platform`: o ruído `Defaulted container` do `kubectl exec` na saída do smoke, corrigido no PR #12. As observações sobre os serviços, com a situação de cada uma em 14/10, estão em [Observações do ensaio](#observações-do-ensaio-situação-em-1410).
-- Fora do ensaio: nenhuma saga, mensagem de negócio, carga, e-mail ou chamada ao Mercado Pago rodou. O ensaio provou que tudo sobe, conecta e aparece na borda, no Prometheus e na NetworkPolicy; o fluxo de negócio é assunto do teste de ponta a ponta do `platform` #13, ainda aberto.
+- Fora do ensaio: nenhuma saga, mensagem de negócio, carga, e-mail ou chamada ao Mercado Pago rodou. O ensaio provou que tudo sobe, conecta e aparece na borda, no Prometheus e na NetworkPolicy; o fluxo de negócio é assunto do teste de ponta a ponta do `platform` #13, que entrou na `main` depois do ensaio (`35aa03e`).
 
 ## Depois do ensaio
 
@@ -32,12 +34,12 @@ O ensaio rodou na madrugada de 14/10/2026 (horário de Brasília), com a platafo
 | Mudança depois do ensaio | Efeito neste registro |
 |---|---|
 | `platform` #11 (`11480bb`): smoke, runbook, ADRs, RFC e contratos | A saída do smoke citada é a de `aaca05c`. Desde o #11, as linhas de `/metrics` e de `/api/v1/admin/outbox` saem `ok: 404 (Kong, not published)` e `ok: 404 (Kong fora-da-borda)`, e só passam se o corpo da resposta for o do Kong. O #11 também trocou a regra de alerta "Saga parada" (duas condições novas). Nenhuma das duas mudanças foi exercitada com os serviços reais neste ensaio |
-| OS Service #9 (`b310889`, `notificador`) e #10 (`593471d`, `prazos`) | Já estão na `main` do OS Service. A [medida adicional](#medida-adicional-prazos-e-notificador-do-os-service) foi feita com as branches e vale como estimativa até ser repetida sobre a `main` |
+| OS Service #9 (`b310889`, `notificador`) e #10 (`593471d`, `prazos`) | Entraram na `main` do OS Service depois do ensaio. A [medida adicional](#medida-adicional-prazos-e-notificador-do-os-service) foi feita com as branches e vale como estimativa até ser repetida sobre a `main` |
 | Billing #6 (`264da4e`) e Execution #6 (`d04fd81`) | Corrigem o aviso de telemetria do FastAPI nas duas APIs; o Billing #6 também corta o volume de log do `mongod` e adota os nomes de variável do `make kind-deploy` que a Execução já usava. Detalhe em [Observações do ensaio](#observações-do-ensaio-situação-em-1410) |
 | OS Service #11 (aberto) | Unifica os nomes das variáveis do `make kind-deploy` no OS (`PLATFORM` vira alias de `PLATFORM_DIR`) |
-| `platform` #13 (aberto) | Traz o teste de ponta a ponta da saga (ADR-041); até o merge, nenhum teste de saga roda contra o kind |
+| `platform` #13 (`35aa03e`) | Traz o teste de ponta a ponta da saga (ADR-041, `make e2e`), que inclui o trace da saga no Jaeger com os três serviços. É posterior a este ensaio, que não o rodou |
 
-Antes de fechar a fase, o ensaio deve ser repetido sobre as `main` de hoje: `smoke-servicos.sh` nos três serviços (com a prova nova do corte pelo Kong) e as regras de alerta com serviços de pé.
+Antes de fechar a fase, o ensaio deve ser repetido sobre a `main` mais recente de cada repositório: `smoke-servicos.sh` nos três serviços (com a prova nova do corte pelo Kong) e as regras de alerta com serviços de pé.
 
 ## Ambiente e versões
 
@@ -203,7 +205,7 @@ Feitas com comandos avulsos depois do smoke; as saídas estão em [Medidas cruas
 | Segundo `implantar-servicos.sh` (mesmo commit) | 13 s: os Jobs são apagados e recriados, as migrações e a semente repetem sem erro, os Deployments seguem como estavam (mesma tag, mesmo template); o smoke dos serviços passa em 11 s |
 | Broker reiniciado com os serviços de pé | `kubectl delete pod rabbitmq-0`: o broker volta em 13 s, os três consumidores voltam em 30 s, o relay do Billing registra `broker_unavailable` e depois `broker_connected`, e nenhum pod de serviço reinicia |
 | Alvos do Prometheus | nenhum alvo ativo fora de `up` (a consulta por `health != up` voltou vazia); 4 pods no OS, 5 no Billing e 4 na Execução em `up = 1`, na primeira execução; saída colada do terminal |
-| Traces | depois de chamadas pela borda, o Jaeger listou `os-service`; Billing e Execução não apareceram, porque as APIs deles não exportam spans (ver [Observações do ensaio](#observações-do-ensaio-situação-em-1410)) e nenhuma mensagem circulou pelos relays e consumidores. O teste de ponta a ponta da saga (ADR-041), que exercitaria os três traces, ainda não existe na `main`: está no `platform` #13, aberto |
+| Traces | depois de chamadas pela borda, o Jaeger listou `os-service`; Billing e Execução não apareceram, porque as APIs deles não exportam spans (ver [Observações do ensaio](#observações-do-ensaio-situação-em-1410)) e nenhuma mensagem circulou pelos relays e consumidores. O teste de ponta a ponta da saga (ADR-041), que confere os spans dos três serviços no trace da saga, entrou na `main` depois do ensaio (`platform` #13, `35aa03e`) e este ensaio não o rodou |
 
 ## Tempos
 
@@ -308,7 +310,7 @@ Na época do ensaio (14/10), os dois processos estavam em branches abertas do OS
 
 Cada branch foi implantada, sozinha, sobre o cluster `kind-ci` do ensaio, com a imagem construída do commit dela e o `smoke-servicos.sh os-service` verde nas duas. A de e-mail foi implantada sobre o banco do OS da `main`; a dos prazos, sobre um namespace `pytstop-os` recriado, para não misturar as migrações das duas branches, que partem da mesma `main`.
 
-| Processo | Branch na época | Commit medido | Hoje na `main` do OS | Memória | CPU | Requests/limits | Nó (working set) |
+| Processo | Branch na época | Commit medido | Em 14/10 na `main` do OS | Memória | CPU | Requests/limits | Nó (working set) |
 |---|---|---|---|---|---|---|---|
 | `os-service-notificador` | `feat/notificacao-e-lgpd` | `8eec08f` | `b310889` (#9) | 63 MiB | 4m | 50m/250m, 128/256 Mi | 3.242 MiB (era 3.147) |
 | `os-service-prazos` | `feat/saga-prazos` | `84f89cd` | `593471d` (#10) | 72 MiB | 5m | 50m/250m, 128/256 Mi | 3.377 MiB (namespace recriado) |
@@ -343,6 +345,6 @@ Linhas de log que parecem erro e são esperadas no kind: `payment_simulator_enab
 ## Como repetir
 
 1. Confira que nenhum outro cluster usa a máquina: `kind get clusters`, `docker ps` e `lsof -nP -iTCP:443 -sTCP:LISTEN` (o kind publica o Kong em `127.0.0.1:443`).
-2. Clone os três serviços ao lado do `platform` e ponha cada um no commit que quer ensaiar. Para repetir o ensaio sobre as `main` de hoje, use o topo da `main` de cada repositório.
+2. Clone os três serviços ao lado do `platform` e ponha cada um no commit que quer ensaiar. Para repetir o ensaio sobre a `main` atual, use o topo da `main` de cada repositório.
 3. Cole os comandos da primeira execução de [Comandos usados](#comandos-usados) num script único (o `export MEDICAO` já está no bloco), rode-o e termine com `make kind-down`. Para repetir também a segunda execução (overlay `kind` e pico de CPU), troque pelo segundo bloco, que abre o laço de amostragem em segundo plano e termina com o `kill` dele e o `awk` do pico. As imagens `pytstop-<serviço>:<commit>` ficam no Docker local: apague as suas com `docker rmi`.
 4. No CD, o mesmo roteiro roda no job `deploy-kind` de cada serviço (`--tar` no lugar do `docker build` para o próprio serviço), e a coluna "Medido no runner" do ADR-042 se preenche com o primeiro run verde.
