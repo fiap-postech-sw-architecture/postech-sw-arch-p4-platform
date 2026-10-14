@@ -25,7 +25,7 @@ import subprocess  # nosec B404
 import sys
 import urllib.parse
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 import pytest
 import yaml
@@ -462,30 +462,55 @@ def test_servicos_saudaveis_passam_em_todas_as_etapas(smoke: Smoke) -> None:
     assert smoke.chamadas("sleep") == []
 
 
-def execs(smoke: Smoke) -> list[list[str]]:
-    return [chamada for chamada in smoke.chamadas("kubectl") if "exec" in chamada]
+class Exec(NamedTuple):
+    """Um `kubectl exec` do smoke, lido pelas flags e nao pela posicao."""
+
+    chamada: list[str]
+    namespace: str
+    pod: str
+    container: str | None
+    comando: list[str]
+
+
+def execs(smoke: Smoke) -> list[Exec]:
+    """Os `kubectl exec` do smoke: o namespace vem em `-n`, o pod depois do `exec`,
+    o container em `-c` (se houver) e o comando depois do `--`."""
+    lidos = []
+    for chamada in smoke.chamadas("kubectl"):
+        if "exec" not in chamada:
+            continue
+        i = chamada.index("exec")
+        fim = chamada.index("--")
+        flags = chamada[i + 2 : fim]
+        lidos.append(
+            Exec(
+                chamada=chamada,
+                namespace=chamada[chamada.index("-n") + 1],
+                pod=chamada[i + 1],
+                container=flags[flags.index("-c") + 1] if "-c" in flags else None,
+                comando=chamada[fim + 1 :],
+            )
+        )
+    return lidos
 
 
 def test_conexao_ao_banco_sai_do_rabbitmq_0_com_prazo_no_pod(smoke: Smoke) -> None:
     processo = smoke.roda(cluster_saudavel())
 
     assert processo.returncode == 0, processo.stderr
-    conexoes = [chamada for chamada in execs(smoke) if "rabbitmq-0" in chamada]
-    assert [chamada[-2:] for chamada in conexoes] == [
+    conexoes = [e for e in execs(smoke) if e.pod == "rabbitmq-0"]
+    assert [e.comando[-2:] for e in conexoes] == [
         [host_do_banco(servico), SERVICOS[servico][3]] for servico in SERVICOS
     ]
-    for chamada in conexoes:
-        assert chamada[:7] == [
+    for e in conexoes:
+        assert e.chamada[:3] == [
             "--context",
             "kind-pytstop-p4",
             "--request-timeout=20s",
-            "-n",
-            "pytstop-plataforma",
-            "exec",
-            "rabbitmq-0",
         ]
-        assert chamada[9:12] == ["--", "bash", "-c"]
-        assert chamada[12].startswith('timeout 3 bash -c "</dev/tcp/$0/$1"')
+        assert (e.namespace, e.container) == ("pytstop-plataforma", "rabbitmq")
+        assert e.comando[:2] == ["bash", "-c"]
+        assert e.comando[2].startswith('timeout 3 bash -c "</dev/tcp/$0/$1"')
 
 
 def test_controle_sai_da_api_e_o_loopback_do_banco_nao_tem_trust(
@@ -494,27 +519,28 @@ def test_controle_sai_da_api_e_o_loopback_do_banco_nao_tem_trust(
     processo = smoke.roda(cluster_saudavel())
 
     assert processo.returncode == 0, processo.stderr
-    chamadas = execs(smoke)
-    controles = [c for c in chamadas if "python" in c[12]]
-    assert [(c[4], c[6]) for c in controles] == [
+    # O container da API tem de ser nomeado: sem o -c, o kubectl escolhe o
+    # primeiro e avisa "Defaulted container" na saida.
+    controles = [e for e in execs(smoke) if e.container == "api"]
+    assert [(e.namespace, e.pod) for e in controles] == [
         (ns, f"{servico}-api-1") for servico, (ns, *_) in SERVICOS.items()
     ]
-    for chamada in controles:
-        assert chamada[7:12] == ["-c", "api", "--", "sh", "-c"]
+    for e in controles:
+        assert e.comando[:2] == ["sh", "-c"]
         # A conexao do controle tem prazo de 3 s, como a sonda do rabbitmq-0.
         assert (
             "socket.create_connection((sys.argv[1], int(sys.argv[2])), 3)"
-            in (chamada[12])
+            in e.comando[2]
         )
-    loopbacks = [c for c in chamadas if c[7:9] == ["-c", "postgres"]]
+    loopbacks = [e for e in execs(smoke) if e.container == "postgres"]
     # So os dois bancos PostgreSQL: o MongoDB nao tem essa prova.
-    assert [(c[4], c[6]) for c in loopbacks] == [
+    assert [(e.namespace, e.pod) for e in loopbacks] == [
         ("pytstop-os", "os-postgres-0"),
         ("pytstop-execucao", "execucao-postgres-0"),
     ]
-    for chamada in loopbacks:
-        assert chamada[7:11] == ["-c", "postgres", "--", "sh"]
-        assert chamada[12] == (
+    for e in loopbacks:
+        assert e.comando[:2] == ["sh", "-c"]
+        assert e.comando[2] == (
             'psql -h 127.0.0.1 -U postgres -w -c "select 1" 2>&1; echo "code=$?"'
         )
 
@@ -938,8 +964,8 @@ def test_controle_pula_o_pod_da_api_que_esta_saindo(smoke: Smoke) -> None:
     processo = smoke.roda(estado, "billing-service")
 
     assert processo.returncode == 0, processo.stderr
-    controles = [c for c in execs(smoke) if "python" in c[12]]
-    assert [c[6] for c in controles] == ["billing-service-api-1"]
+    controles = [e for e in execs(smoke) if e.container == "api"]
+    assert [e.pod for e in controles] == ["billing-service-api-1"]
 
 
 def test_summary_acrescenta_ao_que_os_passos_anteriores_escreveram(
