@@ -787,9 +787,6 @@ class TerminalQueSumiu:
     def write(self, texto: str) -> int:
         raise OSError(errno.EIO, "Input/output error", texto)
 
-    def flush(self) -> None:
-        raise OSError(errno.EIO, "Input/output error")
-
 
 def test_varredura_apaga_o_arquivo_com_segredo_mesmo_com_o_terminal_fechado(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
