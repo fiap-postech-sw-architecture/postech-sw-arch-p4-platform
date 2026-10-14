@@ -793,6 +793,9 @@ def test_o_evento_de_criacao_basta_sem_a_linha_do_httpx() -> None:
     [
         pytest.param("bad_request", ["invalid_notification_url"], id="nas-causas"),
         pytest.param("invalid_notification_url", [], id="no-erro-do-mp"),
+        pytest.param(
+            "bad_request", ["INVALID.Notification.URL"], id="maiuscula-e-ponto"
+        ),
     ],
 )
 def test_codigo_que_fala_da_notification_url_nao_diz_que_a_causa_e_outra(

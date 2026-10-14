@@ -328,7 +328,8 @@ def _sobre_a_notification_url(sinais: Sinais, rejeicao: LinhaDeLog | None) -> st
             rejeicao.campos.get(nome, "") for nome in ("erro_do_mp", "causas")
         )
     )
-    if "notification" in codigos:
+    # Os codigos de ``cause`` passam no Billing com maiuscula e ponto.
+    if "notification" in codigos.lower():
         return (
             f" Os códigos registrados falam da notification_url, e a usada foi {url}: "
             "troque-a por outra URL https pública com E2E_MP_NOTIFICATION_URL."
