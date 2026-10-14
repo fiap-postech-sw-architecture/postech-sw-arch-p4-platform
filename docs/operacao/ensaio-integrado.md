@@ -2,7 +2,7 @@
 
 > [↑ Raiz do projeto](../../README.md)
 
-Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a `main` de cada repositório) no mesmo cluster kind, com os scripts de implantação e de smoke do [Contrato com os serviços](../../README.md#contrato-com-os-serviços), e a memória e a CPU de cada pod medidas contra o orçamento do [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). Vale para o estado em que o OS Service ainda não tem os processos `prazos` e `notificador` na `main`; a medida deles, feita a partir das branches abertas, está em [Medida adicional](#medida-adicional-prazos-e-notificador-do-os-service).
+Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a `main` de cada repositório) no mesmo cluster kind, com os scripts de implantação e de smoke do [Contrato com os serviços](../../README.md#contrato-com-os-serviços), e a memória e a CPU de cada pod medidas contra o orçamento do [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). Na época do ensaio, o OS Service ainda não tinha os processos `prazos` e `notificador` na `main`; a medida deles, feita com as branches então abertas, está em [Medida adicional](#medida-adicional-prazos-e-notificador-do-os-service). Os dois já entraram na `main` do OS Service (b310889 e 593471d): o que mudou nos repositórios desde o ensaio está em [Depois do ensaio](#depois-do-ensaio).
 
 ## Resultado
 
@@ -10,6 +10,20 @@ Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a
 - O `make smoke` da plataforma passou antes dos serviços (nos dois overlays) e o [`smoke-servicos.sh`](../../scripts/ci/smoke-servicos.sh) passou nos três namespaces: 35 etapas `ok`, nenhuma `FAILED`, incluindo `pg_up` e `mongodb_up` em 1 lidos do Prometheus, o Swagger sob o prefixo de cada serviço e a NetworkPolicy barrando o `rabbitmq-0` em cada banco.
 - Memória e CPU ficaram bem abaixo do orçamento: os 13 pods usam 0,84 GiB em repouso, contra 2,2 GiB de requests; o nó do kind inteiro (control plane, plataforma e serviços) fica em cerca de 3,1 GiB de working set, contra os 3,4 GiB de requests do orçamento.
 - O que falhou no ensaio foi só ruído de saída do smoke (uma linha `Defaulted container` do `kubectl exec`), corrigido neste PR. As observações que ficam nos repositórios dos serviços estão em [Observações](#observações-que-ficam-nos-repositórios-dos-serviços).
+
+## Depois do ensaio
+
+O ensaio rodou na madrugada de 14/10/2026 (horário de Brasília), com a plataforma em `aaca05c` e os serviços nos commits da tabela de [Ambiente e versões](#ambiente-e-versões). Desde então a `main` de vários repositórios andou; a tabela diz o que isso muda neste registro.
+
+| Mudança depois do ensaio | Efeito neste registro |
+|---|---|
+| `platform` #11 (`11480bb`): smoke, runbook, ADRs, RFC e contratos | A saída do smoke citada é a de `aaca05c`. Desde o #11, as linhas de `/metrics` e de `/api/v1/admin/outbox` saem `ok: 404 (Kong, not published)` e `ok: 404 (Kong fora-da-borda)`, e só passam se o corpo da resposta for o do Kong. O #11 também trocou a regra de alerta "Saga parada" (duas condições novas). Nenhuma das duas mudanças foi exercitada com os serviços reais neste ensaio |
+| OS Service #9 (`b310889`, `notificador`) e #10 (`593471d`, `prazos`) | Já estão na `main` do OS Service. A [medida adicional](#medida-adicional-prazos-e-notificador-do-os-service) foi feita com as branches e vale como estimativa até ser repetida sobre a `main` |
+| Billing #6 (`264da4e`) e Execution #6 (`d04fd81`) | Corrigem o aviso de telemetria do FastAPI nas duas APIs e, no Billing, o volume de log do `mongod`; também unificam os nomes das variáveis do `make kind-deploy`. Detalhe em [Observações do ensaio](#observações-do-ensaio-situação-em-1410) |
+| OS Service #11 (aberto) | Unifica os nomes das variáveis do `make kind-deploy` no OS (`PLATFORM` vira alias de `PLATFORM_DIR`) |
+| `platform` #13 (aberto) | Traz o teste de ponta a ponta da saga (ADR-041); até o merge, nenhum teste de saga roda contra o kind |
+
+Antes de fechar a fase, o ensaio deve ser repetido sobre as `main` de hoje: `smoke-servicos.sh` nos três serviços (com a prova nova do corte pelo Kong) e as regras de alerta com serviços de pé.
 
 ## Ambiente e versões
 
@@ -196,14 +210,18 @@ CPU: os requests somados dos serviços são 980m, e os da plataforma no `kind-ci
 
 ## Medida adicional: `prazos` e `notificador` do OS Service
 
-Os dois processos ainda não estão na `main` do OS Service: o `prazos` está na branch `feat/saga-prazos` e o `notificador`, na `feat/notificacao-e-lgpd`, cada uma com o seu `k8s/`. Cada branch foi implantada, sozinha, sobre o cluster `kind-ci` do ensaio (a de e-mail sobre o banco da `main`; a dos prazos sobre um namespace `pytstop-os` recriado, para não misturar as migrações das duas branches, que partem da mesma `main`), com a imagem construída do commit dela (`8eec08f` e `84f89cd`) e o `smoke-servicos.sh os-service` verde nas duas.
+Na época do ensaio (14/10), os dois processos estavam em branches abertas do OS Service, cada uma com o seu `k8s/`: o `notificador` na `feat/notificacao-e-lgpd` e o `prazos`, na `feat/saga-prazos`. As duas entraram depois na `main` do OS Service, por squash: o `notificador` como `b310889` (PR #9) e o `prazos` como `593471d` (PR #10); os commits da medida (`8eec08f` e `84f89cd`) deixaram de existir como commits da `main`. **Repita a medida sobre a `main` do OS Service antes de usar esses números no ADR-042.**
 
-| Processo | Branch | Memória | CPU | Requests/limits | Nó (working set) |
-|---|---|---|---|---|---|
-| `os-service-notificador` | `feat/notificacao-e-lgpd` | 63 MiB | 4m | 50m/250m, 128/256 Mi | 3.242 MiB (era 3.147) |
-| `os-service-prazos` | `feat/saga-prazos` | 72 MiB | 5m | 50m/250m, 128/256 Mi | 3.377 MiB (namespace recriado) |
+Cada branch foi implantada, sozinha, sobre o cluster `kind-ci` do ensaio, com a imagem construída do commit dela e o `smoke-servicos.sh os-service` verde nas duas. A de e-mail foi implantada sobre o banco do OS da `main`; a dos prazos, sobre um namespace `pytstop-os` recriado, para não misturar as migrações das duas branches, que partem da mesma `main`.
 
-Os dois cabem nos 128/256 Mi do orçamento: juntos acrescentam cerca de 135 MiB e 9m ao nó. O `prazos` do OS logou, uma vez, `os.eventos has no consumer` e `saga deadlines paused` no arranque (o consumidor do OS ainda não tinha conectado, porque o namespace acabava de ser recriado) e não repetiu depois: o consumidor passou a ter 1 e os ciclos seguintes seguiram sem aviso.
+| Processo | Branch na época | Commit medido | Hoje na `main` do OS | Memória | CPU | Requests/limits | Nó (working set) |
+|---|---|---|---|---|---|---|---|
+| `os-service-notificador` | `feat/notificacao-e-lgpd` | `8eec08f` | `b310889` (#9) | 63 MiB | 4m | 50m/250m, 128/256 Mi | 3.242 MiB (era 3.147) |
+| `os-service-prazos` | `feat/saga-prazos` | `84f89cd` | `593471d` (#10) | 72 MiB | 5m | 50m/250m, 128/256 Mi | 3.377 MiB (namespace recriado) |
+
+- Os dois cabem nos 128/256 Mi dos manifests: juntos acrescentaram cerca de 135 MiB e 9m ao nó.
+- O ADR-042 tem linha para o `prazos` e não tem para o `notificador`, que é o 9º processo (relay e consumidor de cada serviço, mais o `prazos` do OS e o do Billing): com ele, os requests e limits passam de 3.488/8.896 Mi para 3.616/9.152 Mi (3,5/8,9 GiB), ainda abaixo dos 10 GiB do ADR. A linha entra no PR que alinha o ADR-042 aos serviços (pendência registrada no `MEMORY.md`).
+- O `prazos` do OS logou, uma vez, `os.eventos has no consumer` e `saga deadlines paused` no arranque, porque o consumidor do OS ainda não tinha conectado (o namespace acabava de ser recriado). Não repetiu: o consumidor passou a ter 1 e os ciclos seguintes seguiram sem aviso.
 
 ## O que falhou e como foi resolvido
 
