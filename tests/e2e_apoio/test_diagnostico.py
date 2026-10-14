@@ -752,11 +752,30 @@ def test_a_dica_funciona_so_com_a_operacao_e_o_status_http() -> None:
 
 
 def test_o_evento_de_criacao_basta_sem_a_linha_do_httpx() -> None:
-    sinais = _com_logs(
-        consumidor=[_log("mercadopago_request_rejected", "warning", **REJEICAO)]
+    sinais = _sinais(
+        url_de_notificacao=URL_PUBLICA,
+        logs={
+            "consumidor": _linhas(
+                _log("mercadopago_request_rejected", "warning", **REJEICAO)
+            )
+        },
     )
 
-    assert "recusou criar a cobrança" in dicas(sinais)[0]
+    texto = dicas(sinais)[0]
+
+    assert (
+        "recusou criar a cobrança (POST /checkout/preferences com resposta 4xx)"
+        in texto
+    )
+    assert f"A notification_url usada foi {URL_PUBLICA}" in texto
+
+
+def test_outro_evento_com_a_operacao_de_criacao_nao_e_recusa_da_criacao() -> None:
+    sinais = _com_logs(
+        consumidor=[_log("outro_aviso", "warning", operacao="criar_cobranca")]
+    )
+
+    assert "recusou" not in " ".join(dicas(sinais))
 
 
 def test_dica_da_criacao_nao_mistura_o_erro_do_mercado_pago_com_o_da_dlq() -> None:
