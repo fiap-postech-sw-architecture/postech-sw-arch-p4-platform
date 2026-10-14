@@ -866,7 +866,7 @@ make e2e      # os 13 cenários, cerca de 3 min; relatórios em reports/e2e
 make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 2 min; relatórios em reports/demo
 ```
 
-Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Com todos os cenários verdes, o `make e2e` confere ainda que cada consulta de painel de negócio devolve série no Prometheus do kind ([`e2e/apoio/paineis.py`](e2e/apoio/paineis.py)): o `expr` de cada alvo dos quatro dashboards de negócio roda em `/api/v1/query` (com `$__range` em 1h e `$__rate_interval` em 5m), e a que volta vazia ou com erro reprova o alvo, porque um nome de métrica trocado ou um rótulo errado deixaria vazio justamente o painel que a banca pediu. A tabela sai em `reports/e2e/paineis.md` e no resumo do job; os painéis técnicos e os alertas entram no resumo, mas não reprovam. O E2E alimenta até as duas séries esparsas da Execução (tempo de execução por serviço e peças em falta): um cenário finaliza uma execução e outro recusa a reserva por falta de peça. `make paineis` repete só essa conferência, sem o E2E (por exemplo depois do `make demo`), em qualquer cluster com o Prometheus da plataforma. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
+Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
 
 | Variável | Para quê | Padrão |
 |---|---|---|
@@ -936,6 +936,10 @@ O `make demo` reaproveita os cenários marcados `@demo` e as mesmas fixtures. A 
 ```
 
 Ficam de fora a demonstração do deploy com testes e a do monitoramento (Jaeger, Grafana e Loki), que não são do E2E.
+
+### Painéis de negócio com série
+
+Com todos os cenários verdes, o `make e2e` confere ainda que cada consulta de painel de negócio devolve série no Prometheus do kind ([`e2e/apoio/paineis.py`](e2e/apoio/paineis.py)): o `expr` de cada alvo dos quatro [dashboards de negócio](observabilidade/negocio.md) roda em `/api/v1/query` (com `$__range` em 1h e `$__rate_interval` em 5m), e a que volta vazia ou com erro reprova, porque um nome de métrica trocado ou um rótulo errado deixaria vazio justamente o painel que a banca pediu. A tabela sai em `reports/e2e/paineis.md` e no resumo do job; os painéis técnicos e os alertas entram nela, mas não reprovam. O E2E alimenta até as duas séries esparsas da Execução (tempo de execução por serviço e peças em falta): um cenário finaliza uma execução e outro recusa a reserva por falta de peça. `make paineis` repete só essa conferência, sem o E2E (por exemplo depois do `make demo`), em qualquer cluster com o Prometheus da plataforma.
 
 ### Testes do código auxiliar
 
