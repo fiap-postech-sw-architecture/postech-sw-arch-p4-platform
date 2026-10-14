@@ -66,6 +66,16 @@ PRINTS: Final = (
         "aprovado e, depois do cancelamento, o estorno."
     ),
     "O `resumo.md` desta pasta (já sem token nem dado do pagador).",
+    (
+        "Cuidado com os prints: cubra e-mail, nome, User ID e CPF das contas de "
+        "teste, e nunca mostre a tela de Credenciais nem a de Webhooks."
+    ),
+    (
+        "Cuidado com os arquivos: anexe só o `resumo.md` e os prints, nunca o "
+        "`junit.xml` (leva o nome da máquina), o `cucumber.json`, o `cenarios.json` "
+        "nem a pasta inteira; antes de commitar, rode "
+        "`python -m e2e.varredura <pasta>` e `gitleaks dir <pasta>`."
+    ),
 )
 PRINTS_DO_ENSAIO: Final = (
     "Nenhum: o ensaio não fala com o Mercado Pago. Os prints são do `make mp-sandbox`.",
@@ -278,6 +288,7 @@ class Prova:
             erro=mascarar(f"{type(erro).__name__}: {erro}")[:600],
             esperado=passo,
             real=self.real,
+            contexto=self.kubectl.contexto,
         )
         sinais.estado_da_os = diagnostico.coletar(
             lambda: self._descrever_estado(self.api, self.cenario)

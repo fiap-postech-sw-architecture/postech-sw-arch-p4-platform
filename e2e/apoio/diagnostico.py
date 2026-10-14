@@ -148,12 +148,18 @@ class Sinais:
     erro: str
     esperado: str
     real: bool
+    contexto: str  # o kubectl que a dica manda rodar leva o --context do script
     estado_da_os: str | None = None
     pagamento: Mapping[str, Any] | None = None
     mercadopago: list[PagamentoMp] | None = None
     filas_mortas: Mapping[str, int] | None = None
     filas_mortas_antes: Mapping[str, int] | None = None
     logs: dict[str, list[LinhaDeLog]] = field(default_factory=dict)
+
+
+def _kubectl(sinais: Sinais) -> str:
+    """O inicio de um ``kubectl`` no cluster certo, e nao no contexto corrente."""
+    return f"kubectl --context {sinais.contexto} -n pytstop-billing"
 
 
 def _linhas_do_mp(sinais: Sinais) -> list[tuple[str, str, int]]:
@@ -221,7 +227,7 @@ def dicas(sinais: Sinais) -> list[str]:
             "(https://localhost/billing/...), que a documentação do Mercado Pago "
             "manda não usar. Aponte para uma URL pública: exporte "
             f"E2E_MP_NOTIFICATION_URL={NOTIFICATION_URL_PUBLICA} e rode de novo, ou "
-            "com o modo real mantido, `kubectl -n pytstop-billing set env deployment "
+            f"com o modo real mantido, `{_kubectl(sinais)} set env deployment "
             f"--all MP_NOTIFICATION_URL={NOTIFICATION_URL_PUBLICA}`."
         )
     if _provedor_indisponivel(sinais, chamadas):
@@ -244,7 +250,7 @@ def dicas(sinais: Sinais) -> list[str]:
         achadas.append(
             "O pagamento está aprovado no Mercado Pago, mas o Billing ainda o vê como "
             "SOLICITADO: a conciliação do `prazos` está parada. Veja "
-            "`kubectl -n pytstop-billing logs deploy/billing-service-prazos` "
+            f"`{_kubectl(sinais)} logs deploy/billing-service-prazos` "
             "(`conciliacao` tem de ser true)."
         )
     if sinais.mercadopago == [] and solicitado:
@@ -269,8 +275,7 @@ def dicas(sinais: Sinais) -> list[str]:
     if not achadas:
         achadas.append(
             "Sem causa óbvia nos logs. Veja o do consumidor: "
-            "`kubectl -n pytstop-billing logs deploy/billing-service-consumidor "
-            "--tail=50`."
+            f"`{_kubectl(sinais)} logs deploy/billing-service-consumidor --tail=50`."
         )
     return achadas
 

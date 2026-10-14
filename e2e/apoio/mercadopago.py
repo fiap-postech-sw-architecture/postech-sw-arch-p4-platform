@@ -34,6 +34,9 @@ PRAZO: Final = 10.0
 # um valor mude o caminho da URL (``../``, ``?``).
 _ID_VALIDO: Final = re.compile(r"[A-Za-z0-9_-]{1,64}")
 _TAMANHO_DO_DETALHE: Final = 300
+# O id da preferencia vem como ``<collector_id>-<uuid>``: o numero e o User ID da conta
+# vendedora, que nao vai para a evidencia (ela pode ir para um repositorio publico).
+_PREFIXO_DA_CONTA: Final = re.compile(r"^\d{6,}-(?=[0-9a-fA-F]{8}-)")
 # O Mercado Pago responde a data de expiracao com fuso (``-04:00``); a margem cobre
 # a diferenca de relogio entre esta maquina e a dele.
 MARGEM_DO_RELOGIO: Final = timedelta(minutes=5)
@@ -168,8 +171,9 @@ class PreferenciaMp:
         return self.expires and self.expira_em <= agora + MARGEM_DO_RELOGIO
 
     def para_evidencia(self) -> dict[str, str | bool | None]:
+        """O uuid da preferencia (sem o User ID da conta), ``expires`` e a expiracao."""
         return {
-            "id": self.id,
+            "id": sem_id_da_conta(self.id),
             "expires": self.expires,
             "expiration_date_to": (
                 None if self.expira_em is None else self.expira_em.isoformat()
@@ -209,6 +213,11 @@ def _detalhe_do_erro(resposta: httpx.Response) -> str:
             if isinstance(causa, dict)
         )
     return mascarar("; ".join(partes) or "sem detalhe")[:_TAMANHO_DO_DETALHE]
+
+
+def sem_id_da_conta(preferencia_id: str) -> str:
+    """O uuid da preferencia, sem o ``<collector_id>-`` que vem na frente."""
+    return _PREFIXO_DA_CONTA.sub("", preferencia_id, count=1)
 
 
 def _id_valido(valor: str, rotulo: str) -> str:

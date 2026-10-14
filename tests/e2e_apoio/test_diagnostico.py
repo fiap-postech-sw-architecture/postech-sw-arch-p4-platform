@@ -68,6 +68,7 @@ def _sinais(**campos: Any) -> Sinais:
         "erro": "TempoEsgotadoError: pagamento CONFIRMADO no Billing: nao ocorreu",
         "esperado": "Então o Billing confirma o pagamento",
         "real": True,
+        "contexto": "kind-x",
     }
     return Sinais(**{**base, **campos})
 
@@ -484,8 +485,8 @@ def test_dlq_vazia_ou_de_outro_servico_nao_e_dica() -> None:
     assert achadas == [
         (
             "Sem causa óbvia nos logs. Veja o do consumidor: "
-            "`kubectl -n pytstop-billing logs deploy/billing-service-consumidor "
-            "--tail=50`."
+            "`kubectl --context kind-x -n pytstop-billing "
+            "logs deploy/billing-service-consumidor --tail=50`."
         )
     ]
 
@@ -599,3 +600,24 @@ def test_coletar_devolve_o_valor_e_engole_a_falha() -> None:
 
     assert coletar(lambda: 42) == 42
     assert coletar(falha) is None
+
+
+# --- todo kubectl sugerido leva o --context do script --------------------------
+
+
+def test_todo_kubectl_sugerido_leva_o_contexto_do_cluster_do_script() -> None:
+    sinais = _sinais(
+        contexto="kind-pytstop-mp",
+        mercadopago=[_pagamento_mp("approved")],
+        pagamento={"status": "SOLICITADO"},
+        logs={"consumidor": _linhas(_mp("POST", "/checkout/preferences", 400))},
+    )
+
+    textos = " ".join(dicas(sinais))
+
+    comandos = [parte for parte in textos.split("`") if parte.startswith("kubectl")]
+    assert len(comandos) == 2, comandos
+    for comando in comandos:
+        assert comando.startswith(
+            "kubectl --context kind-pytstop-mp -n pytstop-billing"
+        )

@@ -22,6 +22,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
+from e2e.apoio.mercadopago import sem_id_da_conta
 from e2e.apoio.segredos import registrados
 
 if TYPE_CHECKING:
@@ -56,7 +57,6 @@ CAMPOS_DA_NOTIFICACAO: Final = (
 # Do GET /os/api/v1/sagas/{id}: o texto livre da falha nao entra.
 CAMPOS_DA_SAGA: Final = ("etapa", "motivo")
 CAMPOS_DO_PASSO: Final = ("seq", "em", "de", "para", "gatilho", "comando")
-CAMPOS_DA_MUDANCA: Final = ("sequencia", "de", "para", "origem", "ocorrido_em")
 
 FRASE_DA_SANDBOX: Final = (
     "A sandbox do Mercado Pago não envia webhook (notificação) para pagamento de "
@@ -69,8 +69,8 @@ FRASE_DO_ENSAIO: Final = (
     "ao Mercado Pago. Este arquivo prova o fluxo, o formato da evidência e o "
     "desfazer; a integração real só é provada por `make mp-sandbox`."
 )
-# Execução em que nenhum pagamento chegou a ser confirmado: o resumo não afirma
-# uma confirmação que não houve.
+# Execucao em que nenhum pagamento chegou a ser confirmado: o resumo nao afirma
+# uma confirmacao que nao houve.
 FRASE_SEM_CONFIRMACAO: Final = (
     "Nenhum pagamento foi confirmado nesta execução. A sandbox do Mercado Pago "
     "não envia webhook (notificação) para pagamento de teste: quando o pagamento "
@@ -82,12 +82,15 @@ FRASE_DO_ENSAIO_SEM_CONFIRMACAO: Final = (
     "ENSAIO: nenhum pagamento foi confirmado nesta execução, e nada foi enviado "
     "ao Mercado Pago. A integração real só é provada por `make mp-sandbox`."
 )
-# Estados do pagamento no Billing que só existem depois de uma confirmação.
+# Estados do pagamento no Billing que so existem depois de uma confirmacao.
 CONFIRMADOS: Final = frozenset({"CONFIRMADO", "ESTORNADO"})
 _PADROES_DA_VARREDURA: Final = {
     "Bearer": re.compile(r"Bearer\s+\S+", re.IGNORECASE),
     "token do Mercado Pago": re.compile(r"(?:TEST|APP_USR)-[A-Za-z0-9_-]{8,}"),
     "e-mail": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"),
+    "User ID da conta vendedora (prefixo do id da preferencia)": re.compile(
+        r"\b\d{6,}-[0-9a-f]{8}-[0-9a-f]{4}"
+    ),
 }
 
 
@@ -103,6 +106,10 @@ def permitidos(dados: Mapping[str, Any], campos: Iterable[str]) -> dict[str, Any
 def pagamento_do_billing(dados: Mapping[str, Any]) -> dict[str, Any]:
     """O pagamento do Billing sem o ``checkout_url`` e com as notificacoes enxutas."""
     limpo = permitidos(dados, CAMPOS_DO_PAGAMENTO)
+    if isinstance(limpo.get("referencia_preferencia"), str):
+        limpo["referencia_preferencia"] = sem_id_da_conta(
+            limpo["referencia_preferencia"]
+        )
     limpo["notificacoes"] = [
         permitidos(notificacao, CAMPOS_DA_NOTIFICACAO)
         for notificacao in dados.get("notificacoes", [])
@@ -316,6 +323,9 @@ def varrer(texto: str, extras: Iterable[str] = ()) -> list[Achado]:
 
 
 def _conferir(nome: str, texto: str, extras: Iterable[str]) -> None:
+    # O pytest mostra os argumentos de cada frame do traceback: o texto inteiro (com o
+    # que a varredura acabou de achar) nao pode aparecer.
+    __tracebackhide__ = True
     achados = varrer(texto, extras)
     if achados:
         onde = ", ".join(f"linha {a.linha} ({a.tipo})" for a in achados[:10])
@@ -325,6 +335,7 @@ def _conferir(nome: str, texto: str, extras: Iterable[str]) -> None:
 
 def gravar(caminho: Path, texto: str, extras: Iterable[str] = ()) -> None:
     """Grava ``texto`` em ``caminho`` se a varredura nao achar nada."""
+    __tracebackhide__ = True
     _conferir(caminho.name, texto, extras)
     caminho.write_text(texto, encoding="utf-8")
 
@@ -354,6 +365,9 @@ def gravar_evidencia(
     extras: Iterable[str] = (),
 ) -> None:
     """``resumo.md`` e ``evidencia.json`` em ``pasta``, os dois varridos antes."""
+    __tracebackhide__ = (
+        True  # ``registros`` leva as observacoes, que podem ter o achado
+    )
     lista = list(registros)
     resumo = gerar_resumo(
         lista,

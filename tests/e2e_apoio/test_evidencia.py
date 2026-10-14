@@ -4,8 +4,14 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+
+# subprocess roda o pytest do proprio repositorio, sem shell.
+import subprocess  # nosec B404
+import sys
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -29,9 +35,7 @@ from e2e.apoio.evidencia import (
     varrer_pasta,
 )
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
+RAIZ = Path(__file__).resolve().parents[2]
 CHAVE_DO_MP = (
     "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
 )
@@ -612,3 +616,91 @@ def test_o_json_da_varredura_aceita_dados_de_qualquer_tipo_na_saga() -> None:
     saga: dict[str, Any] = {"etapa": "x", "passos": [{"seq": 1, "extra": {"a": 1}}]}
 
     assert saga_resumida(saga)["passos"] == [{"seq": 1}]
+
+
+# --- o User ID da conta vendedora -----------------------------------------------------
+
+ID_DA_PREFERENCIA = "1462278261-c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6"
+UUID_DA_PREFERENCIA = "c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6"
+TIPO_DO_USER_ID = "User ID da conta vendedora (prefixo do id da preferencia)"
+
+
+def test_pagamento_do_billing_guarda_so_o_uuid_da_preferencia() -> None:
+    limpo = pagamento_do_billing(
+        {**PAGAMENTO_DO_BILLING, "referencia_preferencia": ID_DA_PREFERENCIA}
+    )
+
+    assert limpo["referencia_preferencia"] == UUID_DA_PREFERENCIA
+
+
+def test_pagamento_do_billing_sem_preferencia_nao_inventa_o_campo() -> None:
+    assert "referencia_preferencia" not in pagamento_do_billing({"id": "p-1"})
+    assert (
+        pagamento_do_billing({"referencia_preferencia": None})["referencia_preferencia"]
+        is None
+    )
+
+
+def test_varredura_acha_o_user_id_no_id_da_preferencia() -> None:
+    achados = varrer(f"linha limpa\npreferencia {ID_DA_PREFERENCIA}")
+
+    assert [(a.tipo, a.linha) for a in achados] == [(TIPO_DO_USER_ID, 2)]
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        pytest.param(UUID_DA_PREFERENCIA, id="so-o-uuid"),
+        pytest.param("98c4cf1d-c9fc-4371-8cd0-f409ad2ff8e2", id="uuid-do-billing"),
+        pytest.param(
+            "12345678-1234-4371-8cd0-f409ad2ff8e2", id="uuid-que-comeca-numerico"
+        ),
+        pytest.param("2026-10-14T11:49:42.940000+00:00", id="data"),
+        pytest.param("pagamento 1791978588021 aprovado", id="id-numerico-do-mp"),
+    ],
+)
+def test_varredura_nao_confunde_uuid_data_nem_id_numerico_com_user_id(
+    texto: str,
+) -> None:
+    assert varrer(texto) == []
+
+
+# --- o e-mail nao vaza pelo traceback -----------------------------------------
+
+
+def test_email_achado_na_evidencia_nao_vaza_pelo_traceback_nem_pelo_junit(
+    tmp_path: Path,
+) -> None:
+    usuario, dominio = "joao.silva", "example.com"
+    email = f"{usuario}@{dominio}"
+    saida = tmp_path / "saida"
+    (tmp_path / "test_x.py").write_text(
+        "from pathlib import Path\n\n"
+        "from e2e.apoio.evidencia import RegistroDoCenario, gravar_evidencia\n\n\n"
+        "def test_grava_com_email():\n"
+        "    registro = RegistroDoCenario(nome='Cenario', resultado='passou')\n"
+        # O endereco nasce em tempo de execucao: o pytest mostra o codigo-fonte do
+        # teste no traceback, e o literal apareceria ali sem nenhum vazamento.
+        f"    email = {usuario!r} + chr(64) + {dominio!r}\n"
+        "    registro.observacoes = ['contato ' + email + ' no pagamento']\n"
+        f"    gravar_evidencia(Path({str(saida)!r}), [registro], modo='real',\n"
+        "                     contexto='kind-x', prints=[])\n"
+    )
+
+    resultado = subprocess.run(  # noqa: S603  # nosec B603
+        [sys.executable, "-m", "pytest", "test_x.py", "-q", "-p", "no:cacheprovider",
+         "--rootdir", str(tmp_path), "--junitxml=junit.xml"],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(RAIZ)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+        stdin=subprocess.DEVNULL,
+    )  # fmt: skip
+
+    escrito = resultado.stdout + resultado.stderr + (tmp_path / "junit.xml").read_text()
+    assert resultado.returncode == 1, escrito
+    assert "recusei gravar resumo.md" in escrito, "a mensagem aparece sem o valor"
+    assert email not in escrito
+    assert not saida.exists(), "nada foi gravado"

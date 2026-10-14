@@ -20,6 +20,7 @@ from e2e.apoio.mercadopago import (
     ErroDoMercadoPagoError,
     PagamentoMp,
     TokenRecusadoError,
+    sem_id_da_conta,
 )
 
 if TYPE_CHECKING:
@@ -546,3 +547,36 @@ def test_token_sem_prefixo_conhecido_tambem_sai_mascarado() -> None:
 
     assert chave not in str(erro.value)
     assert "***" in str(erro.value)
+
+
+# --- o User ID da conta vendedora no id da preferencia ----------------------
+
+UUID = "c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6"
+
+
+@pytest.mark.parametrize(
+    ("entrada", "saida"),
+    [
+        pytest.param(f"1462278261-{UUID}", UUID, id="com-user-id"),
+        pytest.param(UUID, UUID, id="so-o-uuid"),
+        pytest.param(f"1462278261-{UUID.upper()}", UUID.upper(), id="maiusculas"),
+        pytest.param("123-abc", "123-abc", id="formato-desconhecido"),
+        pytest.param(f"12345-{UUID}", f"12345-{UUID}", id="numero-curto-demais"),
+    ],
+)
+def test_sem_id_da_conta_corta_so_o_prefixo_numerico_do_vendedor(
+    entrada: str, saida: str
+) -> None:
+    assert sem_id_da_conta(entrada) == saida
+
+
+def test_a_preferencia_na_evidencia_nao_leva_o_user_id_da_conta() -> None:
+    preferencia_id = f"1462278261-{UUID}"
+    cliente = _cliente(
+        lambda _: httpx.Response(200, json={"id": preferencia_id, "expires": True})
+    )
+
+    preferencia = cliente.preferencia(preferencia_id)
+
+    assert preferencia.id == preferencia_id, "a consulta usa o id inteiro"
+    assert preferencia.para_evidencia()["id"] == UUID
