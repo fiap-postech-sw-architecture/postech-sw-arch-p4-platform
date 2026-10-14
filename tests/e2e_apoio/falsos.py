@@ -46,3 +46,38 @@ class ExecutorFalso:
             if trecho in " ".join(comando):
                 return resposta
         return ""
+
+
+class ClusterFalso:
+    """Deployments com replicas; escalar a 0 esvazia os pods nas consultas."""
+
+    def __init__(self, replicas: dict[str, int], pods_demoram: int = 0) -> None:
+        self.replicas = replicas
+        self.comandos: list[list[str]] = []
+        self._pods_demoram = pods_demoram
+        self._consultas = 0
+
+    def __call__(self, argumentos: Sequence[str], prazo: float) -> str:
+        comando = list(argumentos)
+        self.comandos.append(comando)
+        if "scale" in comando:
+            nome = comando[comando.index("scale") + 1].split("/")[1]
+            self.replicas[nome] = int(comando[-1].split("=")[1])
+            self._consultas = 0
+        elif "pods" in comando:
+            self._consultas += 1
+            nome = comando[comando.index("-l") + 1].split("=")[1]
+            if self.replicas[nome] == 0 and self._consultas > self._pods_demoram:
+                return ""
+            return "pod/x\n"
+        elif "deployment" in comando and "jsonpath={.spec.replicas}" in comando:
+            return str(self.replicas[comando[comando.index("deployment") + 1]])
+        return ""
+
+    def escalas(self) -> list[str]:
+        return [
+            " ".join(c[c.index("scale") + 1 :]) for c in self.comandos if "scale" in c
+        ]
+
+    def prontos(self) -> list[str]:
+        return [c[c.index("rollout") + 2] for c in self.comandos if "rollout" in c]

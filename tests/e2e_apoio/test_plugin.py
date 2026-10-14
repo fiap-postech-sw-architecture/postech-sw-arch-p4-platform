@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import signal
 from dataclasses import dataclass, field
-from typing import Any
 
 import pytest
 
@@ -19,13 +18,6 @@ class RelatorioFalso:
     failed: bool
     longrepr: object
     sections: list[tuple[str, str]] = field(default_factory=list)
-
-
-@pytest.fixture(autouse=True)
-def _sem_segredos_registrados() -> Any:
-    segredos.esquecer_todos()
-    yield
-    segredos.esquecer_todos()
 
 
 def _rodar_hook(relatorio: RelatorioFalso) -> RelatorioFalso:
