@@ -770,6 +770,63 @@ def test_o_evento_de_criacao_basta_sem_a_linha_do_httpx() -> None:
     assert f"A notification_url usada foi {URL_PUBLICA}" in texto
 
 
+@pytest.mark.parametrize(
+    ("erro", "causas"),
+    [
+        pytest.param("bad_request", ["invalid_notification_url"], id="nas-causas"),
+        pytest.param("invalid_notification_url", [], id="no-erro-do-mp"),
+    ],
+)
+def test_codigo_que_fala_da_notification_url_nao_diz_que_a_causa_e_outra(
+    erro: str, causas: list[str]
+) -> None:
+    # Visto no kind, com um Mercado Pago de mentira que recusa a URL: o Billing
+    # registrou a causa, e a dica nao pode dizer "a causa e outra" na mesma frase.
+    sinais = _sinais(
+        url_de_notificacao=URL_PUBLICA,
+        logs={
+            "consumidor": _linhas(
+                _log(
+                    "mercadopago_request_rejected",
+                    "warning",
+                    operacao="criar_cobranca",
+                    status_http=400,
+                    erro=erro,
+                    causas=causas,
+                )
+            )
+        },
+    )
+
+    texto = dicas(sinais)[0]
+
+    assert f"falam da notification_url, e a usada foi {URL_PUBLICA}" in texto
+    assert "troque-a por outra URL https pública com E2E_MP_NOTIFICATION_URL" in texto
+    assert "a causa é outra" not in texto
+
+
+def test_sem_url_conhecida_a_dica_nao_fala_da_notification_url_nem_com_a_causa() -> (
+    None
+):
+    sinais = _com_logs(
+        consumidor=[
+            _log(
+                "mercadopago_request_rejected",
+                "warning",
+                operacao="criar_cobranca",
+                status_http=400,
+                causas=["invalid_notification_url"],
+            )
+        ]
+    )
+
+    texto = dicas(sinais)[0]
+
+    assert "causas invalid_notification_url" in texto
+    assert "falam da notification_url" not in texto
+    assert "E2E_MP_NOTIFICATION_URL" not in texto
+
+
 def test_outro_evento_com_a_operacao_de_criacao_nao_e_recusa_da_criacao() -> None:
     sinais = _com_logs(
         consumidor=[_log("outro_aviso", "warning", operacao="criar_cobranca")]

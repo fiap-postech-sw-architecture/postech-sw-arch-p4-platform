@@ -310,6 +310,34 @@ def _registrado_pelo_billing(rejeicao: LinhaDeLog | None) -> str:
     return f" O Billing registrou: {', '.join(partes)}." if partes else ""
 
 
+def _sobre_a_notification_url(sinais: Sinais, rejeicao: LinhaDeLog | None) -> str:
+    """O que dizer da ``notification_url`` quando o Mercado Pago recusa a criacao.
+
+    A padrao e publica e a sandbox nao envia webhook, entao em geral a causa e outra.
+    Se os codigos que o Billing registrou falam da notificacao, a URL e a suspeita.
+    """
+    url = sinais.url_de_notificacao
+    if not url:
+        return ""
+    codigos = (
+        ""
+        if rejeicao is None
+        else " ".join(
+            rejeicao.campos.get(nome, "") for nome in ("erro_do_mp", "causas")
+        )
+    )
+    if "notification" in codigos:
+        return (
+            f" Os códigos registrados falam da notification_url, e a usada foi {url}: "
+            "troque-a por outra URL https pública com E2E_MP_NOTIFICATION_URL."
+        )
+    return (
+        f" A notification_url usada foi {url} (pública: a sandbox não envia webhook), "
+        "então a causa é outra; se suspeitar dela, troque-a com "
+        "E2E_MP_NOTIFICATION_URL."
+    )
+
+
 def _dica_da_recusa(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str | None:
     """O Mercado Pago recusou a criacao da cobranca (ou outra chamada do Billing)."""
     if _token_recusado(sinais, chamadas):
@@ -320,13 +348,7 @@ def _dica_da_recusa(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str
         if rejeicao is None:
             return None
         return f"O Mercado Pago recusou {_chamada_recusada(rejeicao)}.{registrado}"
-    url = (
-        f" A notification_url usada foi {sinais.url_de_notificacao} (pública: a "
-        "sandbox não envia webhook), então a causa é outra; se suspeitar dela, "
-        "troque-a com E2E_MP_NOTIFICATION_URL."
-        if sinais.url_de_notificacao
-        else ""
-    )
+    url = _sobre_a_notification_url(sinais, rejeicao)
     onde_ver = (
         "O log do Billing traz só os códigos do Mercado Pago, e nunca o texto: "
         "procure-os na documentação"
