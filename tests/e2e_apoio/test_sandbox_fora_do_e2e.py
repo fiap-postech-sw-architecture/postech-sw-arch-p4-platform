@@ -232,9 +232,11 @@ def test_pytest_cru_sem_modo_pula_o_sandbox_sem_chamar_o_kubectl(
     assert not registro.exists(), "o kubectl foi chamado por um cenario pulado"
 
 
-def test_com_o_modo_definido_so_o_sandbox_roda_e_o_resto_e_pulado(
+def test_modo_esquecido_no_shell_faz_a_saga_falhar_em_vez_de_pular_tudo(
     tmp_path: Path,
 ) -> None:
+    # make e2e e make demo com E2E_MP_MODO exportado por engano: sem isto, 13 skipped e
+    # saida 0, um verde falso.
     registro = _kubectl_que_nao_pode_ser_chamado(tmp_path)
 
     resultado = _pytest(
@@ -250,9 +252,12 @@ def test_com_o_modo_definido_so_o_sandbox_roda_e_o_resto_e_pulado(
         ),
     )
 
-    assert resultado.returncode == 0, resultado.stdout
-    assert "E2E_MP_MODO definido: so o sandbox roda" in resultado.stdout
-    assert " passed" not in resultado.stdout
+    saida = resultado.stdout + resultado.stderr
+    assert resultado.returncode == 2, saida
+    assert "E2E_MP_MODO=ensaio esta no seu shell" in saida
+    assert "unset E2E_MP_MODO" in saida
+    assert " passed" not in saida
+    assert " skipped" not in saida
     assert not registro.exists()
 
 

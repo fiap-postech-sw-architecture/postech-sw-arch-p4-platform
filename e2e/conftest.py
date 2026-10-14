@@ -49,13 +49,15 @@ from e2e.apoio.segredos import mascarar
 from e2e.servicos import Api, Cenario
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterator
+    from collections.abc import Iterator
 
     from _pytest.fixtures import FixtureRequest
     from pytest_bdd.parser import Feature, Scenario, Step
 
-# Mascara no relatorio, SIGTERM e log do httpx: e2e/apoio/plugin.py.
-pytest_plugins = ["e2e.apoio.plugin"]
+# Mascara no relatorio, SIGTERM e log do httpx: e2e/apoio/plugin.py. Os ganchos do
+# sandbox do Mercado Pago (resultado do cenario, interrupcao, pulos e diagnostico):
+# e2e/apoio/plugin_sandbox.py.
+pytest_plugins = ["e2e.apoio.plugin", "e2e.apoio.plugin_sandbox"]
 
 
 def _recusar_o_sandbox(erro: AssertionError) -> NoReturn:
@@ -180,58 +182,6 @@ def cenario(
     registro.anotar(
         atual.nome, ordem_id=atual.ordem_id or "-", trace_id=atual.trace_id or "-"
     )
-
-
-def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
-    """O sandbox do Mercado Pago e o E2E da saga nao rodam na mesma execucao.
-
-    Sem ``E2E_MP_MODO`` os cenarios ``@mp_sandbox`` ficam de fora (nao ha token no
-    CI e eles mexem no modo do Billing); com ele, so eles rodam. O ``make e2e`` e o
-    ``make demo`` ja os excluem pelo marker, e isto cobre quem roda o pytest cru.
-    Fica como ``skip`` (e nao fora da lista) para o ``--generate-missing`` do
-    ``make test`` continuar vendo os passos do feature.
-    """
-    for item in items:
-        e_sandbox = item.get_closest_marker("mp_sandbox") is not None
-        if e_sandbox and not MP_MODO:
-            item.add_marker(
-                pytest.mark.skip(reason="sandbox do Mercado Pago: use make mp-sandbox")
-            )
-        elif MP_MODO and not e_sandbox:
-            item.add_marker(
-                pytest.mark.skip(reason="E2E_MP_MODO definido: so o sandbox roda")
-            )
-
-
-@pytest.hookimpl(wrapper=True)
-def pytest_runtest_makereport(
-    item: pytest.Item,
-) -> Generator[None, pytest.TestReport, pytest.TestReport]:
-    """Guarda o relatorio de cada fase no item: a fixture ``prova`` le o da chamada."""
-    relatorio = yield
-    setattr(item, f"rep_{relatorio.when}", relatorio)
-    return relatorio
-
-
-def pytest_bdd_step_error(
-    request: FixtureRequest,
-    feature: Feature,
-    scenario: Scenario,
-    step: Step,
-    step_func: Any,
-    step_func_args: dict[str, Any],
-    exception: Exception,
-) -> None:
-    """No sandbox, a falha vem com o diagnostico: estado, logs filtrados e a dica."""
-    if "mp_sandbox" not in scenario.tags:
-        return
-    try:
-        request.getfixturevalue("prova").falha_no_passo(
-            f"{step.keyword} {step.name}", exception
-        )
-    except Exception as erro:  # o diagnostico nunca esconde a falha original
-        # Uma fixture que quebrou antes (o login, por exemplo) quebra de novo aqui.
-        print(f"[mp-sandbox] sem diagnóstico: {type(erro).__name__}", flush=True)
 
 
 def pytest_bdd_before_scenario(
