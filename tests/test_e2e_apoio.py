@@ -802,6 +802,23 @@ def test_mailpit_link_de_decisao_acha_o_email_de_orcamento(relogio: Relogio) -> 
     assert link.endswith("hcfahihF-5Kb_ZyvD")
 
 
+def test_mailpit_link_de_decisao_so_olha_o_email_de_orcamento(relogio: Relogio) -> None:
+    outro_link = "https://localhost/billing/api/v1/publico/orcamentos/OUTRO.tok"
+    mensagens = [
+        {"ID": "m2", "Subject": "Ordem de Serviço 64db2c4d: pagamento"},
+        {
+            "ID": "m1",
+            "Subject": "Ordem de Serviço 64db2c4d: orçamento para a sua decisão",
+        },
+    ]
+    textos = {"m1": _CORPO_ORCAMENTO, "m2": f"Pague. Veja tambem {outro_link}"}
+
+    link = _mailpit(relogio, mensagens, textos).link_de_decisao("cliente@x.dev")
+
+    assert link is not None
+    assert "OUTRO" not in link
+
+
 def test_mailpit_link_de_decisao_antes_do_email_chegar_devolve_none(
     relogio: Relogio,
 ) -> None:

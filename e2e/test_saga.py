@@ -209,9 +209,9 @@ def ler_email_de_decisao(api: Api, portas: Portas, cenario: Cenario) -> None:
     )
     registrar(link.rsplit("/", 1)[1])
     cenario.link_de_decisao = link
-    assert link == api.ordem(cenario.ordem_id)["orcamento"]["link_decisao"], (
-        "o link do e-mail difere do link do orcamento da OS"
-    )
+    # Em variavel: o pytest mostraria os dois links (credenciais) na falha.
+    mesmo_link = link == api.ordem(cenario.ordem_id)["orcamento"]["link_decisao"]
+    assert mesmo_link, "o link do e-mail difere do link do orcamento da OS"
 
 
 def esperar_orcamento(api: Api, portas: Portas, cenario: Cenario) -> None:

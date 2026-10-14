@@ -107,18 +107,20 @@ class Cenario:
     preco_peca: str = ""
     estoque_inicial: int = 0
     cliente_id: str = ""
-    documento: str = ""
-    contato: str = ""
-    placa: str = ""
+    # Fora do repr: o pytest imprime o fixture quando um passo falha, e o link
+    # de decisao e uma credencial.
+    documento: str = field(default="", repr=False)
+    contato: str = field(default="", repr=False)
+    placa: str = field(default="", repr=False)
     veiculo_id: str = ""
     ordem_id: str = ""
     request_id_da_abertura: str = ""
-    link_de_decisao: str = ""
+    link_de_decisao: str = field(default="", repr=False)
     orcamento_id: str = ""
     pagamento_id: str = ""
     trace_id: str = ""
-    ultima_resposta: httpx.Response | None = None
-    respostas: list[httpx.Response] = field(default_factory=list)
+    ultima_resposta: httpx.Response | None = field(default=None, repr=False)
+    respostas: list[httpx.Response] = field(default_factory=list, repr=False)
     filas_mortas_antes: dict[str, int] = field(default_factory=dict)
     inicio: float = 0.0
 
