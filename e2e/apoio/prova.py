@@ -38,7 +38,7 @@ from e2e.apoio.modo_billing import NAMESPACE_BILLING
 from e2e.apoio.segredos import mascarar, registrar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterator, Mapping
 
     from e2e.apoio.evidencia import RegistroDoCenario
     from e2e.apoio.kube import Kubectl
@@ -85,6 +85,7 @@ class Prova:
         registro: RegistroDoCenario,
         esperar_status: Callable[[Api, Cenario, str], Json],
         descrever_estado: Callable[[Api, Cenario], str],
+        filas_mortas_antes: Mapping[str, int] | None = None,
         avisar: Callable[[str], None] = print,
         numeros: Iterator[int] | None = None,
         relogio: Callable[[], float] = time.monotonic,
@@ -99,6 +100,7 @@ class Prova:
         self.falhou = ""
         self._esperar_status = esperar_status
         self._descrever_estado = descrever_estado
+        self._mortas_antes = filas_mortas_antes
         self._avisar = avisar
         self._numeros = numeros if numeros is not None else itertools.count(1)
         self._relogio = relogio
@@ -266,6 +268,7 @@ class Prova:
                     lambda: mercadopago.buscar_por_referencia(self.cenario.pagamento_id)
                 )
         sinais.filas_mortas = diagnostico.coletar(self.kubectl.filas_mortas)
+        sinais.filas_mortas_antes = self._mortas_antes
         for nome, app, container in diagnostico.PROCESSOS_DO_BILLING:
             saida = diagnostico.coletar(
                 partial(
@@ -278,10 +281,22 @@ class Prova:
             sinais.logs[nome] = diagnostico.filtrar_log(saida or "")
         return diagnostico.montar(sinais)
 
-    def concluir(self) -> None:
-        """No fim do cenario: duracao, resultado e o que os servicos registraram."""
+    def concluir(self, desfecho: str | None) -> None:
+        """No fim do cenario: duracao, resultado e o que os servicos registraram.
+
+        ``desfecho`` e o que o pytest registrou para a chamada (``passed`` ou
+        ``failed``); ``None`` e o cenario que parou antes do fim (Ctrl-C).
+        """
         self.registro.duracao = self._relogio() - self.cenario.inicio
-        self.registro.resultado = "falhou" if self.falhou else "passou"
+        if self.falhou or desfecho == "failed":
+            self.registro.resultado = "falhou"
+        elif desfecho == "passed":
+            self.registro.resultado = "passou"
+        else:
+            self.registro.resultado = "interrompido"
+            self.registro.observacoes.append(
+                "a execução parou antes do fim deste cenário"
+            )
         self.registro.ordem_id = self.cenario.ordem_id
         if self.falhou:
             self.registro.observacoes.append(f"falhou no passo: {self.falhou}")

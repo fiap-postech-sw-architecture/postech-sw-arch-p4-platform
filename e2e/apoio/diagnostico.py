@@ -152,6 +152,7 @@ class Sinais:
     pagamento: Mapping[str, Any] | None = None
     mercadopago: list[PagamentoMp] | None = None
     filas_mortas: Mapping[str, int] | None = None
+    filas_mortas_antes: Mapping[str, int] | None = None
     logs: dict[str, list[LinhaDeLog]] = field(default_factory=dict)
 
 
@@ -253,10 +254,17 @@ def dicas(sinais: Sinais) -> list[str]:
             "pague com o cartão de teste (nome do titular APRO)."
         )
     mortas = (sinais.filas_mortas or {}).get("billing.comandos.dlq", 0)
-    if mortas:
+    antes = (sinais.filas_mortas_antes or {}).get("billing.comandos.dlq", 0)
+    if mortas > antes:
+        # Mensagem de uma execucao anterior nao e causa desta falha.
+        a_mais = (
+            ""
+            if sinais.filas_mortas_antes is None
+            else f" ({mortas - antes} a mais que no início do cenário)"
+        )
         achadas.append(
-            f"A fila billing.comandos.dlq tem {mortas} mensagem(ns): um comando da "
-            "saga foi recusado de vez. Veja o log do consumidor abaixo."
+            f"A fila billing.comandos.dlq tem {mortas} mensagem(ns){a_mais}: um "
+            "comando da saga foi recusado de vez. Veja o log do consumidor abaixo."
         )
     if not achadas:
         achadas.append(
@@ -296,6 +304,10 @@ def montar(sinais: Sinais) -> str:
             ]
     if sinais.filas_mortas is not None:
         linhas.append(f"Filas mortas: {dict(sinais.filas_mortas)}")
+        if sinais.filas_mortas_antes is not None:
+            linhas.append(
+                f"Filas mortas no início do cenário: {dict(sinais.filas_mortas_antes)}"
+            )
     for processo, registros in sinais.logs.items():
         linhas.append(f"Log do {processo} (últimas {LINHAS_DE_LOG} linhas, filtradas):")
         linhas += [f"  {registro.texto()}" for registro in registros] or [

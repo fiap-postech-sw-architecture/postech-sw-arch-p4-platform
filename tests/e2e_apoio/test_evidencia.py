@@ -13,6 +13,8 @@ from e2e.apoio import segredos
 from e2e.apoio.evidencia import (
     FRASE_DA_SANDBOX,
     FRASE_DO_ENSAIO,
+    FRASE_DO_ENSAIO_SEM_CONFIRMACAO,
+    FRASE_SEM_CONFIRMACAO,
     EvidenciaComSegredoError,
     RegistroDoCenario,
     gerar_resumo,
@@ -282,6 +284,7 @@ def _registro_completo() -> RegistroDoCenario:
     registro.mercadopago = {"id": "999", "status": "approved", "live_mode": False}
     registro.preferencia = {"id": "123-abc", "expires": True}
     registro.observacoes = ["a expiração não foi provada pela consulta"]
+    registro.billing = {"status": "CONFIRMADO"}
     return registro
 
 
@@ -316,6 +319,7 @@ def test_resumo_real_tem_a_frase_honesta_e_o_que_veio_do_mercado_pago() -> None:
 
 def test_resumo_do_ensaio_diz_que_nada_foi_ao_mercado_pago() -> None:
     registro = RegistroDoCenario(nome="Cenário", resultado="passou")
+    registro.billing = {"status": "ESTORNADO"}
 
     texto = gerar_resumo(
         [registro], modo="ensaio", contexto="kind-x", quando=QUANDO, prints=[]
@@ -328,6 +332,43 @@ def test_resumo_do_ensaio_diz_que_nada_foi_ao_mercado_pago() -> None:
     assert "FRASE_DA_SANDBOX" not in texto
     assert FRASE_DA_SANDBOX not in texto
     assert "| Cenário | passou | 0 | `-` | `-` | `-` |" in texto
+
+
+@pytest.mark.parametrize(
+    ("modo", "frase", "outra"),
+    [
+        ("real", FRASE_SEM_CONFIRMACAO, FRASE_DA_SANDBOX),
+        ("ensaio", FRASE_DO_ENSAIO_SEM_CONFIRMACAO, FRASE_DO_ENSAIO),
+    ],
+)
+@pytest.mark.parametrize(
+    "billing", [{}, {"status": "SOLICITADO"}, {"status": "CANCELADO"}]
+)
+def test_resumo_sem_pagamento_confirmado_nao_afirma_confirmacao(
+    modo: str, frase: str, outra: str, billing: dict[str, str]
+) -> None:
+    registro = RegistroDoCenario(nome="Cenário", resultado="falhou")
+    registro.billing = billing
+
+    texto = gerar_resumo(
+        [registro], modo=modo, contexto="kind-x", quando=QUANDO, prints=[]
+    )
+
+    assert f"> {frase}" in texto
+    assert outra not in texto
+    assert "nenhum pagamento foi confirmado nesta execução" in frase.lower()
+
+
+def test_resumo_basta_um_pagamento_confirmado_entre_os_cenarios() -> None:
+    sem = RegistroDoCenario(nome="A", resultado="falhou")
+    com = RegistroDoCenario(nome="B", resultado="passou")
+    com.billing = {"status": "ESTORNADO"}
+
+    texto = gerar_resumo(
+        [sem, com], modo="real", contexto="kind-x", quando=QUANDO, prints=[]
+    )
+
+    assert f"> {FRASE_DA_SANDBOX}" in texto
 
 
 # --- varredura -----------------------------------------------------------------------

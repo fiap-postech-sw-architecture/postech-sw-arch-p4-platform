@@ -449,6 +449,33 @@ def test_mensagem_na_dlq_do_billing_e_dica() -> None:
     assert any("billing.comandos.dlq tem 2 mensagem(ns)" in dica for dica in achadas)
 
 
+def test_dlq_com_mensagem_nova_diz_quantas_a_mais_que_no_inicio() -> None:
+    achadas = dicas(
+        _sinais(
+            filas_mortas={"billing.comandos.dlq": 3},
+            filas_mortas_antes={"billing.comandos.dlq": 1},
+        )
+    )
+
+    assert any(
+        "billing.comandos.dlq tem 3 mensagem(ns) (2 a mais que no início do cenário)"
+        in dica
+        for dica in achadas
+    )
+
+
+def test_dlq_que_ja_tinha_a_mensagem_antes_do_cenario_nao_e_dica() -> None:
+    achadas = dicas(
+        _sinais(
+            filas_mortas={"billing.comandos.dlq": 2},
+            filas_mortas_antes={"billing.comandos.dlq": 2},
+        )
+    )
+
+    assert len(achadas) == 1
+    assert "Sem causa óbvia nos logs" in achadas[0]
+
+
 def test_dlq_vazia_ou_de_outro_servico_nao_e_dica() -> None:
     achadas = dicas(
         _sinais(filas_mortas={"billing.comandos.dlq": 0, "os.eventos.dlq": 4})
@@ -516,6 +543,18 @@ def test_diagnostico_completo_no_modo_real() -> None:
     assert "Mercado Pago: POST /checkout/preferences respondeu 400" in texto
     assert "Dica provável:" in texto
     assert "pref_id" not in texto, "o link do checkout nunca entra no diagnostico"
+
+
+def test_diagnostico_mostra_as_filas_mortas_do_inicio_do_cenario() -> None:
+    texto = montar(
+        _sinais(
+            filas_mortas={"billing.comandos.dlq": 2},
+            filas_mortas_antes={"billing.comandos.dlq": 1},
+        )
+    )
+
+    assert "Filas mortas: {'billing.comandos.dlq': 2}" in texto
+    assert "Filas mortas no início do cenário: {'billing.comandos.dlq': 1}" in texto
 
 
 def test_diagnostico_sem_nenhuma_leitura_diz_que_nao_leu() -> None:

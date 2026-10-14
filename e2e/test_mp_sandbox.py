@@ -18,6 +18,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from e2e import test_saga as saga
 from e2e.ambiente import RELATORIOS
+from e2e.apoio.diagnostico import coletar
 from e2e.apoio.evidencia import RegistroDoCenario, gravar_evidencia
 from e2e.apoio.modo_billing import ModoDoBilling
 from e2e.apoio.prova import PRINTS, PRINTS_DO_ENSAIO, Prova
@@ -136,11 +137,13 @@ def prova(
         registro=registro,
         esperar_status=saga.esperar_status,
         descrever_estado=saga.descrever_estado,
+        filas_mortas_antes=coletar(kubectl.filas_mortas),
         avisar=anunciar,
         numeros=_NUMEROS_DO_PAGAMENTO,
     )
     yield atual
-    atual.concluir()
+    relatorio = getattr(request.node, "rep_call", None)  # None: parou antes do fim
+    atual.concluir(None if relatorio is None else relatorio.outcome)
 
 
 @given("que o Billing está no modo de pagamento desta execução")

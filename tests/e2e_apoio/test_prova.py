@@ -142,6 +142,7 @@ def _prova(
     executor: ExecutorFalso | None = None,
     numeros: Any = None,
     descrever: Callable[[Api, Cenario], str] | None = None,
+    filas_mortas_antes: dict[str, int] | None = None,
 ) -> tuple[Prova, list[str], list[str]]:
     avisos: list[str] = []
     esperas: list[str] = []
@@ -165,6 +166,7 @@ def _prova(
         esperar_status=esperar_status,
         descrever_estado=descrever
         or (lambda _api, _cenario: "OS o-1: status=x etapa=y"),
+        filas_mortas_antes=filas_mortas_antes,
         avisar=avisos.append,
         numeros=numeros,
         relogio=relogio,
@@ -517,6 +519,40 @@ def _executor_do_cluster(**logs: str) -> ExecutorFalso:
     return ExecutorFalso(respostas)
 
 
+@pytest.mark.parametrize(
+    ("antes", "esperado", "ausente"),
+    [
+        (
+            {"billing.comandos.dlq": 0},
+            "billing.comandos.dlq tem 1 mensagem(ns) (1 a mais que no início",
+            "",
+        ),
+        (
+            {"billing.comandos.dlq": 1},
+            "Filas mortas no início do cenário: {'billing.comandos.dlq': 1",
+            "billing.comandos.dlq tem 1 mensagem(ns)",
+        ),
+    ],
+    ids=["mensagem-nova", "mensagem-de-antes"],
+)
+def test_diagnostico_compara_as_filas_mortas_com_o_inicio_do_cenario(
+    relogio: Relogio, antes: dict[str, int], esperado: str, ausente: str
+) -> None:
+    prova, avisos, _ = _prova(
+        Mundo(),
+        relogio,
+        real=False,
+        executor=_executor_do_cluster(),
+        filas_mortas_antes=antes,
+    )
+
+    prova.falha_no_passo("Então o Billing confirma o pagamento", AssertionError("x"))
+
+    assert esperado in avisos[0]
+    if ausente:
+        assert ausente not in avisos[0]
+
+
 def test_falha_no_passo_imprime_o_diagnostico_e_marca_a_falha(relogio: Relogio) -> None:
     mundo = Mundo()
     mundo.billing = _pagamento_billing()
@@ -661,7 +697,7 @@ def test_concluir_guarda_duracao_resultado_e_o_que_os_servicos_registraram(
     prova.cenario.pagamento_id = "p-1"
     relogio.dormir(61.4)
 
-    prova.concluir()
+    prova.concluir("passed")
 
     registro = prova.registro
     assert registro.duracao == pytest.approx(61.4)
@@ -682,12 +718,34 @@ def test_concluir_de_cenario_que_falhou_diz_em_que_passo(relogio: Relogio) -> No
     prova, _, _ = _prova(Mundo(), relogio, real=False)
     prova.falhou = "Então o Billing confirma o pagamento"
 
-    prova.concluir()
+    prova.concluir("failed")
 
     assert prova.registro.resultado == "falhou"
     assert prova.registro.observacoes == [
         "falhou no passo: Então o Billing confirma o pagamento"
     ]
+
+
+def test_concluir_de_falha_fora_de_passo_tambem_diz_que_falhou(
+    relogio: Relogio,
+) -> None:
+    prova, _, _ = _prova(Mundo(), relogio, real=False)
+
+    prova.concluir("failed")
+
+    assert prova.registro.resultado == "falhou"
+    assert prova.registro.observacoes == []
+
+
+def test_concluir_de_cenario_interrompido_nao_diz_que_passou(
+    relogio: Relogio,
+) -> None:
+    prova, _, _ = _prova(Mundo(), relogio, real=True)
+
+    prova.concluir(None)
+
+    assert prova.registro.resultado == "interrompido"
+    assert prova.registro.observacoes == ["a execução parou antes do fim deste cenário"]
 
 
 def test_concluir_sem_ordem_nao_consulta_nada(relogio: Relogio) -> None:
@@ -696,7 +754,7 @@ def test_concluir_sem_ordem_nao_consulta_nada(relogio: Relogio) -> None:
     prova.cenario.ordem_id = ""
     prova.api.os = None  # type: ignore[assignment]  # qualquer consulta quebraria
 
-    prova.concluir()
+    prova.concluir("passed")
 
     assert prova.registro.resultado == "passou"
     assert prova.registro.ordem_id == ""
@@ -708,7 +766,7 @@ def test_concluir_sem_pagamento_ainda_guarda_a_saga(relogio: Relogio) -> None:
     prova, _, _ = _prova(mundo, relogio, real=False)
     prova.api.billing = None  # type: ignore[assignment]  # sem pagamento_id, nao deve ser chamado
 
-    prova.concluir()
+    prova.concluir("passed")
 
     assert prova.registro.billing == {"notificacoes": []}
     assert prova.registro.saga["etapa"] == "compensada"
@@ -730,7 +788,7 @@ def test_concluir_com_os_servicos_fora_do_ar_nao_levanta(relogio: Relogio) -> No
         ),
     )
 
-    prova.concluir()
+    prova.concluir("passed")
 
     assert prova.registro.saga == {"passos": []}
     assert prova.registro.transicoes == []

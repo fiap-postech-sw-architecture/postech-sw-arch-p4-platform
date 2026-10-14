@@ -49,7 +49,7 @@ from e2e.apoio.segredos import mascarar
 from e2e.servicos import Api, Cenario
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Generator, Iterator
 
     from _pytest.fixtures import FixtureRequest
     from pytest_bdd.parser import Feature, Scenario, Step
@@ -201,6 +201,16 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
             item.add_marker(
                 pytest.mark.skip(reason="E2E_MP_MODO definido: so o sandbox roda")
             )
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(
+    item: pytest.Item,
+) -> Generator[None, pytest.TestReport, pytest.TestReport]:
+    """Guarda o relatorio de cada fase no item: a fixture ``prova`` le o da chamada."""
+    relatorio = yield
+    setattr(item, f"rep_{relatorio.when}", relatorio)
+    return relatorio
 
 
 def pytest_bdd_step_error(

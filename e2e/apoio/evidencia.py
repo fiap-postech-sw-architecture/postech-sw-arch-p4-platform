@@ -69,6 +69,21 @@ FRASE_DO_ENSAIO: Final = (
     "ao Mercado Pago. Este arquivo prova o fluxo, o formato da evidência e o "
     "desfazer; a integração real só é provada por `make mp-sandbox`."
 )
+# Execução em que nenhum pagamento chegou a ser confirmado: o resumo não afirma
+# uma confirmação que não houve.
+FRASE_SEM_CONFIRMACAO: Final = (
+    "Nenhum pagamento foi confirmado nesta execução. A sandbox do Mercado Pago "
+    "não envia webhook (notificação) para pagamento de teste: quando o pagamento "
+    "é confirmado, a confirmação vem da conciliação do processo `prazos` do "
+    "Billing, que consulta `GET /v1/payments/search?external_reference=` a cada "
+    "30 s, e não de um webhook."
+)
+FRASE_DO_ENSAIO_SEM_CONFIRMACAO: Final = (
+    "ENSAIO: nenhum pagamento foi confirmado nesta execução, e nada foi enviado "
+    "ao Mercado Pago. A integração real só é provada por `make mp-sandbox`."
+)
+# Estados do pagamento no Billing que só existem depois de uma confirmação.
+CONFIRMADOS: Final = frozenset({"CONFIRMADO", "ESTORNADO"})
 _PADROES_DA_VARREDURA: Final = {
     "Bearer": re.compile(r"Bearer\s+\S+", re.IGNORECASE),
     "token do Mercado Pago": re.compile(r"(?:TEST|APP_USR)-[A-Za-z0-9_-]{8,}"),
@@ -229,6 +244,13 @@ def _secao(registro: RegistroDoCenario, *, real: bool) -> list[str]:
     return [*linhas, ""]
 
 
+def _frase(*, real: bool, confirmou: bool) -> str:
+    """A frase honesta do cabeçalho: diz como o pagamento foi confirmado, se foi."""
+    if real:
+        return FRASE_DA_SANDBOX if confirmou else FRASE_SEM_CONFIRMACAO
+    return FRASE_DO_ENSAIO if confirmou else FRASE_DO_ENSAIO_SEM_CONFIRMACAO
+
+
 def gerar_resumo(
     registros: Iterable[RegistroDoCenario],
     *,
@@ -240,6 +262,7 @@ def gerar_resumo(
     """O ``resumo.md``: modo, a frase honesta, os cenarios e os prints a tirar."""
     real = modo == "real"
     lista = list(registros)
+    confirmou = any(r.billing.get("status") in CONFIRMADOS for r in lista)
     descricao_do_modo = (
         "real (credenciais de teste do Mercado Pago)"
         if real
@@ -252,7 +275,7 @@ def gerar_resumo(
         f"- Data: {quando.astimezone(UTC):%Y-%m-%d %H:%M} UTC",
         f"- Cluster: `{contexto}`",
         "",
-        f"> {FRASE_DA_SANDBOX if real else FRASE_DO_ENSAIO}",
+        f"> {_frase(real=real, confirmou=confirmou)}",
         "",
         (
             "| Cenário | Resultado | Duração (s) | `ordem_id` | `pagamento_id` "

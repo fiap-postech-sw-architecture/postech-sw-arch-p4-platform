@@ -758,13 +758,13 @@ O terminal imprime o link do checkout e o que fazer: abrir uma **janela anônima
 
 | Arquivo | Conteúdo |
 |---|---|
-| `resumo.md` | Modo, data, cenário, resultado, duração, `ordem_id`, `pagamento_id`, id do pagamento no Mercado Pago, as transições com a hora que o serviço registrou (histórico da OS, passos da saga e datas do pagamento), o que veio do Mercado Pago, a frase de que a confirmação veio da conciliação, e os prints que você tira |
+| `resumo.md` | Modo, data, cenário, resultado (`passou`, `falhou` ou `interrompido`, se você deu `Ctrl-C`), duração, `ordem_id`, `pagamento_id`, id do pagamento no Mercado Pago, as transições com a hora que o serviço registrou (histórico da OS, passos da saga e datas do pagamento), o que veio do Mercado Pago, a frase de que a confirmação veio da conciliação, e os prints que você tira |
 | `evidencia.json` | O mesmo em JSON, sanitizado |
 | `relatorio-e2e.md`, `junit.xml`, `cucumber.json`, `cenarios.json` | O relatório do E2E, como em `reports/e2e`. O `junit.xml` traz o nome da máquina: na evidência da entrega, anexe o `resumo.md` |
 
 A sanitização é por **lista de campos permitidos**. Do Mercado Pago entram só `id`, `status`, `transaction_amount`, `currency_id`, `date_approved`, `external_reference` e `live_mode` (nunca e-mail, nome, documento ou cartão do pagador). Do Billing, o pagamento sem o `checkout_url`; da saga, a etapa, o motivo e o rastro de cada passo. Antes de gravar, todo texto é varrido atrás do token, da assinatura, de qualquer segredo que o E2E registrou, de `Bearer`, de `TEST-`/`APP_USR-` e de padrão de e-mail; se achar, o script recusa gravar e diz o arquivo e a linha (sem repetir o valor). Depois do pytest, `python -m e2e.varredura` varre a pasta toda e apaga o arquivo em que achar algo.
 
-Quando uma afirmação falha ou o prazo estoura, o terminal mostra, mascarado, o estado da OS e da saga, o pagamento no Billing, os pagamentos que o Mercado Pago tem para aquele `external_reference`, as filas mortas, as últimas 40 linhas do log da `api`, do `consumidor` e do `prazos` (só as que importam, e só os campos `erro`, `codigo`, `resultado`, `operacao` e o status HTTP de cada chamada ao Mercado Pago que o Billing registra) e a causa provável.
+Quando uma afirmação falha ou o prazo estoura, o terminal mostra, mascarado, o estado da OS e da saga, o pagamento no Billing, os pagamentos que o Mercado Pago tem para aquele `external_reference`, as filas mortas (e quantas a mais que no início do cenário: mensagem de uma execução anterior não vira causa), as últimas 40 linhas do log da `api`, do `consumidor` e do `prazos` (só as que importam, e só os campos `erro`, `codigo`, `resultado`, `operacao` e o status HTTP de cada chamada ao Mercado Pago que o Billing registra) e a causa provável.
 
 ### Segurança
 
