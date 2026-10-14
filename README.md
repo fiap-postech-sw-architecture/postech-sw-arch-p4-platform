@@ -732,7 +732,7 @@ Se um ensaio foi interrompido ou reprovado, apague o cluster e suba outro (`make
 Para o modo real você precisa de quatro coisas do painel do Mercado Pago (os nomes dos menus vêm da documentação consultada em 14/10/2026; se o painel estiver diferente, siga o que ele mostrar):
 
 1. uma aplicação do tipo Checkout Pro, em [Mercado Pago Developers](https://www.mercadopago.com.br/developers/panel/app), Suas integrações;
-2. duas contas de teste do mesmo país, uma Vendedor e outra Comprador, na página da aplicação, Contas de teste (anote usuário e senha de cada uma; elas não podem ser apagadas);
+2. duas contas de teste do Brasil (o Billing cobra em BRL, e o checkout de outro país não paga nessa moeda), uma Vendedor e outra Comprador, na página da aplicação, Contas de teste (anote usuário e senha de cada uma; elas não podem ser apagadas);
 3. o Access Token de teste, em Suas integrações, Dados da integração, Testes, Credenciais de teste (entre com a sua conta real para ver essa tela; o prefixo pode ser `TEST-` ou `APP_USR-`);
 4. a assinatura secreta do webhook, em Webhooks, Configurar notificações: em Modo produtivo, informe uma URL HTTPS pública qualquer (por exemplo `https://example.com/api/v1/webhooks/mercadopago`), marque o evento Pagamentos e salve; a chave aparece depois de salvar. A sandbox não envia webhook, então a URL só precisa ser pública.
 
@@ -748,6 +748,22 @@ unset MP_ACCESS_TOKEN MP_WEBHOOK_SECRET
 O `make` recusa as duas se vierem na linha de comando (`make mp-sandbox MP_ACCESS_TOKEN=...`): o valor ficaria no `ps` e no histórico do shell.
 
 O terminal imprime o link do checkout e o que fazer: abrir uma **janela anônima**, entrar no Mercado Pago só com o usuário Comprador de teste (nunca a sua conta real) e pagar com o cartão de teste da documentação (nome do titular `APRO` aprova; `OTHE`, `FUND` e `SECU` recusam). O script espera até 15 min por pagamento, consulta o Billing a cada 5 s, mostra a contagem regressiva a cada 30 s e avisa cada tentativa recusada (o pagamento encerra na recusa de número `PAGAMENTO_MAX_RECUSAS`, 3 no `kind`). São dois pagamentos seus, nos dois primeiros cenários.
+
+O quadro com o link diz o site dele (`www.mercadopago.com.br`) antes de a espera começar. Se a página mostrar erro de conta (usuário errado, conta real logada, país diferente), dê **um** `Ctrl-C`: o script desfaz o modo real, e você não espera os 15 min para ouvir "O Mercado Pago não recebeu nenhum pagamento deste link. Você pagou?".
+
+O `make mp-sandbox` leva cerca de 2 min de máquina (a criação da cobrança, a conciliação de cada pagamento, que o `prazos` faz a cada 30 s, e os rollouts do modo real e do desfazer), mais o tempo de você pagar duas vezes no navegador. Quando tudo passa, o fim do terminal é este (os tempos mudam):
+
+```text
+[mp-sandbox] Billing: desfazendo o modo real em 3 passos (Secret, variáveis e reinício). Não feche o terminal e não use kill -9.
+[mp-sandbox] 1/3 apagando o Secret
+[mp-sandbox] 2/3 tirando MP_MODE, SIMULADOR_PERMITIDO e MP_NOTIFICATION_URL dos Deployments
+[mp-sandbox] 3/3 reiniciando os Deployments
+[mp-sandbox] Billing de volta ao simulador
+3 passed, 13 deselected in 114.44s (0:01:54)
+varredura de reports/mp-sandbox: nenhum segredo
+```
+
+E a evidência fica em `reports/mp-sandbox/resumo.md`.
 
 | Variável | Para quê | Padrão |
 |---|---|---|
@@ -787,7 +803,9 @@ A sanitização é por **lista de campos permitidos**. Do Mercado Pago entram s�
 
 Os prints que o terminal pede são do checkout, do pagamento aprovado e do painel do vendedor de teste. Cubra e-mail, nome, User ID e CPF das contas de teste, e nunca mostre a tela de Credenciais nem a de Webhooks. Antes de commitar a evidência, rode `python -m e2e.varredura <pasta>` e `gitleaks dir <pasta>`.
 
-Quando uma afirmação falha ou o prazo estoura, o terminal mostra, mascarado, o estado da OS e da saga, o pagamento no Billing, os pagamentos que o Mercado Pago tem para aquele `external_reference`, as filas mortas (e quantas a mais que no início do cenário: mensagem de uma execução anterior não vira causa), as últimas 40 linhas do log da `api`, do `consumidor` e do `prazos` (só as que importam, e só os campos `erro`, `codigo`, `resultado`, `operacao` e o status HTTP de cada chamada ao Mercado Pago que o Billing registra; quando o Billing registra a recusa, o evento `mercadopago_request_rejected` entra com a operação, o HTTP e os códigos `erro_do_mp` e `causas`, nunca o texto do Mercado Pago) e a causa provável, que diz qual chamada foi recusada mesmo se o evento vier só com a operação e o HTTP. Se a fila morta do Billing cresce durante um cenário, o script reprova na hora, sem esperar o prazo: o Billing recusou de vez um comando da saga.
+Quando uma afirmação falha ou o prazo estoura, o terminal mostra, mascarado, o estado da OS e da saga, o pagamento no Billing, os pagamentos que o Mercado Pago tem para aquele `external_reference` (cada um com o `live_mode`), as filas mortas (e quantas a mais que no início do cenário: mensagem de uma execução anterior não vira causa), as últimas 40 linhas do log da `api`, do `consumidor` e do `prazos` e a causa provável. Das linhas do log só passam as que importam (aviso ou erro, resposta 4xx ou 5xx, `resultado` fora da rotina e o evento `mercadopago_request_rejected`), e delas só os 16 campos de `CAMPOS_DO_LOG`, em `e2e/apoio/diagnostico.py` (tipo, comando, resultado, tentativa, erro, código, motivo, operação, status, caminho, id do pagamento, referência, mensagem, causa, `status_http` e `causas`), cada um cortado em 160 caracteres e mascarado. O script não filtra o conteúdo desses campos: que o texto livre do Mercado Pago (`message`, `description`) não apareça é garantia do Billing da `main`, que não o registra. O evento de recusa traz sempre a operação e o HTTP, e traz o `error` do Mercado Pago (`erro_do_mp`, só se casar com `[a-z_]{1,40}`) e os códigos de `causas` (só se casarem com `[A-Za-z0-9_.-]{1,40}`) quando passam pelo filtro do Billing. A causa provável diz qual chamada foi recusada mesmo se o evento vier só com a operação e o HTTP, e a falha por divergência com o Mercado Pago (por exemplo, `live_mode` verdadeiro) vem com a dica de conferir primeiro no painel do Vendedor de teste.
+
+Nas esperas da cobrança aberta e do pagamento, se a fila morta do Billing cresce o script reprova na hora, sem esperar o prazo: o Billing recusou de vez um comando da saga (isso só vale se a foto inicial das filas foi lida). Nos outros passos vale o prazo do passo (30 a 60 s), e o diagnóstico mostra a fila. O estorno que o Mercado Pago recusa nem passa pela fila morta: a saga vai a `falha_na_compensacao`, e o diagnóstico mostra a etapa e a falha.
 
 ### Segurança
 
@@ -810,7 +828,7 @@ As recusas da conferência prévia começam com `[mp-sandbox] não posso seguir:
 | `serviços fora do ar pela borda` ou `o kubectl não conseguiu ler o cluster` | Cluster ou serviços fora do ar, ou `KUBE_CONTEXT` errado | Suba o cluster e os três serviços ("Como rodar") e confira o `KUBE_CONTEXT` |
 | `o Billing está com os prazos do E2E (kind-ci)` | Cluster subido com `OVERLAY=kind-ci`, que é o do `make e2e` e do `make demo` | `make kind-down` e suba de novo no overlay `kind` (`make kind-up deploy` e o `implantar-servicos.sh` de "Como rodar"); trocar de overlay no mesmo cluster não desfaz o anterior |
 | `E2E_MP_MODO=... está no seu shell` (no `make e2e` ou no `make demo`) | A variável ficou definida no shell | `unset E2E_MP_MODO` |
-| O Mercado Pago recusou criar a cobrança (`POST /checkout/preferences` com 4xx) | Um dado da cobrança (valor, moeda, itens) ou a `notification_url`; o terminal diz o HTTP e os códigos que o Billing registrou, e qual URL foi usada | Procure os códigos na documentação do Mercado Pago e confira o valor e os itens; se suspeitar da URL, use outra URL https pública, por exemplo `https://example.org/api/v1/webhooks/mercadopago`: `E2E_MP_NOTIFICATION_URL=https://example.org/api/v1/webhooks/mercadopago make mp-sandbox` (junto das duas credenciais) ou, com o modo real mantido, `kubectl --context kind-pytstop-p4 -n pytstop-billing set env deployment --all MP_NOTIFICATION_URL=https://example.org/api/v1/webhooks/mercadopago` |
+| O Mercado Pago recusou criar a cobrança (`POST /checkout/preferences` com 4xx) | Um dado da cobrança (valor, moeda, itens) ou a `notification_url`; o terminal diz o HTTP e os códigos que o Billing registrou, e qual URL foi usada | Procure os códigos na documentação do Mercado Pago e confira o valor e os itens. Para ver a linha inteira do log do Billing (a operação, o HTTP, o `error` e os códigos que ele deixou passar; o texto do Mercado Pago ele nunca registra): `kubectl --context kind-pytstop-p4 -n pytstop-billing logs deploy/billing-service-consumidor --tail=200 \| grep mercadopago_request_rejected`. Se suspeitar da URL, use outra URL https pública, por exemplo `https://example.org/api/v1/webhooks/mercadopago`: `E2E_MP_NOTIFICATION_URL=https://example.org/api/v1/webhooks/mercadopago make mp-sandbox` (junto das duas credenciais) ou, com o modo real mantido, `kubectl --context kind-pytstop-p4 -n pytstop-billing set env deployment --all MP_NOTIFICATION_URL=https://example.org/api/v1/webhooks/mercadopago` |
 | O Mercado Pago recusou o pagamento | Nome do titular diferente de `APRO`, cartão errado, janela comum ou conta real logada | Janela anônima e só o usuário Comprador de teste; o cartão está no terminal |
 | O painel do Mercado Pago pede código de verificação | A conta de teste é fictícia, sem e-mail de verdade | O código da tabela de contas de teste (coluna "Código de verificação") ou os 6 últimos dígitos do User ID da conta; o terminal lembra |
 | O pagamento não confirma em 2 min | Conciliação parada | `kubectl --context kind-pytstop-p4 -n pytstop-billing logs deploy/billing-service-prazos` (a linha `deadlines_started` diz `conciliacao: true`) |
