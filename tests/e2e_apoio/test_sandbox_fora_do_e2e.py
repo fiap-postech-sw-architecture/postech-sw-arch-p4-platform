@@ -139,14 +139,33 @@ def test_make_do_sandbox_recusa_contexto_que_nao_e_kind_e_nao_tem_escape() -> No
         assert "uv run" not in resultado.stdout.replace("echo", "")
 
 
-def test_o_real_guarda_a_evidencia_anterior_e_o_ensaio_nao_toca_nela() -> None:
+def test_o_real_gira_so_a_pasta_com_resumo_e_o_ensaio_nao_toca_nela() -> None:
     real = _make("mp-sandbox")
     ensaio = _make("mp-sandbox-ensaio")
 
-    assert "mv reports/mp-sandbox reports/mp-sandbox.anterior" in real
+    assert "if [ -f reports/mp-sandbox/resumo.md ]; then" in real
+    assert 'mv reports/mp-sandbox "reports/mp-sandbox.$(date +%Y%m%d-%H%M%S)"' in real
+    assert "reports/mp-sandbox.anterior" not in real, "nada anterior e apagado"
     assert "rm -rf reports/mp-sandbox-ensaio" in ensaio
     assert "rm -rf reports/mp-sandbox " not in ensaio
-    assert "reports/mp-sandbox.anterior" not in ensaio
+    assert "mv reports/mp-sandbox" not in ensaio
+
+
+@pytest.mark.parametrize(
+    ("alvo", "modo", "mexe_nos_relatorios"),
+    [
+        ("mp-sandbox", "real", "if [ -f reports/mp-sandbox/resumo.md ]"),
+        ("mp-sandbox-ensaio", "ensaio", "rm -rf reports/mp-sandbox-ensaio"),
+    ],
+)
+def test_a_conferencia_vem_antes_de_tocar_nos_relatorios_e_do_pytest(
+    alvo: str, modo: str, mexe_nos_relatorios: str
+) -> None:
+    comandos = _make(alvo)
+
+    conferencia = comandos.index(f"python -m e2e.conferir_sandbox {modo}")
+    assert conferencia < comandos.index(mexe_nos_relatorios)
+    assert conferencia < comandos.index("pytest -c e2e/pytest.ini")
 
 
 def _make_com(*argumentos: str, **ambiente: str) -> subprocess.CompletedProcess[str]:

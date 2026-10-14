@@ -262,10 +262,19 @@ endif
 
 GUARDA_DE_KIND := case "$(KUBE_CONTEXT)" in kind-*) ;; *) \
 	echo "contexto $(KUBE_CONTEXT) nao e um kind: o sandbox grava o Access Token num Secret do cluster, e o escape do E2E nao vale aqui" >&2; exit 2;; esac
+# A conferencia roda ANTES do pytest e da pasta de relatorios: se reprova (cluster fora do
+# ar, credencial esquecida), le-se so a mensagem, e a evidencia de uma execucao boa fica.
+CONFERIR_SANDBOX := KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e python -m e2e.conferir_sandbox
+# Uma execucao boa (com resumo.md) vai para uma pasta com data e hora, e nada anterior e
+# apagado. O que sobrou de uma execucao que nao chegou a escrever o resumo.md vai embora.
+GIRAR_EVIDENCIA := if [ -f reports/mp-sandbox/resumo.md ]; then \
+	mv reports/mp-sandbox "reports/mp-sandbox.$$(date +%Y%m%d-%H%M%S)"; \
+	else rm -rf reports/mp-sandbox; fi
 
 mp-sandbox: ## Mercado Pago na sandbox (modo real): cria a OS, imprime o link, espera voce pagar, estorna e desfaz (reports/mp-sandbox)
 	$(GUARDA_DE_KIND)
-	if [ -d reports/mp-sandbox ]; then rm -rf reports/mp-sandbox.anterior && mv reports/mp-sandbox reports/mp-sandbox.anterior; fi
+	$(CONFERIR_SANDBOX) real
+	$(GIRAR_EVIDENCIA)
 	mkdir -p reports/mp-sandbox
 	set -uo pipefail; \
 	E2E_MP_MODO=real E2E_NARRAR=1 E2E_RELATORIOS=reports/mp-sandbox KUBE_CONTEXT=$(KUBE_CONTEXT) \
@@ -278,6 +287,7 @@ mp-sandbox: ## Mercado Pago na sandbox (modo real): cria a OS, imprime o link, e
 
 mp-sandbox-ensaio: ## ensaio do mp-sandbox sem credencial: o simulador do Billing paga no seu lugar (reports/mp-sandbox-ensaio)
 	$(GUARDA_DE_KIND)
+	$(CONFERIR_SANDBOX) ensaio
 	rm -rf reports/mp-sandbox-ensaio && mkdir -p reports/mp-sandbox-ensaio
 	set -uo pipefail; \
 	E2E_MP_MODO=ensaio E2E_NARRAR=1 E2E_RELATORIOS=reports/mp-sandbox-ensaio KUBE_CONTEXT=$(KUBE_CONTEXT) \

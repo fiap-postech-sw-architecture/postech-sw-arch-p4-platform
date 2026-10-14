@@ -477,7 +477,7 @@ def test_servico_fora_do_ar_reprova_dizendo_qual(
         )
 
     assert trecho in str(erro.value)
-    assert "Subir a plataforma" in str(erro.value)
+    assert 'README, "Mercado Pago na sandbox", "Como rodar"' in str(erro.value)
 
 
 def test_servico_que_demora_a_responder_e_esperado_ate_o_prazo(

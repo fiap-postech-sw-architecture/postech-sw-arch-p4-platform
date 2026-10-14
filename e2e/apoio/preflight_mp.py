@@ -248,9 +248,10 @@ def conferir_overlay_kind(kubectl: Kubectl) -> int:
         msg = (
             "o Billing está com os prazos do E2E (kind-ci): "
             + "; ".join(problemas)
-            + ". Use o overlay kind: make kind-up deploy e make kind-deploy em "
-            "cada serviço, num cluster novo (trocar de overlay no mesmo cluster "
-            "não desfaz o anterior)."
+            + ". Apague o cluster (make kind-down) e suba de novo no overlay kind: "
+            "make kind-up deploy e os três serviços (README, "
+            '"Mercado Pago na sandbox", "Como rodar"). Trocar de overlay no mesmo '
+            "cluster não desfaz o anterior."
         )
         raise PreflightDoSandboxError(msg)
     return int(recusas or 0)
@@ -296,7 +297,8 @@ def conferir_servicos(
         msg = (
             "serviços fora do ar pela borda: "
             + "; ".join(problemas)
-            + '. Suba o cluster e os três serviços (README, "Subir a plataforma").'
+            + '. Suba o cluster e os três serviços (README, "Mercado Pago na sandbox", '
+            '"Como rodar").'
         )
         raise PreflightDoSandboxError(msg) from None
 
