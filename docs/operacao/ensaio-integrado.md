@@ -230,7 +230,7 @@ Dentro do `implantar-servicos.sh` da primeira execução (1 min 27 s):
 - os Jobs, medidos na segunda execução (saída colada do terminal, em [Provas avulsas](ensaio-integrado-medidas.md#provas-avulsas)), duraram 12 s (`execucao-migracao`), 28 s (`os-migracao`) e 36 s (`billing-inicializacao`, que também inicia o replica set);
 - os Deployments esperam o Job pelo `aguarda-migracao` (OS e Execução) e pelo `aguarda-banco` (Billing).
 
-Para comparar, o [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) mediu no runner, só com a plataforma, 39 a 46 s de `kind-up`, 50 a 54 s de deploy e 1 min 40 s a 1 min 47 s de smoke; aqui foram 26 s, 1 min 34 s e 1 min 46 s. O deploy local ficou mais lento que o do runner porque a máquina dividia o Docker com outros containers.
+Para comparar, o [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) mediu no runner, só com a plataforma, 39 a 46 s de `kind-up`, 50 a 54 s de deploy e 1 min 40 s a 1 min 47 s de smoke; aqui foram 26 s, 1 min 34 s e 1 min 46 s. O deploy local ficou mais lento que o do runner, provavelmente porque a máquina dividia o Docker com outros containers (não foi medido).
 
 ## Memória e CPU
 
@@ -293,7 +293,7 @@ Memória: o maior valor do `kubectl top` entre as amostras das duas execuções 
 
 O `kubectl top` arredonda cada linha, então o total do pod pode diferir em 1 MiB da soma dos containers (`os-postgres-0`: 37 + 6, e 44 no pod).
 
-O pico de CPU do RabbitMQ (237m) é do `make smoke` da plataforma, que apaga o pod do broker e o vê subir de novo; o pico do MongoDB (71m) e dos Jobs vem do arranque. Nenhuma API passou de 67m e nenhum processo de 40m, contra limits de 500m e 250m; o MongoDB chegou a 71m e o PostgreSQL a 44m (limits de 500m).
+O pico de CPU do RabbitMQ (237m) provavelmente é do `make smoke` da plataforma, que apaga o pod do broker e o vê subir de novo, e o do MongoDB (71m), do arranque; o laço de amostragem não separa as etapas. Nenhuma API passou de 67m e nenhum processo de 40m, contra limits de 500m e 250m; o MongoDB chegou a 71m e o PostgreSQL a 44m (limits de 500m).
 
 ### Contra o orçamento do ADR-042
 
@@ -310,7 +310,12 @@ O orçamento do ADR-042 é só de memória, com requests e limits por componente
 | Plataforma no `kind-ci`, somada | 1.088 Mi / 3.072 Mi (+ 200 Mi do metrics-server) | 543 MiB em repouso (Kong 306, RabbitMQ 129 a 201, Prometheus 83) | sim |
 | Nó inteiro: serviços e plataforma | 3,3 GiB de requests e 8,4 GiB de limits com 7 processos (o ADR estima 3,4/8,7 GiB e conta 8 processos) | 3,1 GiB de working set, com control plane e metrics-server | sim, com 6% a 9% de folga na conta uso do nó contra requests; o que sustenta a conclusão são os pods (962 MiB contra 2.272 Mi) e os 16 GB do runner |
 
-CPU: o ADR-042 não orça CPU. Os valores da tabela de pods são os requests e limits dos manifests dos serviços: 50m/250m por processo, 100m/500m por API e 110m/600m por banco com o exporter. Os requests somados são 980m nos serviços e 395m na plataforma do `kind-ci` (1,4 CPU), mais cerca de 1 CPU do control plane; o nó usou 0,3 CPU em repouso. Dos requests de cada pod de serviço, o uso em repouso foi de 3% a 12%, exceto o MongoDB, com 42% (46m de 110m). Nas amostras de 5 s, o pico foi de 16% a 80% nos processos, 35% a 67% nas APIs e 14% a 65% nos bancos, e de no máximo 16% dos limits.
+CPU: o ADR-042 não orça CPU.
+
+- Os valores da tabela de pods são os requests e limits dos manifests dos serviços: 50m/250m por processo, 100m/500m por API e 110m/600m por banco com o exporter.
+- Os requests somados são 980m nos serviços e 395m na plataforma do `kind-ci` (1,4 CPU), mais cerca de 1 CPU do control plane; o nó usou 0,3 CPU em repouso.
+- Em repouso, o uso de cada pod de serviço foi de 3% a 12% dos requests de CPU, exceto o MongoDB, com 42% (46m de 110m).
+- Nas amostras de 5 s, o pico foi de 16% a 80% dos requests de CPU nos processos, 35% a 67% nas APIs e 14% a 65% nos bancos; contra os limits, no máximo 16%.
 
 ## Medida adicional: `prazos` e `notificador` do OS Service
 
@@ -323,7 +328,7 @@ Cada branch foi implantada, sozinha, sobre o cluster `kind-ci` do ensaio, com a 
 | `os-service-notificador` | `feat/notificacao-e-lgpd` | `8eec08f` | `b310889` (#9) | 63 MiB | 4m | 50m/250m, 128/256 Mi | 3.242 MiB (era 3.147) |
 | `os-service-prazos` | `feat/saga-prazos` | `84f89cd` | `593471d` (#10) | 72 MiB | 5m | 50m/250m, 128/256 Mi | 3.377 MiB (namespace recriado) |
 
-- Os dois cabem nos 128/256 Mi dos manifests: juntos acrescentaram cerca de 135 MiB e 9m ao nó.
+- Os dois cabem nos 128/256 Mi dos manifests. Os dois pods somam 135 MiB e 9m (63 + 72 MiB, 4m + 5m); o working set do nó subiu 95 MiB com o `notificador` e 230 MiB com o `prazos`, este com o namespace recriado.
 - O ADR-042 tem linha para o `prazos` e não tem para o `notificador`, que é o 9º processo (relay e consumidor de cada serviço, mais o `prazos` do OS e o do Billing): com ele, os requests e limits passam de 3.488/8.896 Mi para 3.616/9.152 Mi (3,5/8,9 GiB), ainda abaixo dos 10 GiB do ADR. A linha entra no PR que alinha o ADR-042 aos serviços (pendência registrada no `MEMORY.md`).
 - O `prazos` do OS (commit `84f89cd`) logou, uma vez, `os.eventos has no consumer` e `saga deadlines paused: the os.eventos consumer is away` no arranque, porque o consumidor do OS ainda não tinha conectado (o namespace acabava de ser recriado). Não repetiu: o consumidor passou a ter 1 e os ciclos seguintes seguiram sem aviso (o log está em [Medidas cruas](ensaio-integrado-medidas.md#log-do-prazos-commit-84f89cd-lido-90-s-depois-do-smoke)). Na `main` do OS de 14/10 (`593471d`), o aviso de pausa é `saga deadlines paused` com `motivo=sem_consumidor`.
 
