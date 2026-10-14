@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import socket
 import subprocess  # nosec B404
 import tempfile
@@ -17,7 +18,7 @@ import time
 from typing import TYPE_CHECKING, Any, Final
 
 from e2e.apoio.espera import esperar
-from e2e.apoio.segredos import mascarar
+from e2e.apoio.segredos import CREDENCIAIS_DO_AMBIENTE, mascarar
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
@@ -45,6 +46,20 @@ class ErroDeComandoError(AssertionError):
     """O comando saiu com erro ou passou do prazo."""
 
 
+def _ambiente_dos_filhos() -> dict[str, str]:
+    """O ambiente deste processo sem as credenciais do Mercado Pago.
+
+    O ``kubectl``, o ``docker`` e o ``port-forward`` nao as usam. O pytest e o
+    ``conferir_sandbox`` as tem no proprio ambiente ate o preflight tira-las, e os
+    primeiros filhos (a conferencia previa e a fixture ``kubectl``) rodam antes disso.
+    """
+    return {
+        chave: valor
+        for chave, valor in os.environ.items()
+        if chave not in CREDENCIAIS_DO_AMBIENTE
+    }
+
+
 def executar_processo(
     argumentos: Sequence[str], prazo: float, entrada: str | None = None
 ) -> str:
@@ -61,6 +76,7 @@ def executar_processo(
             text=True,
             timeout=prazo,
             check=False,
+            env=_ambiente_dos_filhos(),
             input=entrada,
             # input e stdin nao convivem: sem entrada, o stdin e vazio.
             stdin=subprocess.DEVNULL if entrada is None else None,
@@ -368,6 +384,7 @@ class PortForward:
                 self._alvo,
                 f"{self.porta}:{self._porta_remota}",
             ],
+            env=_ambiente_dos_filhos(),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=self._erros,

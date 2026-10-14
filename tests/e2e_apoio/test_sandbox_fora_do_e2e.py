@@ -19,7 +19,12 @@ from pathlib import Path
 
 import pytest
 
-from e2e_apoio.falsos import ASSINATURA, CHAVE_DO_MP, criar_cluster_falso
+from e2e_apoio.falsos import (
+    ASSINATURA,
+    CHAVE_DO_MP,
+    credenciais_vistas_pelo_cluster_falso,
+    criar_cluster_falso,
+)
 
 RAIZ = Path(__file__).resolve().parents[2]
 INI = RAIZ / "e2e" / "pytest.ini"
@@ -531,3 +536,58 @@ def test_kubectl_que_falha_no_preflight_sai_sem_traceback_e_sem_o_ambiente(
     chamadas = (estado / "chamadas").read_text()
     for mudanca in (" scale ", "set env", "apply", "rollout"):
         assert mudanca not in chamadas
+
+
+# --- as credenciais nao vao para os filhos -------------------------------------------
+
+
+def _nenhum_filho_recebeu_as_credenciais(estado: Path) -> None:
+    vistas = credenciais_vistas_pelo_cluster_falso(estado)
+    # get nodes, docker port, get deployment e get configmap: se o falso nao viu as
+    # quatro, o teste nao provou o que diz.
+    assert len(vistas) >= 4, (estado / "chamadas").read_text()
+    assert vistas == [""] * len(vistas), "um kubectl ou docker recebeu credencial"
+
+
+def test_nenhum_kubectl_ou_docker_da_sessao_recebe_as_credenciais(
+    tmp_path: Path,
+) -> None:
+    # A fixture kubectl chama `get nodes` e `docker port` ANTES de o preflight tirar as
+    # credenciais do ambiente do pytest; o preflight chama o resto.
+    resultado, chamadas, _ = _sessao_do_sandbox(
+        tmp_path,
+        E2E_MP_MODO="real",
+        MP_ACCESS_TOKEN=CHAVE_DO_MP,
+        MP_WEBHOOK_SECRET=ASSINATURA,
+    )
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    _nenhum_filho_recebeu_as_credenciais(chamadas.parent)
+
+
+def test_nenhum_kubectl_ou_docker_da_conferencia_previa_recebe_as_credenciais(
+    tmp_path: Path,
+) -> None:
+    # A conferencia previa roda num processo a parte, que nunca tira as credenciais do
+    # proprio ambiente: o que as guarda e o ambiente dos filhos.
+    estado = criar_cluster_falso(tmp_path)
+
+    resultado = subprocess.run(  # nosec B603
+        [sys.executable, "-m", "e2e.conferir_sandbox", "real"],
+        cwd=RAIZ,
+        env=_ambiente(
+            KUBE_CONTEXT="kind-pytstop-p4",
+            MP_ACCESS_TOKEN=CHAVE_DO_MP,
+            MP_WEBHOOK_SECRET=ASSINATURA,
+            FALSO_ESTADO=str(estado),
+            PATH=f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
+        ),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+        stdin=subprocess.DEVNULL,
+    )
+
+    assert resultado.returncode == 2, resultado.stdout + resultado.stderr
+    _nenhum_filho_recebeu_as_credenciais(estado)

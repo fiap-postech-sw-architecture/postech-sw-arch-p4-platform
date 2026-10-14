@@ -14,6 +14,9 @@ import sys
 from typing import Final
 
 MASCARA: Final = "***"
+# As variaveis de ambiente com credencial do Mercado Pago: nenhum processo filho
+# (kubectl, docker, port-forward) precisa delas, e nenhum as herda (kube.py).
+CREDENCIAIS_DO_AMBIENTE: Final = ("MP_ACCESS_TOKEN", "MP_WEBHOOK_SECRET")
 # Abaixo disto o valor casaria com texto comum e estragaria a leitura do log.
 _TAMANHO_MINIMO: Final = 6
 

@@ -33,7 +33,7 @@ from e2e.apoio.modo_billing import (
     url_de_notificacao_valida,
 )
 from e2e.apoio.preflight import numero
-from e2e.apoio.segredos import registrar
+from e2e.apoio.segredos import CREDENCIAIS_DO_AMBIENTE, registrar
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, MutableMapping
@@ -118,7 +118,7 @@ class Sandbox:
 # O que o sandbox le do ambiente. O pytest mostra os argumentos de cada frame no
 # traceback, entao o ambiente inteiro (que tem credenciais de outras coisas) nunca
 # pode ser argumento de quem pode falhar: o corte vem antes, como no guarda do contexto.
-CHAVES_SECRETAS: Final = ("MP_ACCESS_TOKEN", "MP_WEBHOOK_SECRET")
+CHAVES_SECRETAS: Final = CREDENCIAIS_DO_AMBIENTE
 CHAVES_DO_SANDBOX: Final = (
     "E2E_MP_MODO",
     "E2E_MP_MANTER",

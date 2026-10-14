@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import os
 import signal
 import subprocess  # nosec B404
@@ -20,7 +21,13 @@ from e2e.apoio.kube import (
     PortForward,
     executar_processo,
 )
-from e2e_apoio.falsos import pids_do_kubectl_falso, processo_vivo
+from e2e_apoio.falsos import (
+    ASSINATURA,
+    CHAVE_DO_MP,
+    credenciais_vistas_pelo_kubectl_falso,
+    pids_do_kubectl_falso,
+    processo_vivo,
+)
 
 RAIZ = Path(__file__).resolve().parents[2]
 
@@ -29,6 +36,23 @@ def test_executar_processo_devolve_a_saida() -> None:
     assert (
         executar_processo([sys.executable, "-c", "print('ola')"], 10).strip() == "ola"
     )
+
+
+def test_executar_processo_nao_passa_as_credenciais_ao_filho(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # O pytest e o conferir_sandbox tem as credenciais no ambiente ate o preflight as
+    # tirar; o kubectl e o docker da conferencia previa e da fixture rodam antes disso.
+    monkeypatch.setenv("MP_ACCESS_TOKEN", CHAVE_DO_MP)
+    monkeypatch.setenv("MP_WEBHOOK_SECRET", ASSINATURA)
+    monkeypatch.setenv("OUTRA_VARIAVEL_DO_TESTE", "continua")
+    programa = "import json, os; print(json.dumps(sorted(os.environ)))"
+
+    nomes = json.loads(executar_processo([sys.executable, "-c", programa], 10))
+
+    assert "OUTRA_VARIAVEL_DO_TESTE" in nomes, "o resto do ambiente chega ao filho"
+    assert "MP_ACCESS_TOKEN" not in nomes
+    assert "MP_WEBHOOK_SECRET" not in nomes
 
 
 def test_executar_processo_entrada_vai_so_pelo_stdin_e_nao_pelo_argv() -> None:
@@ -78,6 +102,19 @@ def test_port_forward_abre_a_porta_e_fecha_no_fim(kubectl_falso: Path) -> None:
 
     with pytest.raises(OSError, match=r"refused|Connection"):
         socket.create_connection(("127.0.0.1", ponte.porta), timeout=2)
+
+
+def test_port_forward_nao_passa_as_credenciais_ao_kubectl(
+    kubectl_falso: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MP_ACCESS_TOKEN", CHAVE_DO_MP)
+    monkeypatch.setenv("MP_WEBHOOK_SECRET", ASSINATURA)
+    kubectl = Kubectl("kind-x", binario=str(kubectl_falso))
+
+    with PortForward(kubectl, "ns", "svc/mailpit", 8025):
+        pass
+
+    assert credenciais_vistas_pelo_kubectl_falso(kubectl_falso) == [""]
 
 
 def test_port_forward_garantir_religa_o_kubectl_que_morreu(kubectl_falso: Path) -> None:
