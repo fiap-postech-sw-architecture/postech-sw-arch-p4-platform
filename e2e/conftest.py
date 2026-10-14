@@ -20,6 +20,7 @@ from e2e.ambiente import (
     CONTEXTO,
     DURACAO_DOS_BLOCOS,
     LIMITE_DO_BLOCO,
+    MP_MODO,
     NARRAR,
     RELATORIOS,
     URL_DA_BORDA,
@@ -36,6 +37,11 @@ from e2e.apoio.credenciais import Credenciais
 from e2e.apoio.http import ClienteHttp
 from e2e.apoio.kube import Escalas, Kubectl
 from e2e.apoio.preflight import conferir_dlqs_vazias, conferir_overlay_kind_ci
+from e2e.apoio.preflight_mp import (
+    Sandbox,
+    ambiente_do_sandbox,
+    preparar_sandbox,
+)
 from e2e.apoio.relatorio import Registro
 from e2e.servicos import Api, Cenario
 
@@ -51,15 +57,28 @@ pytest_plugins = ["e2e.apoio.plugin"]
 
 @pytest.fixture(scope="session")
 def kubectl() -> Kubectl:
-    """kubectl no contexto escolhido, depois de provado: kind descartavel no kind-ci."""
+    """kubectl no contexto escolhido, depois de provado: um kind que e o da borda."""
     # So o escape entra no guarda: o ambiente inteiro apareceria no traceback.
     escape = escape_do_ambiente(os.environ)
     conferir_contexto(CONTEXTO, escape)
     kubectl = Kubectl(CONTEXTO)
     conferir_borda_local(kubectl, escape, url_da_borda=URL_DA_BORDA)
+    return kubectl
+
+
+@pytest.fixture(scope="session")
+def preflight(kubectl: Kubectl, borda: ClienteHttp) -> Sandbox | None:
+    """A conferencia previa do cluster, antes de qualquer ``kubectl scale``.
+
+    O E2E da saga exige o overlay ``kind-ci`` e as DLQs vazias. Com
+    ``E2E_MP_MODO`` (sandbox do Mercado Pago), o overlay ``kind`` e, no modo real,
+    o token: devolve o que o preflight decidiu.
+    """
+    if MP_MODO:
+        return preparar_sandbox(kubectl, borda, ambiente_do_sandbox(os.environ))
     conferir_overlay_kind_ci(kubectl)
     conferir_dlqs_vazias(kubectl)
-    return kubectl
+    return None
 
 
 @pytest.fixture(scope="session")
@@ -69,8 +88,9 @@ def execucao() -> str:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def escalas(kubectl: Kubectl) -> Iterator[Escalas]:
+def escalas(kubectl: Kubectl, preflight: Sandbox | None) -> Iterator[Escalas]:
     """O que um cenario derruba volta no fim; o que sobrou de antes, no inicio."""
+    del preflight  # so garante a ordem: a conferencia vem antes de qualquer scale
     escalas = Escalas(kubectl)
     for _, deployment in escalas.recuperar_do_inicio(ALVOS_DE_FALHA):
         narrar(f"[e2e] {deployment} estava em 0 replicas (execucao anterior): religado")
@@ -140,6 +160,43 @@ def cenario(
     registro.anotar(
         atual.nome, ordem_id=atual.ordem_id or "-", trace_id=atual.trace_id or "-"
     )
+
+
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """O sandbox do Mercado Pago e o E2E da saga nao rodam na mesma execucao.
+
+    Sem ``E2E_MP_MODO`` os cenarios ``@mp_sandbox`` ficam de fora (nao ha token no
+    CI e eles mexem no modo do Billing); com ele, so eles rodam. O ``make e2e`` e o
+    ``make demo`` ja os excluem pelo marker, e isto cobre quem roda o pytest cru.
+    Fica como ``skip`` (e nao fora da lista) para o ``--generate-missing`` do
+    ``make test`` continuar vendo os passos do feature.
+    """
+    for item in items:
+        e_sandbox = item.get_closest_marker("mp_sandbox") is not None
+        if e_sandbox and not MP_MODO:
+            item.add_marker(
+                pytest.mark.skip(reason="sandbox do Mercado Pago: use make mp-sandbox")
+            )
+        elif MP_MODO and not e_sandbox:
+            item.add_marker(
+                pytest.mark.skip(reason="E2E_MP_MODO definido: so o sandbox roda")
+            )
+
+
+def pytest_bdd_step_error(
+    request: FixtureRequest,
+    feature: Feature,
+    scenario: Scenario,
+    step: Step,
+    step_func: Any,
+    step_func_args: dict[str, Any],
+    exception: Exception,
+) -> None:
+    """No sandbox, a falha vem com o diagnostico: estado, logs filtrados e a dica."""
+    if "mp_sandbox" in scenario.tags:
+        request.getfixturevalue("prova").falha_no_passo(
+            f"{step.keyword} {step.name}", exception
+        )
 
 
 def pytest_bdd_before_scenario(

@@ -21,6 +21,9 @@ CONTEXTO: Final = os.environ.get("KUBE_CONTEXT", CONTEXTO_PADRAO)
 URL_DA_BORDA: Final = os.environ.get("E2E_URL", "https://localhost")
 RELATORIOS: Final = Path(os.environ.get("E2E_RELATORIOS", "reports/e2e"))
 NARRAR: Final = os.environ.get("E2E_NARRAR") == "1"
+# Sandbox do Mercado Pago (make mp-sandbox e make mp-sandbox-ensaio): "real" ou
+# "ensaio". Vazio e o E2E da saga; com ele, so os cenarios @mp_sandbox rodam.
+MP_MODO: Final = os.environ.get("E2E_MP_MODO", "")
 # Cada bloco do video dura ate 4 min; o make demo imprime o tempo dos dois.
 LIMITE_DO_BLOCO: Final = 240.0
 DURACAO_DOS_BLOCOS: dict[str, float] = {}
