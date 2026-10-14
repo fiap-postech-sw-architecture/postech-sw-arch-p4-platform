@@ -14,7 +14,9 @@ from e2e.apoio import preflight_mp, segredos
 from e2e.apoio.http import ClienteHttp
 from e2e.apoio.kube import ErroDeComandoError, Kubectl, executar_processo
 from e2e.apoio.mercadopago import ErroDoMercadoPagoError, TokenRecusadoError
+from e2e.apoio.modo_billing import URL_DE_NOTIFICACAO_PADRAO
 from e2e.apoio.preflight_mp import (
+    AVISO_DO_PAGAMENTO_ANTIGO,
     CHAVES_DO_SANDBOX,
     PreflightDoSandboxError,
     Sandbox,
@@ -548,6 +550,78 @@ def test_preparar_sandbox_real_devolve_o_que_a_sessao_precisa(relogio: Relogio) 
     assert mp.chave == CHAVE_DO_MP
 
 
+def test_modo_real_sem_url_usa_a_padrao_publica_e_diz_qual(relogio: Relogio) -> None:
+    avisos: list[str] = []
+
+    sandbox = _preparar(
+        _kubectl(),
+        _borda(relogio),
+        AMBIENTE,
+        cliente=_fabrica(MercadoPagoFalso()),
+        avisar=avisos.append,
+    )
+
+    assert sandbox.url_de_notificacao == URL_DE_NOTIFICACAO_PADRAO
+    assert URL_DE_NOTIFICACAO_PADRAO == (
+        "https://example.com/api/v1/webhooks/mercadopago"
+    )
+    assert (
+        "[mp-sandbox] notification_url: "
+        "https://example.com/api/v1/webhooks/mercadopago (padrão do modo real); "
+        "a sandbox não envia notificação, então o webhook não é exercitado"
+    ) in avisos
+
+
+def test_modo_real_com_url_propria_usa_a_dela_e_nao_imprime_a_consulta(
+    relogio: Relogio,
+) -> None:
+    avisos: list[str] = []
+    url = "https://meu-tunel.ngrok.app/hook?token=segredo-na-consulta"
+
+    sandbox = _preparar(
+        _kubectl(),
+        _borda(relogio),
+        {**AMBIENTE, "E2E_MP_NOTIFICATION_URL": url},
+        cliente=_fabrica(MercadoPagoFalso()),
+        avisar=avisos.append,
+    )
+
+    assert sandbox.url_de_notificacao == url
+    aviso = next(a for a in avisos if "notification_url:" in a)
+    assert "https://meu-tunel.ngrok.app/hook (E2E_MP_NOTIFICATION_URL)" in aviso
+    assert "segredo-na-consulta" not in " ".join(avisos)
+
+
+def test_modo_real_lembra_do_pagamento_que_um_ensaio_antigo_deixa(
+    relogio: Relogio,
+) -> None:
+    avisos: list[str] = []
+
+    _preparar(
+        _kubectl(),
+        _borda(relogio),
+        AMBIENTE,
+        cliente=_fabrica(MercadoPagoFalso()),
+        avisar=avisos.append,
+    )
+
+    assert AVISO_DO_PAGAMENTO_ANTIGO in avisos
+    assert "make kind-down kind-up" in AVISO_DO_PAGAMENTO_ANTIGO
+    assert "conciliado no Mercado Pago de verdade" in AVISO_DO_PAGAMENTO_ANTIGO
+
+
+def test_ensaio_nao_imprime_url_nem_aviso_de_pagamento_antigo(
+    relogio: Relogio,
+) -> None:
+    avisos: list[str] = []
+
+    _preparar(
+        _kubectl(), _borda(relogio), {"E2E_MP_MODO": "ensaio"}, avisar=avisos.append
+    )
+
+    assert avisos == []
+
+
 def test_preparar_sandbox_nao_poe_o_token_no_repr() -> None:
     sandbox = Sandbox(modo="real", token=CHAVE_DO_MP, assinatura=ASSINATURA)
 
@@ -733,10 +807,10 @@ def test_conferencia_do_token_com_4xx_que_nao_e_de_credencial_avisa_e_segue(
 
     assert id(sandbox.mercadopago) == id(mp)
     assert not mp.fechado
-    assert len(avisos) == 1
-    assert "atenção: a conferência do token respondeu" in avisos[0]
-    assert "o roteiro segue sem ela" in avisos[0]
-    assert CHAVE_DO_MP not in avisos[0]
+    aviso = next(a for a in avisos if "a conferência do token respondeu" in a)
+    assert aviso.startswith("[mp-sandbox] atenção:")
+    assert "o roteiro segue sem ela" in aviso
+    assert all(CHAVE_DO_MP not in a for a in avisos)
 
 
 @pytest.mark.parametrize("status", [500, 502, 503, None])

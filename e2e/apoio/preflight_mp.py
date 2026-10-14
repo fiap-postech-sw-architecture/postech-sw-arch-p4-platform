@@ -25,7 +25,9 @@ from e2e.apoio.modo_billing import (
     MODO_REAL,
     MODO_SIMULADO,
     NAMESPACE_BILLING,
+    URL_DE_NOTIFICACAO_PADRAO,
     UrlDeNotificacaoInvalidaError,
+    sem_consulta,
     url_de_notificacao_valida,
 )
 from e2e.apoio.preflight import numero
@@ -37,6 +39,14 @@ if TYPE_CHECKING:
     from e2e.apoio.http import ClienteHttp
     from e2e.apoio.kube import Kubectl
 
+# Um pagamento SOLICITADO que um ensaio interrompido ou reprovado deixou no cluster
+# seria conciliado no Mercado Pago de verdade (o Billing escolhe o gateway pelo modo,
+# e nao pelo pagamento). Nao ha como conferir daqui; fica o aviso.
+AVISO_DO_PAGAMENTO_ANTIGO: Final = (
+    "[mp-sandbox] atenção: se o último ensaio foi interrompido ou reprovado, suba um "
+    "cluster novo (make kind-down kind-up) antes de seguir: um pagamento SOLICITADO "
+    "dele seria conciliado no Mercado Pago de verdade"
+)
 MODO_REAL_DO_E2E: Final = "real"
 MODO_ENSAIO: Final = "ensaio"
 PREFIXOS_DOS_SERVICOS: Final = ("/os", "/billing", "/execucao")
@@ -286,7 +296,7 @@ def preparar_sandbox(
     conferir_kind(kubectl.contexto)
     real = modo == MODO_REAL_DO_E2E
     credenciais = credenciais_do_ambiente(ambiente) if real else ("", "")
-    url = _url_de_notificacao(ambiente) if real else ""
+    url, origem = _url_de_notificacao(ambiente) if real else ("", "")
     try:
         max_recusas = conferir_overlay_kind(kubectl)
     except ErroDeComandoError as erro:
@@ -294,6 +304,12 @@ def preparar_sandbox(
         raise PreflightDoSandboxError(msg) from None
     conferir_servicos(borda, relogio=relogio, dormir=dormir)
     mercadopago = _validar_token(cliente, credenciais[0], avisar) if real else None
+    if real:
+        avisar(
+            f"[mp-sandbox] notification_url: {sem_consulta(url)} ({origem}); "
+            "a sandbox não envia notificação, então o webhook não é exercitado"
+        )
+        avisar(AVISO_DO_PAGAMENTO_ANTIGO)
     return Sandbox(
         modo=modo,
         token=credenciais[0],
@@ -321,13 +337,17 @@ def preflight_do_sandbox(
     return preparar_sandbox(kubectl, borda, recorte, **opcoes)
 
 
-def _url_de_notificacao(ambiente: Mapping[str, str]) -> str:
-    """``E2E_MP_NOTIFICATION_URL`` conferida, ou vazio se nao foi pedida."""
+def _url_de_notificacao(ambiente: Mapping[str, str]) -> tuple[str, str]:
+    """A ``notification_url`` do modo real e de onde ela veio.
+
+    ``E2E_MP_NOTIFICATION_URL`` conferida, ou a padrao: a do kind
+    (``https://localhost/...``) e local, e o Mercado Pago manda nao usar.
+    """
     url = ambiente.get("E2E_MP_NOTIFICATION_URL", "")
     if not url:
-        return ""
+        return URL_DE_NOTIFICACAO_PADRAO, "padrão do modo real"
     try:
-        return url_de_notificacao_valida(url)
+        return url_de_notificacao_valida(url), "E2E_MP_NOTIFICATION_URL"
     except UrlDeNotificacaoInvalidaError as erro:
         raise PreflightDoSandboxError(str(erro)) from None
 

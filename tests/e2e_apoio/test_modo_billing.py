@@ -128,7 +128,10 @@ def _modo(
     [
         URL,
         "https://meu-tunel.ngrok.app/api/v1/webhooks/mercadopago",
-        "https://203.0.113.10/webhook",
+        "https://example.com./webhook",
+        "https://8.8.8.8/webhook",
+        "https://[2001:4860:4860::8888]/webhook",
+        "https://a.b.cafe/webhook",
     ],
 )
 def test_url_de_notificacao_publica_passa(url: str) -> None:
@@ -150,6 +153,21 @@ def test_url_de_notificacao_publica_passa(url: str) -> None:
         pytest.param("https://usuario:senha@example.com/webhook", id="com-usuario"),
         pytest.param("https:///sem-host", id="sem-host"),
         pytest.param("example.com/webhook", id="sem-esquema"),
+        pytest.param("https://192.168.1.10/webhook", id="rede-privada-192"),
+        pytest.param("https://10.0.0.5/webhook", id="rede-privada-10"),
+        pytest.param("https://172.16.0.1/webhook", id="rede-privada-172"),
+        pytest.param("https://127.0.0.2/webhook", id="loopback-127-x"),
+        pytest.param("https://0.0.0.0/webhook", id="zero"),
+        pytest.param("https://169.254.1.1/webhook", id="link-local-ipv4"),
+        pytest.param("https://[fe80::1]/webhook", id="link-local-ipv6"),
+        pytest.param("https://[::]/webhook", id="ipv6-zero"),
+        pytest.param("https://[::ffff:127.0.0.1]/webhook", id="ipv4-dentro-de-ipv6"),
+        pytest.param("https://100.64.0.1/webhook", id="cgnat"),
+        pytest.param("https://localhost./webhook", id="localhost-com-ponto-final"),
+        pytest.param("https://127.1/webhook", id="ip-legado-curto"),
+        pytest.param("https://2130706433/webhook", id="ip-legado-decimal"),
+        pytest.param("https://0x7f.0.0.1/webhook", id="ip-legado-hexadecimal"),
+        pytest.param("https://meu-mac/webhook", id="nome-sem-ponto"),
     ],
 )
 def test_url_de_notificacao_local_ou_insegura_e_recusada(url: str) -> None:

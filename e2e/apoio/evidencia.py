@@ -258,6 +258,13 @@ def _frase(*, real: bool, confirmou: bool) -> str:
     return FRASE_DO_ENSAIO if confirmou else FRASE_DO_ENSAIO_SEM_CONFIRMACAO
 
 
+def _linha_da_notificacao(url: str) -> str:
+    return (
+        f"- `notification_url`: `{url}` (a notificação não foi exercitada: "
+        "a sandbox não envia webhook)"
+    )
+
+
 def gerar_resumo(
     registros: Iterable[RegistroDoCenario],
     *,
@@ -265,8 +272,14 @@ def gerar_resumo(
     contexto: str,
     quando: datetime,
     prints: Iterable[str],
+    url_de_notificacao: str = "",
 ) -> str:
-    """O ``resumo.md``: modo, a frase honesta, os cenarios e os prints a tirar."""
+    """O ``resumo.md``: modo, a frase honesta, os cenarios e os prints a tirar.
+
+    ``url_de_notificacao`` (so no modo real, sem a consulta) entra no cabecalho: a
+    notificacao nao foi exercitada, e o leitor tem de saber qual URL o Mercado Pago
+    recebeu.
+    """
     real = modo == "real"
     lista = list(registros)
     confirmou = any(r.billing.get("status") in CONFIRMADOS for r in lista)
@@ -281,6 +294,11 @@ def gerar_resumo(
         f"- Modo: **{descricao_do_modo}**",
         f"- Data: {quando.astimezone(UTC):%Y-%m-%d %H:%M} UTC",
         f"- Cluster: `{contexto}`",
+        *(
+            [_linha_da_notificacao(url_de_notificacao)]
+            if real and url_de_notificacao
+            else []
+        ),
         "",
         f"> {_frase(real=real, confirmou=confirmou)}",
         "",
@@ -361,6 +379,7 @@ def gravar_evidencia(
     modo: str,
     contexto: str,
     prints: Iterable[str],
+    url_de_notificacao: str = "",
     quando: datetime | None = None,
     extras: Iterable[str] = (),
 ) -> None:
@@ -375,6 +394,7 @@ def gravar_evidencia(
         contexto=contexto,
         quando=quando or datetime.now(UTC),
         prints=prints,
+        url_de_notificacao=url_de_notificacao,
     )
     dados = json.dumps(
         {

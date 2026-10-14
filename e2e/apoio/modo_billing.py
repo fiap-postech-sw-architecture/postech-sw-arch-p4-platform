@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import base64
 import contextlib
+import ipaddress
+import re
 import signal
 import time
 from typing import TYPE_CHECKING, Any, Final
@@ -53,6 +55,11 @@ PRAZO_DA_CONFERENCIA: Final = 90.0
 INTERVALO_DA_CONFERENCIA: Final = 2.0
 HOSTS_LOCAIS: Final = frozenset({"localhost", "127.0.0.1", "::1"})
 SUFIXOS_LOCAIS: Final = (".localhost", ".local", ".internal", ".test", ".lan")
+# A sandbox nao envia notificacao, entao qualquer https publico serve; a documentacao
+# do Mercado Pago manda nao usar dominio local (o padrao do kind, https://localhost).
+URL_DE_NOTIFICACAO_PADRAO: Final = "https://example.com/api/v1/webhooks/mercadopago"
+# Cada pedaco de um IP em forma legada que o ``ipaddress`` nao le: 127.1, 0x7f.0.0.1.
+_NUMERO_LEGADO: Final = re.compile(r"0x[0-9a-f]+|[0-9]+")
 # Os sinais que o terminal, o kill e o fechamento da janela mandam ao script.
 SINAIS_DE_INTERRUPCAO: Final = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
 NAO_FECHE: Final = "Não feche o terminal e não use kill -9."
@@ -70,17 +77,38 @@ class UrlDeNotificacaoInvalidaError(ValueError):
     """``E2E_MP_NOTIFICATION_URL`` nao serve de ``notification_url``."""
 
 
+def _host_publico(host: str) -> bool:
+    """Nome com ponto fora dos dominios locais, ou IP global.
+
+    Recusa loopback, rede privada, link-local, ``0.0.0.0``, o IPv4 dentro de IPv6
+    (``::ffff:127.0.0.1``), nome sem ponto e as formas legadas de IP.
+    """
+    host = host.rstrip(".")
+    if not host or host in HOSTS_LOCAIS or host.endswith(SUFIXOS_LOCAIS):
+        return False
+    try:
+        endereco = ipaddress.ip_address(host)
+    except ValueError:
+        rotulos = host.split(".")
+        return len(rotulos) > 1 and not all(
+            _NUMERO_LEGADO.fullmatch(rotulo) for rotulo in rotulos
+        )
+    if isinstance(endereco, ipaddress.IPv6Address) and endereco.ipv4_mapped:
+        endereco = endereco.ipv4_mapped
+    return endereco.is_global
+
+
 def url_de_notificacao_valida(url: str) -> str:
-    """``url`` se for https, sem usuario e fora do loopback e dos dominios locais.
+    """``url`` se for https, sem usuario e de um host publico.
 
     A documentacao do Mercado Pago manda nao usar dominios locais na
-    ``notification_url``: a variavel existe para trocar a local (``localhost``)
-    por uma publica, e uma local de novo nao resolveria nada.
+    ``notification_url``: a variavel existe para trocar a padrao por outra
+    publica, e uma local nao resolveria nada (o Mercado Pago a recusa depois, e a
+    primeira tentativa real seria gasta para descobrir).
     """
     partes = urlsplit(url)
     host = (partes.hostname or "").lower()
-    local = host in HOSTS_LOCAIS or host.endswith(SUFIXOS_LOCAIS)
-    if partes.scheme != "https" or not host or partes.username or local:
+    if partes.scheme != "https" or partes.username or not _host_publico(host):
         msg = (
             "E2E_MP_NOTIFICATION_URL precisa ser uma URL https pública, sem usuário "
             "e fora de localhost (exemplo: "
@@ -88,6 +116,12 @@ def url_de_notificacao_valida(url: str) -> str:
         )
         raise UrlDeNotificacaoInvalidaError(msg)
     return url
+
+
+def sem_consulta(url: str) -> str:
+    """Esquema, host e caminho: a consulta (e o que mais vier depois) nao se imprime."""
+    partes = urlsplit(url)
+    return f"{partes.scheme}://{partes.hostname}{partes.path}"
 
 
 def _base64(valor: str) -> str:

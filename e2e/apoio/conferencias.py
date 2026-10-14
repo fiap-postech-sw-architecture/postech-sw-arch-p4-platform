@@ -30,8 +30,14 @@ def _mesmo_valor(mp: Decimal | None, billing: str) -> bool:
 
 def conferir_aprovado(
     mp: PagamentoMp, *, pagamento_id: str, valor: str, moeda: str
-) -> None:
-    """Aprovado, desta cobranca, no valor e na moeda do orcamento, e de teste."""
+) -> str | None:
+    """Aprovado, desta cobranca, no valor e na moeda do orcamento, e de teste.
+
+    Reprova a divergencia. ``None`` se tudo confere; senao, o motivo pelo qual a
+    consulta nao prova que o pagamento e de teste: sem ``live_mode`` na resposta
+    (ou nao booleano) nao ha o que afirmar, e e a unica barreira contra um token
+    de producao (o prefixo do token nao distingue).
+    """
     problemas = []
     if mp.status != APROVADO:
         problemas.append(
@@ -58,6 +64,14 @@ def conferir_aprovado(
         )
     if problemas:
         raise DivergenciaComOMercadoPagoError("; ".join(problemas))
+    if mp.live_mode is None:
+        return (
+            "a resposta do Mercado Pago não trouxe `live_mode` (ou não é verdadeiro "
+            "ou falso): a natureza de teste do pagamento NÃO foi provada pela "
+            "consulta. Confira no painel do vendedor de teste que o pagamento é de "
+            "teste."
+        )
+    return None
 
 
 def conferir_estornado(mp: PagamentoMp) -> None:

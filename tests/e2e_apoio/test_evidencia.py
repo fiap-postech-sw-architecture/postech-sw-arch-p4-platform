@@ -9,7 +9,7 @@ import os
 # subprocess roda o pytest do proprio repositorio, sem shell.
 import subprocess  # nosec B404
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -373,6 +373,98 @@ def test_resumo_basta_um_pagamento_confirmado_entre_os_cenarios() -> None:
     )
 
     assert f"> {FRASE_DA_SANDBOX}" in texto
+
+
+def _resumo_real(registro: RegistroDoCenario, **opcoes: Any) -> str:
+    return gerar_resumo(
+        [registro], modo="real", contexto="kind-x", quando=QUANDO, prints=[], **opcoes
+    )
+
+
+def test_resumo_real_diz_a_notification_url_usada_e_que_nao_foi_exercitada() -> None:
+    texto = _resumo_real(
+        RegistroDoCenario(nome="C"),
+        url_de_notificacao="https://example.com/api/v1/webhooks/mercadopago",
+    )
+
+    assert (
+        "- `notification_url`: `https://example.com/api/v1/webhooks/mercadopago` "
+        "(a notificação não foi exercitada: a sandbox não envia webhook)"
+    ) in texto
+
+
+def test_resumo_sem_url_de_notificacao_nao_tem_a_linha() -> None:
+    assert "notification_url" not in _resumo_real(RegistroDoCenario(nome="C"))
+
+
+def test_resumo_do_ensaio_nao_tem_a_linha_da_notification_url() -> None:
+    texto = gerar_resumo(
+        [RegistroDoCenario(nome="C")],
+        modo="ensaio",
+        contexto="kind-x",
+        quando=QUANDO,
+        prints=[],
+        url_de_notificacao="https://example.com/hook",
+    )
+
+    assert "notification_url" not in texto
+
+
+def test_resumo_traz_ordem_e_pagamento_de_cada_cenario() -> None:
+    registro = RegistroDoCenario(
+        nome="C", ordem_id="o-9", pagamento_id="p-9", pagamento_mp_id="1234"
+    )
+
+    texto = _resumo_real(registro)
+
+    assert "- `ordem_id`: `o-9`" in texto
+    assert "- `pagamento_id` (Billing): `p-9`" in texto
+    assert "- Id do pagamento no Mercado Pago: `1234`" in texto
+
+
+def test_resumo_sem_ordem_nem_pagamento_poe_traco() -> None:
+    texto = _resumo_real(RegistroDoCenario(nome="C"))
+
+    assert "- `ordem_id`: `-`" in texto
+    assert "- `pagamento_id` (Billing): `-`" in texto
+    assert "- Id do pagamento no Mercado Pago: -" in texto
+
+
+def test_resumo_ordena_as_transicoes_pela_hora_e_nao_pela_ordem_em_que_entraram() -> (
+    None
+):
+    registro = RegistroDoCenario(nome="C")
+    # A nota do script entra antes, mas o evento do servico aconteceu antes dela.
+    registro.transicoes = [
+        (QUANDO + timedelta(seconds=5), "script: link impresso"),
+        (QUANDO, "OS: (abertura) -> recebida (atendimento)"),
+        (QUANDO + timedelta(seconds=2), "Billing: cobrança criada (SOLICITADO)"),
+    ]
+
+    texto = _resumo_real(registro)
+
+    horas = [linha for linha in texto.splitlines() if linha.startswith("| 12:")]
+    assert horas == [
+        "| 12:30:00 | OS: (abertura) -> recebida (atendimento) |",
+        "| 12:30:02 | Billing: cobrança criada (SOLICITADO) |",
+        "| 12:30:05 | script: link impresso |",
+    ]
+
+
+def test_gravar_evidencia_recusa_segredo_que_so_esta_no_resumo(tmp_path: Path) -> None:
+    # Os prints e o cabecalho so existem no resumo.md: o evidencia.json esta limpo.
+    registro = RegistroDoCenario(nome="Cenário limpo", resultado="passou")
+
+    with pytest.raises(EvidenciaComSegredoError, match=r"recusei gravar resumo\.md"):
+        gravar_evidencia(
+            tmp_path,
+            [registro],
+            modo="real",
+            contexto="kind-x",
+            prints=[f"print com {CHAVE_DO_MP}"],
+        )
+
+    assert list(tmp_path.iterdir()) == []
 
 
 # --- varredura -----------------------------------------------------------------------

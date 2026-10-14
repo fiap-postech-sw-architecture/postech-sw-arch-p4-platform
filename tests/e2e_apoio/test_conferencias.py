@@ -34,13 +34,27 @@ def _mp(**campos: Any) -> PagamentoMp:
     return PagamentoMp(**{**base, **campos})
 
 
-def _confere(mp: PagamentoMp) -> None:
-    conferir_aprovado(mp, pagamento_id="p-1", valor="210.00", moeda="BRL")
+def _confere(mp: PagamentoMp) -> str | None:
+    return conferir_aprovado(mp, pagamento_id="p-1", valor="210.00", moeda="BRL")
 
 
-def test_aprovado_desta_cobranca_no_valor_e_de_teste_passa() -> None:
-    _confere(_mp())
-    _confere(_mp(live_mode=None))
+def test_aprovado_desta_cobranca_no_valor_e_de_teste_passa_sem_ressalva() -> None:
+    assert _confere(_mp()) is None
+
+
+def test_live_mode_ausente_nao_prova_que_o_pagamento_e_de_teste() -> None:
+    # A unica barreira contra um token de producao e o live_mode da resposta: sem ele
+    # a consulta nao prova nada, e a evidencia tem de dizer isso.
+    motivo = _confere(_mp(live_mode=None))
+
+    assert motivo is not None
+    assert "não trouxe `live_mode`" in motivo
+    assert "NÃO foi provada pela consulta" in motivo
+
+
+def test_divergencia_vale_mais_que_a_ressalva_do_live_mode() -> None:
+    with pytest.raises(DivergenciaComOMercadoPagoError, match="rejected"):
+        _confere(_mp(status="rejected", live_mode=None))
 
 
 @pytest.mark.parametrize(
