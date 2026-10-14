@@ -2,7 +2,7 @@
 
 > [↑ Registro do ensaio integrado](ensaio-integrado.md)
 
-Saídas guardadas do ensaio de 14/10/2026 (horário de Brasília), sem Secret e sem dado pessoal, que sustentam as tabelas do [registro do ensaio](ensaio-integrado.md). O comando de cada uma está em [Como cada número foi coletado](ensaio-integrado.md#como-cada-número-foi-coletado). Os blocos vêm dos arquivos de saída dos scripts do ensaio, com duas edições: o prefixo de hora de cada linha foi tirado onde a hora não importa, e do `implantar-servicos.sh` ficaram só as linhas de build, carga, rollout e Job. As provas avulsas do fim vêm de comandos cuja saída não foi gravada em arquivo.
+Saídas guardadas do ensaio de 14/10/2026 (horário de Brasília), sem Secret e sem dado pessoal, que sustentam as tabelas do [registro do ensaio](ensaio-integrado.md). O comando de cada uma está em [Como cada número foi coletado](ensaio-integrado.md#como-cada-número-foi-coletado). Os blocos vêm dos arquivos de saída dos scripts do ensaio, com três edições: o prefixo de hora de cada linha foi tirado onde a hora não importa; do `implantar-servicos.sh` ficaram só as linhas de build, carga, rollout e Job; e o caminho do checkout de cada serviço nas linhas de `docker build` foi encurtado para `./svc/<serviço>`. As provas avulsas do fim vêm de comandos cuja saída não foi gravada em arquivo.
 
 ## Primeira execução: overlay `kind-ci`, os três serviços de uma vez
 
@@ -74,9 +74,9 @@ estavel-fim 426s
 ### `implantar-servicos.sh`: build, carga, rollout e Jobs (com hora)
 
 ```text
-00:25:34 os-service: docker build of pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4 from /private/tmp/claude-501/-Users-jbamaral-git-fiap-postech-sw-architecture/6bf7c38d-7948-425c-aa16-91ada45d4484/scratchpad/svc/os-service
-00:25:34 billing-service: docker build of pytstop-billing-service:0fed78b5e24694402ed71b79f9a9238e1c471e66 from /private/tmp/claude-501/-Users-jbamaral-git-fiap-postech-sw-architecture/6bf7c38d-7948-425c-aa16-91ada45d4484/scratchpad/svc/billing-service
-00:25:34 execution-service: docker build of pytstop-execution-service:0c34ed75443f0824d14a80dbf20600d2774471ba from /private/tmp/claude-501/-Users-jbamaral-git-fiap-postech-sw-architecture/6bf7c38d-7948-425c-aa16-91ada45d4484/scratchpad/svc/execution-service
+00:25:34 os-service: docker build of pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4 from ./svc/os-service
+00:25:34 billing-service: docker build of pytstop-billing-service:0fed78b5e24694402ed71b79f9a9238e1c471e66 from ./svc/billing-service
+00:25:34 execution-service: docker build of pytstop-execution-service:0c34ed75443f0824d14a80dbf20600d2774471ba from ./svc/execution-service
 00:25:47 Image: "pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4" with ID "sha256:77d015b351ba503a257f9f7d8ee49ab39d54c85161bfb8c3787985a347663708" not yet present on node "pytstop-p4-control-plane", loading...
 00:25:50 os-service: k8s/overlays/execucao = kind-ci with image pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4
 00:25:50 Image: "pytstop-billing-service:0fed78b5e24694402ed71b79f9a9238e1c471e66" with ID "sha256:c2dc64c951a317d77f78a22e31ac0d6726bd5c58e68632258b5dbcf5becbc5e6" not yet present on node "pytstop-p4-control-plane", loading...
@@ -414,7 +414,7 @@ estavel-fim 474s
 ### `make kind-deploy` do OS Service (com hora)
 
 ```text
-00:43:10 os-service: docker build of pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4 from /private/tmp/claude-501/-Users-jbamaral-git-fiap-postech-sw-architecture/6bf7c38d-7948-425c-aa16-91ada45d4484/scratchpad/svc/os-service
+00:43:10 os-service: docker build of pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4 from ./svc/os-service
 00:43:12 Image: "pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4" with ID "sha256:f3cbbb180b46e6b2ffb82d7b64322c0920735b2d1d0386d36d6d8993abfb5dea" not yet present on node "pytstop-p4-control-plane", loading...
 00:43:15 os-service: k8s/overlays/execucao = kind with image pytstop-os-service:fda0672bc10750f76dc252ce4d3c68862eefcbf4
 00:43:37 [os-service] partitioned roll out complete: 1 new pods have been updated...
@@ -428,7 +428,7 @@ estavel-fim 474s
 ### `make kind-deploy` do Billing Service (com hora)
 
 ```text
-00:43:44 billing-service: docker build of pytstop-billing-service:0fed78b5e24694402ed71b79f9a9238e1c471e66 from /private/tmp/claude-501/-Users-jbamaral-git-fiap-postech-sw-architecture/6bf7c38d-7948-425c-aa16-91ada45d4484/scratchpad/svc/billing-service
+00:43:44 billing-service: docker build of pytstop-billing-service:0fed78b5e24694402ed71b79f9a9238e1c471e66 from ./svc/billing-service
 00:43:46 Image: "pytstop-billing-service:0fed78b5e24694402ed71b79f9a9238e1c471e66" with ID "sha256:45ce0219d033aade82bf16c531d7ce1694e4032ed090d349689bb63d4762a15c" not yet present on node "pytstop-p4-control-plane", loading...
 00:43:47 billing-service: k8s/overlays/execucao = kind with image pytstop-billing-service:0fed78b5e24694402ed71b79f9a9238e1c471e66
 00:44:17 [billing-service] partitioned roll out complete: 1 new pods have been updated...
@@ -443,7 +443,7 @@ estavel-fim 474s
 ### `make kind-deploy` do Execution Service (com hora)
 
 ```text
-00:44:30 execution-service: docker build of pytstop-execution-service:0c34ed75443f0824d14a80dbf20600d2774471ba from /private/tmp/claude-501/-Users-jbamaral-git-fiap-postech-sw-architecture/6bf7c38d-7948-425c-aa16-91ada45d4484/scratchpad/svc/execution-service
+00:44:30 execution-service: docker build of pytstop-execution-service:0c34ed75443f0824d14a80dbf20600d2774471ba from ./svc/execution-service
 00:44:32 Image: "pytstop-execution-service:0c34ed75443f0824d14a80dbf20600d2774471ba" with ID "sha256:5ca7f414688f5de3f92edb844d797d3b9930f883eb174ee196b39c185d3eaa65" not yet present on node "pytstop-p4-control-plane", loading...
 00:44:34 execution-service: k8s/overlays/execucao = kind with image pytstop-execution-service:0c34ed75443f0824d14a80dbf20600d2774471ba
 00:44:40 [execution-service] partitioned roll out complete: 1 new pods have been updated...
