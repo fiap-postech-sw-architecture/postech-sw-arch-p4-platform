@@ -14,6 +14,7 @@ from e2e.apoio.conferencias import (
     conferir_estornado,
     conferir_preferencia_expirada,
 )
+from e2e.apoio.evidencia import varrer
 from e2e.apoio.mercadopago import MARGEM_DO_RELOGIO, PagamentoMp, PreferenciaMp
 
 AGORA = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
@@ -154,6 +155,22 @@ def test_preferencia_ainda_valida_reprova_dizendo_que_o_put_nao_valeu() -> None:
 
     assert "preferência 123-abc não está expirada" in str(erro.value)
     assert "PUT /checkout/preferences" in str(erro.value)
+
+
+def test_a_mensagem_da_preferencia_nao_expirada_nao_leva_o_user_id_da_conta() -> None:
+    # O id que o Billing guarda e <User ID da vendedora>-<uuid>; a mensagem vai para o
+    # junit.xml, e a varredura apagaria o arquivo ao achar o prefixo.
+    uuid = "c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6"
+    preferencia = PreferenciaMp(
+        id=f"1462278261-{uuid}", expires=True, expira_em=AGORA + timedelta(days=30)
+    )
+
+    with pytest.raises(DivergenciaComOMercadoPagoError) as erro:
+        conferir_preferencia_expirada(preferencia, agora=AGORA)
+
+    assert uuid in str(erro.value)
+    assert "1462278261" not in str(erro.value)
+    assert varrer(str(erro.value)) == []
 
 
 def test_preferencia_que_diz_expires_falso_reprova() -> None:

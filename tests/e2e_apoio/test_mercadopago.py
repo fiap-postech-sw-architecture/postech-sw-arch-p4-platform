@@ -12,6 +12,7 @@ import httpx
 import pytest
 
 from e2e.apoio import segredos
+from e2e.apoio.evidencia import varrer
 from e2e.apoio.mercadopago import (
     MARGEM_DO_RELOGIO,
     PRAZO,
@@ -630,6 +631,48 @@ def test_a_preferencia_na_evidencia_nao_leva_o_user_id_da_conta() -> None:
 
     assert preferencia.id == preferencia_id, "a consulta usa o id inteiro"
     assert preferencia.para_evidencia()["id"] == UUID
+
+
+def _sem_rede(_: httpx.Request) -> httpx.Response:
+    msg = "sem rede"
+    raise httpx.ConnectError(msg)
+
+
+@pytest.mark.parametrize(
+    "resposta",
+    [
+        pytest.param(_sem_rede, id="sem-rede"),
+        pytest.param(lambda _: httpx.Response(404, json={"error": "nf"}), id="404"),
+        pytest.param(lambda _: httpx.Response(500, json={"message": "x"}), id="500"),
+        pytest.param(lambda _: httpx.Response(401, json={"message": "x"}), id="token"),
+        pytest.param(
+            lambda _: httpx.Response(302, headers={"location": "https://outro"}),
+            id="redirecionamento",
+        ),
+        pytest.param(
+            lambda _: httpx.Response(200, content=b"nao e json"), id="sem-json"
+        ),
+    ],
+)
+def test_erro_da_leitura_da_preferencia_nao_leva_o_user_id_da_conta(
+    resposta: Callable[[httpx.Request], httpx.Response],
+) -> None:
+    # A mensagem vai para o junit.xml e o cucumber.json; a varredura apaga os dois se
+    # achar o prefixo numerico do id da preferencia.
+    with pytest.raises(ErroDoMercadoPagoError) as erro:
+        _cliente(resposta).preferencia(f"1462278261-{UUID}")
+
+    texto = str(erro.value)
+    assert f"/checkout/preferences/{UUID}" in texto
+    assert "1462278261" not in texto
+    assert varrer(texto) == []
+
+
+def test_id_de_preferencia_fora_do_formato_nao_leva_o_user_id_da_conta() -> None:
+    with pytest.raises(ErroDoMercadoPagoError, match="fora do formato aceito") as erro:
+        _cliente(lambda _: _json(PAGAMENTO)).preferencia(f"1462278261-{UUID}?x=y")
+
+    assert "1462278261" not in str(erro.value)
 
 
 # --- as fronteiras do estorno e da expiracao ----------------------------------

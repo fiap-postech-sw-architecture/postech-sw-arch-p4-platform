@@ -220,9 +220,19 @@ def sem_id_da_conta(preferencia_id: str) -> str:
     return _PREFIXO_DA_CONTA.sub("", preferencia_id, count=1)
 
 
+def _caminho_sem_conta(caminho: str) -> str:
+    """O caminho da URL com o id da preferencia sem o User ID da conta vendedora.
+
+    E o que as mensagens de erro dizem: elas vao para o ``junit.xml`` e o
+    ``cucumber.json``, que a varredura apaga se acha o prefixo.
+    """
+    inicio, barra, ultimo = caminho.rpartition("/")
+    return f"{inicio}{barra}{sem_id_da_conta(ultimo)}"
+
+
 def _id_valido(valor: str, rotulo: str) -> str:
     if not _ID_VALIDO.fullmatch(valor):
-        msg = f"{rotulo} fora do formato aceito: {valor[:20]!r}"
+        msg = f"{rotulo} fora do formato aceito: {sem_id_da_conta(valor)[:20]!r}"
         raise ErroDoMercadoPagoError(msg)
     return valor
 
@@ -255,29 +265,30 @@ class ClienteMercadoPago:
         self._http.close()
 
     def _ler(self, caminho: str, **params: str) -> Any:  # JSON do provedor
+        onde = _caminho_sem_conta(caminho)  # o que as mensagens dizem
         try:
             resposta = self._http.get(caminho, params=params or None)
         except httpx.HTTPError as erro:
-            msg = f"sem resposta do Mercado Pago em {caminho}: {type(erro).__name__}"
+            msg = f"sem resposta do Mercado Pago em {onde}: {type(erro).__name__}"
             raise ErroDoMercadoPagoError(msg) from None
         status = resposta.status_code
         if httpx.codes.is_redirect(status):
-            msg = f"GET {caminho}: redirecionamento {status} recusado (nunca se segue)"
+            msg = f"GET {onde}: redirecionamento {status} recusado (nunca se segue)"
             raise ErroDoMercadoPagoError(msg, status=status)
         if status in {httpx.codes.UNAUTHORIZED, httpx.codes.FORBIDDEN}:
             msg = (
-                f"GET {caminho}: HTTP {status}, o Mercado Pago não aceita o token "
+                f"GET {onde}: HTTP {status}, o Mercado Pago não aceita o token "
                 f"({_detalhe_do_erro(resposta)})"
             )
             raise TokenRecusadoError(msg, status=status)
         if not httpx.codes.is_success(status):
-            msg = f"GET {caminho}: HTTP {status} ({_detalhe_do_erro(resposta)})"
+            msg = f"GET {onde}: HTTP {status} ({_detalhe_do_erro(resposta)})"
             raise ErroDoMercadoPagoError(msg, status=status)
         try:
             # parse_float=Decimal: o valor cobrado nunca passa por float.
             return json.loads(resposta.text, parse_float=Decimal)
         except (ValueError, InvalidOperation):
-            msg = f"GET {caminho}: o corpo da resposta não é JSON"
+            msg = f"GET {onde}: o corpo da resposta não é JSON"
             raise ErroDoMercadoPagoError(msg, status=status) from None
 
     def pagamento(self, pagamento_id: str) -> PagamentoMp:

@@ -11,6 +11,8 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import TYPE_CHECKING, Final
 
+from e2e.apoio.mercadopago import sem_id_da_conta
+
 if TYPE_CHECKING:
     from e2e.apoio.mercadopago import PagamentoMp, PreferenciaMp
 
@@ -105,7 +107,8 @@ def conferir_preferencia_expirada(
         )
     if not expirada:
         msg = (
-            f"a preferência {preferencia.id} não está expirada no Mercado Pago "
+            f"a preferência {sem_id_da_conta(preferencia.id)} não está expirada no "
+            "Mercado Pago "
             f"(expires={preferencia.expires}, "
             f"expiration_date_to={preferencia.expira_em}): "
             "o `PUT /checkout/preferences/{id}` do Billing não valeu"
