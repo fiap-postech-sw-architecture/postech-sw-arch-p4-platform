@@ -667,6 +667,19 @@ tests:
         alertname: pytstop-webhook-assinatura-invalida
         exp_alerts:
           - exp_labels: {}
+  - name: pytstop-webhook-assinatura-invalida, uma tentativa a cada 2 minutos por 12 min dispara (a janela de 5 min dá continuidade)
+    interval: 1m
+    input_series:
+      - series: pytstop_webhook_assinatura_invalida_total{pod="billing-api-1"}
+        values: 0 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts:
+          - exp_labels: {}
   - name: pytstop-webhook-assinatura-invalida, um evento isolado nao dispara
     interval: 1m
     input_series:
@@ -696,6 +709,16 @@ tests:
         alertname: pytstop-jwks-falhas
         exp_alerts:
           - exp_labels: {namespace: pytstop-billing}
+  - name: pytstop-jwks-falhas, uma falha a cada 2 minutos por 12 min dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_jwks_falhas_total{namespace="pytstop-execucao", pod="exec-api-1"}
+        values: 0 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-jwks-falhas
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao}
   - name: pytstop-jwks-falhas, uma falha isolada nao dispara
     interval: 1m
     input_series:
@@ -775,6 +798,24 @@ tests:
       - eval_time: 5m
         alertname: pytstop-latencia-p95
         exp_alerts: []
+      - eval_time: 7m
+        alertname: pytstop-latencia-p95
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+  - name: pytstop-latencia-p95, 10% de requisicoes lentas puxam o p95 e a mediana continua rapida
+    interval: 1m
+    input_series:
+      # 90% das observacoes abaixo de 100 ms e 10% entre 250 ms e 500 ms: o p95
+      # cai na cauda lenta (0,375 s) e a mediana (p50) ficaria em 50 ms.
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.1"}
+        values: 0+54x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.25"}
+        values: 0+54x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
       - eval_time: 7m
         alertname: pytstop-latencia-p95
         exp_alerts:
