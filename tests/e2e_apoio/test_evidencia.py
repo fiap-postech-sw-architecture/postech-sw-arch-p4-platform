@@ -34,12 +34,9 @@ from e2e.apoio.evidencia import (
     varrer,
     varrer_pasta,
 )
+from e2e_apoio.falsos import ASSINATURA, CHAVE_APP_USR
 
 RAIZ = Path(__file__).resolve().parents[2]
-CHAVE_DO_MP = (
-    "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
-)
-ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
 QUANDO = datetime(2026, 10, 20, 12, 30, tzinfo=UTC)
 
 PAGAMENTO_DO_BILLING = {
@@ -341,12 +338,22 @@ def test_resumo_do_ensaio_diz_que_nada_foi_ao_mercado_pago() -> None:
 @pytest.mark.parametrize(
     ("modo", "frase", "outra"),
     [
-        ("real", FRASE_SEM_CONFIRMACAO, FRASE_DA_SANDBOX),
-        ("ensaio", FRASE_DO_ENSAIO_SEM_CONFIRMACAO, FRASE_DO_ENSAIO),
+        pytest.param("real", FRASE_SEM_CONFIRMACAO, FRASE_DA_SANDBOX, id="real"),
+        pytest.param(
+            "ensaio",
+            FRASE_DO_ENSAIO_SEM_CONFIRMACAO,
+            FRASE_DO_ENSAIO,
+            id="ensaio",
+        ),
     ],
 )
 @pytest.mark.parametrize(
-    "billing", [{}, {"status": "SOLICITADO"}, {"status": "CANCELADO"}]
+    "billing",
+    [
+        pytest.param({}, id="sem-dados-do-billing"),
+        pytest.param({"status": "SOLICITADO"}, id="solicitado"),
+        pytest.param({"status": "CANCELADO"}, id="cancelado"),
+    ],
 )
 def test_resumo_sem_pagamento_confirmado_nao_afirma_confirmacao(
     modo: str, frase: str, outra: str, billing: dict[str, str]
@@ -461,7 +468,7 @@ def test_gravar_evidencia_recusa_segredo_que_so_esta_no_resumo(tmp_path: Path) -
             [registro],
             modo="real",
             contexto="kind-x",
-            prints=[f"print com {CHAVE_DO_MP}"],
+            prints=[f"print com {CHAVE_APP_USR}"],
         )
 
     assert list(tmp_path.iterdir()) == []
@@ -476,7 +483,7 @@ def test_varrer_acha_cada_tipo_de_segredo_com_a_linha_e_nunca_o_valor() -> None:
         [
             "linha limpa",
             "a senha senha-registrada-do-admin vazou",
-            f"token {CHAVE_DO_MP}",
+            f"token {CHAVE_APP_USR}",
             "Authorization: Bearer abc.def.ghi",
             "comprador@testuser.com comprou",
             "TEST-1234567890-abcdef tambem",
@@ -502,7 +509,7 @@ def test_varrer_acha_o_que_o_chamador_passa_como_extra_e_ignora_extra_vazio() ->
 
 
 def test_varrer_uma_linha_com_dois_tipos_conta_os_dois() -> None:
-    tipos = {a.tipo for a in varrer(f"Bearer {CHAVE_DO_MP} de x@y.com")}
+    tipos = {a.tipo for a in varrer(f"Bearer {CHAVE_APP_USR} de x@y.com")}
 
     assert tipos == {"Bearer", "token do Mercado Pago", "e-mail"}
 
@@ -524,15 +531,15 @@ def test_gravar_escreve_o_texto_limpo(tmp_path: Path) -> None:
 
 
 def test_gravar_recusa_se_achar_o_token_diz_onde_e_nao_grava(tmp_path: Path) -> None:
-    segredos.registrar(CHAVE_DO_MP)
+    segredos.registrar(CHAVE_APP_USR)
 
     with pytest.raises(EvidenciaComSegredoError) as erro:
-        gravar(tmp_path / "resumo.md", f"linha 1\nlinha 2 com {CHAVE_DO_MP}\n")
+        gravar(tmp_path / "resumo.md", f"linha 1\nlinha 2 com {CHAVE_APP_USR}\n")
 
     texto = str(erro.value)
     assert "resumo.md" in texto
     assert "linha 2" in texto
-    assert CHAVE_DO_MP not in texto
+    assert CHAVE_APP_USR not in texto
     assert "Nada foi gravado" in texto
     assert not (tmp_path / "resumo.md").exists()
 
@@ -569,22 +576,33 @@ def test_gravar_evidencia_escreve_o_resumo_e_o_json(tmp_path: Path) -> None:
 
 
 def test_gravar_evidencia_sem_quando_usa_agora(tmp_path: Path) -> None:
+    # A data de antes e a de depois da chamada: o teste nao quebra na virada do
+    # dia UTC (meia-noite no meio da chamada).
+    antes = datetime.now(UTC)
     gravar_evidencia(tmp_path, [], modo="ensaio", contexto="kind-x", prints=[])
+    depois = datetime.now(UTC)
 
-    assert f"Data: {datetime.now(UTC):%Y-%m-%d}" in (tmp_path / "resumo.md").read_text()
+    texto = (tmp_path / "resumo.md").read_text()
+    assert any(f"Data: {dia:%Y-%m-%d}" in texto for dia in (antes, depois))
 
 
-@pytest.mark.parametrize("onde", ["resumo", "json"])
+@pytest.mark.parametrize(
+    "onde",
+    [
+        pytest.param("resumo", id="no-resumo"),
+        pytest.param("json", id="so-no-json"),
+    ],
+)
 def test_gravar_evidencia_com_segredo_nao_grava_nem_o_outro_arquivo(
     onde: str, tmp_path: Path
 ) -> None:
-    segredos.registrar(CHAVE_DO_MP)
+    segredos.registrar(CHAVE_APP_USR)
     registro = _registro_completo()
     if onde == "resumo":
-        registro.nome = f"cenario com {CHAVE_DO_MP}"
+        registro.nome = f"cenario com {CHAVE_APP_USR}"
     else:
         # So o JSON tem este campo: a varredura do resumo nao o veria.
-        registro.billing = {"referencia": CHAVE_DO_MP}
+        registro.billing = {"referencia": CHAVE_APP_USR}
 
     with pytest.raises(EvidenciaComSegredoError) as erro:
         gravar_evidencia(
@@ -596,7 +614,7 @@ def test_gravar_evidencia_com_segredo_nao_grava_nem_o_outro_arquivo(
             quando=QUANDO,
         )
 
-    assert CHAVE_DO_MP not in str(erro.value)
+    assert CHAVE_APP_USR not in str(erro.value)
     assert list(tmp_path.iterdir()) == []
 
 
@@ -624,7 +642,7 @@ def test_o_json_da_evidencia_nunca_tem_dado_do_pagador_nem_o_link(
 def test_varrer_pasta_so_lista_os_arquivos_com_achado(tmp_path: Path) -> None:
     (tmp_path / "limpo.md").write_text("tudo certo\n")
     (tmp_path / "sub").mkdir()
-    (tmp_path / "sub" / "junit.xml").write_text(f"ok\nBearer {CHAVE_DO_MP}\n")
+    (tmp_path / "sub" / "junit.xml").write_text(f"ok\nBearer {CHAVE_APP_USR}\n")
 
     achados = varrer_pasta(tmp_path)
 
@@ -659,14 +677,14 @@ def test_varredura_apaga_o_arquivo_com_o_token_do_ambiente_e_nao_o_repete(
     # Um processo novo: so conhece o token e a assinatura pelo ambiente do shell.
     segredos.esquecer_todos()
     (tmp_path / "junit.xml").write_text(
-        f"a\nb {CHAVE_DO_MP}\nc {CHAVE_DO_MP} outra vez\n"
+        f"a\nb {CHAVE_APP_USR}\nc {CHAVE_APP_USR} outra vez\n"
     )
     (tmp_path / "cucumber.json").write_text(
         json.dumps({"x": base64.b64encode(ASSINATURA.encode()).decode()})
     )
     (tmp_path / "resumo.md").write_text("limpo\n")
     ambiente = {
-        "MP_ACCESS_TOKEN": CHAVE_DO_MP,
+        "MP_ACCESS_TOKEN": CHAVE_APP_USR,
         "MP_WEBHOOK_SECRET": ASSINATURA,
         "OUTRA": "x",
     }
@@ -681,7 +699,7 @@ def test_varredura_apaga_o_arquivo_com_o_token_do_ambiente_e_nao_o_repete(
     )
     assert "segredo em cucumber.json" in erro
     assert "APAGADOS" in erro
-    assert CHAVE_DO_MP not in erro
+    assert CHAVE_APP_USR not in erro
     assert ASSINATURA not in erro
     assert sorted(p.name for p in tmp_path.iterdir()) == ["resumo.md"]
 
@@ -696,7 +714,13 @@ def test_varredura_sem_as_credenciais_no_ambiente_ainda_acha_os_padroes(
     assert not (tmp_path / "x.md").exists()
 
 
-@pytest.mark.parametrize("argumentos", [[], ["a", "b"]])
+@pytest.mark.parametrize(
+    "argumentos",
+    [
+        pytest.param([], id="nenhuma-pasta"),
+        pytest.param(["a", "b"], id="pastas-demais"),
+    ],
+)
 def test_varredura_exige_exatamente_uma_pasta(
     argumentos: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:

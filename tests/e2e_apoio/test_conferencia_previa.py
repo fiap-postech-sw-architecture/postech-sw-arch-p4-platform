@@ -13,13 +13,11 @@ from e2e.apoio.conferencia_previa import SUBIR_O_CLUSTER, conferir_antes_do_pyte
 from e2e.apoio.http import ClienteHttp
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
 from e2e.apoio.mercadopago import TokenRecusadoError
-from e2e_apoio.falsos import ExecutorFalso, Relogio
+from e2e_apoio.falsos import ASSINATURA, CHAVE_DO_MP, ExecutorFalso, Relogio
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-CHAVE_DO_MP = "TEST-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
-ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
 KIND = {
     "ORCAMENTO_VALIDADE_HORAS": "72",
     "PAGAMENTO_VALIDADE_MINUTOS": "60",

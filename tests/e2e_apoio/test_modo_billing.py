@@ -29,7 +29,12 @@ from e2e.apoio.modo_billing import (
     url_de_notificacao_valida,
 )
 from e2e.apoio.preflight_mp import Sandbox
-from e2e_apoio.falsos import chamadas_do_gravador, criar_kubectl_gravador
+from e2e_apoio.falsos import (
+    ASSINATURA,
+    CHAVE_DO_MP,
+    chamadas_do_gravador,
+    criar_kubectl_gravador,
+)
 
 if TYPE_CHECKING:
     import contextlib
@@ -38,8 +43,6 @@ if TYPE_CHECKING:
 
     from e2e_apoio.falsos import Relogio
 
-CHAVE_DO_MP = "TEST-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
-ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
 URL = "https://example.com/api/v1/webhooks/mercadopago"
 
 
@@ -129,12 +132,15 @@ def _modo(
 @pytest.mark.parametrize(
     "url",
     [
-        URL,
-        "https://meu-tunel.ngrok.app/api/v1/webhooks/mercadopago",
-        "https://example.com./webhook",
-        "https://8.8.8.8/webhook",
-        "https://[2001:4860:4860::8888]/webhook",
-        "https://a.b.cafe/webhook",
+        pytest.param(URL, id="a-do-padrao"),
+        pytest.param(
+            "https://meu-tunel.ngrok.app/api/v1/webhooks/mercadopago",
+            id="tunel",
+        ),
+        pytest.param("https://example.com./webhook", id="dominio-com-ponto-final"),
+        pytest.param("https://8.8.8.8/webhook", id="ipv4-publico"),
+        pytest.param("https://[2001:4860:4860::8888]/webhook", id="ipv6-publico"),
+        pytest.param("https://a.b.cafe/webhook", id="nome-que-parece-hexadecimal"),
     ],
 )
 def test_url_de_notificacao_publica_passa(url: str) -> None:
@@ -587,7 +593,13 @@ def test_desfazer_avisa_quando_o_billing_voltou_ao_simulador(relogio: Relogio) -
     assert avisos[-1] == "[mp-sandbox] Billing de volta ao simulador"
 
 
-@pytest.mark.parametrize("erro", [KeyError("modo"), ValueError("sem json")])
+@pytest.mark.parametrize(
+    "erro",
+    [
+        pytest.param(KeyError("modo"), id="chave-ausente"),
+        pytest.param(ValueError("sem json"), id="json-invalido"),
+    ],
+)
 def test_saude_ilegivel_no_desfazer_e_falha_do_passo_e_nao_excecao_estranha(
     erro: Exception, relogio: Relogio
 ) -> None:

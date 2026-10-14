@@ -91,7 +91,14 @@ def _guardar_relatorio(item: ItemFalso, fase: str, resultado: str) -> None:
     assert fim.value.value is relatorio
 
 
-@pytest.mark.parametrize("fase", ["setup", "call", "teardown"])
+@pytest.mark.parametrize(
+    "fase",
+    [
+        pytest.param("setup", id="preparacao"),
+        pytest.param("call", id="chamada"),
+        pytest.param("teardown", id="encerramento"),
+    ],
+)
 def test_o_relatorio_de_cada_fase_fica_no_item(fase: str) -> None:
     item = ItemFalso()
 
@@ -100,7 +107,10 @@ def test_o_relatorio_de_cada_fase_fica_no_item(fase: str) -> None:
     assert getattr(item, f"rep_{fase}").outcome == "passed"
 
 
-@pytest.mark.parametrize("resultado", ["passed", "failed"])
+@pytest.mark.parametrize(
+    "resultado",
+    [pytest.param("passed", id="passou"), pytest.param("failed", id="falhou")],
+)
 def test_o_desfecho_e_o_da_chamada_e_nao_o_do_setup_nem_do_teardown(
     resultado: str,
 ) -> None:

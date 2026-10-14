@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from e2e.apoio import segredos
+from e2e_apoio.falsos import CHAVE_APP_USR, CHAVE_DO_MP
 
 
 def test_mascarar_troca_segredo_registrado() -> None:
@@ -133,9 +134,9 @@ def test_registrar_fora_do_actions_nao_imprime_o_segredo(
 @pytest.mark.parametrize(
     "token",
     [
-        "TEST-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789",
-        "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789",
-        "APP_USR-12345678",
+        pytest.param(CHAVE_DO_MP, id="prefixo-test"),
+        pytest.param(CHAVE_APP_USR, id="prefixo-app-usr"),
+        pytest.param("APP_USR-12345678", id="app-usr-curto"),
     ],
 )
 def test_mascarar_pega_o_access_token_do_mercado_pago_mesmo_sem_registro(

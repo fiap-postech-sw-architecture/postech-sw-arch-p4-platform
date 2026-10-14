@@ -12,6 +12,14 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
 
+# Credenciais de mentira: o formato imita o do Mercado Pago so para a mascara e a
+# varredura as reconhecerem. Nenhuma vale em lugar nenhum.
+CHAVE_DO_MP = "TEST-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
+CHAVE_APP_USR = (
+    "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
+)
+ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
+
 
 class Relogio:
     """Relogio e ``dormir`` falsos: dormir avanca o tempo sem esperar de verdade.

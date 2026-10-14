@@ -20,10 +20,7 @@ from e2e.apoio.diagnostico import (
     montar,
 )
 from e2e.apoio.mercadopago import PagamentoMp
-
-CHAVE_DO_MP = (
-    "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
-)
+from e2e_apoio.falsos import CHAVE_APP_USR
 
 
 def _log(evento: str, nivel: str = "info", **campos: Any) -> str:
@@ -237,10 +234,10 @@ def test_linha_sem_hora_nem_nivel_ainda_e_formatada() -> None:
 def test_o_texto_da_linha_sai_mascarado() -> None:
     segredos.registrar("segredo-no-log-123")
     linha = _linhas(
-        _log("x", "error", erro=f"falhou com {CHAVE_DO_MP} e segredo-no-log-123")
+        _log("x", "error", erro=f"falhou com {CHAVE_APP_USR} e segredo-no-log-123")
     )[0]
 
-    assert CHAVE_DO_MP not in linha.texto()
+    assert CHAVE_APP_USR not in linha.texto()
     assert "segredo-no-log-123" not in linha.texto()
 
 
@@ -320,7 +317,13 @@ def test_get_com_4xx_nao_e_criacao_recusada() -> None:
     assert "notification_url" not in " ".join(dicas(sinais))
 
 
-@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(401, id="nao-autenticado"),
+        pytest.param(403, id="proibido"),
+    ],
+)
 def test_token_recusado_na_criacao_vence_a_hipotese_da_notification_url(
     status: int,
 ) -> None:
@@ -591,9 +594,11 @@ def test_diagnostico_do_ensaio_nao_fala_do_mercado_pago() -> None:
 def test_diagnostico_sai_mascarado() -> None:
     segredos.registrar("senha-que-vazou-123")
 
-    texto = montar(_sinais(erro=f"AssertionError: {CHAVE_DO_MP} e senha-que-vazou-123"))
+    texto = montar(
+        _sinais(erro=f"AssertionError: {CHAVE_APP_USR} e senha-que-vazou-123")
+    )
 
-    assert CHAVE_DO_MP not in texto
+    assert CHAVE_APP_USR not in texto
     assert "senha-que-vazou-123" not in texto
     assert "***" in texto
 

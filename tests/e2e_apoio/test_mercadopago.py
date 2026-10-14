@@ -23,13 +23,11 @@ from e2e.apoio.mercadopago import (
     TokenRecusadoError,
     sem_id_da_conta,
 )
+from e2e_apoio.falsos import CHAVE_APP_USR
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-CHAVE_DO_MP = (
-    "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
-)
 AGORA = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 
 # Um pagamento do Mercado Pago como a documentacao o mostra, com os dados do pagador
@@ -62,7 +60,7 @@ def _cliente(
             visto.append(requisicao)
         return responder(requisicao)
 
-    return ClienteMercadoPago(CHAVE_DO_MP, transporte=httpx.MockTransport(tratador))
+    return ClienteMercadoPago(CHAVE_APP_USR, transporte=httpx.MockTransport(tratador))
 
 
 def _json(corpo: object, status: int = 200) -> httpx.Response:
@@ -109,7 +107,7 @@ def test_cada_chamada_leva_o_token_no_cabecalho_e_um_user_agent_proprio() -> Non
 
     _cliente(lambda _: _json(PAGAMENTO), visto).pagamento("1")
 
-    assert visto[0].headers["authorization"] == f"Bearer {CHAVE_DO_MP}"
+    assert visto[0].headers["authorization"] == f"Bearer {CHAVE_APP_USR}"
     assert visto[0].headers["user-agent"] == USER_AGENT
     assert "pytstop" in USER_AGENT
     assert visto[0].headers["accept"] == "application/json"
@@ -126,7 +124,7 @@ def test_o_cliente_http_tem_prazo_tls_ligado_e_nao_segue_redirecionamento(
 
     monkeypatch.setattr(httpx, "Client", ClienteFalso)
 
-    ClienteMercadoPago(CHAVE_DO_MP)
+    ClienteMercadoPago(CHAVE_APP_USR)
 
     assert opcoes["base_url"] == URL_DA_API == "https://api.mercadopago.com"
     assert opcoes["timeout"] == PRAZO
@@ -137,9 +135,9 @@ def test_o_cliente_http_tem_prazo_tls_ligado_e_nao_segue_redirecionamento(
 def test_o_token_nao_aparece_no_repr_nem_nos_atributos() -> None:
     cliente = _cliente(lambda _: _json(PAGAMENTO))
 
-    assert CHAVE_DO_MP not in repr(cliente)
+    assert CHAVE_APP_USR not in repr(cliente)
     assert all(
-        CHAVE_DO_MP not in str(valor)
+        CHAVE_APP_USR not in str(valor)
         for valor in vars(cliente).values()
         if not isinstance(valor, httpx.Client)
     )
@@ -298,7 +296,13 @@ def test_preferencia_fora_do_formato_diz_o_campo() -> None:
         _cliente(lambda _: _json(["x"])).preferencia("1")
 
 
-@pytest.mark.parametrize("status", [401, 403])
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(401, id="nao-autenticado"),
+        pytest.param(403, id="proibido"),
+    ],
+)
 def test_token_recusado_e_um_erro_proprio_com_a_mensagem_do_mercado_pago(
     status: int,
 ) -> None:
@@ -389,10 +393,10 @@ def test_a_mensagem_de_erro_sai_mascarada_e_cortada() -> None:
 def test_erro_que_repete_o_proprio_token_sai_mascarado() -> None:
     with pytest.raises(ErroDoMercadoPagoError) as erro:
         _cliente(
-            lambda _: _json({"message": f"token {CHAVE_DO_MP} invalido"}, 400)
+            lambda _: _json({"message": f"token {CHAVE_APP_USR} invalido"}, 400)
         ).pagamento("1")
 
-    assert CHAVE_DO_MP not in str(erro.value)
+    assert CHAVE_APP_USR not in str(erro.value)
     assert "***" in str(erro.value)
 
 
@@ -417,14 +421,14 @@ def test_redirecionamento_nunca_e_seguido() -> None:
 
 def test_falha_de_rede_vira_erro_sem_o_texto_da_excecao() -> None:
     def cai(_: httpx.Request) -> httpx.Response:
-        msg = f"conexao com {CHAVE_DO_MP} caiu"
+        msg = f"conexao com {CHAVE_APP_USR} caiu"
         raise httpx.ConnectError(msg)
 
     with pytest.raises(ErroDoMercadoPagoError) as erro:
         _cliente(cai).pagamento("1")
 
     assert "ConnectError" in str(erro.value)
-    assert CHAVE_DO_MP not in str(erro.value)
+    assert CHAVE_APP_USR not in str(erro.value)
     assert erro.value.status is None
 
 

@@ -147,7 +147,13 @@ def test_escrever_resumo_sem_registro_e_sem_step_summary(
     assert "| Pulado |" in destino.read_text()
 
 
-@pytest.mark.parametrize("argumentos", [[], ["a", "b", "c", "d"]])
+@pytest.mark.parametrize(
+    "argumentos",
+    [
+        pytest.param([], id="nenhum-argumento"),
+        pytest.param(["a", "b", "c", "d"], id="argumentos-demais"),
+    ],
+)
 def test_principal_exige_o_diretorio_dos_relatorios(
     argumentos: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -163,7 +163,11 @@ def test_preferencia_que_diz_expires_falso_reprova() -> None:
 
 @pytest.mark.parametrize(
     ("expires", "expira_em"),
-    [(None, None), (True, None), (None, AGORA)],
+    [
+        pytest.param(None, None, id="sem-nenhum-dos-campos"),
+        pytest.param(True, None, id="sem-a-data"),
+        pytest.param(None, AGORA, id="sem-a-flag"),
+    ],
 )
 def test_resposta_sem_os_campos_nao_prova_e_diz_onde_ver(
     expires: bool | None, expira_em: datetime | None

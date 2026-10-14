@@ -137,7 +137,14 @@ modo.desfazer()
 """
 
 
-@pytest.mark.parametrize("sinal", [signal.SIGINT, signal.SIGTERM, signal.SIGHUP])
+@pytest.mark.parametrize(
+    "sinal",
+    [
+        pytest.param(signal.SIGINT, id="ctrl-c"),
+        pytest.param(signal.SIGTERM, id="kill"),
+        pytest.param(signal.SIGHUP, id="terminal-fechado"),
+    ],
+)
 def test_sinal_ao_grupo_durante_o_rollout_do_desfazer_nao_o_interrompe(
     sinal: signal.Signals, tmp_path: Path
 ) -> None:

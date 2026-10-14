@@ -19,7 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from e2e_apoio.falsos import criar_cluster_falso
+from e2e_apoio.falsos import ASSINATURA, CHAVE_DO_MP, criar_cluster_falso
 
 RAIZ = Path(__file__).resolve().parents[2]
 INI = RAIZ / "e2e" / "pytest.ini"
@@ -28,8 +28,6 @@ FEATURE = RAIZ / "e2e" / "features" / "mercadopago_sandbox.feature"
 SANDBOX = "test_mp_sandbox.py"
 ARQUIVO_DO_SANDBOX = "e2e/test_mp_sandbox.py"
 CENARIOS_DO_SANDBOX = 3
-ASSINATURA_DO_TESTE = "assinatura-do-webhook-0123456789abcdef"
-CHAVE_DO_MP = "TEST-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
 
 
 def _ambiente(**extra: str) -> dict[str, str]:
@@ -98,8 +96,10 @@ def test_make_demo_roda_so_o_que_tem_a_tag_demo() -> None:
 @pytest.mark.parametrize(
     ("alvo", "modo", "pasta"),
     [
-        ("mp-sandbox", "real", "reports/mp-sandbox"),
-        ("mp-sandbox-ensaio", "ensaio", "reports/mp-sandbox-ensaio"),
+        pytest.param("mp-sandbox", "real", "reports/mp-sandbox", id="real"),
+        pytest.param(
+            "mp-sandbox-ensaio", "ensaio", "reports/mp-sandbox-ensaio", id="ensaio"
+        ),
     ],
 )
 def test_make_do_sandbox_roda_so_o_sandbox_no_modo_e_na_pasta_dele(
@@ -154,8 +154,15 @@ def test_o_real_gira_so_a_pasta_com_resumo_e_o_ensaio_nao_toca_nela() -> None:
 @pytest.mark.parametrize(
     ("alvo", "modo", "mexe_nos_relatorios"),
     [
-        ("mp-sandbox", "real", "if [ -f reports/mp-sandbox/resumo.md ]"),
-        ("mp-sandbox-ensaio", "ensaio", "rm -rf reports/mp-sandbox-ensaio"),
+        pytest.param(
+            "mp-sandbox", "real", "if [ -f reports/mp-sandbox/resumo.md ]", id="real"
+        ),
+        pytest.param(
+            "mp-sandbox-ensaio",
+            "ensaio",
+            "rm -rf reports/mp-sandbox-ensaio",
+            id="ensaio",
+        ),
     ],
 )
 def test_a_conferencia_vem_antes_de_tocar_nos_relatorios_e_do_pytest(
@@ -180,8 +187,20 @@ def _make_com(*argumentos: str, **ambiente: str) -> subprocess.CompletedProcess[
     )
 
 
-@pytest.mark.parametrize("variavel", ["MP_ACCESS_TOKEN", "MP_WEBHOOK_SECRET"])
-@pytest.mark.parametrize("alvo", ["mp-sandbox", "mp-sandbox-ensaio"])
+@pytest.mark.parametrize(
+    "variavel",
+    [
+        pytest.param("MP_ACCESS_TOKEN", id="token"),
+        pytest.param("MP_WEBHOOK_SECRET", id="assinatura"),
+    ],
+)
+@pytest.mark.parametrize(
+    "alvo",
+    [
+        pytest.param("mp-sandbox", id="real"),
+        pytest.param("mp-sandbox-ensaio", id="ensaio"),
+    ],
+)
 def test_credencial_na_linha_do_make_e_recusada_sem_repetir_o_valor(
     alvo: str, variavel: str
 ) -> None:
@@ -205,12 +224,12 @@ def test_credencial_so_no_ambiente_o_make_aceita_e_nao_a_repete() -> None:
             "-n",
             alvo,
             MP_ACCESS_TOKEN=CHAVE_DO_MP,
-            MP_WEBHOOK_SECRET=ASSINATURA_DO_TESTE,
+            MP_WEBHOOK_SECRET=ASSINATURA,
         )
 
         assert resultado.returncode == 0, resultado.stdout + resultado.stderr
         assert CHAVE_DO_MP not in resultado.stdout
-        assert ASSINATURA_DO_TESTE not in resultado.stdout
+        assert ASSINATURA not in resultado.stdout
 
 
 def test_a_recusa_da_credencial_vale_so_para_os_alvos_do_sandbox() -> None:
@@ -372,7 +391,7 @@ def test_token_com_quebra_de_linha_reprova_antes_do_cluster_e_nao_vaza(
         E2E_MP_MODO="real",
         MP_ACCESS_TOKEN=CHAVE_DO_MP + "\n",
         CREDENCIAL_DE_OUTRA_COISA="valor-secreto-do-ambiente-9999",
-        MP_WEBHOOK_SECRET=ASSINATURA_DO_TESTE,
+        MP_WEBHOOK_SECRET=ASSINATURA,
     )
 
     assert resultado.returncode == 2

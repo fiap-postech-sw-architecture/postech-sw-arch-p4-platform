@@ -30,13 +30,13 @@ LINK = "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=123-abc"
 @pytest.mark.parametrize(
     ("segundos", "texto"),
     [
-        (900, "15 min 00 s"),
-        (845.4, "14 min 05 s"),
-        (60, "1 min 00 s"),
-        (59.9, "59 s"),
-        (45, "45 s"),
-        (0, "0 s"),
-        (-3, "0 s"),
+        pytest.param(900, "15 min 00 s", id="quinze-minutos"),
+        pytest.param(845.4, "14 min 05 s", id="minutos-e-segundos"),
+        pytest.param(60, "1 min 00 s", id="um-minuto-exato"),
+        pytest.param(59.9, "59 s", id="quase-um-minuto"),
+        pytest.param(45, "45 s", id="so-segundos"),
+        pytest.param(0, "0 s", id="zero"),
+        pytest.param(-3, "0 s", id="negativo-vira-zero"),
     ],
 )
 def test_formatar_restante(segundos: float, texto: str) -> None:
@@ -163,7 +163,15 @@ def test_cada_tentativa_recusada_e_avisada_quando_aparece(relogio: Relogio) -> N
     assert "APRO aprova" in recusas[0]
 
 
-@pytest.mark.parametrize("status", ["RECUSADO", "EXPIRADO", "CANCELADO", "ESTORNADO"])
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param("RECUSADO", id="recusado"),
+        pytest.param("EXPIRADO", id="expirado"),
+        pytest.param("CANCELADO", id="cancelado"),
+        pytest.param("ESTORNADO", id="estornado"),
+    ],
+)
 def test_cobranca_encerrada_sem_pagamento_reprova_na_hora(
     status: str, relogio: Relogio
 ) -> None:

@@ -27,7 +27,7 @@ from e2e.apoio.prova import (
     gravar_evidencia_da_sessao,
 )
 from e2e.servicos import Cenario
-from e2e_apoio.falsos import ExecutorFalso
+from e2e_apoio.falsos import CHAVE_APP_USR, ExecutorFalso
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -36,9 +36,6 @@ if TYPE_CHECKING:
     from e2e.servicos import Api, Json
     from e2e_apoio.falsos import Relogio
 
-CHAVE_DO_MP = (
-    "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
-)
 AGORA = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 LINK_MP = "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref-1"
 LINK_SIMULADO = "https://localhost/billing/simulador/checkout/p-1?token=tok-sim-1"
@@ -138,7 +135,7 @@ class Mundo:
             return httpx.Response(200, json=self.mp_pagamento(self._leituras))
 
         return ClienteMercadoPago(
-            CHAVE_DO_MP, transporte=httpx.MockTransport(responder)
+            CHAVE_APP_USR, transporte=httpx.MockTransport(responder)
         )
 
 
@@ -193,7 +190,8 @@ def test_cobranca_aberta_espera_o_resumo_na_os_e_le_o_pagamento_no_billing(
 ) -> None:
     leituras = iter([None, None, {"pagamento_id": "p-1", "status": "solicitado"}])
     prova, _, esperas = _prova(Mundo(), relogio, real=True)
-    prova.api.os.ordem = lambda _id: {"pagamento": next(leituras)}  # type: ignore[assignment]
+    # Duas leituras da OS sem o resumo da cobranca e depois a que o traz.
+    prova.api.os.ordem = lambda _id: {"pagamento": next(leituras)}  # type: ignore[assignment]  # troca o metodo pelo falso
 
     pagamento = prova.cobranca_aberta()
 
@@ -219,7 +217,10 @@ def test_cobranca_aberta_no_ensaio_aceita_o_provedor_simulado(relogio: Relogio) 
 
 @pytest.mark.parametrize(
     ("real", "provedor", "esperado"),
-    [(True, "simulado", "mercadopago"), (False, "mercadopago", "simulado")],
+    [
+        pytest.param(True, "simulado", "mercadopago", id="real-com-cobranca-simulada"),
+        pytest.param(False, "mercadopago", "simulado", id="ensaio-com-cobranca-do-mp"),
+    ],
 )
 def test_cobranca_no_provedor_errado_reprova_dizendo_qual_era_o_esperado(
     real: bool, provedor: str, esperado: str, relogio: Relogio
@@ -553,9 +554,17 @@ def test_conferir_estornado_com_o_mp_fora_do_ar_reprova_dizendo_o_status(
 @pytest.mark.parametrize(
     ("passo", "campo"),
     [
-        ("conferir_aprovado", "referencia_pagamento"),
-        ("conferir_estornado", "referencia_pagamento"),
-        ("conferir_preferencia_expirada", "referencia_preferencia"),
+        pytest.param(
+            "conferir_aprovado", "referencia_pagamento", id="aprovado-sem-pagamento"
+        ),
+        pytest.param(
+            "conferir_estornado", "referencia_pagamento", id="estorno-sem-pagamento"
+        ),
+        pytest.param(
+            "conferir_preferencia_expirada",
+            "referencia_preferencia",
+            id="expiracao-sem-preferencia",
+        ),
     ],
 )
 def test_billing_sem_o_id_do_mp_reprova_antes_de_consultar(
@@ -962,14 +971,14 @@ def test_falha_no_passo_imprime_o_diagnostico_e_marca_a_falha(relogio: Relogio) 
 
     prova.falha_no_passo(
         "Então o Billing confirma o pagamento",
-        AssertionError(f"falhou com {CHAVE_DO_MP}"),
+        AssertionError(f"falhou com {CHAVE_APP_USR}"),
     )
 
     assert prova.falhou == "Então o Billing confirma o pagamento"
     texto = avisos[0]
     assert "==== Diagnóstico: Cenário de teste" in texto
     assert "Falhou: AssertionError" in texto
-    assert CHAVE_DO_MP not in texto
+    assert CHAVE_APP_USR not in texto
     assert "OS o-1: status=x etapa=y" in texto
     assert "Pagamento no Billing: status=SOLICITADO" in texto
     assert (
@@ -1027,7 +1036,7 @@ def test_diagnostico_nunca_levanta_mesmo_com_tudo_fora_do_ar(relogio: Relogio) -
         mundo, relogio, real=True, executor=ExecutorQueFalha(), descrever=cai
     )
     prova.cenario.pagamento_id = "p-1"
-    prova.api.billing.pagamento = cai  # type: ignore[method-assign]
+    prova.api.billing.pagamento = cai  # type: ignore[method-assign]  # o Billing falso passa a falhar
 
     texto = prova.diagnostico("Então algo", AssertionError("x"))
 

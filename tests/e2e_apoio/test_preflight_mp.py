@@ -30,13 +30,11 @@ from e2e.apoio.preflight_mp import (
     preparar_sandbox,
     retirar_credenciais,
 )
-from e2e_apoio.falsos import ExecutorFalso, Relogio
+from e2e_apoio.falsos import ASSINATURA, CHAVE_DO_MP, ExecutorFalso, Relogio
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping, Sequence
 
-CHAVE_DO_MP = "TEST-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
-ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
 KIND = {
     "ORCAMENTO_VALIDADE_HORAS": "72",
     "PAGAMENTO_VALIDADE_MINUTOS": "60",
@@ -333,7 +331,13 @@ def test_conferir_kind_aceita_o_kind() -> None:
 
 
 @pytest.mark.parametrize(
-    "contexto", ["arn:aws:eks:us-east-1:1:cluster/producao", "k3s", "kind", "minikube"]
+    "contexto",
+    [
+        pytest.param("arn:aws:eks:us-east-1:1:cluster/producao", id="eks-de-producao"),
+        pytest.param("k3s", id="k3s"),
+        pytest.param("kind", id="kind-sem-o-nome-do-cluster"),
+        pytest.param("minikube", id="minikube"),
+    ],
 )
 def test_conferir_kind_recusa_o_resto_e_diz_que_o_escape_nao_vale(
     contexto: str,
@@ -673,7 +677,14 @@ def test_preparar_sandbox_ensaio_nao_pede_credencial_nem_fala_com_o_mercado_pago
     assert sandbox.url_de_notificacao == ""
 
 
-@pytest.mark.parametrize("modo", ["", "tanto-faz", "REAL"])
+@pytest.mark.parametrize(
+    "modo",
+    [
+        pytest.param("", id="vazio"),
+        pytest.param("tanto-faz", id="valor-desconhecido"),
+        pytest.param("REAL", id="em-maiusculas"),
+    ],
+)
 def test_preparar_sandbox_exige_real_ou_ensaio(modo: str, relogio: Relogio) -> None:
     kubectl = _kubectl()
 
@@ -809,7 +820,15 @@ def test_kubectl_que_falha_na_leitura_do_billing_vira_recusa_clara(
     assert "NotFound" in str(erro.value)
 
 
-@pytest.mark.parametrize("status", [400, 404, 422, 499])
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(400, id="requisicao-invalida"),
+        pytest.param(404, id="nao-encontrado"),
+        pytest.param(422, id="nao-processavel"),
+        pytest.param(499, id="ultimo-4xx"),
+    ],
+)
 def test_conferencia_do_token_com_4xx_que_nao_e_de_credencial_avisa_e_segue(
     status: int, relogio: Relogio
 ) -> None:
@@ -834,7 +853,15 @@ def test_conferencia_do_token_com_4xx_que_nao_e_de_credencial_avisa_e_segue(
     assert all(CHAVE_DO_MP not in a for a in avisos)
 
 
-@pytest.mark.parametrize("status", [500, 502, 503, None])
+@pytest.mark.parametrize(
+    "status",
+    [
+        pytest.param(500, id="erro-interno"),
+        pytest.param(502, id="gateway-ruim"),
+        pytest.param(503, id="indisponivel"),
+        pytest.param(None, id="sem-resposta"),
+    ],
+)
 def test_mercado_pago_que_nao_responde_ou_cai_barra_o_roteiro(
     status: int | None, relogio: Relogio
 ) -> None:
