@@ -226,8 +226,7 @@ GUARDA_DE_CONTEXTO := case "$(KUBE_CONTEXT)" in kind-*) ;; *) \
 # mesmo com cenario reprovado, e o status do make e o do pytest. Com todos os
 # cenarios verdes, o make confere ainda que cada consulta de painel de negocio
 # devolve serie no Prometheus do kind (e2e/apoio/paineis.py, paineis.md): painel
-# vazio reprova, e e o que o job e2e do CD precisa para pegar nome de metrica
-# trocado.
+# vazio reprova, e assim o E2E pega nome de metrica trocado em painel.
 e2e: ## E2E BDD da saga contra o kind com os tres servicos, e cada painel de negocio com serie (relatorios em reports/e2e)
 	$(GUARDA_DE_CONTEXTO)
 	rm -rf reports/e2e && mkdir -p reports/e2e
