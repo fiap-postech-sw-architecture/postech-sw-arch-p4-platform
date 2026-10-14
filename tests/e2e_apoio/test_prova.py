@@ -33,9 +33,7 @@ CHAVE_DO_MP = (
 )
 AGORA = datetime(2026, 10, 20, 12, 0, tzinfo=UTC)
 LINK_MP = "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=pref-1"
-LINK_SIMULADO = (
-    "https://localhost/billing/simulador/checkout/p-1?token=tok.en-do-simulador-1"
-)
+LINK_SIMULADO = "https://localhost/billing/simulador/checkout/p-1?token=tok-sim-1"
 
 
 def _pagamento_billing(**campos: Any) -> dict[str, Any]:
@@ -271,8 +269,8 @@ def test_pagar_no_ensaio_o_simulador_aprova_com_o_token_do_link_e_o_token_sai_ma
 
     prova.pagar(_pagamento_billing(checkout_url=LINK_SIMULADO))
 
-    assert mundo.simulados == [("p-1", "tok.en-do-simulador-1", "aprovar")]
-    assert segredos.mascarar("tok.en-do-simulador-1") == "***"
+    assert mundo.simulados == [("p-1", "tok-sim-1", "aprovar")]
+    assert segredos.mascarar("tok-sim-1") == "***"
     assert "simulador do Billing aprova" in avisos[0]
     assert LINK_SIMULADO not in " ".join(avisos)
     assert prova.registro.transicoes[-1][1] == "script: simulador aprovou o pagamento"
