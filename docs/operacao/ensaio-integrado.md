@@ -7,9 +7,11 @@ Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a
 ## Resultado
 
 - Os três serviços subiram na primeira tentativa, nos dois overlays (`kind-ci` e `kind`): 13 pods prontos (10 processos e 3 bancos), 3 Jobs de inicialização completos, nenhum reinício de container.
-- O `make smoke` da plataforma passou antes dos serviços (nos dois overlays) e o [`smoke-servicos.sh`](../../scripts/ci/smoke-servicos.sh) passou nos três namespaces: 35 etapas `ok`, nenhuma `FAILED`, incluindo `pg_up` e `mongodb_up` em 1 lidos do Prometheus, o Swagger sob o prefixo de cada serviço e a NetworkPolicy barrando o `rabbitmq-0` em cada banco.
-- Memória e CPU ficaram bem abaixo do orçamento: os 13 pods usam 0,84 GiB em repouso, contra 2,2 GiB de requests; o nó do kind inteiro (control plane, plataforma e serviços) fica em cerca de 3,1 GiB de working set, contra os 3,4 GiB de requests do orçamento.
-- O que falhou no ensaio foi só ruído de saída do smoke (uma linha `Defaulted container` do `kubectl exec`), corrigido neste PR. As observações sobre os serviços, com a situação de cada uma em 14/10, estão em [Observações do ensaio](#observações-do-ensaio-situação-em-1410).
+- O `make smoke` da plataforma passou antes dos serviços (nos dois overlays) e o [`smoke-servicos.sh`](../../scripts/ci/smoke-servicos.sh) passou nos três namespaces: 35 etapas `ok`, nenhuma `FAILED`, incluindo `pg_up` e `mongodb_up` em 1 lidos do Prometheus, o Swagger sob o prefixo de cada serviço e a NetworkPolicy barrando o `rabbitmq-0` em cada banco. É o smoke de `aaca05c`; o que mudou desde então está em [Depois do ensaio](#depois-do-ensaio).
+- Memória, uso contra reserva: os 13 pods usam 0,84 GiB em repouso (0,94 GiB somando os maiores valores amostrados), contra 2,2 GiB de requests. O nó do kind inteiro (control plane, plataforma e serviços) fica em 3,1 GiB de working set no `kind-ci`, com pico de cgroup de 5,35 GiB, nos 16 GB do runner. Contra os 3,3 a 3,4 GiB de requests do orçamento a folga é de só 6% a 9%, mas essa conta compara o uso do nó, que inclui o control plane e o metrics-server (fora do orçamento), com a reserva dos pods; a conclusão se apoia nos pods e no limite do runner.
+- CPU: o nó usou 0,3 CPU em repouso, e nenhum pod de serviço passou de 20% dos limits de CPU nas amostras de 5 s (o maior foi o consumidor do OS, com 40m de 250m).
+- Só um defeito apareceu, no próprio `platform`: o ruído `Defaulted container` do `kubectl exec` na saída do smoke, corrigido no PR #12. As observações sobre os serviços, com a situação de cada uma em 14/10, estão em [Observações do ensaio](#observações-do-ensaio-situação-em-1410).
+- Fora do ensaio: nenhuma saga, mensagem de negócio, carga, e-mail ou chamada ao Mercado Pago rodou. O ensaio provou que tudo sobe, conecta e aparece na borda, no Prometheus e na NetworkPolicy; o fluxo de negócio é assunto do teste de ponta a ponta do `platform` #13, ainda aberto.
 
 ## Depois do ensaio
 
@@ -38,7 +40,10 @@ Antes de fechar a fase, o ensaio deve ser repetido sobre as `main` de hoje: `smo
 | Imagens de terceiros | as da [tabela de versões](../../README.md#componentes-e-versões): `postgres:16.15`, `mongo:7.0.43`, `prometheuscommunity/postgres-exporter:v0.20.1`, `percona/mongodb_exporter:0.53.0`, `rabbitmq:4.3.6-management`, `kong:3.9.3`, entre outras |
 | Imagens dos serviços | `docker build` do checkout de cada `main`, com o commit como tag (`pytstop-<serviço>:<commit>`), 357 a 437 MB cada |
 
-Os números abaixo vêm de uma máquina arm64 com as imagens de terceiros e as camadas do `docker build` já em cache. O runner do CD é amd64, com 4 vCPU e 16 GB, e puxa as imagens a cada job: os tempos daqui são um piso, e os números do runner são os do primeiro `deploy-kind` completo dos serviços (a medição que o ADR-042 pede). A memória não depende do cache de imagens e deve ficar próxima.
+Os números abaixo vêm de uma máquina arm64 com as imagens de terceiros e as camadas do `docker build` já em cache. O runner do CD é amd64, com 4 vCPU e 16 GB, e puxa as imagens a cada job. Por isso:
+
+- os tempos valem como ordem de grandeza: o `kind-up` local (26 s) foi menor que o do runner (39 a 46 s, no ADR-042) e o `make deploy` da plataforma, maior (1 min 34 s contra 50 a 54 s);
+- a memória não depende do cache de imagens e deve ficar próxima, mas só o primeiro `deploy-kind` completo dos serviços no runner a confirma (a medição que o ADR-042 pede).
 
 ## Comandos usados
 
