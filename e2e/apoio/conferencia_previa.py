@@ -19,7 +19,12 @@ from e2e.apoio.contexto import (
     escape_do_ambiente,
 )
 from e2e.apoio.http import ClienteHttp
-from e2e.apoio.kube import ErroDeComandoError, Kubectl, executar_processo
+from e2e.apoio.kube import (
+    ComandoAusenteError,
+    ErroDeComandoError,
+    Kubectl,
+    executar_processo,
+)
 from e2e.apoio.mercadopago import ClienteMercadoPago
 from e2e.apoio.preflight_mp import (
     PreflightDoSandboxError,
@@ -89,7 +94,11 @@ def conferir_antes_do_pytest(  # cada parametro e um ponto de injecao dos testes
             cliente=criar_cliente,
             avisar=lambda _: None,
         )
-    except (ContextoNaoDescartavelError, PreflightDoSandboxError) as erro:
+    except (
+        ContextoNaoDescartavelError,
+        PreflightDoSandboxError,
+        ComandoAusenteError,
+    ) as erro:
         return _recusar(saida, str(erro))
     except ErroDeComandoError as erro:
         return _recusar(

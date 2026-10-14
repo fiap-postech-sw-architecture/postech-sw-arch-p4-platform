@@ -16,6 +16,7 @@ import pytest
 from e2e.apoio import segredos
 from e2e.apoio.espera import TempoEsgotadoError
 from e2e.apoio.kube import (
+    ComandoAusenteError,
     ErroDeComandoError,
     Kubectl,
     PortForward,
@@ -62,6 +63,15 @@ def test_executar_processo_entrada_vai_so_pelo_stdin_e_nao_pelo_argv() -> None:
 
     assert saida == "TOKEN-SECRETO"
     assert "token-secreto" not in programa
+
+
+def test_executar_processo_de_programa_ausente_diz_que_nao_esta_no_path() -> None:
+    with pytest.raises(ComandoAusenteError) as erro:
+        executar_processo(["programa-que-nao-existe-9f3a", "get", "nodes"], 10)
+
+    assert isinstance(erro.value, ErroDeComandoError)
+    assert "programa-que-nao-existe-9f3a não está no PATH" in str(erro.value)
+    assert "instale-o" in str(erro.value)
 
 
 def test_executar_processo_sem_entrada_o_stdin_e_vazio() -> None:

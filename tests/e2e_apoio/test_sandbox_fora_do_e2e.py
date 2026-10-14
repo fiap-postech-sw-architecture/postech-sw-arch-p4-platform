@@ -591,3 +591,26 @@ def test_nenhum_kubectl_ou_docker_da_conferencia_previa_recebe_as_credenciais(
 
     assert resultado.returncode == 2, resultado.stdout + resultado.stderr
     _nenhum_filho_recebeu_as_credenciais(estado)
+
+
+def test_conferencia_previa_sem_kubectl_no_path_sai_em_portugues_sem_traceback(
+    tmp_path: Path,
+) -> None:
+    vazio = tmp_path / "vazio"
+    vazio.mkdir()
+
+    resultado = subprocess.run(  # nosec B603
+        [sys.executable, "-m", "e2e.conferir_sandbox", "ensaio"],
+        cwd=RAIZ,
+        env=_ambiente(KUBE_CONTEXT="kind-pytstop-p4", PATH=str(vazio)),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+        stdin=subprocess.DEVNULL,
+    )
+
+    saida = resultado.stdout + resultado.stderr
+    assert resultado.returncode == 2, saida
+    assert "kubectl não está no PATH" in saida
+    assert "Traceback" not in saida

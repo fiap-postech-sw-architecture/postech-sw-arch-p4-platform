@@ -46,6 +46,16 @@ class ErroDeComandoError(AssertionError):
     """O comando saiu com erro ou passou do prazo."""
 
 
+class ComandoAusenteError(ErroDeComandoError):
+    """O programa (``kubectl``, ``docker``) nao esta no PATH: nao e falha do cluster."""
+
+    def __init__(self, programa: str) -> None:
+        super().__init__(
+            f"{programa} não está no PATH: instale-o e abra um terminal novo "
+            '(README, "Pré-requisitos")'
+        )
+
+
 def _ambiente_dos_filhos() -> dict[str, str]:
     """O ambiente deste processo sem as credenciais do Mercado Pago.
 
@@ -88,6 +98,8 @@ def executar_processo(
         raise ErroDeComandoError(
             mascarar(f"{comando}: passou de {prazo:g} s")
         ) from erro
+    except FileNotFoundError as erro:
+        raise ComandoAusenteError(argumentos[0]) from erro
     if processo.returncode != 0:
         # Mascara o texto inteiro e so entao corta: um JWT cortado ao meio nao casa
         # com o padrao nem com o valor registrado.

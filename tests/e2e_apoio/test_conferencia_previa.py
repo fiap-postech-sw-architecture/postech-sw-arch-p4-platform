@@ -11,7 +11,7 @@ import pytest
 
 from e2e.apoio.conferencia_previa import SUBIR_O_CLUSTER, conferir_antes_do_pytest
 from e2e.apoio.http import ClienteHttp
-from e2e.apoio.kube import ErroDeComandoError, Kubectl
+from e2e.apoio.kube import ComandoAusenteError, ErroDeComandoError, Kubectl
 from e2e.apoio.mercadopago import TokenRecusadoError
 from e2e_apoio.falsos import ASSINATURA, CHAVE_DO_MP, ExecutorFalso, Relogio
 
@@ -282,3 +282,20 @@ def test_token_recusado_pelo_mercado_pago_diz_isso_sem_repetir_o_valor(
     assert CHAVE_DO_MP not in erro
     assert ASSINATURA not in erro
     assert mundo.mp.fechado
+
+
+@pytest.mark.parametrize("programa", ["kubectl", "docker"])
+def test_programa_fora_do_path_diz_isso_sem_traceback_e_sem_mandar_subir_o_cluster(
+    relogio: Relogio, programa: str
+) -> None:
+    ausente = ExecutorQueFalha(ComandoAusenteError(programa))
+    mundo = Mundo(relogio, executor=ausente if programa == "kubectl" else None)
+    if programa == "docker":
+        mundo.docker = ausente  # type: ignore[assignment]  # falso do executor
+
+    codigo, saida = mundo.conferir(["ensaio"])
+
+    assert codigo == 2
+    assert f"{programa} não está no PATH" in saida
+    assert "Traceback" not in saida
+    assert SUBIR_O_CLUSTER not in saida
