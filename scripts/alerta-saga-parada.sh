@@ -10,9 +10,10 @@
 # serie `up`, e o `pytstop-alvo-fora` so dispara com `up = 0`: ali so o 5xx do
 # gateway, com trafego, acusa. Cada replica da API repete o gauge: duas replicas
 # a 40 s somam 80 s e nao disparam, o que reprova a troca de max por sum; uma
-# replica com o coletor em 0 e outra em 1 reprova a troca de min por max; e uma
+# replica com o coletor em 0 e outra em 1 reprova a troca de min por max; uma
 # replica com `up` em 0 e outra em 1, sem a serie do coletor, reprova a troca
-# de max por min no `up`. O threshold do Grafana (so `gt` e o valor de
+# de max por min no `up`; e uma replica a 90 s (ou com uma instancia em
+# falha_na_compensacao) e outra a 0 reprova a troca de max por min no gauge. O threshold do Grafana (so `gt` e o valor de
 # params[0]) e a janela viram uma regra do Prometheus com a mesma consulta.
 set -euo pipefail
 : "${PROMETHEUS_IMAGE:?}" "${YQ_IMAGE:?}"
@@ -142,6 +143,36 @@ tests:
       - eval_time: 6m
         alertname: SagaParada
         exp_alerts: []
+  - name: duas replicas, uma a 90 s de atraso e a outra a 0 (o maximo decide)
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-1"}
+        values: 90x10
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-2"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: SagaParada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: SagaParada
+        exp_alerts:
+          - exp_labels: {}
+  - name: duas replicas, uma com instancia em falha_na_compensacao e a outra sem
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_ativas{pod="os-api-1", etapa="falha_na_compensacao"}
+        values: 1x10
+      - series: pytstop_saga_ativas{pod="os-api-2", etapa="falha_na_compensacao"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: SagaParada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: SagaParada
+        exp_alerts:
+          - exp_labels: {}
   - name: coletor fora por 3 minutos e de volta, menos que a janela de 5 min
     interval: 1m
     input_series:
