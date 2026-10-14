@@ -229,7 +229,18 @@ Para comparar, o [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes
 | `kubectl top node` em repouso | 3.147 MiB (22%), 299 m | 3.362 MiB (24%), 351 m |
 | `memory.peak` do cgroup do nó (conta o cache de arquivos, que o kernel devolve sob pressão) | 5.476 MiB | 6.738 MiB |
 
-O ADR-042 media, só com a plataforma, working set de até 1,5 GiB e pico de 3,5 GiB no cgroup. Com os três serviços, o working set sobe cerca de 1,6 GiB (os 13 pods somam 0,84 GiB; o resto é o que o nó gasta fora dos pods, como o containerd, o kubelet e o cache de arquivos ainda ativo, e não foi detalhado) e o pico no cgroup, cerca de 2 GiB (provavelmente o cache das imagens e dos dados dos bancos). Em ambos os overlays o nó cabe com folga nos 16 GB do `ubuntu-24.04`, mas a comparação com o ADR mistura arm64 local e amd64 do runner.
+Para comparar, o ADR-042 mediu, só com a plataforma e no runner, working set de até 1,5 GiB e pico de 3,5 GiB no cgroup. Aqui, com os três serviços e em arm64 local, o working set subiu 1,6 GiB (para 3,1) e o pico, 1,9 GiB (para 5,35). Os 13 pods dos serviços somam 0,84 GiB, a plataforma 0,53 GiB e o control plane cerca de 0,5 GiB, no `kubectl top`: 1,9 GiB no total. O resto do working set do nó, cerca de 1,1 GiB, não é de pod; a `memory.stat` do nó, lida na primeira execução, divide o working set assim:
+
+| Parcela da `memory.stat` do nó (90 s depois do smoke dos serviços) | MiB |
+|---|---|
+| `memory.current` | 5.317 |
+| menos `inactive_file`, o cache que o kubelet não conta | 2.298 |
+| igual ao working set | 3.019 |
+| dele, `anon` (memória anônima: pods, containerd, kubelet) | 2.078 |
+| dele, `active_file` (cache de arquivos usado há pouco) | 570 |
+| dele, outros (kernel, slab, memória compartilhada) | 371 |
+
+A memória anônima do nó passa em cerca de 170 MiB a soma dos pods (conta aproximada, porque o `kubectl top` dos pods inclui parte do cache), o que cabe aos processos do nó fora deles, como o containerd e o kubelet; o cache ativo e o restante respondem pelo resto. O ensaio não mediu o cache por consumidor, então não diz quanto dele é das imagens e dos dados dos bancos. No momento da leitura, o `memory.current` de 5,2 GiB tinha 2,2 GiB de cache inativo, que o kernel devolve sob pressão; o pico de 5,35 GiB não foi decomposto. Nos 16 GB do `ubuntu-24.04` o nó cabe com folga nos dois overlays, mas a comparação com o ADR mistura arm64 local e amd64 do runner.
 
 ### Por pod
 
@@ -259,22 +270,26 @@ Memória: o maior valor do `kubectl top` entre as amostras das duas execuções 
 | Loki, Promtail e Grafana (só no `kind`) | | | 5m, 11m, 2m | 11m, 23m, 91m | 57, 37 e 48 MiB | 57, 37 e 51 MiB |
 | Control plane do kind (apiserver, etcd, controller-manager, scheduler, coredns, kube-proxy, kindnet, metrics-server) | | | 95m no pico do apiserver | | cerca de 500 MiB, 279 MiB só no apiserver | |
 
+O `kubectl top` arredonda cada linha, então o total do pod pode diferir em 1 MiB da soma dos containers (`os-postgres-0`: 37 + 6, e 44 no pod).
+
 O pico de CPU do RabbitMQ (237m) é do `make smoke` da plataforma, que apaga o pod do broker e o vê subir de novo; o pico do MongoDB (71m) e dos Jobs vem do arranque. Nenhuma API passou de 67m e nenhum processo de 40m, contra limits de 500m e 250m; o MongoDB chegou a 71m e o PostgreSQL a 44m (limits de 500m).
 
 ### Contra o orçamento do ADR-042
 
-| Componente | Orçamento (requests/limits) | Medido (maior valor) | Fica no orçamento |
+O orçamento do ADR-042 é só de memória, com requests e limits por componente; a coluna "Medido" traz o maior valor amostrado nas duas execuções.
+
+| Componente | Orçamento (requests/limits) | Medido (maior valor) | Cabe |
 |---|---|---|---|
 | API de cada serviço (3) | 256/512 Mi | 66 a 101 MiB | sim, com 61% a 74% de folga nos requests |
-| relay, consumidor e `prazos` (7 processos na `main`) | 128/256 Mi cada | 48 a 74 MiB | sim |
+| relay, consumidor e `prazos` (7 processos na `main`) | 128/256 Mi cada | 49 a 74 MiB | sim |
 | PostgreSQL (2), com o exporter | 128/512 Mi (+ 32/64 Mi do exporter) | 44 a 45 MiB | sim |
-| MongoDB, com o exporter | 256/1024 Mi (+ 32/64 Mi do exporter) | 108 MiB em repouso, 194 MiB no pico | sim |
+| MongoDB, com o exporter | 256/1024 Mi (+ 32/64 Mi do exporter) | 194 MiB no pico (108 em repouso) | sim |
 | exporters de banco (3) | 32/64 Mi cada | 6 a 12 MiB | sim |
-| Serviços, soma dos requests e dos limits | 2.272 Mi / 5.568 Mi (os 7 processos da `main`) | 864 MiB em repouso | sim |
-| Plataforma no `kind-ci`, soma dos requests e dos limits | 1.088 Mi / 3.072 Mi (+ 200 Mi do metrics-server) | 543 MiB em repouso (Kong 306, RabbitMQ 129 a 201, Prometheus 83) | sim |
-| Serviços e plataforma | cerca de 3,3 GiB de requests e 8,4 GiB de limits (o ADR estima 3,4/8,7 GiB e conta 8 processos; a `main` tem 7) | nó em 3,1 GiB de working set | sim |
+| Os 13 pods de serviço, somados | 2.272 Mi / 5.568 Mi (os 7 processos da `main`) | 962 MiB somando os maiores valores (864 em repouso) | sim |
+| Plataforma no `kind-ci`, somada | 1.088 Mi / 3.072 Mi (+ 200 Mi do metrics-server) | 543 MiB em repouso (Kong 306, RabbitMQ 129 a 201, Prometheus 83) | sim |
+| Nó inteiro: serviços e plataforma | 3,3 GiB de requests e 8,4 GiB de limits com 7 processos (o ADR estima 3,4/8,7 GiB e conta 8 processos) | 3,1 GiB de working set, com control plane e metrics-server | sim, com 6% a 9% de folga na conta uso do nó contra requests; o que sustenta a conclusão são os pods (962 MiB contra 2.272 Mi) e os 16 GB do runner |
 
-CPU: os requests somados dos serviços são 980m, e os da plataforma no `kind-ci`, 395m (1,4 CPU com os dois, mais cerca de 1 CPU do control plane); o nó usou 0,3 CPU em repouso no total. O orçamento de CPU do ADR (50m a 250m por processo, 100m a 500m por API e banco) se mostrou folgado: em repouso o uso é de 3% a 12% dos requests, e nos picos de arranque, de 30% a 80% deles, longe dos limits.
+CPU: o ADR-042 não orça CPU. Os valores da tabela de pods são os requests e limits dos manifests dos serviços: 50m/250m por processo, 100m/500m por API e 110m/600m por banco com o exporter. Os requests somados são 980m nos serviços e 395m na plataforma do `kind-ci` (1,4 CPU), mais cerca de 1 CPU do control plane; o nó usou 0,3 CPU em repouso. Dos requests de cada pod de serviço, o uso em repouso foi de 3% a 12%, exceto o MongoDB, com 42% (46m de 110m). Nas amostras de 5 s, o pico foi de 16% a 80% nos processos, 35% a 67% nas APIs e 14% a 65% nos bancos, e de no máximo 16% dos limits.
 
 ## Medida adicional: `prazos` e `notificador` do OS Service
 
