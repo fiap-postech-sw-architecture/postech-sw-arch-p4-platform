@@ -781,6 +781,55 @@ def test_varredura_apaga_o_arquivo_com_o_token_do_ambiente_e_nao_o_repete(
     assert sorted(p.name for p in tmp_path.iterdir()) == ["resumo.md"]
 
 
+def test_falha_da_preferencia_nao_leva_o_user_id_ao_junit_e_a_varredura_nao_o_apaga(
+    tmp_path: Path,
+) -> None:
+    # Visto no kind, com o PUT que o Billing mandou sem expirar a preferencia: o pytest
+    # mostra o argumento de cada frame do traceback, ``PreferenciaMp(id=...)`` entre
+    # eles, e a varredura apagava o junit.xml e o cucumber.json por causa do prefixo
+    # numerico. O id nasce em tempo de execucao: o literal apareceria no codigo-fonte
+    # do teste que o pytest mostra.
+    (tmp_path / "test_x.py").write_text(
+        "from datetime import UTC, datetime, timedelta\n\n"
+        "import httpx\n\n"
+        "from e2e.apoio.conferencias import conferir_preferencia_expirada\n"
+        "from e2e.apoio.mercadopago import ClienteMercadoPago\n\n\n"
+        "def test_preferencia_nao_expirada():\n"
+        "    conta = '1462' + '278261'\n"
+        "    preferencia_id = conta + '-c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6'\n"
+        "    futuro = (datetime.now(UTC) + timedelta(days=30)).isoformat()\n"
+        "    corpo = {'id': preferencia_id, 'expires': True,\n"
+        "             'expiration_date_to': futuro}\n"
+        "    transporte = httpx.MockTransport(\n"
+        "        lambda _: httpx.Response(200, json=corpo))\n"
+        "    cliente = ClienteMercadoPago('chave-de-teste-123456',\n"
+        "                                 transporte=transporte)\n"
+        "    conferir_preferencia_expirada(cliente.preferencia(preferencia_id))\n"
+    )
+
+    resultado = subprocess.run(  # noqa: S603  # nosec B603
+        [sys.executable, "-m", "pytest", "test_x.py", "-q", "-p", "no:cacheprovider",
+         "-p", "e2e.apoio.plugin", "--rootdir", str(tmp_path),
+         "--junitxml=junit.xml"],
+        cwd=tmp_path,
+        env={**os.environ, "PYTHONPATH": str(RAIZ)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+        stdin=subprocess.DEVNULL,
+    )  # fmt: skip
+
+    escrito = resultado.stdout + resultado.stderr + (tmp_path / "junit.xml").read_text()
+    assert resultado.returncode == 1, escrito
+    assert "não está expirada no Mercado Pago" in escrito, "a falha é a esperada"
+    assert "1462278261" not in escrito
+    assert "***-c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6" in escrito, "mascarado"
+    segredos.esquecer_todos()  # o processo da varredura e outro: nao conhece o id
+    assert principal_da_varredura([str(tmp_path)], {}) == 0
+    assert (tmp_path / "junit.xml").exists(), "a varredura nao apagou o relatorio"
+
+
 class TerminalQueSumiu:
     """Um stdout ou stderr cuja janela fechou: escrever levanta ``OSError`` (EIO)."""
 

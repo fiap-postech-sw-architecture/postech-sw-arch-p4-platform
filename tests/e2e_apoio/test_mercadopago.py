@@ -23,8 +23,10 @@ from e2e.apoio.mercadopago import (
     PagamentoMp,
     PreferenciaMp,
     TokenRecusadoError,
+    registrar_conta,
     sem_id_da_conta,
 )
+from e2e.apoio.segredos import mascarar
 from e2e_apoio.falsos import CHAVE_APP_USR
 
 if TYPE_CHECKING:
@@ -619,6 +621,50 @@ def test_sem_id_da_conta_corta_so_o_prefixo_numerico_do_vendedor(
     entrada: str, saida: str
 ) -> None:
     assert sem_id_da_conta(entrada) == saida
+
+
+def test_registrar_conta_mascara_o_user_id_onde_o_pytest_mostrar_o_id() -> None:
+    # O pytest mostra o argumento de cada frame do traceback (``PreferenciaMp(id=...)``,
+    # ``preferencia_id=...``): a mascara central tira o numero do terminal, do
+    # junit.xml e do cucumber.json, e a varredura nao acha o prefixo.
+    registrar_conta(f"1462278261-{UUID}")
+
+    texto = mascarar(f"preferencia = PreferenciaMp(id='1462278261-{UUID}')")
+
+    assert texto == f"preferencia = PreferenciaMp(id='***-{UUID}')"
+    assert varrer(texto) == []
+
+
+@pytest.mark.parametrize(
+    "preferencia_id",
+    [
+        pytest.param(UUID, id="so-o-uuid"),
+        pytest.param("123-abc", id="formato-desconhecido"),
+        pytest.param(f"12345-{UUID}", id="numero-curto-demais"),
+        pytest.param("", id="vazio"),
+    ],
+)
+def test_registrar_conta_ignora_o_id_sem_user_id(preferencia_id: str) -> None:
+    antes = set(segredos.registrados())
+
+    registrar_conta(preferencia_id)
+
+    assert set(segredos.registrados()) == antes
+
+
+def test_ler_a_preferencia_registra_o_user_id_da_conta() -> None:
+    _cliente(
+        lambda _: httpx.Response(200, json={"id": "x", "expires": True})
+    ).preferencia(f"1462278261-{UUID}")
+
+    assert mascarar(f"1462278261-{UUID}") == f"***-{UUID}"
+
+
+def test_id_de_preferencia_invalido_tambem_registra_a_conta_antes_de_falhar() -> None:
+    with pytest.raises(ErroDoMercadoPagoError):
+        _cliente(lambda _: _json(PAGAMENTO)).preferencia(f"1462278261-{UUID}?x=y")
+
+    assert "1462278261" not in mascarar(f"preferencia_id='1462278261-{UUID}?x=y'")
 
 
 def test_a_preferencia_na_evidencia_nao_leva_o_user_id_da_conta() -> None:

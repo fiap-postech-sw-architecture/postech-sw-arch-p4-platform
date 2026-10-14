@@ -42,7 +42,7 @@ from e2e.apoio.humano import (
     instrucoes_de_pagamento,
 )
 from e2e.apoio.kube import FILA_MORTA_DO_BILLING
-from e2e.apoio.mercadopago import ErroDoMercadoPagoError
+from e2e.apoio.mercadopago import ErroDoMercadoPagoError, registrar_conta
 from e2e.apoio.modo_billing import NAMESPACE_BILLING, sem_consulta
 from e2e.apoio.segredos import mascarar, registrar
 
@@ -243,7 +243,7 @@ class Prova:
             relogio=self._relogio,
             dormir=self._dormir,
         )
-        pagamento: Json = self.api.billing.pagamento(resumo["pagamento_id"])
+        pagamento = self._pagamento_do_billing(resumo["pagamento_id"])
         self.cenario.pagamento_id = pagamento["id"]
         self.registro.ordem_id = self.cenario.ordem_id
         self.registro.pagamento_id = pagamento["id"]
@@ -291,8 +291,15 @@ class Prova:
             )
             raise DlqDoBillingCresceuError(msg)
 
+    def _pagamento_do_billing(self, pagamento_id: str) -> Json:
+        """O pagamento do Billing; o User ID da vendedora, que vem no id da preferencia
+        (e no link), passa para a mascara antes de qualquer frame o mostrar."""
+        pagamento: Json = self.api.billing.pagamento(pagamento_id)
+        registrar_conta(str(pagamento.get("referencia_preferencia") or ""))
+        return pagamento
+
     def _pagamento_ou_dlq(self) -> Json:
-        pagamento: Json = self.api.billing.pagamento(self.cenario.pagamento_id)
+        pagamento = self._pagamento_do_billing(self.cenario.pagamento_id)
         if pagamento["status"] != "CONFIRMADO":
             self._conferir_dlq()
         return pagamento
@@ -408,7 +415,7 @@ class Prova:
             self._avisar(SEM_CONSULTA)
             return
         assert self.sandbox.mercadopago is not None
-        pagamento = self.api.billing.pagamento(self.cenario.pagamento_id)
+        pagamento = self._pagamento_do_billing(self.cenario.pagamento_id)
         preferencia = self.sandbox.mercadopago.preferencia(
             _referencia(
                 pagamento, "referencia_preferencia", "a preferência do checkout"

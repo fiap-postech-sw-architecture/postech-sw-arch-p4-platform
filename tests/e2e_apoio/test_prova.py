@@ -26,6 +26,7 @@ from e2e.apoio.prova import (
     Prova,
     gravar_evidencia_da_sessao,
 )
+from e2e.apoio.segredos import mascarar
 from e2e.servicos import Cenario
 from e2e_apoio.falsos import CHAVE_APP_USR, ExecutorFalso
 
@@ -204,6 +205,40 @@ def test_cobranca_aberta_espera_o_resumo_na_os_e_le_o_pagamento_no_billing(
     assert prova.registro.transicoes[-1][1].startswith(
         "script: cobrança criada no provedor"
     )
+
+
+CONTA_E_UUID = "1462278261-c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6"
+
+
+def test_ler_o_pagamento_do_billing_registra_o_user_id_da_vendedora(
+    relogio: Relogio,
+) -> None:
+    # O id da preferencia vem no dict do pagamento, que o pytest mostra como argumento
+    # de frame (``pagar(self, pagamento)``): o numero tem de estar na mascara antes.
+    mundo = Mundo()
+    mundo.billing = _pagamento_billing(referencia_preferencia=CONTA_E_UUID)
+    prova, _, _ = _prova(mundo, relogio, real=True)
+    prova.cenario.pagamento_id = "p-1"
+
+    prova._pagamento_ou_dlq()
+
+    assert mascarar(f"pagamento = {{'x': '{CONTA_E_UUID}'}}") == (
+        "pagamento = {'x': '***-c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6'}"
+    )
+
+
+def test_ler_o_pagamento_sem_referencia_da_preferencia_nao_registra_nada(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.billing = _pagamento_billing(referencia_preferencia=None)
+    prova, _, _ = _prova(mundo, relogio, real=True)
+    prova.cenario.pagamento_id = "p-1"
+    antes = set(segredos.registrados())
+
+    prova._pagamento_ou_dlq()
+
+    assert set(segredos.registrados()) == antes
 
 
 def test_cobranca_aberta_no_ensaio_aceita_o_provedor_simulado(relogio: Relogio) -> None:

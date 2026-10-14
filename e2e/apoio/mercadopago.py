@@ -220,6 +220,19 @@ def sem_id_da_conta(preferencia_id: str) -> str:
     return _PREFIXO_DA_CONTA.sub("", preferencia_id, count=1)
 
 
+def registrar_conta(preferencia_id: str) -> None:
+    """Passa a mascarar o User ID da conta vendedora, o prefixo do id da preferencia.
+
+    O id inteiro aparece onde o pytest mostra o argumento de um frame
+    (``PreferenciaMp(id=...)``, ``preferencia_id=...``, o dict do pagamento do Billing)
+    e no log do Billing. A mascara central troca o numero por ``***`` no terminal, no
+    ``junit.xml`` e no ``cucumber.json``, e a varredura nao acha o prefixo.
+    """
+    achado = _PREFIXO_DA_CONTA.match(preferencia_id)
+    if achado:
+        registrar(achado.group().rstrip("-"))
+
+
 def _caminho_sem_conta(caminho: str) -> str:
     """O caminho da URL com o id da preferencia sem o User ID da conta vendedora.
 
@@ -311,6 +324,7 @@ class ClienteMercadoPago:
 
     def preferencia(self, preferencia_id: str) -> PreferenciaMp:
         """``GET /checkout/preferences/{id}``."""
+        registrar_conta(preferencia_id)
         _id_valido(preferencia_id, "id da preferência")
         return _preferencia(self._ler(f"/checkout/preferences/{preferencia_id}"))
 
