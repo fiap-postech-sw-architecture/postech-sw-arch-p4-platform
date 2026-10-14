@@ -31,6 +31,7 @@ from e2e.apoio.contexto import conferir_borda_local, conferir_contexto
 from e2e.apoio.credenciais import Credenciais
 from e2e.apoio.http import ClienteHttp
 from e2e.apoio.kube import Escalas, Kubectl
+from e2e.apoio.preflight import conferir_overlay_kind_ci
 from e2e.apoio.relatorio import Registro
 from e2e.servicos import Api, Cenario
 
@@ -46,10 +47,11 @@ pytest_plugins = ["e2e.apoio.plugin"]
 
 @pytest.fixture(scope="session")
 def kubectl() -> Kubectl:
-    """kubectl no contexto escolhido, depois de provado que e um kind descartavel."""
+    """kubectl no contexto escolhido, depois de provado: kind descartavel no kind-ci."""
     conferir_contexto(CONTEXTO, os.environ)
     kubectl = Kubectl(CONTEXTO)
     conferir_borda_local(kubectl, os.environ)
+    conferir_overlay_kind_ci(kubectl)
     return kubectl
 
 
