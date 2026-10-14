@@ -71,6 +71,7 @@ class ItemFalso:
 
     marcadores: set[str] = field(default_factory=set)
     adicionados: list[Any] = field(default_factory=list)
+    name: str = "test_x"
 
     def get_closest_marker(self, nome: str) -> object | None:
         return object() if nome in self.marcadores else None
@@ -82,7 +83,9 @@ class ItemFalso:
 def _guardar_relatorio(item: ItemFalso, fase: str, resultado: str) -> None:
     ciclo = plugin_sandbox.pytest_runtest_makereport(item)  # type: ignore[arg-type]  # item falso
     next(ciclo)
-    relatorio = SimpleNamespace(when=fase, outcome=resultado)
+    relatorio = SimpleNamespace(
+        when=fase, outcome=resultado, failed=resultado == "failed"
+    )
     with pytest.raises(StopIteration) as fim:
         ciclo.send(relatorio)  # type: ignore[arg-type]  # falso do TestReport
     assert fim.value.value is relatorio
@@ -109,11 +112,53 @@ def test_o_desfecho_e_o_da_chamada_e_nao_o_do_setup_nem_do_teardown(
     assert plugin_sandbox.desfecho_da_chamada(item) == resultado  # type: ignore[arg-type]  # item falso
 
 
-def test_sem_relatorio_da_chamada_o_desfecho_e_nenhum() -> None:
+def test_sem_relatorio_da_chamada_e_com_a_sessao_interrompida_o_desfecho_e_nenhum(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(plugin_sandbox._ESTADO, "interrompida", True)
     item = ItemFalso()
     _guardar_relatorio(item, "setup", "passed")  # o Ctrl-C veio antes da chamada acabar
 
     assert plugin_sandbox.desfecho_da_chamada(item) is None  # type: ignore[arg-type]  # item falso
+
+
+def test_sem_relatorio_da_chamada_e_sem_interrupcao_a_ligacao_quebrada_reprova(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Se rep_call deixar de ser guardado, dizer "passou" ou "interrompido" mentiria.
+    monkeypatch.setitem(plugin_sandbox._ESTADO, "interrompida", False)
+    item = ItemFalso(name="test_cenario")
+    _guardar_relatorio(item, "setup", "passed")
+
+    with pytest.raises(
+        plugin_sandbox.LigacaoDoResultadoError,
+        match=r"não registrou a chamada de test_cenario.*\(rep_call\) está quebrada",
+    ):
+        plugin_sandbox.desfecho_da_chamada(item)  # type: ignore[arg-type]  # item falso
+
+
+def test_cenario_que_falhou_no_preparo_falhou_e_nao_foi_interrompido(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setitem(plugin_sandbox._ESTADO, "interrompida", False)
+    item = ItemFalso()
+    _guardar_relatorio(item, "setup", "failed")
+
+    assert plugin_sandbox.desfecho_da_chamada(item) == "failed"  # type: ignore[arg-type]  # item falso
+
+
+def test_a_primeira_interrupcao_fica_registrada_e_a_configuracao_a_zera(
+    sinais: list[tuple[int, object]], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("E2E_MP_MODO", raising=False)
+    monkeypatch.setitem(plugin_sandbox._ESTADO, "interrompida", False)
+
+    plugin_sandbox.pytest_keyboard_interrupt(None)
+
+    assert plugin_sandbox._ESTADO["interrompida"] is True
+    plugin_sandbox.pytest_configure(None)  # type: ignore[arg-type]  # o gancho descarta a config
+    assert plugin_sandbox._ESTADO["interrompida"] is False
+    assert sinais == [], "fora do sandbox nenhum sinal muda"
 
 
 # --- o que roda em cada modo --------------------------------------------------

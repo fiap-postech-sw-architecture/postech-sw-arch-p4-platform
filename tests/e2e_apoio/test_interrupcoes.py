@@ -103,36 +103,6 @@ def test_controle_sem_o_plugin_o_segundo_ctrl_c_pula_o_desfazer(
     assert not registro.exists()
 
 
-# --- o resultado de cada cenario ------------------------------------------------
-
-
-def test_o_desfecho_da_chamada_e_passed_failed_ou_ausente_no_ctrl_c(
-    tmp_path: Path,
-) -> None:
-    saida = tmp_path / "desfechos"
-    (tmp_path / "test_x.py").write_text(
-        "from pathlib import Path\n\nimport pytest\n\n"
-        "from e2e.apoio.plugin_sandbox import desfecho_da_chamada\n\n"
-        f"SAIDA = Path({str(saida)!r})\n\n\n"
-        "@pytest.fixture(autouse=True)\ndef registrar(request):\n    yield\n"
-        "    desfecho = desfecho_da_chamada(request.node)\n"
-        "    with SAIDA.open('a') as arquivo:\n"
-        "        arquivo.write(f'{request.node.name}={desfecho}\\n')\n"
-        "\n\ndef test_a():\n    pass\n\n\n"
-        "def test_b():\n    assert False\n\n\n"
-        "def test_c():\n    raise KeyboardInterrupt\n"
-    )
-
-    resultado = _pytest(tmp_path)
-
-    assert resultado.returncode == 2, resultado.stdout
-    assert saida.read_text().splitlines() == [
-        "test_a=passed",
-        "test_b=failed",
-        "test_c=None",
-    ]
-
-
 # --- o kubectl do desfazer, com o sinal que o terminal manda ---------------------
 
 KUBECTL_FALSO = """\

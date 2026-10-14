@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from e2e.apoio import segredos
+from e2e.apoio.http import ClienteHttp
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
 from e2e.apoio.modo_billing import (
     MODO_REAL,
@@ -27,9 +28,11 @@ from e2e.apoio.modo_billing import (
     sem_interrupcao,
     url_de_notificacao_valida,
 )
+from e2e.apoio.preflight_mp import Sandbox
 from e2e_apoio.falsos import chamadas_do_gravador, criar_kubectl_gravador
 
 if TYPE_CHECKING:
+    import contextlib
     from collections.abc import Iterator, Sequence
     from pathlib import Path
 
@@ -840,3 +843,116 @@ def test_desfazer_imprime_cada_passo_e_manda_nao_fechar_o_terminal(
         "3/3 esperando o rollout de billing-service-relay (até 5 min)",
     ):
         assert any(trecho in aviso for aviso in avisos), trecho
+
+
+# --- a sessao do Sandbox: o que o preflight decidiu, ligado ao Billing -------------
+
+
+def _borda_do_billing(cluster: Cluster, relogio: Relogio) -> ClienteHttp:
+    """A borda: o ``/billing/api/v1/saude`` diz o modo em que o Cluster esta."""
+
+    def responder(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"status": "ok", "modo": cluster.modo})
+
+    return ClienteHttp(
+        "https://localhost",
+        transporte=httpx.MockTransport(responder),
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+
+class MercadoPagoDaSessao:
+    def __init__(self) -> None:
+        self.fechado = False
+
+    def fechar(self) -> None:
+        self.fechado = True
+
+
+def _sandbox(**campos: object) -> Sandbox:
+    base: dict[str, object] = {
+        "modo": "real",
+        "token": CHAVE_DO_MP,
+        "assinatura": ASSINATURA,
+        "url_de_notificacao": URL,
+    }
+    return Sandbox(**{**base, **campos})  # type: ignore[arg-type]  # os campos de Sandbox
+
+
+def _abrir(
+    sandbox: Sandbox, cluster: Cluster, relogio: Relogio
+) -> contextlib.AbstractContextManager[ModoDoBilling]:
+    return sandbox.sessao_do_billing(
+        Kubectl("kind-x", executor=cluster, executor_com_entrada=cluster),
+        _borda_do_billing(cluster, relogio),
+        lambda _: None,
+    )
+
+
+def test_sessao_real_do_sandbox_grava_o_token_e_a_assinatura_cada_um_no_seu_lugar(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster()
+
+    with _abrir(_sandbox(), cluster, relogio):
+        apply = next(
+            (comando, entrada)
+            for comando, entrada in cluster.chamadas
+            if comando.endswith("apply --server-side --force-conflicts -f -")
+        )
+        manifesto = json.loads(str(apply[1]))
+        assert base64.b64decode(manifesto["data"]["MP_ACCESS_TOKEN"]).decode() == (
+            CHAVE_DO_MP
+        )
+        assert base64.b64decode(manifesto["data"]["MP_WEBHOOK_SECRET"]).decode() == (
+            ASSINATURA
+        )
+        assert cluster.modo == MODO_REAL
+        assert f"MP_NOTIFICATION_URL={URL}" in cluster.comandos()[1]
+
+    assert cluster.modo == MODO_SIMULADO, "desfeito no fim"
+
+
+def test_sessao_do_ensaio_nao_cria_secret_nem_liga_o_modo_real(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster()
+
+    with _abrir(Sandbox(modo="ensaio"), cluster, relogio):
+        assert cluster.modo == MODO_SIMULADO
+
+    assert not any("apply" in c or "set env" in c for c in cluster.comandos())
+
+
+def test_sessao_do_sandbox_com_manter_deixa_o_modo_real_no_fim(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster()
+
+    with _abrir(_sandbox(manter=True), cluster, relogio):
+        pass
+
+    assert cluster.modo == MODO_REAL
+    assert not any("delete secret" in c for c in cluster.comandos())
+
+
+def test_sessao_do_sandbox_fecha_o_cliente_do_mercado_pago_mesmo_com_erro(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster()
+    mp = MercadoPagoDaSessao()
+    sandbox = _sandbox(mercadopago=mp)
+
+    with pytest.raises(KeyboardInterrupt), _abrir(sandbox, cluster, relogio):
+        raise KeyboardInterrupt
+
+    assert mp.fechado
+    assert cluster.modo == MODO_SIMULADO
+
+
+def test_sessao_do_sandbox_sem_cliente_do_mercado_pago_nao_fecha_nada(
+    relogio: Relogio,
+) -> None:
+    with _abrir(Sandbox(modo="ensaio"), Cluster(), relogio) as modo:
+        assert isinstance(modo, ModoDoBilling)

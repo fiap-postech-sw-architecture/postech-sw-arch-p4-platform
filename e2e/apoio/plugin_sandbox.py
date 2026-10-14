@@ -24,9 +24,17 @@ if TYPE_CHECKING:
     from _pytest.reports import TestReport
     from pytest_bdd.parser import Scenario, Step
 
+# Estado da sessao: o pytest roda uma por processo. ``interrompida`` vale a partir do
+# primeiro Ctrl-C (ou kill, ou fechar a janela): so ai um cenario sem relatorio da
+# chamada e "interrompido"; em outro caso, a ligacao do resultado esta quebrada.
+_ESTADO: Final = {"interrompida": False}
 TAG_DO_SANDBOX: Final = "mp_sandbox"
 SEM_MODO: Final = "sandbox do Mercado Pago: use make mp-sandbox"
 COM_MODO: Final = "E2E_MP_MODO definido: so o sandbox roda"
+
+
+class LigacaoDoResultadoError(AssertionError):
+    """O pytest nao registrou a chamada do cenario e ninguem interrompeu a sessao."""
 
 
 def _modo() -> str:
@@ -37,6 +45,7 @@ def _modo() -> str:
 def pytest_configure(config: pytest.Config) -> None:
     """No sandbox, fechar a janela (SIGHUP) interrompe como o Ctrl-C."""
     del config
+    _ESTADO["interrompida"] = False
     if _modo():
         signal.signal(signal.SIGHUP, signal.default_int_handler)
 
@@ -49,6 +58,7 @@ def pytest_keyboard_interrupt(excinfo: object) -> None:
     ``KeyboardInterrupt`` dentro de um finalizer nao e capturado pelo pytest.
     """
     del excinfo
+    _ESTADO["interrompida"] = True
     if _modo():
         for sinal in SINAIS_DE_INTERRUPCAO:
             signal.signal(sinal, signal.SIG_IGN)
@@ -65,9 +75,25 @@ def pytest_runtest_makereport(
 
 
 def desfecho_da_chamada(item: pytest.Item) -> str | None:
-    """``passed`` ou ``failed``; ``None`` se a chamada nao foi registrada (Ctrl-C)."""
-    relatorio = getattr(item, "rep_call", None)
-    return None if relatorio is None else str(relatorio.outcome)
+    """``passed`` ou ``failed``; ``None`` so se a sessao foi interrompida (Ctrl-C).
+
+    Sem relatorio da chamada, um cenario que falhou no setup falhou; interrompido so
+    vale com a interrupcao registrada. Fora disso a ligacao do resultado esta
+    quebrada, e dizer "passou" ou "interrompido" seria mentir: a execucao reprova.
+    """
+    chamada = getattr(item, "rep_call", None)
+    if chamada is not None:
+        return str(chamada.outcome)
+    preparo = getattr(item, "rep_setup", None)
+    if preparo is not None and preparo.failed:
+        return "failed"
+    if _ESTADO["interrompida"]:
+        return None
+    msg = (
+        f"o pytest não registrou a chamada de {item.name} e a sessão não foi "
+        "interrompida: a ligação do resultado do cenário (rep_call) está quebrada"
+    )
+    raise LigacaoDoResultadoError(msg)
 
 
 @pytest.hookimpl(trylast=True)  # depois do -m, que tira os deselecionados

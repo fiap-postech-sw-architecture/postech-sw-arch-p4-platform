@@ -18,10 +18,8 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from e2e import test_saga as saga
 from e2e.ambiente import RELATORIOS
-from e2e.apoio.diagnostico import coletar
-from e2e.apoio.evidencia import RegistroDoCenario, gravar_evidencia
-from e2e.apoio.modo_billing import ModoDoBilling
-from e2e.apoio.prova import PRINTS, PRINTS_DO_ENSAIO, Prova
+from e2e.apoio.plugin_sandbox import desfecho_da_chamada
+from e2e.apoio.prova import Prova, gravar_evidencia_da_sessao
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -29,8 +27,10 @@ if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
 
     from e2e.ambiente import Portas
+    from e2e.apoio.evidencia import RegistroDoCenario
     from e2e.apoio.http import ClienteHttp
     from e2e.apoio.kube import Kubectl
+    from e2e.apoio.modo_billing import ModoDoBilling
     from e2e.apoio.preflight_mp import Sandbox
     from e2e.servicos import Api, Cenario, Json
 
@@ -74,28 +74,8 @@ def modo_billing(
 ) -> Iterator[ModoDoBilling]:
     """O modo do Billing da sessao: real (e desfeito no fim) ou o simulador."""
     assert preflight is not None, "E2E_MP_MODO sem o preflight do sandbox"
-
-    def modo_da_api() -> str:
-        resposta = borda.pedir("GET", "/billing/api/v1/saude", esperado=[200])
-        return str(resposta.json()["modo"])
-
-    modo = ModoDoBilling(
-        kubectl,
-        modo_da_api,
-        url_de_notificacao=preflight.url_de_notificacao,
-        avisar=anunciar,
-    )
-    try:
-        with modo.sessao(
-            real=preflight.real,
-            token=preflight.token,
-            assinatura=preflight.assinatura,
-            manter=preflight.manter,
-        ):
-            yield modo
-    finally:
-        if preflight.mercadopago is not None:
-            preflight.mercadopago.fechar()
+    with preflight.sessao_do_billing(kubectl, borda, anunciar) as modo:
+        yield modo
 
 
 @pytest.fixture(scope="session")
@@ -106,15 +86,9 @@ def evidencia(
     assert preflight is not None
     registros: list[RegistroDoCenario] = []
     yield registros
-    if registros:
-        gravar_evidencia(
-            RELATORIOS,
-            registros,
-            modo=preflight.modo,
-            contexto=kubectl.contexto,
-            prints=PRINTS if preflight.real else PRINTS_DO_ENSAIO,
-        )
-        anunciar(f"[mp-sandbox] evidência em {RELATORIOS}/resumo.md")
+    gravar_evidencia_da_sessao(
+        RELATORIOS, registros, preflight, contexto=kubectl.contexto, avisar=anunciar
+    )
 
 
 @pytest.fixture
@@ -127,23 +101,20 @@ def prova(
     evidencia: list[RegistroDoCenario],
 ) -> Iterator[Prova]:
     assert preflight is not None
-    registro = RegistroDoCenario(nome=cenario.nome or request.node.name)
-    evidencia.append(registro)
-    atual = Prova(
+    atual = Prova.abrir(
+        nome=cenario.nome or request.node.name,
+        evidencia=evidencia,
         api=api,
         kubectl=kubectl,
         sandbox=preflight,
         cenario=cenario,
-        registro=registro,
         esperar_status=saga.esperar_status,
         descrever_estado=saga.descrever_estado,
-        filas_mortas_antes=coletar(kubectl.filas_mortas),
         avisar=anunciar,
         numeros=_NUMEROS_DO_PAGAMENTO,
     )
     yield atual
-    relatorio = getattr(request.node, "rep_call", None)  # None: parou antes do fim
-    atual.concluir(None if relatorio is None else relatorio.outcome)
+    atual.concluir(desfecho_da_chamada(request.node))
 
 
 @given("que o Billing está no modo de pagamento desta execução")

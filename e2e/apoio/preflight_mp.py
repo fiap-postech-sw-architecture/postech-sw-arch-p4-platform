@@ -6,6 +6,7 @@ tamanho deles: so o nome da variavel e o que ha de errado com ela.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import time
 from dataclasses import dataclass, field
@@ -26,6 +27,7 @@ from e2e.apoio.modo_billing import (
     MODO_SIMULADO,
     NAMESPACE_BILLING,
     URL_DE_NOTIFICACAO_PADRAO,
+    ModoDoBilling,
     UrlDeNotificacaoInvalidaError,
     sem_consulta,
     url_de_notificacao_valida,
@@ -34,7 +36,7 @@ from e2e.apoio.preflight import numero
 from e2e.apoio.segredos import registrar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping, MutableMapping
+    from collections.abc import Callable, Iterator, Mapping, MutableMapping
 
     from e2e.apoio.http import ClienteHttp
     from e2e.apoio.kube import Kubectl
@@ -79,6 +81,38 @@ class Sandbox:
     @property
     def real(self) -> bool:
         return self.modo == MODO_REAL_DO_E2E
+
+    @contextlib.contextmanager
+    def sessao_do_billing(
+        self, kubectl: Kubectl, borda: ClienteHttp, avisar: Callable[[str], None]
+    ) -> Iterator[ModoDoBilling]:
+        """O modo do Billing desta sessao: real (e desfeito no fim) ou o simulador.
+
+        Junta o que o preflight decidiu (modo, credenciais, ``manter``, URL) ao
+        ``ModoDoBilling``, e fecha o cliente do Mercado Pago no fim.
+        """
+
+        def modo_da_api() -> str:
+            resposta = borda.pedir("GET", "/billing/api/v1/saude", esperado=[200])
+            return str(resposta.json()["modo"])
+
+        modo = ModoDoBilling(
+            kubectl,
+            modo_da_api,
+            url_de_notificacao=self.url_de_notificacao,
+            avisar=avisar,
+        )
+        try:
+            with modo.sessao(
+                real=self.real,
+                token=self.token,
+                assinatura=self.assinatura,
+                manter=self.manter,
+            ):
+                yield modo
+        finally:
+            if self.mercadopago is not None:
+                self.mercadopago.fechar()
 
 
 # O que o sandbox le do ambiente. O pytest mostra os argumentos de cada frame no

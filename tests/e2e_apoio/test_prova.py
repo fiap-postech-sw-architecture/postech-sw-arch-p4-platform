@@ -24,12 +24,14 @@ from e2e.apoio.prova import (
     SEM_CONSULTA,
     DlqDoBillingCresceuError,
     Prova,
+    gravar_evidencia_da_sessao,
 )
 from e2e.servicos import Cenario
 from e2e_apoio.falsos import ExecutorFalso
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from pathlib import Path
 
     from e2e.servicos import Api, Json
     from e2e_apoio.falsos import Relogio
@@ -763,6 +765,130 @@ def test_pagamento_ja_confirmado_nao_olha_a_dlq(relogio: Relogio) -> None:
     prova.esperar_confirmacao()
 
     assert _leituras_da_dlq(executor) == 0
+
+
+# --- abrir o cenario e gravar a evidencia da sessao ------------------------------
+
+
+def _abrir(
+    mundo: Mundo,
+    relogio: Relogio,
+    *,
+    real: bool = True,
+    executor: ExecutorFalso | None = None,
+    evidencia: list[RegistroDoCenario] | None = None,
+    nome: str = "Cenário aberto",
+) -> tuple[Prova, list[RegistroDoCenario]]:
+    registros: list[RegistroDoCenario] = [] if evidencia is None else evidencia
+    sandbox = Sandbox(
+        modo="real" if real else "ensaio",
+        mercadopago=mundo.mercado_pago() if real else None,
+    )
+    prova = Prova.abrir(
+        nome=nome,
+        evidencia=registros,
+        api=mundo.api(),
+        kubectl=Kubectl("kind-x", executor=executor or ExecutorFalso()),
+        sandbox=sandbox,
+        cenario=Cenario(numero=1, execucao="ABC123", ordem_id="o-1"),
+        esperar_status=lambda _api, _cenario, status: {"status": status},
+        descrever_estado=lambda _api, _cenario: "OS o-1: status=x etapa=y",
+        avisar=lambda _: None,
+    )
+    return prova, registros
+
+
+def test_abrir_poe_o_registro_na_evidencia_da_sessao_com_o_nome_do_cenario(
+    relogio: Relogio,
+) -> None:
+    anterior = RegistroDoCenario(nome="Cenário anterior")
+
+    prova, registros = _abrir(Mundo(), relogio, evidencia=[anterior], nome="Cenário 2")
+
+    assert [r.nome for r in registros] == ["Cenário anterior", "Cenário 2"]
+    assert prova.registro is registros[1]
+
+
+def test_abrir_tira_a_foto_das_dlq_e_o_diagnostico_compara_com_ela(
+    relogio: Relogio,
+) -> None:
+    prova, _ = _abrir(Mundo(), relogio, executor=_executor_com_dlq(2))
+
+    texto = prova.diagnostico("Então x", AssertionError("x"))
+
+    assert "Filas mortas no início do cenário: {'billing.comandos.dlq': 2" in texto
+
+
+def test_abrir_com_o_kubectl_que_nao_le_as_dlq_segue_sem_foto(relogio: Relogio) -> None:
+    prova, _ = _abrir(Mundo(), relogio)  # o executor falso nao responde ao rabbitmqctl
+
+    texto = prova.diagnostico("Então x", AssertionError("x"))
+
+    assert "Filas mortas no início do cenário" not in texto
+
+
+def _registro_da_sessao() -> RegistroDoCenario:
+    registro = RegistroDoCenario(nome="Cenário", resultado="passou")
+    registro.billing = {"status": "CONFIRMADO"}
+    return registro
+
+
+def test_a_evidencia_da_sessao_real_traz_os_prints_do_real_e_a_url_sem_consulta(
+    tmp_path: Path,
+) -> None:
+    avisos: list[str] = []
+    sandbox = Sandbox(
+        modo="real",
+        url_de_notificacao="https://meu-tunel.ngrok.app/hook?token=segredo-da-consulta",
+    )
+
+    gravar_evidencia_da_sessao(
+        tmp_path,
+        [_registro_da_sessao()],
+        sandbox,
+        contexto="kind-x",
+        avisar=avisos.append,
+    )
+
+    resumo = (tmp_path / "resumo.md").read_text()
+    assert "Modo: **real (credenciais de teste do Mercado Pago)**" in resumo
+    assert "Cuidado com os prints: cubra e-mail, nome, User ID e CPF" in resumo
+    assert "Cuidado com os arquivos: anexe só o `resumo.md`" in resumo
+    assert "`notification_url`: `https://meu-tunel.ngrok.app/hook`" in resumo
+    assert (
+        "segredo-da-consulta" not in resumo + (tmp_path / "evidencia.json").read_text()
+    )
+    assert avisos == [f"[mp-sandbox] evidência em {tmp_path}/resumo.md"]
+
+
+def test_a_evidencia_da_sessao_do_ensaio_traz_os_prints_do_ensaio(
+    tmp_path: Path,
+) -> None:
+    gravar_evidencia_da_sessao(
+        tmp_path,
+        [_registro_da_sessao()],
+        Sandbox(modo="ensaio"),
+        contexto="kind-x",
+        avisar=lambda _: None,
+    )
+
+    resumo = (tmp_path / "resumo.md").read_text()
+    assert "Modo: **ensaio (simulador do Billing)**" in resumo
+    assert "Nenhum: o ensaio não fala com o Mercado Pago." in resumo
+    assert "Cuidado com os prints" not in resumo
+    assert "notification_url" not in resumo
+
+
+def test_sessao_sem_nenhum_cenario_nao_grava_nem_avisa(tmp_path: Path) -> None:
+    avisos: list[str] = []
+    pasta = tmp_path / "reports"
+
+    gravar_evidencia_da_sessao(
+        pasta, [], Sandbox(modo="real"), contexto="kind-x", avisar=avisos.append
+    )
+
+    assert not pasta.exists()
+    assert avisos == []
 
 
 # --- o diagnostico -------------------------------------------------------------------

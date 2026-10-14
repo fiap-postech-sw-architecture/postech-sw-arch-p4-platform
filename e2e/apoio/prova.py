@@ -25,7 +25,13 @@ from e2e.apoio.conferencias import (
     conferir_preferencia_expirada,
 )
 from e2e.apoio.espera import TempoEsgotadoError, esperar
-from e2e.apoio.evidencia import pagamento_do_billing, saga_resumida, transicoes_da_os
+from e2e.apoio.evidencia import (
+    RegistroDoCenario,
+    gravar_evidencia,
+    pagamento_do_billing,
+    saga_resumida,
+    transicoes_da_os,
+)
 from e2e.apoio.humano import (
     INTERVALO_DO_PAGAMENTO,
     INTERVALO_NO_ENSAIO,
@@ -36,13 +42,13 @@ from e2e.apoio.humano import (
 )
 from e2e.apoio.kube import FILA_MORTA_DO_BILLING
 from e2e.apoio.mercadopago import ErroDoMercadoPagoError
-from e2e.apoio.modo_billing import NAMESPACE_BILLING
+from e2e.apoio.modo_billing import NAMESPACE_BILLING, sem_consulta
 from e2e.apoio.segredos import mascarar, registrar
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
+    from pathlib import Path
 
-    from e2e.apoio.evidencia import RegistroDoCenario
     from e2e.apoio.kube import Kubectl
     from e2e.apoio.preflight_mp import Sandbox
     from e2e.servicos import Api, Cenario, Json
@@ -121,6 +127,34 @@ def _referencia(pagamento: Json, campo: str, rotulo: str) -> str:
     return str(valor)
 
 
+def gravar_evidencia_da_sessao(
+    pasta: Path,
+    registros: list[RegistroDoCenario],
+    sandbox: Sandbox,
+    *,
+    contexto: str,
+    avisar: Callable[[str], None] = print,
+) -> None:
+    """No fim da sessao: ``resumo.md`` e ``evidencia.json`` com os prints do modo.
+
+    Sem cenario nenhum (a sessao parou antes do primeiro), nao grava nada.
+    """
+    __tracebackhide__ = True  # os registros levam as observacoes, que a varredura le
+    if not registros:
+        return
+    gravar_evidencia(
+        pasta,
+        registros,
+        modo=sandbox.modo,
+        contexto=contexto,
+        prints=PRINTS if sandbox.real else PRINTS_DO_ENSAIO,
+        url_de_notificacao=sem_consulta(sandbox.url_de_notificacao)
+        if sandbox.url_de_notificacao
+        else "",
+    )
+    avisar(f"[mp-sandbox] evidência em {pasta}/resumo.md")
+
+
 class Prova:
     """Um cenario do sandbox: o registro da evidencia e as chamadas dos passos."""
 
@@ -156,6 +190,41 @@ class Prova:
         self._relogio = relogio
         self._dormir = dormir
         self._agora = agora
+
+    @classmethod
+    def abrir(  # cada parametro e um ponto de injecao dos testes
+        cls,
+        *,
+        nome: str,
+        evidencia: list[RegistroDoCenario],
+        api: Api,
+        kubectl: Kubectl,
+        sandbox: Sandbox,
+        cenario: Cenario,
+        esperar_status: Callable[[Api, Cenario, str], Json],
+        descrever_estado: Callable[[Api, Cenario], str],
+        avisar: Callable[[str], None] = print,
+        numeros: Iterator[int] | None = None,
+    ) -> Prova:
+        """Um cenario novo: o registro entra na evidencia da sessao.
+
+        As DLQs de agora ficam como foto de comparacao: so o que entra nelas depois
+        e causa deste cenario.
+        """
+        registro = RegistroDoCenario(nome=nome)
+        evidencia.append(registro)
+        return cls(
+            api=api,
+            kubectl=kubectl,
+            sandbox=sandbox,
+            cenario=cenario,
+            registro=registro,
+            esperar_status=esperar_status,
+            descrever_estado=descrever_estado,
+            filas_mortas_antes=diagnostico.coletar(kubectl.filas_mortas),
+            avisar=avisar,
+            numeros=numeros,
+        )
 
     @property
     def real(self) -> bool:
