@@ -281,6 +281,10 @@ if args[args.index("-w") + 1] == "\\n%{http_code}":
     print("\n" + resposta, end="")
 else:
     print(resposta, end="")
+# Sem resposta (recusa, prazo), o curl imprime 000 e sai com status diferente de
+# zero (7 na recusa): o `|| true` do script e o que mantem o smoke de pe.
+if resposta == "000":
+    sys.exit(7)
 """
 
 # O relogio falso: o sleep registra o argumento e adianta o relogio (sem
@@ -773,20 +777,30 @@ CORTADAS = ["/billing/metrics", "/billing/api/v1/admin/outbox"]
 
 @pytest.mark.parametrize("caminho", CORTADAS)
 @pytest.mark.parametrize(
-    "corpo",
+    ("corpo", "trecho"),
     [
         # O 404 do proprio servico (o admin/outbox nao existe em nenhum dos tres
         # e o servico tambem responderia 404): status igual, corpo diferente.
-        '{"detail":"Not Found"}',
-        '{"erro":{"codigo":"ENTIDADE_NAO_ENCONTRADA"}}',
-        "",
+        ('{"detail":"Not Found"}', '{"detail":"Not Found"}'),
+        (
+            '{"erro":{"codigo":"ENTIDADE_NAO_ENCONTRADA"}}',
+            '{"erro":{"codigo":"ENTIDADE_NAO_ENCONTRADA"}}',
+        ),
+        ("", "(empty)"),
         # Pedaco da mensagem nao basta.
-        '{"message":"no Route matched"}',
+        ('{"message":"no Route matched"}', '{"message":"no Route matched"}'),
+        # Varias linhas: o codigo e a ultima linha, nao a primeira.
+        (
+            "<html>\n<body>Not Found</body>\n</html>",
+            "?html? ?body?Not Found?/body? ?/html?",
+        ),
+        # Longo e com barra vertical: 60 caracteres, sem quebrar a tabela.
+        ("|" + "x" * 100, "?" + "x" * 59),
     ],
-    ids=["fastapi", "envelope", "vazio", "pedaco"],
+    ids=["fastapi", "envelope", "vazio", "pedaco", "multilinha", "longo"],
 )
 def test_404_sem_o_corpo_do_kong_reprova_porque_nao_prova_o_corte_da_borda(
-    smoke: Smoke, caminho: str, corpo: str
+    smoke: Smoke, caminho: str, corpo: str, trecho: str
 ) -> None:
     estado = cluster_saudavel()
     estado["corpo"][caminho] = corpo
@@ -798,7 +812,7 @@ def test_404_sem_o_corpo_do_kong_reprova_porque_nao_prova_o_corte_da_borda(
         (
             "billing-service",
             f"GET {caminho}",
-            "FAILED: 404 without the Kong fora-da-borda body",
+            f"FAILED: 404 without the Kong fora-da-borda body: {trecho}",
         )
     ]
 

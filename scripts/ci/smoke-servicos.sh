@@ -3,7 +3,8 @@
 # por namespace: o Job de inicializacao completo; os Deployments e o banco com
 # todas as replicas prontas e atualizadas; pela borda, a saude em 200 (ate 1
 # min), o Swagger (/docs e /openapi.json) em 200 e o /metrics e o
-# /api/v1/admin/* em 404 com o corpo do Kong (o Ingress fora-da-borda); cada
+# /api/v1/admin/* em 404 com o corpo do Kong (o /metrics nao e publicado; o
+# admin/outbox e cortado pelo Ingress fora-da-borda, que o corpo prova); cada
 # pod anotado com up = 1 no Prometheus e o exporter do banco com pg_up
 # (PostgreSQL) ou mongodb_up (MongoDB) em 1, as duas esperas juntas por ate
 # 45 s; no PostgreSQL, o 127.0.0.1 do pod do banco
@@ -29,6 +30,8 @@ INICIALIZACAO=app.kubernetes.io/component=inicializacao
 # Corpo que o plugin request-termination do fora-da-borda devolve (message em
 # k8s/base/kong/plugins.yaml; o teste confere os dois).
 MENSAGEM_DO_KONG="no Route matched with those values"
+# Prazo, em segundos, de cada GET pela borda (a espera da saude tem o proprio).
+PRAZO_BORDA=10
 # Esperas, em segundos, e o intervalo entre as tentativas de cada uma.
 ESPERA_SAUDE=60
 INTERVALO_SAUDE=2
@@ -83,17 +86,19 @@ status() { curl -s ${tls:+"$tls"} --max-time "$2" -o /dev/null -w '%{http_code}'
 # borda <servico> <caminho> <status esperado>: um GET pela borda.
 borda() {
   local obtido
-  obtido=$(status "$2" 10)
+  obtido=$(status "$2" "$PRAZO_BORDA")
   registra "$1" "GET $2" "$obtido" "$([ "$obtido" = "$3" ] && echo sim)"
 }
 
 # cortada <servico> <caminho>: um GET pela borda que o Ingress fora-da-borda
 # barra, com 404 e o corpo do Kong. O status sozinho nao prova o corte do
 # /api/v1/admin/outbox: nenhum dos tres servicos tem essa rota, e o proprio
-# servico tambem responderia 404, com o corpo dele. O corpo e o do plugin.
+# servico tambem responderia 404, com o corpo dele. O corpo e o do plugin. No
+# /metrics, que nenhum Ingress publica, o Kong sem rota responde o mesmo 404 e a
+# mesma mensagem (de proposito, plugins.yaml): a prova e que nao e servido.
 cortada() {
-  local resposta obtido corpo detalhe ok=nao
-  resposta=$(curl -s ${tls:+"$tls"} --max-time 10 -w '\n%{http_code}' "$BORDA$2" || true)
+  local resposta obtido corpo trecho detalhe ok=nao
+  resposta=$(curl -s ${tls:+"$tls"} --max-time "$PRAZO_BORDA" -w '\n%{http_code}' "$BORDA$2" || true)
   obtido=${resposta##*$'\n'}
   corpo=${resposta%$'\n'*}
   if [ "$obtido" != 404 ]; then
@@ -102,7 +107,10 @@ cortada() {
     detalhe="404 (Kong fora-da-borda)"
     ok=sim
   else
-    detalhe="404 without the Kong fora-da-borda body"
+    # O inicio do corpo recebido, sem quebra de linha nem barra vertical: a
+    # celula e de tabela Markdown.
+    trecho=$(printf '%.60s' "$corpo" | tr '\n\t' '  ' | tr -c 'A-Za-z0-9 .,:_/"{}-' '?')
+    detalhe="404 without the Kong fora-da-borda body: ${trecho:-(empty)}"
   fi
   registra "$1" "GET $2" "$detalhe" "$ok"
 }
