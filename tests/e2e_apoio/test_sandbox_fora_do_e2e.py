@@ -108,7 +108,7 @@ def test_make_do_sandbox_roda_so_o_sandbox_no_modo_e_na_pasta_dele(
     comandos = _make(alvo)
 
     assert f"E2E_MP_MODO={modo}" in comandos
-    assert "-m mp_sandbox" in comandos
+    assert "-m mp_sandbox -s -q -x " in comandos, "para no primeiro cenario que reprova"
     assert f"E2E_RELATORIOS={pasta} " in comandos
     assert f"--junitxml={pasta}/junit.xml" in comandos
     assert f"python -m e2e.varredura {pasta}" in comandos
@@ -412,3 +412,36 @@ def test_a_saga_continua_com_traceback_no_guarda_de_contexto(tmp_path: Path) -> 
 
     assert resultado.returncode != 0
     assert "ContextoNaoDescartavelError" in resultado.stdout
+
+
+def test_kubectl_que_falha_no_preflight_sai_sem_traceback_e_sem_o_ambiente(
+    tmp_path: Path,
+) -> None:
+    # O kubectl falso do E2E nao sabe responder "get deployment ... envFrom": quebra.
+    estado = criar_cluster_falso(tmp_path)
+
+    resultado = _pytest(
+        ARQUIVO_DO_SANDBOX,
+        "-m",
+        "mp_sandbox",
+        "-p",
+        "no:randomly",
+        ambiente=_ambiente(
+            KUBE_CONTEXT="kind-pytstop-p4",
+            E2E_MP_MODO="ensaio",
+            CREDENCIAL_DE_OUTRA_COISA="valor-secreto-do-ambiente-9999",
+            FALSO_ESTADO=str(estado),
+            PATH=f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
+        ),
+    )
+
+    saida = resultado.stdout + resultado.stderr
+    assert resultado.returncode == 2
+    assert "o kubectl falhou ao ler a configuração do Billing" in saida
+    # O traceback do pytest (o do script falso que quebrou vem no texto do erro).
+    assert "ERROR at setup" not in saida
+    assert "def preparar_sandbox" not in saida
+    assert "valor-secreto-do-ambiente-9999" not in saida
+    chamadas = (estado / "chamadas").read_text()
+    for mudanca in (" scale ", "set env", "apply", "rollout"):
+        assert mudanca not in chamadas

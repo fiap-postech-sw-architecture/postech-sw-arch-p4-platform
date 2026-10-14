@@ -15,6 +15,7 @@ import httpx
 
 from e2e.apoio.contexto import PREFIXO_DO_KIND
 from e2e.apoio.espera import TempoEsgotadoError, esperar
+from e2e.apoio.kube import ErroDeComandoError
 from e2e.apoio.mercadopago import (
     ClienteMercadoPago,
     ErroDoMercadoPagoError,
@@ -272,7 +273,11 @@ def preparar_sandbox(
     real = modo == MODO_REAL_DO_E2E
     credenciais = credenciais_do_ambiente(ambiente) if real else ("", "")
     url = _url_de_notificacao(ambiente) if real else ""
-    max_recusas = conferir_overlay_kind(kubectl)
+    try:
+        max_recusas = conferir_overlay_kind(kubectl)
+    except ErroDeComandoError as erro:
+        msg = f"o kubectl falhou ao ler a configuração do Billing: {erro}"
+        raise PreflightDoSandboxError(msg) from None
     conferir_servicos(borda, relogio=relogio, dormir=dormir)
     mercadopago = _validar_token(cliente, credenciais[0]) if real else None
     return Sandbox(

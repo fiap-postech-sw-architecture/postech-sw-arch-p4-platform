@@ -36,7 +36,7 @@ from e2e.apoio.contexto import (
 )
 from e2e.apoio.credenciais import Credenciais
 from e2e.apoio.http import ClienteHttp
-from e2e.apoio.kube import Escalas, Kubectl
+from e2e.apoio.kube import ErroDeComandoError, Escalas, Kubectl
 from e2e.apoio.preflight import conferir_dlqs_vazias, conferir_overlay_kind_ci
 from e2e.apoio.preflight_mp import (
     PreflightDoSandboxError,
@@ -76,7 +76,7 @@ def kubectl() -> Kubectl:
         conferir_contexto(CONTEXTO, escape)
         kubectl = Kubectl(CONTEXTO)
         conferir_borda_local(kubectl, escape, url_da_borda=URL_DA_BORDA)
-    except ContextoNaoDescartavelError as erro:
+    except (ContextoNaoDescartavelError, ErroDeComandoError) as erro:
         if MP_MODO:
             _recusar_o_sandbox(erro)
         raise
@@ -213,10 +213,15 @@ def pytest_bdd_step_error(
     exception: Exception,
 ) -> None:
     """No sandbox, a falha vem com o diagnostico: estado, logs filtrados e a dica."""
-    if "mp_sandbox" in scenario.tags:
+    if "mp_sandbox" not in scenario.tags:
+        return
+    try:
         request.getfixturevalue("prova").falha_no_passo(
             f"{step.keyword} {step.name}", exception
         )
+    except Exception as erro:  # o diagnostico nunca esconde a falha original
+        # Uma fixture que quebrou antes (o login, por exemplo) quebra de novo aqui.
+        print(f"[mp-sandbox] sem diagnóstico: {type(erro).__name__}", flush=True)
 
 
 def pytest_bdd_before_scenario(

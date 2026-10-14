@@ -10,7 +10,7 @@ import pytest
 
 from e2e.apoio import segredos
 from e2e.apoio.http import ClienteHttp
-from e2e.apoio.kube import Kubectl
+from e2e.apoio.kube import ErroDeComandoError, Kubectl
 from e2e.apoio.mercadopago import ErroDoMercadoPagoError, TokenRecusadoError
 from e2e.apoio.preflight_mp import (
     CHAVES_DO_SANDBOX,
@@ -27,7 +27,7 @@ from e2e.apoio.preflight_mp import (
 from e2e_apoio.falsos import ExecutorFalso, Relogio
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, Sequence
 
 CHAVE_DO_MP = "TEST-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
 ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
@@ -590,3 +590,22 @@ def test_mercado_pago_fora_do_ar_diz_que_nao_conseguiu_falar_com_ele(
         _preparar(_kubectl(), _borda(relogio), AMBIENTE, cliente=_fabrica(mp))
 
     assert mp.fechado
+
+
+def test_kubectl_que_falha_na_leitura_do_billing_vira_recusa_clara(
+    relogio: Relogio,
+) -> None:
+    class KubectlFora(ExecutorFalso):
+        def __call__(self, argumentos: Sequence[str], prazo: float) -> str:
+            msg = "kubectl get deployment: saiu com 1: NotFound"
+            raise ErroDeComandoError(msg)
+
+    with pytest.raises(PreflightDoSandboxError) as erro:
+        _preparar(
+            Kubectl("kind-x", executor=KubectlFora()),
+            _borda(relogio),
+            {"E2E_MP_MODO": "ensaio"},
+        )
+
+    assert "o kubectl falhou ao ler a configuração do Billing" in str(erro.value)
+    assert "NotFound" in str(erro.value)

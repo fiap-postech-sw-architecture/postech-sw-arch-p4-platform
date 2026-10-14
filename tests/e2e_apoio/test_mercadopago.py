@@ -530,3 +530,19 @@ def test_fechar_fecha_o_cliente_http() -> None:
 
     with pytest.raises(RuntimeError, match="closed"):
         cliente.pagamento("1")
+
+
+def test_token_sem_prefixo_conhecido_tambem_sai_mascarado() -> None:
+    chave = "chave-sem-prefixo-do-mercado-pago-123456"
+    cliente = ClienteMercadoPago(
+        chave,
+        transporte=httpx.MockTransport(
+            lambda _: httpx.Response(400, json={"message": f"{chave} invalido"})
+        ),
+    )
+
+    with pytest.raises(ErroDoMercadoPagoError) as erro:
+        cliente.pagamento("1")
+
+    assert chave not in str(erro.value)
+    assert "***" in str(erro.value)
