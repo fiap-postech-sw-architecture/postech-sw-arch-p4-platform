@@ -469,16 +469,16 @@ def test_controle_sai_da_api_e_o_loopback_do_banco_nao_tem_trust(
 
     assert processo.returncode == 0, processo.stderr
     chamadas = execs(smoke)
-    controles = [c for c in chamadas if "python" in c[10]]
+    controles = [c for c in chamadas if "python" in c[12]]
     assert [(c[4], c[6]) for c in controles] == [
         (ns, f"{servico}-api-1") for servico, (ns, *_) in SERVICOS.items()
     ]
     for chamada in controles:
-        assert chamada[7:10] == ["--", "sh", "-c"]
+        assert chamada[7:12] == ["-c", "api", "--", "sh", "-c"]
         # A conexao do controle tem prazo de 3 s, como a sonda do rabbitmq-0.
         assert (
             "socket.create_connection((sys.argv[1], int(sys.argv[2])), 3)"
-            in (chamada[10])
+            in (chamada[12])
         )
     loopbacks = [c for c in chamadas if c[7:9] == ["-c", "postgres"]]
     # So os dois bancos PostgreSQL: o MongoDB nao tem essa prova.
@@ -839,7 +839,7 @@ def test_controle_pula_o_pod_da_api_que_esta_saindo(smoke: Smoke) -> None:
     processo = smoke.roda(estado, "billing-service")
 
     assert processo.returncode == 0, processo.stderr
-    controles = [c for c in execs(smoke) if "python" in c[10]]
+    controles = [c for c in execs(smoke) if "python" in c[12]]
     assert [c[6] for c in controles] == ["billing-service-api-1"]
 
 
