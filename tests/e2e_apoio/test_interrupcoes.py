@@ -63,6 +63,9 @@ def _suite_com_segundo_ctrl_c(pasta: Path) -> Path:
     registro = pasta / "registro"
     (pasta / "test_x.py").write_text(
         "import os\nimport signal\nfrom pathlib import Path\n\nimport pytest\n\n"
+        # Um job em segundo plano herda o SIGINT ignorado, e entao o os.kill abaixo
+        # nao levanta nada: o teste mede o pytest, e nao o shell que o lancou.
+        "signal.signal(signal.SIGINT, signal.default_int_handler)\n"
         f"REGISTRO = Path({str(registro)!r})\n\n\n"
         "def anotar(texto):\n"
         "    with REGISTRO.open('a') as arquivo:\n"
