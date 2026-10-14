@@ -811,7 +811,17 @@ zap-baseline.py -t https://localhost/os/openapi.json -c regras.conf -m 1 -I -z "
 - O ZAP aceita o certificado autoassinado do Kong. Como a varredura que não leu página nenhuma (certificado recusado, borda fora) poderia terminar com "nada a reportar", o script exige ao menos uma URL lida, a linha de resumo do ZAP e o status 0, e reprova nomeando o serviço se faltar qualquer um. Um serviço que reprova não impede a varredura dos outros.
 - A pasta `reports/zap` (ignorada pelo git) recebe `regras.conf`, `zap-<serviço>.html`, `.json`, `.md` e `.log`. O CI a publica como o artefato `zap-baseline` (90 dias), e a tabela por serviço (FAIL, WARN, URLs lidas) mais o `.md` de cada um vão para o summary do job.
 
-Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_REDE` (rede do container, `host`), `RELATORIOS` (`reports/zap`) e `PRAZO_ZAP` (segundos por serviço, 600) trocam o alvo, a rede, a pasta e o prazo; foi assim que o script foi provado com um Kong avulso do 3.9.3 numa rede Docker sem saída para fora.
+Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_REDE` (rede do container, `host`), `RELATORIOS` (`reports/zap`) e `PRAZO_ZAP` (segundos por serviço, 300) trocam o alvo, a rede, a pasta e o prazo; foi assim que o script foi provado com um Kong avulso do 3.9.3 numa rede Docker sem saída para fora.
+
+### O que o ZAP achou nos primeiros runs
+
+Nos dois primeiros runs do job (14/10/2026), com os três serviços na `main` deles, o ZAP leu 37 URLs do OS, 38 do Billing e 24 da Execução, sem nenhum `FAIL`. Os avisos e como foram tratados:
+
+| Achado | Onde | Tratamento |
+|---|---|---|
+| 10035, `Strict-Transport-Security` ausente (`WARN`) | Só no 404 que o próprio Kong gera: `/`, `/<prefixo>`, `/robots.txt` e `/sitemap.xml`, que o spider pede. Toda resposta de serviço (`openapi.json`, `saude`, JWKS) traz o cabeçalho | Fica em `WARN`. A causa é o Kong sem rota casada, que não executa plugin nenhum; ela passa a `FAIL` se o relatório mostrar o achado numa resposta de serviço |
+| 10024, informação sensível na URL (`WARN`) | Billing: o checkout do simulador e o `aprovar` e o `recusar` dele levam o `token` na query | Por desenho do simulador do Mercado Pago ([ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md)), que só existe com `MP_MODE=simulado`; o Promtail mascara o `token=` antes de ele chegar ao Loki ([`make smoke`](scripts/smoke.sh)). Fica em `WARN`, visível |
+| 3% das respostas do Billing com 5xx | Um `POST /billing/api/v1/webhooks/mercadopago` sem assinatura, que o spider monta do `openapi.json` | É a resposta tratada `503 SERVICO_INDISPONIVEL` do serviço (log `http_exception_handled`, nível `warning`, conferido nos logs do Billing e do Kong do segundo run). Nenhum `500` passou pelo Kong no intervalo do scan: os outros dois 503 do log do Kong são do cenário de resiliência do E2E, que derruba a API do Billing de propósito |
 
 ### Regras e allowlist
 
@@ -908,6 +918,8 @@ O job `e2e` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.m
 3. **Plataforma** no kind, pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh), e **os três serviços construídos do código** (nenhuma imagem do GHCR), pelo [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) no overlay `kind-ci`.
 4. **Smoke** por namespace ([`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh)), **`make e2e`** (os 13 cenários) e o **ZAP baseline** ([ZAP baseline na borda](#zap-baseline-na-borda)). O ZAP roda mesmo com o E2E reprovado, para um resultado não esconder o outro, mas não sem o smoke verde: sem os serviços de pé não há o que varrer.
 5. **Resumo e relatórios**, mesmo com falha: minutos e memória no summary ([`medir-kind.sh`](scripts/medir-kind.sh)), o artefato `e2e-kind` (`reports/` sem a pasta do ZAP: `reports/e2e` e, se existir, `reports/demo`; 90 dias) e o `zap-baseline` (90 dias). Em falha ou cancelamento, inclusive o do tempo limite, o [`diagnostico.sh`](scripts/ci/diagnostico.sh).
+
+Medido nos dois primeiros runs (14/10/2026, runner de 16 GB): o job levou de 7 min 57 s a 8 min 24 s, dos quais o kind e a plataforma 1 min 29 s, os três serviços construídos do código 1 min 25 s a 1 min 44 s, o smoke 12 s a 21 s, o E2E (os 13 cenários, 3 min 12 s a 3 min 17 s no pytest) 3 min 15 s a 3 min 21 s e o ZAP 1 min 13 s a 1 min 22 s. O nó do kind chegou a um working set de 3,2 a 3,3 GiB e a um pico de cgroup de 7,5 GiB, com o cache de arquivos, nos 15,6 GiB do Docker do runner.
 
 Cada passo longo tem prazo próprio (plataforma 15 min, serviços 25, smoke 10, E2E 20, ZAP 20), dentro dos 50 do job: um que pendura não gasta o job inteiro, e o diagnóstico ainda roda. O [teste do workflow](tests/test_cd_workflow.py) trava essa estrutura: jobs, `needs`, permissões, prazos, ordem dos passos, os checkouts, as condições `if`, os artefatos e os SHAs das actions.
 

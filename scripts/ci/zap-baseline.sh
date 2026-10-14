@@ -21,7 +21,7 @@
 # verificar atualizacao, sem baixar add-on e sem telemetria, entao a varredura
 # nao fala com a internet. Variaveis: BORDA (https://localhost), ZAP_REDE (rede
 # do container, host: o localhost do runner), RELATORIOS (reports/zap) e
-# PRAZO_ZAP (segundos por servico, 600).
+# PRAZO_ZAP (segundos por servico, 300).
 set -euo pipefail
 
 # Versao e digest do indice multi-arquitetura; a mesma imagem esta na tabela
@@ -32,7 +32,7 @@ raiz=$(cd "$(dirname "$0")/../.." && pwd)
 BORDA="${BORDA:-https://localhost}"
 ZAP_REDE="${ZAP_REDE:-host}"
 destino="${RELATORIOS:-$raiz/reports/zap}"
-PRAZO_ZAP="${PRAZO_ZAP:-600}"
+PRAZO_ZAP="${PRAZO_ZAP:-300}"
 
 # prefixo <servico>: onde o Kong publica o servico (o ROOT_PATH dele).
 prefixo() {

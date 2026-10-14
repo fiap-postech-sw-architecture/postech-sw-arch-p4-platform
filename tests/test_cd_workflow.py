@@ -234,6 +234,15 @@ def test_passos_longos_tem_prazo_proprio_dentro_do_do_job() -> None:
         assert minutos < E2E["timeout-minutes"]
 
 
+def test_prazo_do_zap_por_servico_cabe_no_prazo_do_passo() -> None:
+    """Tres servicos no prazo padrao do script nao passam do prazo do passo."""
+    script = (RAIZ / "scripts" / "ci" / "zap-baseline.sh").read_text(encoding="utf-8")
+    padrao = re.search(r'^PRAZO_ZAP="\$\{PRAZO_ZAP:-(\d+)\}"$', script, re.MULTILINE)
+    assert padrao is not None
+    minutos = passo("scripts/ci/zap-baseline.sh")["timeout-minutes"]
+    assert len(SERVICOS) * int(padrao.group(1)) <= minutos * 60
+
+
 def workflows_e_usos() -> list[tuple[str, str]]:
     """(workflow, valor de cada `uses`) de todos os workflows do repositorio."""
     usos = []

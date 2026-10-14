@@ -272,12 +272,6 @@ jobs:
         run: |
           platform/scripts/medir-kind.sh etapa zap
           platform/scripts/ci/zap-baseline.sh
-      - name: TEMPORARIO 5xx durante o ZAP
-        if: always()
-        continue-on-error: true
-        run: |
-          kubectl --context kind-pytstop-p4 -n pytstop-plataforma logs deployment/kong -c proxy --since=6m | grep -E '" 5[0-9][0-9] ' | head -40 || true
-          kubectl --context kind-pytstop-p4 -n pytstop-billing logs -l app=billing-service-api --since=6m --tail=400 | grep -i -E 'error|exception|traceback|" 5[0-9][0-9]|status.: ?5' | head -40 || true
       - name: Minutos e memoria no summary
         if: always()
         run: platform/scripts/medir-kind.sh resumo
