@@ -876,14 +876,17 @@ erDiagram
         timestamptz entregue_em
     }
     notificacoes {
-        uuid id PK
+        bigint id PK
         uuid ordem_id FK
         varchar modelo "situacao, orcamento, pagamento ou cancelamento"
         varchar status_da_ordem
         varchar motivo "código, nunca texto livre"
-        varchar situacao "pendente, entregue ou dead"
         timestamptz criada_em
+        varchar situacao "pendente, entregue ou dead"
+        int tentativas
+        timestamptz proxima_tentativa_em
         timestamptz entregue_em
+        text ultimo_erro
     }
     mensagens_processadas {
         uuid mensagem_id PK
@@ -896,7 +899,7 @@ erDiagram
     veiculos ||--o{ ordens_de_servico : "atendido em"
     ordens_de_servico ||--o{ historico_status_ordem : "linha do tempo"
     ordens_de_servico ||--|| sagas : "saga_id = ordem_id"
-    ordens_de_servico ||--o{ notificacoes : "e-mails ao cliente (ainda não implementada)"
+    ordens_de_servico ||--o{ notificacoes : "e-mails ao cliente"
 ```
 
 - As tabelas de cliente, veículo, consentimento, usuário e token vêm do p3 sem mudança.
@@ -907,7 +910,7 @@ erDiagram
 - `etapa` guarda o nome em minúsculas (`falha_na_compensacao`), como a coluna `status` da OS guarda `cancelada`; a API e o label `etapa` das métricas usam o mesmo valor, e esta RFC escreve os nomes em maiúsculas.
 - `prazo_resposta_em` é gravado pela saga a cada envio do comando em voo (o original, cada reenvio e o da retomada) e vale `agora` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS`. É um limite inferior do vencimento, porque o comando só chega ao participante depois de sair da outbox, e é por ele que o `prazos` acha as candidatas por índice; fica nulo sem comando com prazo e em `FALHA_NA_COMPENSACAO`. O relay é genérico e não conhece a saga: quem decide o vencimento é o `prazos`, que lê a linha da outbox do envio mais recente (o último de `mensagem_ids`) e só vence a instância se ela estiver entregue e `entregue_em` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS` já tiver passado. Envio pendente na outbox, ou entregue há menos que o prazo, não vence. `etapa_desde`, a entrada na etapa atual, dá a idade da instância mais antiga e a duração de cada etapa ([seção 9](#9-observabilidade)); `iniciada_em` é a abertura da saga.
 - A saga guarda só códigos (etapa, motivo da compensação, falha), nunca texto livre. O texto que o atendente escreve no cancelamento vai para `ordens_de_servico.motivo_cancelamento` já no pedido, antes de a compensação terminar, e passa ao histórico quando a OS chega a `CANCELADA` (na corrida do pivot, o pedido é descartado); assim a eliminação de dados da LGPD o alcança sem tocar `sagas`.
-- A outbox é só AMQP: toda linha tem `exchange` e `routing_key`, e o relay não conhece o e-mail nem o cliente. As notificações ao cliente vão para a tabela `notificacoes`, gravada na transação da própria transição, e um processo `notificador` (um Deployment, com laço, heartbeat e readiness próprios) as entrega por SMTP como no p3, lendo o contato por projeção SQL de `nome` e `contato`, sem a `ENCRYPTION_KEY`. Falha de SMTP retenta só aquela linha e não trava a saga nem o relay, e a ordem de entrega vale só entre os e-mails da mesma OS. A tabela é própria por duas razões: um relay de versão anterior (rolling update ou `rollout undo`) nunca vê linha de e-mail, e SMTP lento não prende a conexão AMQP do relay. Está decidido e ainda não existe no código: a tabela (migração `004_notificacoes`) e o `notificador` entram com o PR de notificações do OS Service.
+- A outbox é só AMQP: toda linha tem `exchange` e `routing_key`, e o relay não conhece o e-mail nem o cliente. As notificações ao cliente vão para a tabela `notificacoes`, gravada na transação da própria transição, e um processo `notificador` (um Deployment, com laço, heartbeat e readiness próprios) as entrega por SMTP como no p3, lendo o contato por projeção SQL de `nome` e `contato`, sem a `ENCRYPTION_KEY`. Falha de SMTP retenta só aquela linha e não trava a saga nem o relay, e a ordem de entrega vale só entre os e-mails da mesma OS. A tabela é própria por duas razões: um relay de versão anterior (rolling update ou `rollout undo`) nunca vê linha de e-mail, e SMTP lento não prende a conexão AMQP do relay. A tabela (migração `004_notificacoes`) e o `notificador` já estão na `main` do OS Service.
 
 ### 7.3 Execution Service (PostgreSQL 16)
 
