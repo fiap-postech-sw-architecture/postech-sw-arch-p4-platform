@@ -55,7 +55,7 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 | [`compose/`](compose) | Stack docker compose para desenvolver um serviço: RabbitMQ, observabilidade e Mailpit com a configuração do cluster, os bancos de cada serviço e um profile que sobe os três; sem o Kong |
 | [`contratos/`](contratos) | AsyncAPI 3.0 dos comandos e eventos, JSON Schema do envelope e de cada mensagem, exemplos e testes |
 | [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong, segredos gerados no deploy, medição do kind, checagens do `make manifests` e, em [`scripts/ci/`](scripts/ci), os scripts do CD: deploy da plataforma, implantação e smoke dos serviços e diagnóstico ([Contrato com os serviços](#contrato-com-os-serviços)) |
-| [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md) o [runbook da saga](docs/operacao/runbook-saga.md), com o procedimento para saga parada, falha na compensação, retomada e redrive da DLQ, e o [ensaio integrado](docs/operacao/ensaio-integrado.md), com os três serviços reais no kind, os tempos e a memória e a CPU de cada pod |
+| [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md), o [runbook da saga](docs/operacao/runbook-saga.md) (saga parada, falha na compensação, retomada e redrive da DLQ) e o [ensaio integrado](docs/operacao/ensaio-integrado.md) (os três serviços no kind, com tempo, memória e CPU por pod) |
 | [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos, de medição do kind e de implantação e smoke dos serviços |
 | [`Makefile`](Makefile) | Atalhos de cluster, deploy, compose e testes (`make` lista os alvos) |
 
@@ -683,9 +683,9 @@ Um cluster com os serviços implantados não serve ao `make smoke`, que recusa u
 
 Tudo o que pode pendurar no `implantar-servicos.sh` roda com prazo, e o estouro reprova o serviço nomeando a chamada, em vez de consumir o timeout do job: `PRAZO_BUILD` (900 s, o `docker build`), `PRAZO_CARGA` (300 s, o `kind load`) e `PRAZO_KUBECTL` (120 s por chamada ao cluster; nas esperas, somado ao tempo delas) e, nas esperas, `ESPERA_BANCO` (180 s), `ESPERA_JOB` (300 s) e `ESPERA_DEPLOYMENT` (300 s).
 
-O ensaio com os três serviços reais no kind (tempos, memória e CPU de cada pod contra o orçamento do ADR-042, e a saída do smoke) está em [`docs/operacao/ensaio-integrado.md`](docs/operacao/ensaio-integrado.md).
-
 Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl`, `sleep` e `date` falsos e conferem a ordem de cada namespace, os prazos, cada etapa reprovando o que deve (cada código HTTP errado, cada réplica fora do lugar), as esperas pelo tempo e o nome do serviço em toda falha.
+
+O ensaio com os três serviços reais no kind (tempos, memória e CPU de cada pod contra o orçamento do ADR-042, e a saída do smoke) está em [`docs/operacao/ensaio-integrado.md`](docs/operacao/ensaio-integrado.md).
 
 ## Contratos de mensageria
 
