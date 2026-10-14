@@ -14,7 +14,8 @@ Procedimento para os alertas "Saga parada" e "DLQ com mensagens" e para a ordem 
 | Alerta "Saga parada", com prazo técnico vencido (a métrica `pytstop_saga_prazo_vencido_segundos` ainda não existe) | [1](#1-achar-a-saga-parada) e [3](#3-prazo-técnico-vencido-sem-reenvio) |
 | Alerta "Saga parada", com o coletor das sagas indisponível (`pytstop_saga_coletor_disponivel` em 0, ou ausente com a API de pé) | [1](#1-achar-a-saga-parada) |
 | Alerta "DLQ com mensagens" (`pytstop-dlq-com-mensagens`) | [4](#4-mensagem-na-dlq-e-redrive) |
-| `outbox_dead` acima de zero (ainda sem alerta) | [Linha `dead` na outbox](#linha-dead-na-outbox) |
+| Alerta "Outbox com mensagem dead" (`pytstop-outbox-dead`: `outbox_dead` acima de zero) | [Linha `dead` na outbox](#linha-dead-na-outbox) |
+| Alerta "Outbox parada" (`pytstop-outbox-parada`: a linha pendente mais antiga passou do limite) | [Comando preso na outbox](#3-prazo-técnico-vencido-sem-reenvio) |
 | OS que não anda, relatada pelo atendente | [1](#1-achar-a-saga-parada) e [5](#5-o-trace-e-os-logs-pelo-correlation_id) |
 
 ## Termos
@@ -83,7 +84,7 @@ No Prometheus (`http://localhost:9090`) ou no Explore do Grafana, entrando como 
 | `sum by (motivo) (increase(pytstop_saga_compensacoes_total[1h]))` | por que as sagas compensam; `prazo_tecnico` subindo é participante sem responder |
 | `rabbitmq_queue_consumers{queue="os.eventos"}` | zero: o consumidor do OS Service está fora, e o `prazos` fica em pausa |
 | `sum by (queue) (rabbitmq_queue_messages{queue=~".+[.]dlq"})` | mensagem em alguma DLQ ([seção 4](#4-mensagem-na-dlq-e-redrive)) |
-| `outbox_pendentes`, `outbox_dead` | comando ou evento que não saiu da outbox: quantas linhas esperam o relay e quantas desistiram ([seção 3](#3-prazo-técnico-vencido-sem-reenvio) e [linha `dead`](#linha-dead-na-outbox)); a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, está decidida e ainda não implementada |
+| `outbox_pendentes`, `outbox_dead` | comando ou evento que não saiu da outbox: quantas linhas esperam o relay e quantas desistiram ([seção 3](#3-prazo-técnico-vencido-sem-reenvio) e [linha `dead`](#linha-dead-na-outbox)); a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, vem da API do serviço e continua certa com o relay parado |
 
 ### Coletor das sagas indisponível
 
@@ -161,7 +162,7 @@ As métricas não levam o `ordem_id`, porque os labels são fechados. Para chega
    SQL
    ```
 
-   O comando que o relay ainda não entregou não entra na lista, porque o prazo dele não começou: o sinal é `outbox_pendentes` que sobe e não volta a cair, e a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, está decidida e ainda não implementada ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)). `entregue_em` e `venceu_em` vazios são de instância sem comando em voo, como a que está em `falha_na_compensacao`. O significado das colunas está na [RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16).
+   O comando que o relay ainda não entregou não entra na lista, porque o prazo dele não começou: o sinal é a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos` (painel "Idade da pendente mais antiga" do dashboard Mensageria e alerta "Outbox parada", [seção 3](#3-prazo-técnico-vencido-sem-reenvio)), e `outbox_pendentes` que sobe e não volta a cair. `entregue_em` e `venceu_em` vazios são de instância sem comando em voo, como a que está em `falha_na_compensacao`. O significado das colunas está na [RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16).
 
 Guarde o `ordem_id` achado, no lugar do UUID de exemplo:
 
@@ -234,7 +235,7 @@ O processo `prazos` e o reenvio por prazo ainda não existem na `main` do OS Ser
 
 Sem consumidor em `os.eventos` ou com o broker fora, o `prazos` não reenvia nem esgota prazo, porque a resposta pode estar esperando na fila, e a saga segue de onde estava, sem gastar reenvio ([RFC-004, seção 4.6](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#46-prazos)).
 
-Comando preso na outbox não dispara "Saga parada": o prazo só começa quando o relay entrega o comando. Hoje o sinal é `outbox_pendentes` acima de zero que não volta a cair: com tráfego ele sobe e desce, e só a parada do relay ou do broker o mantém alto. A idade da linha pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, e o alerta "Outbox parada" sobre ela (acima de 300 s por 5 minutos) estão decididos no ADR-043 e ainda não implementados: entram com as métricas e os alertas dos serviços. Suba o relay ou o broker. A linha que o relay desistiu de publicar (`dead`) não é acusada por alerta nenhum hoje: veja [Linha `dead` na outbox](#linha-dead-na-outbox).
+Comando preso na outbox não dispara "Saga parada": o prazo só começa quando o relay entrega o comando. O sinal é a idade da linha pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, que a API de cada serviço exporta mesmo com o relay parado: o alerta "Outbox parada" dispara com ela acima de 300 s por 5 minutos (no overlay `kind`, para a demonstração, 30 s e 1 minuto) e o painel "Idade da pendente mais antiga" do dashboard Mensageria a mostra. `outbox_pendentes` acima de zero sozinho não serve: com tráfego ele sobe e desce, e só a parada do relay ou do broker o mantém alto. Suba o relay ou o broker. A linha que o relay desistiu de publicar (`dead`) tem alerta próprio: veja [Linha `dead` na outbox](#linha-dead-na-outbox).
 
 Participante lento, com o resto de pé, não para a saga: aparece em `pytstop_saga_reenvios_total` e, esgotados os reenvios, a saga compensa com `motivo=prazo_tecnico` ou, se já estava compensando, vai a `falha_na_compensacao` ([seção 2](#2-falha-na-compensação-e-retomada)).
 
@@ -242,7 +243,7 @@ Resultado esperado: no ciclo seguinte do `prazos`, em até 30 s, o que venceu é
 
 ### Linha `dead` na outbox
 
-A linha `dead` é a que o relay desistiu de publicar, depois de cinco falhas da própria mensagem ou por envelope fora do contrato ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)). A saga que espera aquele comando ou evento fica parada, e a linha só é apagada 30 dias depois. Hoje nenhum alerta a acusa: `outbox_dead` é uma série sem regra nem painel no `platform`. A regra "Outbox com linha morta" (`pytstop-outbox-dead`, `max by (namespace) (outbox_dead)` acima de zero por 1 minuto, crítica) e o painel "Outbox dead" estão decididos e ainda não implementados (PR de dashboards e alertas). Até lá, olhe `max by (namespace) (outbox_dead)` no Prometheus depois de qualquer parada do relay ou do broker.
+A linha `dead` é a que o relay desistiu de publicar, depois de cinco falhas da própria mensagem ou por envelope fora do contrato ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)). A saga que espera aquele comando ou evento fica parada, e a linha só é apagada 30 dias depois. O alerta "Outbox com mensagem dead" (`pytstop-outbox-dead`, `max by (namespace) (outbox_dead)` acima de zero por 1 minuto, crítico) a acusa, e o painel "Outbox dead" do dashboard Mensageria mostra o valor de cada serviço. Com o relay parado ou o banco fora a série some em vez de zerar, então depois de uma parada do relay olhe `max by (namespace) (outbox_dead)` no Prometheus quando o relay voltar.
 
 Reprocessar é um `UPDATE` no banco do serviço, uma linha por vez. Não passa por API (não há rota administrativa, [ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)) e não gera log de auditoria, então quem o faz deixa o registro no ticket do incidente:
 
