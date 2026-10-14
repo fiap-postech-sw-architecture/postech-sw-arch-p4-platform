@@ -105,6 +105,7 @@ O coletor lê a tabela `sagas` na hora de cada raspagem, numa conexão própria,
    - Tabela travada por um lock (o coletor espera 1 s e desiste): as transações abertas do banco e quem trava quem, como `postgres`. A que tem `travado_por` vazio e a `transacao` mais antiga é quem segura o lock. Chame quem mantém o OS Service antes de qualquer `pg_terminate_backend`, porque o relay e o consumidor seguram transações legítimas:
 
      ```bash
+     kos() { kubectl --context kind-pytstop-p4 -n pytstop-os "$@"; }
      kos exec -i statefulset/os-postgres -c postgres -- sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" PGOPTIONS="-c lock_timeout=2s -c statement_timeout=10s" exec psql -w -U postgres -d "$POSTGRES_DB"' <<'SQL'
      SELECT pid, state, wait_event_type, now() - xact_start AS transacao, pg_blocking_pids(pid) AS travado_por, left(query, 70) AS consulta
        FROM pg_stat_activity
@@ -116,6 +117,7 @@ O coletor lê a tabela `sagas` na hora de cada raspagem, numa conexão própria,
    - Consulta acima de 2 s: o plano da consulta do coletor, como `os_app`. Ele deve usar o índice parcial `ix_sagas_ativas` e terminar em milissegundos; um `Seq Scan` demorado quer dizer tabela inchada ou índice ausente, e quem mantém o OS Service decide:
 
      ```bash
+     kos() { kubectl --context kind-pytstop-p4 -n pytstop-os "$@"; }
      kos exec -i statefulset/os-postgres -c postgres -- sh -c 'PGPASSWORD="$POSTGRES_APP_PASSWORD" PGOPTIONS="-c lock_timeout=2s -c statement_timeout=10s" exec psql -w -U os_app -d "$POSTGRES_DB"' <<'SQL'
      EXPLAIN (ANALYZE, BUFFERS)
      SELECT etapa, count(*), extract(epoch FROM now() - min(etapa_desde))
@@ -132,7 +134,7 @@ O coletor lê a tabela `sagas` na hora de cada raspagem, numa conexão própria,
    ```
 
 2. Com a linha `pytstop_saga_coletor_disponivel`, a série existe: o Prometheus ainda não a raspou (espere duas raspagens, 30 s), ou o caso é o da série em 0.
-3. Sem a linha, a imagem implantada é anterior ao coletor, ou a réplica é de uma versão antiga no meio de um rollout. Veja a imagem com `kos get deployment os-service-api -o jsonpath='{.spec.template.spec.containers[0].image}'` e implante a versão com o coletor.
+3. Sem a linha, a imagem implantada é anterior ao coletor, ou a réplica é de uma versão antiga no meio de um rollout. Veja a imagem com `kubectl --context kind-pytstop-p4 -n pytstop-os get deployment os-service-api -o jsonpath='{.spec.template.spec.containers[0].image}'` e implante a versão com o coletor.
 
 Resultado esperado: `min(pytstop_saga_coletor_disponivel)` volta a 1 na raspagem seguinte, e o alerta resolve na avaliação seguinte.
 
