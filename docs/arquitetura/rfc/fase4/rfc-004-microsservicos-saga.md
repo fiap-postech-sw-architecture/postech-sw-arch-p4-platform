@@ -985,15 +985,16 @@ Dinheiro em `Decimal128`, datas em UTC; exemplos em Extended JSON. As coleções
   "ordem_id": "3c9a7e10-5b2f-4f6d-8a41-0e2d9b7c6f55",
   "status": "APROVADO",
   "linhas": [
-    {"codigo": "SRV-TROCA-OLEO", "descricao": "Troca de óleo", "quantidade": 1,
-     "preco_unitario": {"$numberDecimal": "120.00"}, "subtotal": {"$numberDecimal": "120.00"}},
-    {"codigo": "PEC-OLEO-5W30", "descricao": "Óleo 5W30, 1 litro", "quantidade": 4,
-     "preco_unitario": {"$numberDecimal": "45.00"}, "subtotal": {"$numberDecimal": "180.00"}}
+    {"tipo": "servico", "codigo": "SRV-TROCA-OLEO", "descricao": "Troca de óleo", "quantidade": 1,
+     "preco_unitario": {"valor": {"$numberDecimal": "120.00"}, "moeda": "BRL"}},
+    {"tipo": "peca", "codigo": "PEC-OLEO-5W30", "descricao": "Óleo 5W30, 1 litro", "quantidade": 4,
+     "preco_unitario": {"valor": {"$numberDecimal": "45.00"}, "moeda": "BRL"}}
   ],
-  "total": {"$numberDecimal": "300.00"},
-  "moeda": "BRL",
+  "total": {"valor": {"$numberDecimal": "300.00"}, "moeda": "BRL"},
+  "criado_em": {"$date": "2026-10-06T14:32:06Z"},
   "valido_ate": {"$date": "2026-10-09T14:32:06Z"},
-  "decisao": {"resultado": "APROVADO", "canal": "link", "decidido_em": {"$date": "2026-10-06T15:02:11Z"}},
+  "decisao": {"canal": "link", "decidido_em": {"$date": "2026-10-06T15:02:11Z"}, "decidido_por": null},
+  "motivo_cancelamento": null,
   "aberto_por": {"mensagem_id": "8f6b1c2e-4d3a-4e8b-9f1a-2b7c5d9e0a13",
                  "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
 }
@@ -1005,28 +1006,36 @@ Dinheiro em `Decimal128`, datas em UTC; exemplos em Extended JSON. As coleções
   "ordem_id": "3c9a7e10-5b2f-4f6d-8a41-0e2d9b7c6f55",
   "orcamento_id": "6d2a9b14-8c3e-4f5a-a7b6-1c9d0e2f3a45",
   "status": "CONFIRMADO",
-  "valor": {"$numberDecimal": "300.00"},
-  "moeda": "BRL",
+  "valor": {"valor": {"$numberDecimal": "300.00"}, "moeda": "BRL"},
+  "provedor": "simulado",
+  "referencia_preferencia": "sim-pref-b7e2c4d1-0a9f-4e3b-8c6d-5f1a2b3c4d5e",
   "checkout_url": "http://localhost/billing/simulador/checkout/b7e2c4d1-0a9f-4e3b-8c6d-5f1a2b3c4d5e?token=...",
-  "referencia_provedor": "sim-000173",
-  "recusas": 0,
+  "criado_em": {"$date": "2026-10-06T15:02:12Z"},
   "expira_em": {"$date": "2026-10-06T16:02:12Z"},
+  "recusas": 0,
+  "referencia_pagamento": "sim-6f1c0a9e5d2b4c7e8a3b1d9f0c2e4a68",
+  "confirmado_em": {"$date": "2026-10-06T15:05:40Z"},
+  "encerrado_em": null,
+  "motivo": null,
+  "estornado_em": null,
+  "motivo_estorno": null,
+  "notificacoes": [{"recebida_em": {"$date": "2026-10-06T15:05:41Z"},
+                    "referencia_pagamento": "sim-6f1c0a9e5d2b4c7e8a3b1d9f0c2e4a68", "status_provedor": "approved"}],
+  "estornos_automaticos": [],
   "aberto_por": {"mensagem_id": "c4e9a7d2-6b1f-4a30-9d58-3e7f1b2a8c60",
-                 "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-5c3d1e8a2b7f9046-01"},
-  "historico": [{"status": "SOLICITADO", "em": {"$date": "2026-10-06T15:02:12Z"}},
-                {"status": "CONFIRMADO", "em": {"$date": "2026-10-06T15:05:40Z"}}]
+                 "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-5c3d1e8a2b7f9046-01"}
 }
 ```
 
 | Coleção | Índices |
 |---|---|
 | `precos_servicos`, `precos_pecas` | únicos `{codigo: 1}` e `{sku: 1}`; o `sku` liga a peça ao estoque da Execução |
-| `orcamentos` | único `{ordem_id: 1}`: um orçamento por OS, imutável depois de gerado, com os preços congelados nas linhas (RN-013 e RN-016 do p3); `{status: 1, valido_ate: 1}` para a expiração |
-| `pagamentos` | único `{orcamento_id: 1}` (uma cobrança por orçamento, RF-032); único `{ordem_id: 1}`, pelo qual a compensação acha a cobrança; único e esparso `{referencia_provedor: 1}` para o webhook; `{status: 1, expira_em: 1}` para a expiração e a conciliação |
-| `outbox`, `mensagens_processadas` | `{status: 1, proxima_tentativa_em: 1}` para o *claim*; `_id` igual ao `id` da mensagem |
+| `orcamentos` | único `{ordem_id: 1}`: um orçamento por OS, imutável depois de gerado, com os preços congelados nas linhas (RN-013 e RN-016 do p3); `{status: 1, valido_ate: 1}` para a expiração. O subtotal de cada linha não é gravado: é a quantidade vezes o preço |
+| `pagamentos` | único e parcial `{orcamento_id: 1}`, só nos documentos que têm o campo (uma cobrança por orçamento, RF-032; a lápide não tem orçamento); único `{ordem_id: 1}`, pelo qual a compensação acha a cobrança; único e parcial `{referencia_pagamento: 1}`, só quando é texto, para o webhook; `{status: 1, expira_em: 1}` para a expiração e a conciliação |
+| `outbox`, `mensagens_processadas` | `{status: 1, proxima_tentativa_em: 1, _id: 1}` para o *claim*; `_id` igual ao `id` da mensagem; índices TTL (apagam sozinhos) em `entregue_em` (7 dias, só `entregue`), `morta_em` (30 dias, só `dead`) e `processada_em` (30 dias) |
 
 - Orçamento e pagamento são os registros que esperam o cliente. Cada um guarda em `aberto_por` o `id` do comando que o criou (`GerarOrcamento` e `SolicitarPagamento`) e o contexto de trace dele (`traceparent` e `tracestate`): é de lá que saem o `causation_id` e o pai do trace dos eventos que o Billing emite sem comando (decisão do cliente, webhook, conciliação, prazo), que ainda levam um span link para o contexto de quem retomou o passo. O campo é gravado uma vez, na criação, e as gravações seguintes não o alteram.
-- Do provedor, o pagamento guarda só id, status e seu detalhe, valor, moeda e datas; dados do pagador e do cartão são descartados antes de persistir e de logar.
+- Do provedor, o pagamento guarda só as referências da preferência e do pagamento, o status que o provedor informou em cada notificação (`notificacoes`), os estornos automáticos que ele fez (`estornos_automaticos`), valor, moeda e datas; dados do pagador e do cartão são descartados antes de persistir e de logar. A lápide (compensação que chegou antes do comando) é um pagamento sem cobrança: não tem `orcamento_id`, `valor`, `provedor`, `referencia_preferencia`, `checkout_url` nem `expira_em`.
 - O Job de inicialização do Billing cria o replica set (`rs.initiate`), os índices e a validação `$jsonSchema` (nível `moderate`, só mudanças aditivas) antes do rollout ([seção 10.2](#102-pipeline-e-deploy)).
 
 ## 8. Segurança
