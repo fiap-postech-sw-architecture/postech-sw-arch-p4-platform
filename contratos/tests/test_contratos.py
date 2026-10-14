@@ -916,6 +916,44 @@ ATENDENTE = "2f4e8c1a-7b3d-4e5f-9a6b-1c2d3e4f5a6b"
         pytest.param(
             "GerarOrcamento", "ocorrido_em", "2026-13-45T12:00:00Z", id="data-invalida"
         ),
+        # O $ do Python (re.search) casa tambem antes de um \n final, e o
+        # format date-time do FormatChecker tem o mesmo defeito: o que rejeita e
+        # o fim de texto do pattern.
+        pytest.param(
+            "GerarOrcamento", "ocorrido_em", "2026-10-06T12:00:00Z\n", id="data-z-e-lf"
+        ),
+        pytest.param(
+            "GerarOrcamento",
+            "ocorrido_em",
+            "2026-10-06T12:00:00+00:00\n",
+            id="data-offset-e-lf",
+        ),
+        pytest.param(
+            "OrcamentoGerado",
+            "dados/valido_ate",
+            "2026-10-09T12:00:00Z\n",
+            id="valido-ate-lf",
+        ),
+        pytest.param(
+            "ReservarPecas",
+            "dados/pecas/0/sku",
+            "pec-amortecedor-d",
+            id="sku-minusculo",
+        ),
+        pytest.param(
+            "ReservarPecas", "dados/pecas/0/sku", "PEC_AMORT", id="sku-sublinhado"
+        ),
+        pytest.param("ReservarPecas", "dados/pecas/0/sku", "PEC.AMORT", id="sku-ponto"),
+        pytest.param(
+            "ReservarPecas", "dados/pecas/0/sku", "-PEC", id="sku-hifen-inicial"
+        ),
+        pytest.param(
+            "ReservarPecas", "dados/pecas/0/sku", "PEC-", id="sku-hifen-final"
+        ),
+        pytest.param(
+            "ReservarPecas", "dados/pecas/0/sku", "PEC--D", id="sku-hifen-duplo"
+        ),
+        pytest.param("ReservarPecas", "dados/pecas/0/sku", "PEC-D\n", id="sku-e-lf"),
         pytest.param(
             "PagamentoSolicitado", "dados/checkout_url", "nao e uma url", id="url-texto"
         ),
@@ -968,6 +1006,7 @@ def test_envelope_limita_o_tipo() -> None:
 
     assert envelope.is_valid(_mudar(exemplo, "tipo", "A" * 64))
     assert not envelope.is_valid(_mudar(exemplo, "tipo", "A" * 65))
+    assert not envelope.is_valid(_mudar(exemplo, "tipo", "GerarOrcamento\n"))
 
 
 def caminhos(no: Any, prefixo: str = "") -> Iterator[str]:
@@ -1110,13 +1149,19 @@ FRONTEIRAS: list[tuple[str, str, list[Any], list[Any]]] = [
         "GerarOrcamento",
         "dados/itens/0/codigo",
         ["A", "A.b_c-9", texto(50)],
-        ["", texto(51), "-A", "A B", "ÁB", "A/B"],
+        ["", texto(51), "-A", "A B", "ÁB", "A/B", "A\n"],
+    ),
+    (
+        "ReservarPecas",
+        "dados/pecas/0/sku",
+        ["A", "PEC-OLEO-5W30", "A-B-C", "9", "A" * 50],
+        ["", "A" * 51, "a", "PEC-oleo", "PEC_1", "PEC.1", "PEC 1", "PEC-1\n"],
     ),
     (
         "PagamentoConfirmado",
         "dados/valor",
         ["0.50", "9999999999.99"],
-        ["10000000000.00", "01.00", "1.5", "1.234", "-1.00", 1.5],
+        ["10000000000.00", "01.00", "1.5", "1.234", "-1.00", 1.5, "1.00\n"],
     ),
     (
         "PagamentoConfirmado",
@@ -1129,7 +1174,7 @@ FRONTEIRAS: list[tuple[str, str, list[Any], list[Any]]] = [
         "OrcamentoGerado",
         "dados/link_decisao",
         ["http://billing.local/p", "https://x/" + "a" * 2038],
-        ["https://x/" + "a" * 2039, "https://x/a b"],
+        ["https://x/" + "a" * 2039, "https://x/a b", "https://x/a\n"],
     ),
     (
         "OrcamentoGerado",
@@ -1163,7 +1208,15 @@ FRONTEIRAS: list[tuple[str, str, list[Any], list[Any]]] = [
         "SolicitarDiagnostico",
         "dados/veiculo/placa",
         ["ABC1234", "ABC1D23"],
-        ["abc1234", "ABC123", "ABC12345", " ABC1234", "ABC1234 ", "AB1C234"],
+        [
+            "abc1234",
+            "ABC123",
+            "ABC12345",
+            " ABC1234",
+            "ABC1234 ",
+            "AB1C234",
+            "ABC1234\n",
+        ],
     ),
 ]
 
@@ -1347,6 +1400,47 @@ def test_definicoes_compartilhadas_sao_iguais_em_todos_os_schemas() -> None:
         "motivo_estorno",
     } <= set(vistos)
     assert sem_descricao(envelope["ocorrido_em"]) == sem_descricao(vistos["data_hora"])
+
+
+def patterns(no: Any) -> Iterator[str]:
+    """Todo valor da palavra-chave pattern, em qualquer nivel do schema."""
+    if isinstance(no, dict):
+        for chave, valor in no.items():
+            if chave == "pattern" and isinstance(valor, str):
+                yield valor
+            else:
+                yield from patterns(valor)
+    elif isinstance(no, list):
+        for valor in no:
+            yield from patterns(valor)
+
+
+def test_todo_pattern_termina_em_fim_de_texto_e_nao_em_dolar() -> None:
+    # No re.search do Python o $ casa tambem antes de um \n final, entao o
+    # validador dos servicos aceitaria "2026-10-06T12:00:00Z\n" ou "PEC-1\n". O
+    # fim de texto que vale nos dois motores (ECMA 262 e Python) e o
+    # lookahead (?![\s\S]).
+    todos = [
+        padrao
+        for arquivo in sorted(SCHEMAS.glob("*.json"))
+        for padrao in patterns(ler_json(arquivo))
+    ]
+
+    assert todos
+    assert [p for p in todos if not p.endswith(r"(?![\s\S])")] == []
+
+
+def test_sku_do_comando_de_reserva_e_o_formato_do_billing() -> None:
+    # Billing (preco.py) e Execucao (codigo.py) validam o SKU com este formato;
+    # o contrato do comando de reserva o repete, com o fim de texto do teste acima.
+    schema = ler_json(SCHEMAS / "ReservarPecas.schema.json")
+    sku = schema["$defs"]["sku"]
+
+    assert sku["pattern"] == r"^[A-Z0-9]+(?:-[A-Z0-9]+)*(?![\s\S])"
+    assert sku["maxLength"] == 50
+    assert schema["$defs"]["peca_a_reservar"]["properties"]["sku"] == {
+        "$ref": "#/$defs/sku"
+    }
 
 
 def test_exemplo_de_orcamento_fecha_a_conta_em_decimal() -> None:
