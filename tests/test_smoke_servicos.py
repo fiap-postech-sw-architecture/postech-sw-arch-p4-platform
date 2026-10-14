@@ -125,7 +125,8 @@ def cluster_saudavel() -> dict[str, Any]:
         estado["curl"][f"{prefixo}/api/v1/admin/outbox"] = "404"
         estado["curl"][f"{prefixo}/docs"] = "200"
         estado["curl"][f"{prefixo}/openapi.json"] = "200"
-        # So o Kong do fora-da-borda responde com este corpo.
+        # O Kong responde com este corpo ao admin/outbox (plugin do fora-da-borda)
+        # e ao /metrics (sem rota, o mesmo 404): so o admin/outbox distingue o corte.
         estado["corpo"][f"{prefixo}/metrics"] = CORPO_DO_KONG
         estado["corpo"][f"{prefixo}/api/v1/admin/outbox"] = CORPO_DO_KONG
     return estado
@@ -410,7 +411,7 @@ def linhas_saudaveis(servico: str) -> list[tuple[str, str, str]]:
         ),
         (servico, "rollouts", "ok: 3 ready"),
         (servico, f"GET {prefixo}/api/v1/saude", "ok: 200"),
-        (servico, f"GET {prefixo}/metrics", "ok: 404 (Kong fora-da-borda)"),
+        (servico, f"GET {prefixo}/metrics", "ok: 404 (Kong, not published)"),
         (
             servico,
             f"GET {prefixo}/api/v1/admin/outbox",

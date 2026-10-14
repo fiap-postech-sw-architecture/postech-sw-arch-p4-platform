@@ -104,7 +104,13 @@ cortada() {
   if [ "$obtido" != 404 ]; then
     detalhe=$obtido
   elif [[ "$corpo" == *"$MENSAGEM_DO_KONG"* ]]; then
-    detalhe="404 (Kong fora-da-borda)"
+    # So o admin/outbox prova o corte pelo Ingress; o /metrics prova que nao e
+    # publicado (o Kong sem rota responde o mesmo corpo).
+    if [[ "$2" == */metrics ]]; then
+      detalhe="404 (Kong, not published)"
+    else
+      detalhe="404 (Kong fora-da-borda)"
+    fi
     ok=sim
   else
     # O inicio do corpo recebido, sem quebra de linha nem barra vertical: a
