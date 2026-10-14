@@ -42,29 +42,83 @@ Os números abaixo vêm de uma máquina arm64 com as imagens de terceiros e as c
 
 ## Comandos usados
 
-Cada execução foi um script único, para que o amostrador do `medir-kind.sh` (que para quando o shell que marcou a primeira etapa termina) vivesse até o resumo. Os serviços saem da `main` de cada repositório, num checkout limpo ao lado dos outros:
+Cada execução foi um script único, porque o amostrador do `medir-kind.sh` para quando o shell que marcou a primeira etapa termina, e ele tem de viver até o resumo. Os comandos abaixo supõem os quatro repositórios lado a lado, com o `platform` como diretório atual. No ensaio, os serviços foram construídos de checkouts limpos da `main` de cada um (nos commits da tabela de [Ambiente e versões](#ambiente-e-versões)), e não dos clones de trabalho.
+
+Primeira execução, com o overlay do CD (`kind-ci`) e os três serviços de uma vez:
 
 ```bash
-# Primeira execução: o overlay do CD (kind-ci), com os três serviços de uma vez
-scripts/medir-kind.sh etapa kind-up           && make kind-up
-scripts/medir-kind.sh etapa deploy            && make deploy OVERLAY=kind-ci
-scripts/medir-kind.sh etapa smoke-plataforma  && make smoke OVERLAY=kind-ci
-scripts/medir-kind.sh etapa servicos          && scripts/ci/implantar-servicos.sh --overlay kind-ci \
-  os-service=<checkout> billing-service=<checkout> execution-service=<checkout>
-scripts/medir-kind.sh etapa smoke-servicos    && scripts/ci/smoke-servicos.sh
-scripts/medir-kind.sh etapa estavel           && sleep 90 && kubectl --context kind-pytstop-p4 top pod -A
-scripts/medir-kind.sh resumo
-
-# Segunda execução: o caminho de quem desenvolve (overlay kind, com Loki, Promtail e Grafana),
-# e o `make kind-deploy` de cada serviço, um por vez
-make kind-up && make deploy && make smoke
-make -C <os-service> kind-deploy PLATFORM=<platform>
-make -C <billing-service> kind-deploy PLATFORM_DIR=<platform>
-make -C <execution-service> kind-deploy PLATFORM_DIR=<platform>
+export MEDICAO=$(mktemp -d)
+scripts/medir-kind.sh etapa kind-up
+make kind-up
+scripts/medir-kind.sh etapa deploy
+make deploy OVERLAY=kind-ci
+scripts/medir-kind.sh etapa smoke-plataforma
+make smoke OVERLAY=kind-ci
+scripts/medir-kind.sh etapa servicos
+scripts/ci/implantar-servicos.sh --overlay kind-ci os-service=../postech-sw-arch-p4-os-service billing-service=../postech-sw-arch-p4-billing-service execution-service=../postech-sw-arch-p4-execution-service
+scripts/medir-kind.sh etapa smoke-servicos
 scripts/ci/smoke-servicos.sh
+scripts/medir-kind.sh etapa estavel
+sleep 90
+kubectl --context kind-pytstop-p4 top pod -A --containers
+kubectl --context kind-pytstop-p4 top node
+scripts/medir-kind.sh resumo
+```
+
+Segunda execução, o caminho de quem desenvolve: overlay `kind` (com Loki, Promtail e Grafana) e o `make kind-deploy` de cada serviço, um por vez. No ensaio, o OS Service ainda chamava a variável do diretório do `platform` de `PLATFORM`; com o OS Service #11 passa a valer `PLATFORM_DIR` nos três, e `PLATFORM` segue como alias.
+
+```bash
+export MEDICAO=$(mktemp -d)
+scripts/medir-kind.sh etapa kind-up
+make kind-up
+scripts/medir-kind.sh etapa deploy
+make deploy
+scripts/medir-kind.sh etapa smoke-plataforma
+make smoke
+scripts/medir-kind.sh etapa kind-deploy-os-service
+make -C ../postech-sw-arch-p4-os-service kind-deploy PLATFORM=$PWD
+scripts/medir-kind.sh etapa kind-deploy-billing-service
+make -C ../postech-sw-arch-p4-billing-service kind-deploy PLATFORM_DIR=$PWD
+scripts/medir-kind.sh etapa kind-deploy-execution-service
+make -C ../postech-sw-arch-p4-execution-service kind-deploy PLATFORM_DIR=$PWD
+scripts/medir-kind.sh etapa smoke-servicos
+scripts/ci/smoke-servicos.sh
+scripts/medir-kind.sh etapa estavel
+sleep 90
+kubectl --context kind-pytstop-p4 top pod -A --containers
+kubectl --context kind-pytstop-p4 top node
+scripts/medir-kind.sh resumo
 ```
 
 O `make smoke` roda antes dos serviços porque recusa um cluster que já tem Ingress de serviço (`pytstop-os already has Ingresses: the smoke would reuse its paths`; confirmado no ensaio com os serviços de pé).
+
+### Como cada número foi coletado
+
+O `medir-kind.sh` guarda só a memória de cada pod. A CPU de pico, a divisão por container e a composição da memória do nó vieram de comandos avulsos, listados aqui; as saídas cruas estão em [Medidas cruas do ensaio](ensaio-integrado-medidas.md).
+
+| Número | De onde veio |
+|---|---|
+| Duração das etapas, working set do nó (amostra a cada 5 s), `memory.peak` do cgroup do nó e maior memória por pod | `medir-kind.sh resumo`, nas duas execuções |
+| Memória e CPU em repouso, por pod e por container (como `postgres 37` e `exporter 6`) | `kubectl top pod -A --containers` e `kubectl top node`, lidos 90 s depois do smoke dos serviços; a divisão por container é da primeira execução |
+| Pico de CPU por pod, e a memória da mesma amostra | O laço de amostragem abaixo, na segunda execução, de `kind-up` ao resumo; o `kubectl top` dá a média de uma janela de cerca de 15 s, então picos mais curtos não aparecem |
+| Composição do working set do nó | O `docker exec` da `memory.stat` abaixo, na primeira execução |
+| Requests e limits | `kubectl get pods -A -o custom-columns=...`, abaixo |
+| Duração dos Jobs | `status.completionTime` menos `status.startTime` de `kubectl get job -A -o json`, na segunda execução |
+| Tempos dentro do `implantar-servicos.sh` | Carimbo de hora em cada linha da saída do script |
+
+O laço de amostragem do pico de CPU, rodando em segundo plano durante a segunda execução, e a conta do maior valor por pod:
+
+```bash
+while true; do kubectl --context kind-pytstop-p4 top pod -A --no-headers | awk -v d=$(date +%s) '{print d, $1 "/" $2, $3 + 0, $4 + 0}' >> amostras.txt; sleep 5; done
+awk '{ if ($3 > cpu[$2]) cpu[$2] = $3; if ($4 > mem[$2]) mem[$2] = $4 } END { for (p in cpu) printf "%s %d %d\n", p, cpu[p], mem[p] }' amostras.txt | sort -k2,2nr
+```
+
+A composição do working set do nó e os requests e limits de cada container:
+
+```bash
+docker exec pytstop-p4-control-plane sh -c 'cat /sys/fs/cgroup/memory.peak /sys/fs/cgroup/memory.current; grep -E "^(anon|file|inactive_file|active_file) " /sys/fs/cgroup/memory.stat'
+kubectl --context kind-pytstop-p4 get pods -A -o custom-columns='NS:.metadata.namespace,POD:.metadata.name,CONT:.spec.containers[*].name,CPUREQ:.spec.containers[*].resources.requests.cpu,CPULIM:.spec.containers[*].resources.limits.cpu,MEMREQ:.spec.containers[*].resources.requests.memory,MEMLIM:.spec.containers[*].resources.limits.memory'
+```
 
 ## O que subiu
 
