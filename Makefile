@@ -62,10 +62,10 @@ TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
 KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE) YQ_IMAGE=$(YQ_IMAGE) \
 	NAMESPACE=$(NAMESPACE) scripts/kong-render.sh
 
-.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render
+.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render e2e demo
 
 help:
-	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
 
 kind-up: ## cria o cluster kind (nao faz nada se ja existir)
 	@kind get clusters | grep -qx '$(CLUSTER)' || kind create cluster --name $(CLUSTER) --config kind/cluster.yaml --wait 120s
@@ -137,15 +137,26 @@ down: ## derruba a stack compose (os volumes ficam; docker compose down -v apaga
 	$(COMPOSE) --profile servicos down
 
 # CI=true desliga a telemetria anonima do @asyncapi/cli.
-test: ## testes dos contratos e da observabilidade, validacao do asyncapi.yaml
+# O E2E so roda contra o cluster, mas a coleta e offline: import quebrado, tag
+# sem marker (--strict-markers) e step sem definicao reprovam aqui, no CI, e nao
+# no primeiro make e2e. O --generate-missing sai com 0 mesmo com step faltando,
+# entao a saida e que decide.
+test: ## testes dos contratos, da observabilidade e do codigo auxiliar do E2E, coleta do E2E, validacao do asyncapi.yaml
 	uv run pytest
+	@echo ">> E2E: cenarios coletados e todo step definido (sem cluster)"
+	uv run pytest -c e2e/pytest.ini e2e --collect-only -q > /dev/null
+	set -euo pipefail; \
+	saida=$$(uv run pytest -c e2e/pytest.ini --generate-missing --feature e2e/features e2e); \
+	if printf '%s' "$$saida" | grep -q 'is not defined'; then \
+		printf '%s\n' "$$saida"; echo "E2E: step sem definicao" >&2; exit 1; \
+	fi
 	CI=true npx --yes $(ASYNCAPI_CLI) validate contratos/asyncapi.yaml
 
 lint: ## ruff, mypy e bandit nos testes e na prova do retry, mais o lint-scripts
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy
-	uv run bandit -c pyproject.toml -r contratos tests scripts -q
+	uv run bandit -c pyproject.toml -r contratos tests scripts e2e -q
 
 # Pelas imagens pinadas, como no CI, onde rodam no job manifests. O actionlint
 # passa o shellcheck tambem nos run: dos workflows.
@@ -202,6 +213,39 @@ manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, regra de 
 	done
 
 check: lint test prova-retry manifests ## o mesmo que o CI roda
+
+# O E2E derruba o Billing, cria usuarios e nao limpa: so num kind descartavel.
+# O mesmo guarda roda no inicio da sessao (e2e/apoio/contexto.py); aqui ele
+# falha antes de o uv subir. Escape: E2E_CONTEXTO_NAO_DESCARTAVEL=<o contexto>.
+GUARDA_DE_CONTEXTO := case "$(KUBE_CONTEXT)" in kind-*) ;; *) \
+	[ "$${E2E_CONTEXTO_NAO_DESCARTAVEL:-}" = "$(KUBE_CONTEXT)" ] || { \
+	echo "contexto $(KUBE_CONTEXT) nao e um kind descartavel: o E2E derruba o Billing e nao limpa; para rodar assim mesmo exporte E2E_CONTEXTO_NAO_DESCARTAVEL=$(KUBE_CONTEXT)" >&2; exit 2; };; esac
+
+# E2E BDD da saga contra o kind com a plataforma e os tres servicos de pe
+# (README, "E2E da saga"). Os relatorios ficam em reports/e2e; o resumo.md sai
+# mesmo com cenario reprovado, e o status do make e o do pytest.
+e2e: ## E2E BDD da saga contra o kind com os tres servicos (relatorios em reports/e2e)
+	$(GUARDA_DE_CONTEXTO)
+	rm -rf reports/e2e && mkdir -p reports/e2e
+	set -uo pipefail; \
+	KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e pytest -c e2e/pytest.ini e2e \
+		--junitxml=reports/e2e/junit.xml --cucumberjson=reports/e2e/cucumber.json; \
+	status=$$?; \
+	uv run --group e2e python -m e2e.resumo reports/e2e || true; \
+	exit $$status
+
+# Roteiro do video: bloco 1 (fluxo completo) e bloco 2 (falhas), com o status da
+# OS impresso depois de cada Entao. Reusa os cenarios marcados @demo do E2E.
+demo: ## roda os blocos 1 e 2 do video (cenarios @demo) imprimindo o status da OS depois de cada Entao
+	$(GUARDA_DE_CONTEXTO)
+	rm -rf reports/demo && mkdir -p reports/demo
+	set -uo pipefail; \
+	E2E_NARRAR=1 E2E_RELATORIOS=reports/demo KUBE_CONTEXT=$(KUBE_CONTEXT) \
+		uv run --group e2e pytest -c e2e/pytest.ini e2e -m demo -s -q \
+		--junitxml=reports/demo/junit.xml --cucumberjson=reports/demo/cucumber.json; \
+	status=$$?; \
+	uv run --group e2e python -m e2e.resumo reports/demo || true; \
+	exit $$status
 
 kong-render: ## regenera k8s/base/kong (kong.yaml, crds.yaml e o schema do plugin) do chart pinado
 	$(KONG_RENDER) k8s/base/kong
