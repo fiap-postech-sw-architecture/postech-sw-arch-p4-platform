@@ -33,7 +33,7 @@ O ensaio rodou na madrugada de 14/10/2026 (horário de Brasília), com a platafo
 |---|---|
 | `platform` #11 (`11480bb`): smoke, runbook, ADRs, RFC e contratos | A saída do smoke citada é a de `aaca05c`. Desde o #11, as linhas de `/metrics` e de `/api/v1/admin/outbox` saem `ok: 404 (Kong, not published)` e `ok: 404 (Kong fora-da-borda)`, e só passam se o corpo da resposta for o do Kong. O #11 também trocou a regra de alerta "Saga parada" (duas condições novas). Nenhuma das duas mudanças foi exercitada com os serviços reais neste ensaio |
 | OS Service #9 (`b310889`, `notificador`) e #10 (`593471d`, `prazos`) | Já estão na `main` do OS Service. A [medida adicional](#medida-adicional-prazos-e-notificador-do-os-service) foi feita com as branches e vale como estimativa até ser repetida sobre a `main` |
-| Billing #6 (`264da4e`) e Execution #6 (`d04fd81`) | Corrigem o aviso de telemetria do FastAPI nas duas APIs e, no Billing, o volume de log do `mongod`; também unificam os nomes das variáveis do `make kind-deploy`. Detalhe em [Observações do ensaio](#observações-do-ensaio-situação-em-1410) |
+| Billing #6 (`264da4e`) e Execution #6 (`d04fd81`) | Corrigem o aviso de telemetria do FastAPI nas duas APIs; o Billing #6 também corta o volume de log do `mongod` e adota os nomes de variável do `make kind-deploy` que a Execução já usava. Detalhe em [Observações do ensaio](#observações-do-ensaio-situação-em-1410) |
 | OS Service #11 (aberto) | Unifica os nomes das variáveis do `make kind-deploy` no OS (`PLATFORM` vira alias de `PLATFORM_DIR`) |
 | `platform` #13 (aberto) | Traz o teste de ponta a ponta da saga (ADR-041); até o merge, nenhum teste de saga roda contra o kind |
 
