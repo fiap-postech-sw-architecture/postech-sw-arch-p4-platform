@@ -640,12 +640,12 @@ total 0
 FIM-BROKER
 ```
 
-## Medida adicional: notificador (`feat/notificacao-e-lgpd`, commit `8eec08f`)
+## Medida adicional: notificador (commit `8eec08f` de uma branch já mesclada, OS #9)
 
 ### `implantar-servicos.sh` e `smoke-servicos.sh os-service` (com hora)
 
 ```text
-00:31:54 == implantar OS de c4 (8eec08f) 00:31:54
+00:31:54 == implantar OS (8eec08f) 00:31:54
 00:32:12 implantar rc=0
 00:32:12 [os-service] partitioned roll out complete: 1 new pods have been updated...
 00:32:12 [os-service] waiting for job.batch/os-migracao (up to 300s)
@@ -687,12 +687,12 @@ NAME                       CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)
 pytstop-p4-control-plane   411m         5%       3242Mi          23%         
 ```
 
-## Medida adicional: prazos (`feat/saga-prazos`, commit `84f89cd`)
+## Medida adicional: prazos (commit `84f89cd` de uma branch já mesclada, OS #10)
 
 ### `implantar-servicos.sh` e `smoke-servicos.sh os-service` (com hora)
 
 ```text
-00:35:13 == implantar OS de c3 (84f89cd) 00:35:13
+00:35:13 == implantar OS (84f89cd) 00:35:13
 00:35:40 implantar rc=0
 00:35:40 [os-service] Waiting for 1 pods to be ready...
 00:35:40 [os-service] partitioned roll out complete: 1 new pods have been updated...
@@ -732,6 +732,19 @@ pytstop-os           os-service-relay-c9dcff5f9-tfcqh                   3m      
 
 NAME                       CPU(cores)   CPU(%)   MEMORY(bytes)   MEMORY(%)   
 pytstop-p4-control-plane   263m         3%       3377Mi          24%         
+```
+
+### Log do `prazos` (commit `84f89cd`), lido 90 s depois do smoke
+
+Eventos e nível de cada linha de log (`kubectl -n pytstop-os logs deploy/os-service-prazos`); o texto `os.eventos has no consumer` é dessa versão. Na `main` do OS de 14/10 (`593471d`), o aviso de pausa é `saga deadlines paused` com `motivo=sem_consumidor`.
+
+```text
+03:35:38  info     otel export enabled
+03:35:38  info     metrics endpoint started
+03:35:38  info     prazos started
+03:35:38  info     broker connected
+03:35:38  warning  os.eventos has no consumer
+03:35:38  warning  saga deadlines paused: the os.eventos consumer is away
 ```
 
 ## Provas avulsas
