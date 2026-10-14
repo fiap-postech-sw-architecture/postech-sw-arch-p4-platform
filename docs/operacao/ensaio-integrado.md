@@ -50,7 +50,7 @@ Antes de fechar a fase, o ensaio deve ser repetido sobre as `main` de hoje: `smo
 | Billing Service | `main` em `0fed78b` |
 | Execution Service | `main` em `0c34ed7` |
 | Imagens de terceiros | as da [tabela de versões](../../README.md#componentes-e-versões): `postgres:16.15`, `mongo:7.0.43`, `prometheuscommunity/postgres-exporter:v0.20.1`, `percona/mongodb_exporter:0.53.0`, `rabbitmq:4.3.6-management`, `kong:3.9.3`, entre outras |
-| Imagens dos serviços | `docker build` do checkout de cada `main`, com o commit como tag (`pytstop-<serviço>:<commit>`), 357 a 437 MB cada |
+| Imagens dos serviços | `docker build` do checkout de cada `main`, com o commit como tag (`pytstop-<serviço>:<commit>`), 357 a 437 MB cada (`docker images`, em [Provas avulsas](ensaio-integrado-medidas.md#provas-avulsas)) |
 
 Os números abaixo vêm de uma máquina arm64 com as imagens de terceiros e as camadas do `docker build` já em cache. O runner do CD é amd64, com 4 vCPU e 16 GB, e puxa as imagens a cada job. Por isso:
 
@@ -111,7 +111,7 @@ O `make smoke` roda antes dos serviços porque recusa um cluster que já tem Ing
 
 ### Como cada número foi coletado
 
-O `medir-kind.sh` guarda só a memória de cada pod. A CPU de pico, a divisão por container e a composição da memória do nó vieram de comandos avulsos, listados aqui; as saídas cruas estão em [Medidas cruas do ensaio](ensaio-integrado-medidas.md).
+O `medir-kind.sh` guarda só a memória de cada pod. A CPU de pico, a divisão por container e a composição da memória do nó vieram de comandos avulsos, listados aqui. As saídas estão em [Medidas cruas do ensaio](ensaio-integrado-medidas.md); nas que vieram de comandos avulsos, a saída foi colada do terminal e não foi gravada em arquivo (marcadas assim em [Provas avulsas](ensaio-integrado-medidas.md#provas-avulsas)).
 
 | Número | De onde veio |
 |---|---|
@@ -120,7 +120,7 @@ O `medir-kind.sh` guarda só a memória de cada pod. A CPU de pico, a divisão p
 | Pico de CPU por pod, e a memória da mesma amostra | O laço de amostragem abaixo, na segunda execução, de `kind-up` ao resumo; o `kubectl top` dá a média de uma janela de cerca de 15 s, então picos mais curtos não aparecem |
 | Composição do working set do nó | O `docker exec` da `memory.stat` abaixo, na primeira execução |
 | Requests e limits | `kubectl get pods -A -o custom-columns=...`, abaixo |
-| Duração dos Jobs | `status.completionTime` menos `status.startTime` de `kubectl get job -A -o json`, na segunda execução |
+| Duração dos Jobs | `status.completionTime` menos `status.startTime` de `kubectl get job -A -o json`, na segunda execução; saída colada do terminal |
 | Tempos dentro do `implantar-servicos.sh` | Carimbo de hora em cada linha da saída do script |
 
 O laço de amostragem do pico de CPU, rodando em segundo plano durante a segunda execução, e a conta do maior valor por pod:
@@ -191,7 +191,7 @@ execution-service  rabbitmq-0 -> execucao-postgres.pytstop-execucao.svc.cluster.
 services smoke OK: os-service billing-service execution-service
 ```
 
-A segunda execução (overlay `kind`) produziu a mesma tabela, com os mesmos 35 `ok`. O `make smoke` da plataforma terminou com `smoke OK: every check held` nos dois overlays (no `kind-ci`, com duas famílias de provas puladas por design: Loki e Promtail, e Grafana). No overlay `kind`, as oito regras de alerta do Grafana ficaram `inactive` e `ok` com os serviços de pé, e o Loki recebeu os logs dos três namespaces.
+A segunda execução (overlay `kind`) produziu a mesma tabela, com os mesmos 35 `ok`. O `make smoke` da plataforma terminou com `smoke OK: every check held` nos dois overlays (no `kind-ci`, com duas famílias de provas puladas por design: Loki e Promtail, e Grafana); as linhas finais estão em [Provas avulsas](ensaio-integrado-medidas.md#provas-avulsas). No overlay `kind`, as oito regras de alerta do Grafana ficaram `inactive` e `ok` com os serviços de pé, e o Loki recebeu os logs dos três namespaces.
 
 ### Provas além do smoke
 
@@ -202,10 +202,10 @@ Feitas com comandos avulsos depois do smoke; as saídas estão em [Medidas cruas
 | Swagger sob o prefixo | `/os/docs`, `/billing/docs` e `/execucao/docs` apontam para `/<prefixo>/openapi.json`, e o `openapi.json` de cada um declara `servers: [{url: "/<prefixo>"}]` (o `--root-path` chegou ao uvicorn) |
 | Login e JWKS entre namespaces | `POST /os/api/v1/autenticacao/login` do admin semeado devolve 200; o token é aceito pela listagem de clientes do OS, de preços do Billing e de estoque da Execução (200 nas três), e a chamada ao Billing sem token dá 401. O Billing e a Execução validam o token contra o JWKS do OS pela NetworkPolicy |
 | NetworkPolicy entre serviços | da Execução para o Billing (validação de preços) e para o OS (JWKS): conecta; do Billing para a Execução, do OS para o Billing e do OS para o banco da Execução: esgota o prazo de 3 s |
-| Segundo `make deploy` com os serviços de pé | 17 s; os 12 Secrets `Opaque` dos quatro namespaces ficam com o mesmo conteúdo (comparação por hash, sem imprimir valor); `kong-check` limpo |
+| Segundo `make deploy` com os serviços de pé | 17 s; os 12 Secrets `Opaque` dos quatro namespaces ficam com o mesmo conteúdo (comparação por hash, sem imprimir valor); `kong-check` limpo (linha final em [Provas avulsas](ensaio-integrado-medidas.md#provas-avulsas)) |
 | Segundo `implantar-servicos.sh` (mesmo commit) | 13 s: os Jobs são apagados e recriados, as migrações e a semente repetem sem erro, os Deployments seguem como estavam (mesma tag, mesmo template); o smoke dos serviços passa em 11 s |
 | Broker reiniciado com os serviços de pé | `kubectl delete pod rabbitmq-0`: o broker volta em 13 s, os três consumidores voltam em 30 s, o relay do Billing registra `broker_unavailable` e depois `broker_connected`, e nenhum pod de serviço reinicia |
-| Alvos do Prometheus | nenhum alvo ativo fora de `up` (a consulta por `health != up` voltou vazia); 4 pods no OS, 5 no Billing e 4 na Execução em `up = 1`, na primeira execução |
+| Alvos do Prometheus | nenhum alvo ativo fora de `up` (a consulta por `health != up` voltou vazia); 4 pods no OS, 5 no Billing e 4 na Execução em `up = 1`, na primeira execução; saída colada do terminal |
 | Traces | depois de chamadas pela borda, o Jaeger listou `os-service`; Billing e Execução não apareceram, porque as APIs deles não exportam spans (ver [Observações do ensaio](#observações-do-ensaio-situação-em-1410)) e nenhuma mensagem circulou pelos relays e consumidores. O teste de ponta a ponta da saga (ADR-041), que exercitaria os três traces, ainda não existe na `main`: está no `platform` #13, aberto |
 
 ## Tempos
@@ -228,7 +228,7 @@ Dentro do `implantar-servicos.sh` da primeira execução (1 min 27 s):
 - o `kind load` das três imagens: 8 s;
 - do `apply` ao último Deployment pronto: 65 s;
 - o StatefulSet do banco ficou pronto 47 s (Execução), 50 s (Billing) e 52 s (OS) depois do `apply`;
-- os Jobs, medidos na segunda execução, duraram 12 s (`execucao-migracao`), 28 s (`os-migracao`) e 36 s (`billing-inicializacao`, que também inicia o replica set);
+- os Jobs, medidos na segunda execução (saída colada do terminal, em [Provas avulsas](ensaio-integrado-medidas.md#provas-avulsas)), duraram 12 s (`execucao-migracao`), 28 s (`os-migracao`) e 36 s (`billing-inicializacao`, que também inicia o replica set);
 - os Deployments esperam o Job pelo `aguarda-migracao` (OS e Execução) e pelo `aguarda-banco` (Billing).
 
 Para comparar, o [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) mediu no runner, só com a plataforma, 39 a 46 s de `kind-up`, 50 a 54 s de deploy e 1 min 40 s a 1 min 47 s de smoke; aqui foram 26 s, 1 min 34 s e 1 min 46 s. O deploy local ficou mais lento que o do runner porque a máquina dividia o Docker com outros containers.
@@ -318,7 +318,7 @@ Cada branch foi implantada, sozinha, sobre o cluster `kind-ci` do ensaio, com a 
 
 - Os dois cabem nos 128/256 Mi dos manifests: juntos acrescentaram cerca de 135 MiB e 9m ao nó.
 - O ADR-042 tem linha para o `prazos` e não tem para o `notificador`, que é o 9º processo (relay e consumidor de cada serviço, mais o `prazos` do OS e o do Billing): com ele, os requests e limits passam de 3.488/8.896 Mi para 3.616/9.152 Mi (3,5/8,9 GiB), ainda abaixo dos 10 GiB do ADR. A linha entra no PR que alinha o ADR-042 aos serviços (pendência registrada no `MEMORY.md`).
-- O `prazos` do OS logou, uma vez, `os.eventos has no consumer` e `saga deadlines paused` no arranque, porque o consumidor do OS ainda não tinha conectado (o namespace acabava de ser recriado). Não repetiu: o consumidor passou a ter 1 e os ciclos seguintes seguiram sem aviso.
+- O `prazos` do OS (commit `84f89cd`) logou, uma vez, `os.eventos has no consumer` e `saga deadlines paused: the os.eventos consumer is away` no arranque, porque o consumidor do OS ainda não tinha conectado (o namespace acabava de ser recriado). Não repetiu: o consumidor passou a ter 1 e os ciclos seguintes seguiram sem aviso (o log está em [Medidas cruas](ensaio-integrado-medidas.md#log-do-prazos-commit-84f89cd-lido-90-s-depois-do-smoke)). Na `main` do OS de 14/10 (`593471d`), o aviso de pausa é `saga deadlines paused` com `motivo=sem_consumidor`.
 
 ## O que precisou de correção
 
@@ -337,7 +337,7 @@ Nenhuma impediu o deploy nem o smoke. A coluna "Observação no ensaio" descreve
 | Serviço | Observação no ensaio | Evidência | Situação em 14/10 |
 |---|---|---|---|
 | Billing e Execução (API) | O FastAPI 0.142.2 tenta configurar telemetria sozinho, porque o ConfigMap define `OTEL_EXPORTER_OTLP_ENDPOINT`, e avisa na partida de cada API que falta o extra: `level: warning`, `logger: fastapi`, `FastAPI automatic telemetry configuration failed: Automatic OpenTelemetry export requires fastapi[opentelemetry] or fastapi[standard]. Install the extra, configure providers yourself, or pass telemetry={'auto_configure': False} to FastAPI().` O OS (FastAPI 0.141.1) não escreve o aviso | `kubectl -n pytstop-billing logs deploy/billing-service-api` e o mesmo em `pytstop-execucao` | Corrigido: Billing #6 (`264da4e`) e Execution #6 (`d04fd81`) passam `telemetry={"auto_configure": False}` ao `FastAPI()` |
-| Billing (MongoDB) | O `mongod` escreve linhas de conexão e de autenticação a cada coleta de 15 s do exporter, e o exporter tenta `find` em `admin.system.version` (`{_id: "shardIdentity"}`) com o papel `clusterMonitor`, que não lê essa coleção: `Checking authorization failed ... not authorized on admin to execute command { find: "system.version" ...`, `s: I`. O exporter segue com `mongodb_up 1`. Na segunda execução, o `billing-mongo-0` gerou 1.393 linhas em 10 min, e o Loki guardou, em janelas de 10 min, 1.428 linhas do namespace do Billing, 214 do OS e 162 da Execução (todos os pods de cada namespace) | `kubectl -n pytstop-billing logs billing-mongo-0 -c mongo --since=10m \| wc -l` | Corrigido em parte pelo Billing #6: `--quiet` no `mongod` tira as linhas `Connection accepted` e `Connection ended`, e `--mongodb.global-conn-pool` no exporter usa um pool de conexões em vez de abrir e autenticar uma por coleta. Sobra uma linha `Checking authorization failed` por coleta, que o manifesto registra como esperada (o exporter pergunta por `shardIdentity`; não é falha de autorização real), e o papel do exporter continua só com `clusterMonitor` |
+| Billing (MongoDB) | O `mongod` escreve linhas de conexão e de autenticação a cada coleta de 15 s do exporter, e o exporter tenta `find` em `admin.system.version` (`{_id: "shardIdentity"}`) com o papel `clusterMonitor`, que não lê essa coleção: `Checking authorization failed ... not authorized on admin to execute command { find: "system.version" ...`, `s: I`. O exporter segue com `mongodb_up 1`. Na segunda execução, o `billing-mongo-0` gerou 1.393 linhas em 10 min (contagem por pod colada do terminal, em [Provas avulsas](ensaio-integrado-medidas.md#provas-avulsas)), e o Loki guardou, em janelas de 10 min, 1.428 linhas do namespace do Billing, 214 do OS e 162 da Execução (todos os pods de cada namespace) | `kubectl -n pytstop-billing logs billing-mongo-0 -c mongo --since=10m \| wc -l` | Corrigido em parte pelo Billing #6: `--quiet` no `mongod` tira as linhas `Connection accepted` e `Connection ended`, e `--mongodb.global-conn-pool` no exporter usa um pool de conexões em vez de abrir e autenticar uma por coleta. Sobra uma linha `Checking authorization failed` por coleta, que o manifesto registra como esperada (o exporter pergunta por `shardIdentity`; não é falha de autorização real), e o papel do exporter continua só com `clusterMonitor` |
 | OS, Billing e Execução (Makefile) | O `make kind-deploy` de cada serviço usava um nome diferente para o diretório do `platform` (`PLATFORM` no OS, `PLATFORM_DIR` no Billing e na Execução) e para o overlay (`OVERLAY` no Billing, `KIND_OVERLAY` na Execução, fixo `kind` no OS). Funcionava, só não era igual | `grep -n kind-deploy -A3 Makefile` nos três | Billing #6 adota `PLATFORM_DIR` e `KIND_OVERLAY` (`OVERLAY` segue como alias), a Execução já usava os dois, e o OS Service #11 (aberto) faz o mesmo (`PLATFORM` vira alias). Com os três merges, os nomes são iguais |
 | Billing e Execução (spans das APIs) | Depois de chamadas pela borda, o Jaeger listou só `os-service` (e o próprio `jaeger-all-in-one`): as APIs do Billing e da Execução não exportam spans, e o [ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md) prevê OpenTelemetry nos três serviços, instrumentando o FastAPI | `kubectl get --raw "/api/v1/namespaces/pytstop-plataforma/services/jaeger:16686/proxy/api/services"` | Pendente. O comentário do Billing #6 diz que a API não instala o SDK e que quem exporta, por gRPC, são o relay, o consumidor e o `prazos`. No ensaio nenhuma mensagem circulou, então nem esses apareceram |
 
