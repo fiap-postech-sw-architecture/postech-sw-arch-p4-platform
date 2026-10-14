@@ -6,13 +6,18 @@ observabilidade/README.md, ou regra de alerta com UID, titulo, consulta,
 severidade, janela, "sem dado" ou "onde" diferentes dos da tabela de alertas
 reprovam. Tambem reprova arquivo de alerta que o Grafana do cluster nao monta
 ou que o compose monta sem poder usar (as regras do Kong), e filtro por fila
-que nao seleciona o grupo certo de filas do definitions.json do RabbitMQ.
+que nao seleciona o grupo certo de filas do definitions.json do RabbitMQ, e a
+retencao do Prometheus (15 dias num PVC no kind e no k3s, efemero no kind-ci).
 """
 
 from __future__ import annotations
 
+import functools
 import json
 import re
+
+# subprocess so roda o kubectl kustomize dos overlays do repositorio, sem shell.
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any
 
@@ -201,3 +206,87 @@ def test_filtro_de_fila_seleciona_o_grupo_certo_da_topologia(
 
     assert outros == []
     assert (casam if operador == "=~" else FILAS - casam) == FILTRO_DE_FILA[nome]
+
+
+@functools.cache
+def renderizar(caminho: str) -> tuple[dict[str, Any], ...]:
+    """Os objetos de `kubectl kustomize k8s/<caminho>` (base ou overlays/<nome>)."""
+    saida = subprocess.run(  # noqa: S603  # nosec B603 B607
+        ["kubectl", "kustomize", str(RAIZ / "k8s" / caminho)],  # noqa: S607
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=True,
+    ).stdout
+    return tuple(objeto for objeto in yaml.safe_load_all(saida) if objeto)
+
+
+def do_prometheus(caminho: str) -> dict[str, Any]:
+    return next(
+        o
+        for o in renderizar(caminho)
+        if o["kind"] == "Deployment" and o["metadata"]["name"] == "prometheus"
+    )
+
+
+def volume_de_dados(deployment: dict[str, Any]) -> dict[str, Any]:
+    volumes: list[dict[str, Any]] = deployment["spec"]["template"]["spec"]["volumes"]
+    (volume,) = [v for v in volumes if v["name"] == "dados"]
+    return volume
+
+
+@pytest.mark.parametrize("overlay", ["kind", "k3s"])
+def test_prometheus_retem_15_dias_num_pvc_no_kind_e_no_k3s(overlay: str) -> None:
+    deployment = do_prometheus(f"overlays/{overlay}")
+    (container,) = deployment["spec"]["template"]["spec"]["containers"]
+    (pvc,) = [
+        o
+        for o in renderizar(f"overlays/{overlay}")
+        if o["kind"] == "PersistentVolumeClaim"
+        and o["metadata"]["name"] == "prometheus-dados"
+    ]
+    (tamanho,) = [
+        a for a in container["args"] if a.startswith("--storage.tsdb.retention.size=")
+    ]
+    limite_mib = int(tamanho.split("=")[1].removesuffix("MB"))
+
+    assert "--storage.tsdb.retention.time=15d" in container["args"]
+    assert volume_de_dados(deployment)["persistentVolumeClaim"] == {
+        "claimName": "prometheus-dados"
+    }
+    assert pvc["spec"]["resources"]["requests"]["storage"] == "2Gi"
+    assert pvc["metadata"]["namespace"] == "pytstop-plataforma"
+    # O WAL conta no retention.size: o resto do volume e folga da compactacao.
+    assert limite_mib <= 0.75 * 2 * 1024
+    # Com PVC ReadWriteOnce, RollingUpdate deixaria o pod novo preso no lock do TSDB.
+    assert deployment["spec"]["strategy"] == {"type": "Recreate"}
+
+
+def test_prometheus_do_kind_ci_segue_efemero_como_o_base() -> None:
+    kind_ci = do_prometheus("overlays/kind-ci")
+
+    assert kind_ci == do_prometheus("base")
+    assert "emptyDir" in volume_de_dados(kind_ci)
+    assert not [
+        o
+        for o in renderizar("overlays/kind-ci")
+        if o["kind"] == "PersistentVolumeClaim"
+    ]
+
+
+@pytest.mark.parametrize(
+    "arquivo",
+    [
+        RAIZ / "k8s" / "base" / "observabilidade" / "config" / "prometheus.yml",
+        RAIZ / "compose" / "prometheus.yml",
+    ],
+    ids=["cluster", "compose"],
+)
+def test_prometheus_tem_scrape_timeout_explicito_que_o_readme_documenta(
+    arquivo: Path,
+) -> None:
+    globais = yaml.safe_load(arquivo.read_text(encoding="utf-8"))["global"]
+
+    assert globais["scrape_timeout"] == "10s"
+    assert globais["scrape_interval"] == "15s"
+    assert "`scrape_timeout: 10s`" in DOC

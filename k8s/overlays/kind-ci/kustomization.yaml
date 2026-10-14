@@ -25,3 +25,31 @@ patches:
       kind: Ignorado
       metadata:
         name: ignorado
+  # O Prometheus do runner e efemero (ADR-042): sem o PVC do kind e com a
+  # retencao e o emptyDir do base (2 dias, 1GB, 2Gi). Os valores repetem os de
+  # k8s/base/observabilidade/prometheus.yaml; um teste compara o Deployment
+  # renderizado aqui com o do base.
+  - target:
+      kind: PersistentVolumeClaim
+      name: prometheus-dados
+    patch: |-
+      $patch: delete
+      kind: PersistentVolumeClaim
+      metadata:
+        name: prometheus-dados
+  - target:
+      kind: Deployment
+      name: prometheus
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args/1
+        value: --storage.tsdb.retention.time=2d
+      - op: replace
+        path: /spec/template/spec/containers/0/args/2
+        value: --storage.tsdb.retention.size=1GB
+      - op: replace
+        path: /spec/template/spec/volumes/1
+        value:
+          name: dados
+          emptyDir:
+            sizeLimit: 2Gi
