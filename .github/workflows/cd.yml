@@ -5,7 +5,7 @@ name: CD
 # Mede minutos e pico de memoria e escreve os dois no summary do job: o
 # deploy-kind de cada servico sobe esta mesma plataforma com os tres servicos.
 #
-# Sem filtro de paths: o deploy-kind pode virar check obrigatorio da main, e
+# Sem filtro de paths: o deploy-kind e check obrigatorio do ruleset da main, e
 # check obrigatorio precisa rodar em todo PR.
 on:
   pull_request:

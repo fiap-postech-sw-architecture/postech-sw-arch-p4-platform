@@ -23,11 +23,11 @@ Kong é o API Gateway das Aulas 03 e 04 de Estrutura de Microsserviços (Micross
 
 ### Borda
 
-Kong como API Gateway, pelo Kong Ingress Controller em modo DB-less: a configuração vem de recursos do Kubernetes (Ingress e `KongPlugin`), sem banco próprio do Kong. O `platform` instala o Kong no kind e no k3s, e cada serviço declara o próprio Ingress no seu `k8s/`. O controlador roda com o feature gate `FallbackConfiguration`, alpha no Kong Ingress Controller 3.5: um Ingress ou plugin inválido de um serviço sai da configuração, com evento registrado no objeto, e o resto continua aplicado. Sem ele, o Kong DB-less recusaria a configuração inteira, e um Kong reiniciado subiria sem rota.
+Kong como API Gateway, pelo Kong Ingress Controller em modo DB-less: a configuração vem de recursos do Kubernetes (Ingress e `KongClusterPlugin`, que o Ingress de qualquer namespace de serviço pode usar), sem banco próprio do Kong. O `platform` instala o Kong no kind e no k3s, e cada serviço declara o próprio Ingress no seu `k8s/`. O controlador roda com o feature gate `FallbackConfiguration`, alpha no Kong Ingress Controller 3.5: um Ingress ou plugin inválido de um serviço sai da configuração, com evento registrado no objeto, e o resto continua aplicado. Sem ele, o Kong DB-less recusaria a configuração inteira, e um Kong reiniciado subiria sem rota.
 
 - Rotas `/os`, `/billing` e `/execucao`, uma por serviço (OS Service, de ordens de serviço, OS; Billing Service; Execution Service, do contexto Execução). O Kong remove o prefixo, e cada serviço continua com `/api/v1/...`.
 - O Ingress expõe só o necessário: `/api/v1/*` de cada serviço, `/docs` e `/openapi.json` (o Swagger é entregável, l. 113) e dois caminhos públicos fora de `/api/v1`, o conjunto de chaves públicas do OS Service (JWKS, `/.well-known/jwks.json`) e a página de checkout do simulador do Billing (`/simulador/checkout/*`, só com `MP_MODE=simulado`). `/metrics` e `/api/v1/admin/*` ficam fora da borda, barrados pelo plugin `request-termination`; o Prometheus raspa os pods direto ([ADR-043](043-observabilidade-distribuida.md)).
-- Um plugin global responde 404, antes do roteamento, a todo caminho com barra codificada (`%2F` ou `%5C`). O Kong casa as rotas pelo caminho sem decodificar, e o uvicorn decodifica: sem o plugin, `/os/api/v1/admin%2Foutbox` escapava do bloqueio da API administrativa e `/os/api/v1/autenticacao%2Flogin` escapava do limite do login.
+- Um plugin global responde 404, antes do roteamento, a todo caminho com barra codificada (`%2F` ou `%5C`). O Kong casa as rotas pelo caminho sem decodificar, e o uvicorn decodifica: sem o plugin, `/os/api/v1/admin%2Foutbox` escapava do bloqueio de `/api/v1/admin/*` (rota que nenhum serviço tem hoje, mas o p3 tinha) e `/os/api/v1/autenticacao%2Flogin` escapava do limite do login.
 - Plugin `correlation-id` com o header `X-Request-ID`, o mesmo que os logs do p3 usam, e `generator: uuid`. O gerador padrão do plugin, `uuid#counter`, produz um valor com `#`, que o middleware do p3 descarta por não casar com `[A-Za-z0-9._=-]{1,128}` (`src/compartilhado/interfaces/middleware.py:39`), e o ID da borda se perderia.
 - Plugin `prometheus`, com as métricas da borda, e plugin `rate-limiting`, descrito abaixo.
 - O Kong não valida o token JWT (JSON Web Token): cada serviço o valida, e a matriz de papel por rota fica no [ADR-039](039-autenticacao-entre-servicos.md).
@@ -35,7 +35,7 @@ Kong como API Gateway, pelo Kong Ingress Controller em modo DB-less: a configura
 
 ### Rate limit
 
-Por IP do cliente, com `policy: local`. O `kong-proxy` usa `externalTrafficPolicy: Local`, que entrega o pacote sem a tradução do endereço de origem (SNAT) feita pelo kube-proxy: no k3s, o IP real do cliente chega ao Kong. No kind, o tráfego entra pelo mapeamento de porta do Docker, e todo cliente do host chega com o IP da bridge, num balde só por limite, o que basta para a demonstração. Se um balanceador ou proxy entrar na frente da máquina virtual do k3s, `trusted_ips` com o CIDR exato dele e `real_ip_header` passam a ler o IP do header. Onde a rota já existia no p3, vale o limite dele:
+Por IP do cliente, com `policy: local`. O `kong-proxy` usa `externalTrafficPolicy: Local`, que entrega o pacote sem a tradução do endereço de origem (SNAT) feita pelo kube-proxy: no k3s, o IP real do cliente deve chegar ao Kong, o que ainda não foi conferido com dois clientes distintos (até lá, o limite por IP no k3s é esperado, não verificado). No kind, o tráfego entra pelo mapeamento de porta do Docker, e todo cliente do host chega com o IP da bridge, num balde só por limite, o que basta para a demonstração. Se um balanceador ou proxy entrar na frente da máquina virtual do k3s, `trusted_ips` com o CIDR exato dele e `real_ip_header` passam a ler o IP do header. Onde a rota já existia no p3, vale o limite dele:
 
 | Rota | Limite por IP | Origem do valor |
 |---|---|---|
@@ -123,7 +123,7 @@ Um *backend for frontend*, o padrão da Aula 03 para agregar e formatar dados pa
 
 * RNF-034 atendido com uma chamada síncrona de negócio justificada; RNF-055 com timeout, retry, circuit breaker e 503 explícito
 * Entrada única, com `X-Request-ID` desde a borda, rate limit por IP do cliente em todas as rotas e métricas de borda no Prometheus
-* `/metrics` e a API administrativa da outbox não ficam expostas na borda
+* `/metrics` e `/api/v1/admin/*` (a API administrativa da outbox do p3, que os serviços ainda não têm) não ficam expostos na borda
 * A consulta de status e histórico não depende de outro serviço: com Billing ou Execução fora do ar, o OS Service continua respondendo
 
 ### Negativas

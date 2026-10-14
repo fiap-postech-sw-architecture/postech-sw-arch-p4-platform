@@ -45,14 +45,14 @@ config:
 ---
 # Caminho com barra codificada (%2F) ou barra invertida codificada (%5C) nunca
 # chega a um servico. O Kong casa as rotas por segmento e nao conta %2F como /,
-# entao /os/api/v1/admin%2Foutbox escaparia do Ingress fora-da-borda e
-# /os/api/v1/autenticacao%2Flogin, do limite do login, e o servico (uvicorn)
-# decodifica o %2F e atende /admin/outbox. O %5C o uvicorn deixa como barra
-# invertida literal; sai junto por precaucao, com qualquer outro servidor que o
-# tratasse como separador. 404 igual ao de rota inexistente. O pre-function tem
-# a maior prioridade: responde antes dos plugins de rate limit, e esse 404 nao
-# gasta balde nenhum. So o caminho conta: a query string (get_raw_path nao a
-# inclui) pode levar %2F.
+# entao /os/api/v1/admin%2Foutbox escaparia do Ingress fora-da-borda (rota que
+# nenhum servico tem hoje, mas o p3 tinha) e /os/api/v1/autenticacao%2Flogin,
+# do limite do login, e o servico (uvicorn) decodifica o %2F. O %5C o uvicorn
+# deixa como barra invertida literal; sai junto por precaucao, com qualquer
+# outro servidor que o tratasse como separador. 404 igual ao de rota
+# inexistente. O pre-function tem a maior prioridade: responde antes dos
+# plugins de rate limit, e esse 404 nao gasta balde nenhum. So o caminho conta:
+# a query string (get_raw_path nao a inclui) pode levar %2F.
 apiVersion: configuration.konghq.com/v1
 kind: KongClusterPlugin
 metadata:
@@ -87,8 +87,9 @@ config:
 # Rate limiting por IP do cliente, contador local na memoria do pod do Kong
 # (com mais de uma replica do gateway cada uma conta a sua parte; a policy
 # redis resolveria). Limites do ADR-038; o overlay kind os multiplica por 10.
-# O IP real chega pelo externalTrafficPolicy Local do kong-proxy (values.yaml
-# e README).
+# O kong-proxy usa externalTrafficPolicy Local para o IP real chegar (no k3s
+# isso ainda nao foi conferido com dois clientes; no kind todo cliente chega
+# com o IP da bridge do Docker: ADR-038, values.yaml e README).
 apiVersion: configuration.konghq.com/v1
 kind: KongClusterPlugin
 metadata:
