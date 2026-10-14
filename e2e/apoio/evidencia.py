@@ -87,7 +87,13 @@ CONFIRMADOS: Final = frozenset({"CONFIRMADO", "ESTORNADO"})
 _PADROES_DA_VARREDURA: Final = {
     "Bearer": re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
     "token do Mercado Pago": re.compile(r"(?:TEST|APP_USR)-[A-Za-z0-9_-]{8,}"),
-    "e-mail": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"),
+    "e-mail": re.compile(
+        r"[A-Za-z0-9._%+-]+@"
+        # Os usuarios que o proprio E2E cria (e2e.pytstop.dev e clientes.pytstop.dev)
+        # saem no traceback de qualquer falha e nao sao dado de ninguem.
+        r"(?!(?:[A-Za-z0-9-]+\.)*pytstop\.dev(?![A-Za-z0-9-]|\.[A-Za-z0-9]))"
+        r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"
+    ),
     "User ID da conta vendedora (prefixo do id da preferencia)": re.compile(
         r"\b\d{6,}-[0-9a-f]{8}-[0-9a-f]{4}"
     ),

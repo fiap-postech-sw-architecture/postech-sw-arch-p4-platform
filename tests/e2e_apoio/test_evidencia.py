@@ -572,6 +572,40 @@ def test_o_achado_da_varredura_nao_muda_depois_de_achado() -> None:
         achado.linha = 9  # type: ignore[misc]  # a classe e congelada de proposito
 
 
+@pytest.mark.parametrize(
+    "texto",
+    [
+        pytest.param(
+            "e2e-9afc16-atendente" + chr(64) + "e2e.pytstop.dev", id="staff-do-e2e"
+        ),
+        pytest.param(
+            "cliente-9afc16-1" + chr(64) + "clientes.pytstop.dev", id="cliente"
+        ),
+        pytest.param("admin" + chr(64) + "pytstop.dev", id="admin"),
+        pytest.param("falhou para x" + chr(64) + "e2e.pytstop.dev.", id="ponto-final"),
+    ],
+)
+def test_varrer_nao_trata_como_dado_o_usuario_que_o_proprio_e2e_cria(
+    texto: str,
+) -> None:
+    assert varrer(texto) == []
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        pytest.param("comprador" + chr(64) + "testuser.com", id="comprador-de-teste"),
+        pytest.param(
+            "joao" + chr(64) + "pytstop.dev.evil.com", id="dominio-que-comeca-igual"
+        ),
+        pytest.param("joao" + chr(64) + "meupytstop.dev", id="sufixo-colado"),
+        pytest.param("joao" + chr(64) + "pytstop.dev9.com", id="outro-dominio"),
+    ],
+)
+def test_varrer_acha_o_e_mail_que_nao_e_do_dominio_do_e2e(texto: str) -> None:
+    assert [a.tipo for a in varrer(texto)] == ["e-mail"]
+
+
 def test_varrer_texto_limpo_nao_acha_nada() -> None:
     assert (
         varrer("## Evidência\n\n- `ordem_id`: `abc`\n| 12:30:00 | OS: recebida |\n")
