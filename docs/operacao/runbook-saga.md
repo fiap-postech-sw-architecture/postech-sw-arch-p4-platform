@@ -352,9 +352,18 @@ O comando leva só o `veiculo_id` (o `correlation_id` da mensagem): não tem dad
    SQL
    ```
 
-   Uma linha com a placa original (`ABC1D23`, por exemplo) quer dizer que a Execução ainda não consumiu o comando: veja o log do consumidor dela e a DLQ de novo.
+   Uma linha com a placa original (`ABC1D23`, por exemplo) quer dizer que a Execução ainda não consumiu o comando, ou que o relay do OS Service ainda não o publicou (o script só grava na outbox do OS; confira `outbox_pendentes{job="os-service-relay"}` no Prometheus): veja o log do consumidor da Execução, a DLQ de novo e o relay do OS Service.
 5. A cópia original do comando continua na DLQ, e o alerta "DLQ com mensagens" fica até ela expirar, em 7 dias. Silencie esse alerta no Grafana (Alerting, Silences) por 7 dias, só para `queue=execucao.comandos.dlq`, e confira a fila no `make status` antes de encerrar o incidente. A placa do `SolicitarDiagnostico` que estiver nessa DLQ também some pela expiração, e só por ela.
-6. Se o comando já expirou sem reenvio, o titular continua com a placa e os textos livres na Execução, e o mesmo script o reenvia: o veículo já está anonimizado no OS Service.
+6. Se o comando já expirou sem reenvio, o titular continua com a placa e os textos livres na Execução, e o mesmo script o reenvia: o veículo já está anonimizado no OS Service. Como a cópia da DLQ não existe mais, ache os `veiculo_id` no OS Service, onde o veículo anonimizado guarda `ANONIMIZADO:` e o próprio id na placa. A consulta é de leitura e entra como `os_app`:
+
+   ```bash
+   kos() { kubectl --context kind-pytstop-p4 -n pytstop-os "$@"; }
+   kos exec -i statefulset/os-postgres -c postgres -- sh -c 'PGPASSWORD="$POSTGRES_APP_PASSWORD" PGOPTIONS="-c lock_timeout=2s -c statement_timeout=10s" exec psql -w -U os_app -d "$POSTGRES_DB"' <<'SQL'
+   SELECT id FROM veiculos WHERE placa LIKE 'ANONIMIZADO:%';
+   SQL
+   ```
+
+   A lista traz todos os veículos já anonimizados, inclusive os que a Execução anonimizou na hora. Para cada `id`, rode a consulta do passo 4: só quem ainda tem a placa original na Execução precisa do reenvio do passo 3.
 
 ### Quando fazer o redrive
 
