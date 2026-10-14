@@ -73,10 +73,13 @@ def test_port_forward_garantir_religa_o_kubectl_que_morreu(kubectl_falso: Path) 
 
         ponte.garantir()
 
-        assert ponte._processo is not primeiro
-        assert ponte._processo is not None
-        assert ponte._processo.poll() is None
+        segundo = ponte._processo
+        assert segundo is not primeiro
+        assert segundo is not None
+        assert segundo.poll() is None
         ponte.garantir()
+        # Vivo, o kubectl nao e reiniciado a cada chamada.
+        assert ponte._processo is segundo
     finally:
         ponte.encerrar()
 

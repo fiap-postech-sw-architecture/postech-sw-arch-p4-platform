@@ -132,6 +132,10 @@ def test_ler_filas_mortas_so_pega_as_dlq() -> None:
     assert ler_filas_mortas("x.dlq\tmuitas") == {}
 
 
+def test_ler_filas_mortas_exige_o_ponto_antes_de_dlq() -> None:
+    assert ler_filas_mortas("xdlq\t3\nsemponto-dlq\t1\n") == {}
+
+
 def test_kubectl_filas_mortas_executa_no_pod_do_broker() -> None:
     executor = ExecutorFalso({"rabbitmqctl": _SAIDA_FILAS})
 

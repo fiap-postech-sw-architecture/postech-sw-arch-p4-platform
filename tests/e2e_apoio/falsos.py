@@ -128,3 +128,81 @@ def processo_vivo(pid: int) -> bool:
     except ProcessLookupError:
         return False
     return True
+
+
+# kubectl e docker falsos de um cluster kind-ci: respondem ao que a sessao do E2E
+# pergunta antes e durante os cenarios e anotam cada chamada em ``chamadas``.
+# O estado (replicas, ConfigMap do Billing, DLQs) vive em arquivos de ``estado``.
+_CLUSTER_FALSO = """\
+#!{python}
+import json, os, sys
+from pathlib import Path
+estado = Path(os.environ["FALSO_ESTADO"])
+args = sys.argv[1:]
+nome = Path(sys.argv[0]).name
+with (estado / "chamadas").open("a") as chamadas:
+    chamadas.write(nome + " " + " ".join(args) + "\\n")
+juntos = " ".join(args)
+if nome == "docker":
+    print("127.0.0.1:443")
+elif "get nodes" in juntos:
+    print("node/pytstop-p4-control-plane")
+elif "get configmap" in juntos:
+    config = json.loads((estado / "configmap.json").read_text())
+    chave = juntos.split(".data.")[1].rstrip("}")
+    print(config.get(chave, ""))
+elif "get kongclusterplugin" in juntos:
+    print("600")
+elif "rabbitmqctl" in juntos:
+    for fila, total in json.loads((estado / "dlq.json").read_text()).items():
+        print(fila + "\\t" + str(total))
+elif "get deployment" in juntos:
+    deployment = args[args.index("deployment") + 1]
+    arquivo = estado / ("replicas-" + deployment)
+    print(arquivo.read_text() if arquivo.exists() else "1")
+elif "scale" in args:
+    deployment = args[args.index("scale") + 1].split("/")[1]
+    (estado / ("replicas-" + deployment)).write_text(args[-1].split("=")[1])
+elif "get pods" in juntos:
+    app = args[args.index("-l") + 1].split("=")[1]
+    arquivo = estado / ("replicas-" + app)
+    zero = arquivo.exists() and arquivo.read_text() == "0"
+    print("" if zero else "pod/x")
+sys.exit(0)
+"""
+
+KIND_CI_NO_BILLING = {
+    "ORCAMENTO_VALIDADE_HORAS": "0.02",
+    "PAGAMENTO_MAX_RECUSAS": "1",
+    "PRAZOS_INTERVALO_SEGUNDOS": "5",
+}
+
+
+def criar_cluster_falso(pasta: Path) -> Path:
+    """Escreve ``bin/kubectl`` e ``bin/docker`` falsos e devolve a pasta do estado.
+
+    Estado inicial: overlay ``kind-ci``, as tres DLQs vazias e todo Deployment com
+    1 replica. Quem testa troca os arquivos de ``estado`` e le ``chamadas``.
+    """
+    import json
+
+    estado = pasta / "estado"
+    estado.mkdir()
+    (estado / "configmap.json").write_text(json.dumps(KIND_CI_NO_BILLING))
+    (estado / "dlq.json").write_text(
+        json.dumps(
+            {
+                "billing.comandos.dlq": 0,
+                "execucao.comandos.dlq": 0,
+                "os.eventos.dlq": 0,
+            }
+        )
+    )
+    (estado / "chamadas").write_text("")
+    bin_ = pasta / "bin"
+    bin_.mkdir()
+    for nome in ("kubectl", "docker"):
+        script = bin_ / nome
+        script.write_text(_CLUSTER_FALSO.replace("{python}", sys.executable))
+        script.chmod(script.stat().st_mode | stat.S_IXUSR)
+    return estado

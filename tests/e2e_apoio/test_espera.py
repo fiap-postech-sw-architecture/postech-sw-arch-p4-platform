@@ -222,6 +222,22 @@ def test_manter_corta_a_ultima_soneca_no_fim_da_janela(relogio: Relogio) -> None
     assert relogio.dormidas == [5, 2]
 
 
+def test_manter_mensagem_de_falha_sai_mascarada(relogio: Relogio) -> None:
+    segredos.registrar("senha-do-admin-123")
+
+    with pytest.raises(TempoEsgotadoError) as erro:
+        manter(
+            lambda: False,
+            duracao=20,
+            descricao="login com senha-do-admin-123",
+            relogio=relogio,
+            dormir=relogio.dormir,
+        )
+
+    assert "senha-do-admin-123" not in str(erro.value)
+    assert "login com ***" in str(erro.value)
+
+
 def test_manter_reprova_assim_que_a_condicao_deixa_de_valer(relogio: Relogio) -> None:
     estados = iter([True, True, False])
 
