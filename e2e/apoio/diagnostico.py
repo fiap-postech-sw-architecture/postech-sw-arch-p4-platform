@@ -50,6 +50,16 @@ CAMPOS_DO_LOG: Final = (
 # contrato com o Billing: operacao, status_http, erro e causas (codigos curtos).
 EVENTO_DE_REJEICAO: Final = "mercadopago_request_rejected"
 EVENTOS_QUE_INTERESSAM: Final = frozenset({EVENTO_DE_REJEICAO})
+# As ``operacao`` que o Billing diz nesse evento (``_enviar`` do adaptador do Mercado
+# Pago) e o que cada uma faz la, para a dica dizer qual chamada foi recusada.
+OPERACAO_DA_CRIACAO: Final = "criar_cobranca"
+OPERACOES_DO_BILLING: Final = {
+    OPERACAO_DA_CRIACAO: "criar a cobrança (POST /checkout/preferences)",
+    "cancelar_cobranca": "fechar o checkout (PUT /checkout/preferences/{id})",
+    "consultar_pagamento": "consultar o pagamento (GET /v1/payments/{id})",
+    "buscar_pagamentos": "buscar os pagamentos da cobrança (GET /v1/payments/search)",
+    "estornar": "estornar o pagamento (POST /v1/payments/{id}/refunds)",
+}
 _TAMANHO_DO_CAMPO: Final = 160
 _NIVEIS_QUE_INTERESSAM: Final = frozenset({"warning", "error", "critical"})
 # O httpx do Billing loga cada chamada ao Mercado Pago em INFO, com o status.
@@ -92,7 +102,25 @@ class LinhaDeLog:
 
 
 def _curto(valor: object) -> str:
-    return str(valor).replace("\n", " ")[:_TAMANHO_DO_CAMPO]
+    texto = ",".join(map(str, valor)) if isinstance(valor, list) else str(valor)
+    return texto.replace("\n", " ")[:_TAMANHO_DO_CAMPO]
+
+
+def _campos(registro: dict[str, Any], evento: str) -> dict[str, str]:
+    """Os campos da lista que a linha traz; os vazios (``causas=[]``) ficam de fora.
+
+    ``erro`` tem dois sentidos nos logs do Billing: no ``command_dead_lettered`` e o
+    nome da classe da excecao, e no evento de rejeicao e o ``error`` do Mercado Pago.
+    Aqui o segundo vira ``erro_do_mp``, para os dois nao se misturarem na leitura.
+    """
+    campos = {
+        campo: _curto(registro[campo])
+        for campo in CAMPOS_DO_LOG
+        if registro.get(campo) not in (None, [], "")
+    }
+    if evento == EVENTO_DE_REJEICAO and "erro" in campos:
+        campos["erro_do_mp"] = campos.pop("erro")
+    return campos
 
 
 def _linha(bruta: str) -> LinhaDeLog | None:
@@ -130,11 +158,7 @@ def _linha(bruta: str) -> LinhaDeLog | None:
     )
     if not interessa:
         return None
-    campos = {
-        campo: _curto(registro[campo])
-        for campo in CAMPOS_DO_LOG
-        if registro.get(campo) is not None
-    }
+    campos = _campos(registro, evento)
     excecao = registro.get("exception")
     if excecao:
         campos["excecao"] = _curto(str(excecao).strip().splitlines()[-1])
@@ -186,16 +210,29 @@ def _eventos(sinais: Sinais, processo: str) -> list[LinhaDeLog]:
 
 
 def _criacao_recusada(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> bool:
-    """O Mercado Pago respondeu 4xx a criacao da preferencia (ou o comando morreu)."""
-    return any(
-        metodo == "POST"
-        and caminho == "/checkout/preferences"
-        and HTTP_ERRO <= status < HTTP_ERRO_DO_SERVIDOR
-        for metodo, caminho, status in chamadas
-    ) or any(
-        linha.evento == "command_dead_lettered"
-        and linha.campos.get("codigo") == "GATEWAY_PAGAMENTO_RECUSOU"
-        for linha in _eventos(sinais, "consumidor")
+    """O Mercado Pago respondeu 4xx a criacao da preferencia (ou o comando morreu).
+
+    Tres sinais, qualquer um basta: a linha do httpx da chamada, o evento de rejeicao
+    da operacao ``criar_cobranca`` e o comando que foi para a DLQ por recusa.
+    """
+    return (
+        any(
+            metodo == "POST"
+            and caminho == "/checkout/preferences"
+            and HTTP_ERRO <= status < HTTP_ERRO_DO_SERVIDOR
+            for metodo, caminho, status in chamadas
+        )
+        or any(
+            linha.evento == EVENTO_DE_REJEICAO
+            and linha.campos.get("operacao") == OPERACAO_DA_CRIACAO
+            for linhas in sinais.logs.values()
+            for linha in linhas
+        )
+        or any(
+            linha.evento == "command_dead_lettered"
+            and linha.campos.get("codigo") == "GATEWAY_PAGAMENTO_RECUSOU"
+            for linha in _eventos(sinais, "consumidor")
+        )
     )
 
 
@@ -230,10 +267,6 @@ def _rejeicao_do_mp(sinais: Sinais) -> LinhaDeLog | None:
     return achadas[-1] if achadas else None
 
 
-def _campos_do_log(linha: LinhaDeLog) -> str:
-    return " ".join(f"{chave}={valor}" for chave, valor in linha.campos.items())
-
-
 def _dica_do_token(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str | None:
     if not _token_recusado(sinais, chamadas):
         return None
@@ -245,19 +278,48 @@ def _dica_do_token(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str 
     )
 
 
+def _chamada_recusada(rejeicao: LinhaDeLog | None) -> str:
+    """Qual chamada o Billing diz que o Mercado Pago recusou (campo ``operacao``)."""
+    operacao = "" if rejeicao is None else rejeicao.campos.get("operacao", "")
+    if not operacao:
+        return "uma chamada do Billing"
+    return OPERACOES_DO_BILLING.get(operacao, f"a chamada {operacao} do Billing")
+
+
+def _registrado_pelo_billing(rejeicao: LinhaDeLog | None) -> str:
+    """O que o Billing registrou da recusa, so o que veio: HTTP, erro e causas.
+
+    So ``operacao`` e ``status_http`` estao sempre no evento; o ``error`` e os
+    ``cause[].code`` do Mercado Pago so saem se casam com o vocabulario curto que o
+    Billing aceita, e a dica nao pode depender deles.
+    """
+    if rejeicao is None:
+        return ""
+    campos = rejeicao.campos
+    partes = [
+        texto
+        for texto in (
+            f"HTTP {campos['status_http']}" if "status_http" in campos else "",
+            f"erro do Mercado Pago {campos['erro_do_mp']}"
+            if "erro_do_mp" in campos
+            else "",
+            f"causas {campos['causas']}" if "causas" in campos else "",
+        )
+        if texto
+    ]
+    return f" O Billing registrou: {', '.join(partes)}." if partes else ""
+
+
 def _dica_da_recusa(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str | None:
     """O Mercado Pago recusou a criacao da cobranca (ou outra chamada do Billing)."""
     if _token_recusado(sinais, chamadas):
         return None
     rejeicao = _rejeicao_do_mp(sinais)
-    registrado = "" if rejeicao is None else _campos_do_log(rejeicao)
-    detalhe = f" O Billing registrou: {registrado}." if registrado else ""
+    registrado = _registrado_pelo_billing(rejeicao)
     if not _criacao_recusada(sinais, chamadas):
-        return (
-            f"O Mercado Pago recusou uma chamada do Billing.{detalhe}"
-            if rejeicao
-            else None
-        )
+        if rejeicao is None:
+            return None
+        return f"O Mercado Pago recusou {_chamada_recusada(rejeicao)}.{registrado}"
     url = (
         f" A notification_url usada foi {sinais.url_de_notificacao} (pública: a "
         "sandbox não envia webhook), então a causa é outra; se suspeitar dela, "
@@ -265,12 +327,18 @@ def _dica_da_recusa(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str
         if sinais.url_de_notificacao
         else ""
     )
+    onde_ver = (
+        "O log do Billing traz só os códigos do Mercado Pago, e nunca o texto: "
+        "procure-os na documentação"
+        if rejeicao
+        else "O log do Billing ainda não traz a mensagem do Mercado Pago: veja o do "
+        f"consumidor com `{_kubectl(sinais)} logs deploy/billing-service-consumidor "
+        "--tail=50`"
+    )
     return (
         "O Mercado Pago recusou criar a cobrança (POST /checkout/preferences com "
-        f"resposta 4xx).{detalhe}{url} O log do Billing ainda não traz a mensagem do "
-        f"Mercado Pago: veja o do consumidor com `{_kubectl(sinais)} logs "
-        "deploy/billing-service-consumidor --tail=50` e confira o valor, a moeda e "
-        "os itens da cobrança."
+        f"resposta 4xx).{registrado}{url} {onde_ver} e confira o valor, a moeda e os "
+        "itens da cobrança."
     )
 
 

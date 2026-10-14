@@ -13,6 +13,7 @@ from e2e.apoio import segredos
 from e2e.apoio.diagnostico import (
     CAMPOS_DO_LOG,
     LINHAS_DE_LOG,
+    OPERACOES_DO_BILLING,
     LinhaDeLog,
     Sinais,
     coletar,
@@ -646,12 +647,21 @@ def test_todo_kubectl_sugerido_leva_o_contexto_do_cluster_do_script() -> None:
 
 # --- o evento de rejeicao do Billing ------------------------------------------
 
+# Os valores que o adaptador do Mercado Pago do Billing emite de verdade: o nome da
+# operacao e o ``error`` do Mercado Pago (que passa no filtro [a-z_]{1,40}).
 REJEICAO = {
-    "operacao": "criar_preferencia",
+    "operacao": "criar_cobranca",
     "status_http": 400,
-    "erro": "GatewayPagamentoRecusouError",
+    "erro": "bad_request",
     "causas": ["invalid_items"],
 }
+OPERACOES_QUE_O_BILLING_EMITE = (
+    "criar_cobranca",
+    "cancelar_cobranca",
+    "consultar_pagamento",
+    "buscar_pagamentos",
+    "estornar",
+)
 
 
 def test_evento_de_rejeicao_do_billing_entra_no_log_mesmo_em_nivel_info() -> None:
@@ -659,13 +669,44 @@ def test_evento_de_rejeicao_do_billing_entra_no_log_mesmo_em_nivel_info() -> Non
 
     assert len(linhas) == 1
     assert linhas[0].campos == {
-        "operacao": "criar_preferencia",
-        "erro": "GatewayPagamentoRecusouError",
+        "operacao": "criar_cobranca",
         "status_http": "400",
-        "causas": "['invalid_items']",
+        "causas": "invalid_items",
+        "erro_do_mp": "bad_request",
     }
     assert "status_http=400" in linhas[0].texto()
-    assert "causas=['invalid_items']" in linhas[0].texto()
+    assert "causas=invalid_items" in linhas[0].texto()
+
+
+def test_erro_tem_dois_sentidos_e_a_linha_mostra_cada_um_com_o_seu_nome() -> None:
+    # No evento de rejeicao e o ``error`` do Mercado Pago; na DLQ do consumidor, o
+    # nome da classe da excecao.
+    rejeicao, morto = _linhas(
+        "\n".join(
+            [
+                _log("mercadopago_request_rejected", "warning", **REJEICAO),
+                _log(
+                    "command_dead_lettered",
+                    "error",
+                    erro="GatewayPagamentoRecusouError",
+                    codigo="GATEWAY_PAGAMENTO_RECUSOU",
+                ),
+            ]
+        )
+    )
+
+    assert "erro_do_mp=bad_request" in rejeicao.texto()
+    assert " erro=" not in rejeicao.texto()
+    assert "erro=GatewayPagamentoRecusouError" in morto.texto()
+    assert "erro_do_mp" not in morto.texto()
+
+
+def test_causas_vazias_do_billing_nao_aparecem_na_linha() -> None:
+    [linha] = _linhas(
+        _log("mercadopago_request_rejected", "warning", operacao="estornar", causas=[])
+    )
+
+    assert "causas" not in linha.campos
 
 
 def test_rejeicao_registrada_pelo_billing_aparece_na_dica_da_criacao() -> None:
@@ -679,34 +720,117 @@ def test_rejeicao_registrada_pelo_billing_aparece_na_dica_da_criacao() -> None:
     texto = dicas(sinais)[0]
 
     assert "recusou criar a cobrança" in texto
-    assert "O Billing registrou: " in texto
-    for campo in (
-        "operacao=criar_preferencia",
-        "status_http=400",
-        "causas=['invalid_items']",
-    ):
-        assert campo in texto
+    assert (
+        "O Billing registrou: HTTP 400, erro do Mercado Pago bad_request, "
+        "causas invalid_items." in texto
+    )
+    assert "traz só os códigos do Mercado Pago" in texto
+    assert "ainda não traz a mensagem" not in texto
 
 
-def test_rejeicao_de_outra_chamada_vira_dica_propria_sem_acusar_a_criacao() -> None:
+def test_a_dica_funciona_so_com_a_operacao_e_o_status_http() -> None:
+    # O ``error`` e os ``cause[].code`` so saem se casam com o vocabulario curto do
+    # Billing; o evento chega sem eles e a dica continua sendo util.
     sinais = _com_logs(
         consumidor=[
             _log(
                 "mercadopago_request_rejected",
                 "warning",
-                operacao="estornar",
+                operacao="criar_cobranca",
                 status_http=400,
-                causas=["payment_already_refunded"],
+                causas=[],
             )
         ]
     )
 
     texto = dicas(sinais)[0]
 
-    assert texto.startswith("O Mercado Pago recusou uma chamada do Billing.")
-    assert "operacao=estornar" in texto
-    assert "causas=['payment_already_refunded']" in texto
+    assert texto.startswith("O Mercado Pago recusou criar a cobrança")
+    assert "O Billing registrou: HTTP 400." in texto
+    assert "erro do Mercado Pago" not in texto
+    assert "causas" not in texto
+
+
+def test_o_evento_de_criacao_basta_sem_a_linha_do_httpx() -> None:
+    sinais = _com_logs(
+        consumidor=[_log("mercadopago_request_rejected", "warning", **REJEICAO)]
+    )
+
+    assert "recusou criar a cobrança" in dicas(sinais)[0]
+
+
+def test_dica_da_criacao_nao_mistura_o_erro_do_mercado_pago_com_o_da_dlq() -> None:
+    sinais = _com_logs(
+        consumidor=[
+            _log("mercadopago_request_rejected", "warning", **REJEICAO),
+            _log(
+                "command_dead_lettered",
+                "error",
+                erro="GatewayPagamentoRecusouError",
+                codigo="GATEWAY_PAGAMENTO_RECUSOU",
+            ),
+        ]
+    )
+
+    texto = dicas(sinais)[0]
+
+    assert "erro do Mercado Pago bad_request" in texto
+    assert "GatewayPagamentoRecusouError" not in texto
+
+
+@pytest.mark.parametrize(
+    ("operacao", "recusou"),
+    [
+        pytest.param(
+            "cancelar_cobranca",
+            "fechar o checkout (PUT /checkout/preferences/{id})",
+            id="cancelar",
+        ),
+        pytest.param(
+            "consultar_pagamento",
+            "consultar o pagamento (GET /v1/payments/{id})",
+            id="consultar",
+        ),
+        pytest.param(
+            "buscar_pagamentos",
+            "buscar os pagamentos da cobrança (GET /v1/payments/search)",
+            id="buscar",
+        ),
+        pytest.param(
+            "estornar",
+            "estornar o pagamento (POST /v1/payments/{id}/refunds)",
+            id="estornar",
+        ),
+        pytest.param("operacao_nova", "a chamada operacao_nova do Billing", id="nova"),
+    ],
+)
+def test_rejeicao_de_outra_chamada_diz_qual_chamada_o_mercado_pago_recusou(
+    operacao: str, recusou: str
+) -> None:
+    sinais = _com_logs(
+        consumidor=[
+            _log(
+                "mercadopago_request_rejected",
+                "warning",
+                operacao=operacao,
+                status_http=404,
+                erro="not_found",
+                causas=["payment_not_found"],
+            )
+        ]
+    )
+
+    texto = dicas(sinais)[0]
+
+    assert texto == (
+        f"O Mercado Pago recusou {recusou}. O Billing registrou: HTTP 404, erro do "
+        "Mercado Pago not_found, causas payment_not_found."
+    )
     assert "criar a cobrança" not in texto
+
+
+def test_as_operacoes_que_o_billing_emite_tem_descricao() -> None:
+    assert set(OPERACOES_DO_BILLING) == set(OPERACOES_QUE_O_BILLING_EMITE)
 
 
 def test_rejeicao_sem_campos_nao_inventa_detalhe() -> None:
