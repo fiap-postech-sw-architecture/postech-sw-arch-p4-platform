@@ -53,6 +53,8 @@ def test_instrucoes_dizem_janela_anonima_comprador_link_cartao_e_prazo() -> None
     assert "Valor: BRL 210.00" in quadro
     assert "JANELA ANÔNIMA" in quadro
     assert "COMPRADOR de teste" in quadro
+    assert "código de verificação" in quadro
+    assert "6 últimos dígitos do User ID" in quadro
     assert f"     {LINK}" in quadro
     assert CARTAO_DE_TESTE in quadro
     assert "5480 8328 0103 3311" in quadro

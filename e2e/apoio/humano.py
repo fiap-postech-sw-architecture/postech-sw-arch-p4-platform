@@ -62,6 +62,11 @@ def instrucoes_de_pagamento(
                 "  2. Entre no Mercado Pago só com o usuário COMPRADOR de teste "
                 "(nunca a sua conta real)."
             ),
+            "     Se pedir código de verificação, use o da tabela de contas de teste",
+            (
+                '     (coluna "Código de verificação") ou os 6 últimos dígitos do '
+                "User ID da conta."
+            ),
             "  3. Abra este link de pagamento:",
             f"     {link}",
             f"  4. Pague com o cartão de teste: {CARTAO_DE_TESTE}.",
