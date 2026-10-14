@@ -151,11 +151,14 @@ def configmap_do_billing(kubectl: Kubectl) -> Mapping[str, str]:
     if not nome:
         msg = "o Deployment billing-service-api não referencia um ConfigMap (envFrom)"
         raise PreflightDoSandboxError(msg)
-    valores: Mapping[str, str] = json.loads(
-        kubectl.executar(
-            "-n", NAMESPACE_BILLING, "get", "configmap", nome, "-o", "jsonpath={.data}"
-        )
+    saida = kubectl.executar(
+        "-n", NAMESPACE_BILLING, "get", "configmap", nome, "-o", "jsonpath={.data}"
     )
+    try:
+        valores: Mapping[str, str] = json.loads(saida)
+    except ValueError:
+        msg = f"não consegui ler o ConfigMap {nome} do Billing (a saída não é JSON)"
+        raise PreflightDoSandboxError(msg) from None
     return valores
 
 

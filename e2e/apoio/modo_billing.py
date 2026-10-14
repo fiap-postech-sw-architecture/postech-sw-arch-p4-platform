@@ -168,7 +168,12 @@ class ModoDoBilling:
             prazo=PRAZO_DA_CONFERENCIA,
             intervalo=2.0,
             descricao=f"/billing/api/v1/saude com modo {esperado}",
-            ignorar=(httpx.TransportError, RespostaInesperadaError),
+            ignorar=(
+                httpx.TransportError,
+                RespostaInesperadaError,
+                LookupError,
+                ValueError,
+            ),
             relogio=self._relogio,
             dormir=self._dormir,
         )
@@ -220,7 +225,12 @@ class ModoDoBilling:
             for descricao, passo in passos:
                 try:
                     passo()
-                except (AssertionError, httpx.HTTPError) as erro:
+                except (
+                    AssertionError,
+                    httpx.HTTPError,
+                    LookupError,
+                    ValueError,
+                ) as erro:
                     falhas.append(f"{descricao}: {mascarar(str(erro))}")
         if falhas:
             msg = (
@@ -230,20 +240,27 @@ class ModoDoBilling:
             )
             raise DesfazerFalhouError(msg)
         self._mexeu = False
+        self._avisar("[mp-sandbox] Billing de volta ao simulador")
 
     @contextlib.contextmanager
     def sessao(
         self, *, real: bool, token: str = "", assinatura: str = "", manter: bool = False
     ) -> Iterator[None]:
-        """O modo da sessao: real (e desfeito no fim) ou simulador (ensaio)."""
+        """O modo da sessao: real (e desfeito no fim) ou simulador (ensaio).
+
+        ``manter`` so vale se o modo real foi ligado por inteiro: um ligar que
+        falhou no meio e sempre desfeito.
+        """
+        ligado = False
         try:
             if real:
                 self.ligar_real(token, assinatura)
             else:
                 self.garantir_simulado()
+            ligado = True
             yield
         finally:
-            if self._mexeu and manter:
+            if self._mexeu and manter and ligado:
                 self._avisar(
                     "[mp-sandbox] E2E_MP_MANTER=1: o Billing segue em modo real. "
                     "Para voltar ao simulador: make mp-sandbox-ensaio"

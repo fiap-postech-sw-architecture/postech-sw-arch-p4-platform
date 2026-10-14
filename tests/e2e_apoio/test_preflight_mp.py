@@ -264,6 +264,15 @@ def test_configmap_do_billing_sem_envfrom_diz_o_que_falta() -> None:
         configmap_do_billing(kubectl)
 
 
+def test_configmap_ilegivel_diz_qual_e_nao_estoura_com_json_decode_error() -> None:
+    executor = ExecutorFalso(
+        {"get deployment": "billing-service-abc", "get configmap": "nao e json"}
+    )
+
+    with pytest.raises(PreflightDoSandboxError, match="ConfigMap billing-service-abc"):
+        configmap_do_billing(Kubectl("kind-x", executor=executor))
+
+
 def test_overlay_kind_passa_e_devolve_as_recusas_que_encerram_a_cobranca() -> None:
     assert conferir_overlay_kind(_kubectl()) == 3
 

@@ -521,3 +521,75 @@ def test_sessao_ensaio_com_modo_real_que_sobrou_volta_ao_simulador(
     assert any("estava em modo real" in aviso for aviso in avisos)
     # Nada mais no fim: o ensaio so garantiu o simulador.
     assert len(cluster.chamadas) == chamadas_no_inicio
+
+
+def test_sessao_real_com_manter_mas_ligar_que_falha_desfaz_assim_mesmo(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster(falhas=("apply",))
+    modo, avisos = _modo(cluster, relogio)
+
+    with (
+        pytest.raises(ErroDeComandoError),
+        modo.sessao(real=True, token=CHAVE_DO_MP, assinatura=ASSINATURA, manter=True),
+    ):
+        pytest.fail("o corpo nao devia rodar")  # pragma: no cover
+
+    assert any("delete secret" in c for c in cluster.comandos())
+    assert not any("E2E_MP_MANTER" in aviso for aviso in avisos)
+
+
+def test_desfazer_avisa_quando_o_billing_voltou_ao_simulador(relogio: Relogio) -> None:
+    cluster = Cluster()
+    cluster.modo = MODO_REAL
+    modo, avisos = _modo(cluster, relogio)
+
+    modo.desfazer()
+
+    assert avisos[-1] == "[mp-sandbox] Billing de volta ao simulador"
+
+
+@pytest.mark.parametrize("erro", [KeyError("modo"), ValueError("sem json")])
+def test_saude_ilegivel_no_desfazer_e_falha_do_passo_e_nao_excecao_estranha(
+    erro: Exception, relogio: Relogio
+) -> None:
+    cluster = Cluster()
+
+    def saude() -> str:
+        raise erro
+
+    modo = ModoDoBilling(
+        cluster.kubectl(),
+        saude,
+        avisar=lambda _: None,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    with pytest.raises(DesfazerFalhouError, match="reiniciar e esperar o Billing"):
+        modo.desfazer()
+
+    assert any("delete secret" in c for c in cluster.comandos())
+
+
+def test_saude_ilegivel_uma_vez_conta_como_ainda_nao(relogio: Relogio) -> None:
+    cluster = Cluster()
+    respostas: Iterator[Exception | str] = iter([ValueError("sem json"), MODO_REAL])
+
+    def saude() -> str:
+        resposta = next(respostas)
+        if isinstance(resposta, Exception):
+            raise resposta
+        return resposta
+
+    modo = ModoDoBilling(
+        cluster.kubectl(),
+        saude,
+        avisar=lambda _: None,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    modo.ligar_real(CHAVE_DO_MP, ASSINATURA)
+
+    assert relogio.dormidas == [2.0]

@@ -11,7 +11,7 @@ from __future__ import annotations
 import itertools
 import os
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import pytest
 
@@ -29,6 +29,7 @@ from e2e.ambiente import (
 )
 from e2e.apoio import dados
 from e2e.apoio.contexto import (
+    ContextoNaoDescartavelError,
     conferir_borda_local,
     conferir_contexto,
     escape_do_ambiente,
@@ -38,11 +39,13 @@ from e2e.apoio.http import ClienteHttp
 from e2e.apoio.kube import Escalas, Kubectl
 from e2e.apoio.preflight import conferir_dlqs_vazias, conferir_overlay_kind_ci
 from e2e.apoio.preflight_mp import (
+    PreflightDoSandboxError,
     Sandbox,
     ambiente_do_sandbox,
     preparar_sandbox,
 )
 from e2e.apoio.relatorio import Registro
+from e2e.apoio.segredos import mascarar
 from e2e.servicos import Api, Cenario
 
 if TYPE_CHECKING:
@@ -55,14 +58,28 @@ if TYPE_CHECKING:
 pytest_plugins = ["e2e.apoio.plugin"]
 
 
+def _recusar_o_sandbox(erro: AssertionError) -> NoReturn:
+    """No sandbox, o preflight que reprova encerra a sessao so com a mensagem.
+
+    Sem traceback e sem repetir o erro em cada cenario: quem roda o script le o que
+    mudar. A mensagem sai mascarada, como todo texto do E2E.
+    """
+    pytest.exit(f"sandbox do Mercado Pago: {mascarar(str(erro))}", returncode=2)
+
+
 @pytest.fixture(scope="session")
 def kubectl() -> Kubectl:
     """kubectl no contexto escolhido, depois de provado: um kind que e o da borda."""
     # So o escape entra no guarda: o ambiente inteiro apareceria no traceback.
     escape = escape_do_ambiente(os.environ)
-    conferir_contexto(CONTEXTO, escape)
-    kubectl = Kubectl(CONTEXTO)
-    conferir_borda_local(kubectl, escape, url_da_borda=URL_DA_BORDA)
+    try:
+        conferir_contexto(CONTEXTO, escape)
+        kubectl = Kubectl(CONTEXTO)
+        conferir_borda_local(kubectl, escape, url_da_borda=URL_DA_BORDA)
+    except ContextoNaoDescartavelError as erro:
+        if MP_MODO:
+            _recusar_o_sandbox(erro)
+        raise
     return kubectl
 
 
@@ -75,7 +92,10 @@ def preflight(kubectl: Kubectl, borda: ClienteHttp) -> Sandbox | None:
     o token: devolve o que o preflight decidiu.
     """
     if MP_MODO:
-        return preparar_sandbox(kubectl, borda, ambiente_do_sandbox(os.environ))
+        try:
+            return preparar_sandbox(kubectl, borda, ambiente_do_sandbox(os.environ))
+        except PreflightDoSandboxError as erro:
+            _recusar_o_sandbox(erro)
     conferir_overlay_kind_ci(kubectl)
     conferir_dlqs_vazias(kubectl)
     return None

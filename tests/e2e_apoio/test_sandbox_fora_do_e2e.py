@@ -308,9 +308,11 @@ def test_token_com_quebra_de_linha_reprova_antes_do_cluster_e_nao_vaza(
         MP_WEBHOOK_SECRET=ASSINATURA_DO_TESTE,
     )
 
-    assert resultado.returncode != 0
-    assert "MP_ACCESS_TOKEN tem espaço ou quebra de linha" in resultado.stdout
-    escrito = resultado.stdout + resultado.stderr + junit.read_text()
+    assert resultado.returncode == 2
+    saida = resultado.stdout + resultado.stderr
+    assert "MP_ACCESS_TOKEN tem espaço ou quebra de linha" in saida
+    assert "Traceback" not in saida, "o preflight do sandbox nao mostra traceback"
+    escrito = saida + junit.read_text()
     assert CHAVE_DO_MP not in escrito
     assert CHAVE_DO_MP[:12] not in escrito
     assert "assinatura-do-webhook" not in escrito
@@ -327,9 +329,11 @@ def test_sem_credencial_o_modo_real_diz_como_ler_sem_colar_no_comando(
 ) -> None:
     resultado, _, _ = _sessao_do_sandbox(tmp_path, E2E_MP_MODO="real")
 
-    assert resultado.returncode != 0
-    assert "MP_ACCESS_TOKEN não está no ambiente" in resultado.stdout
-    assert "read -rs MP_ACCESS_TOKEN" in resultado.stdout
+    saida = resultado.stdout + resultado.stderr
+    assert resultado.returncode == 2
+    assert "MP_ACCESS_TOKEN não está no ambiente" in saida
+    assert "read -rs MP_ACCESS_TOKEN" in saida
+    assert "Traceback" not in saida
 
 
 def test_contexto_que_nao_e_kind_nao_vale_nem_com_o_escape_do_e2e(
@@ -352,9 +356,59 @@ def test_contexto_que_nao_e_kind_nao_vale_nem_com_o_escape_do_e2e(
         ),
     )
 
-    assert resultado.returncode != 0
-    assert "não é um kind" in resultado.stdout
-    assert "E2E_CONTEXTO_NAO_DESCARTAVEL não vale aqui" in resultado.stdout
+    saida = resultado.stdout + resultado.stderr
+    assert resultado.returncode == 2
+    assert "não é um kind" in saida
+    assert "E2E_CONTEXTO_NAO_DESCARTAVEL não vale aqui" in saida
+    assert "Traceback" not in saida
     texto = (estado / "chamadas").read_text()
     for mudanca in (" scale ", "set env", "apply", "rollout"):
         assert mudanca not in texto
+
+
+def test_contexto_que_nao_e_kind_sem_escape_tambem_sai_sem_traceback(
+    tmp_path: Path,
+) -> None:
+    estado = criar_cluster_falso(tmp_path)
+
+    resultado = _pytest(
+        ARQUIVO_DO_SANDBOX,
+        "-m",
+        "mp_sandbox",
+        "-p",
+        "no:randomly",
+        ambiente=_ambiente(
+            KUBE_CONTEXT="k3s-da-vm",
+            E2E_MP_MODO="ensaio",
+            FALSO_ESTADO=str(estado),
+            PATH=f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
+        ),
+    )
+
+    saida = resultado.stdout + resultado.stderr
+    assert resultado.returncode == 2
+    assert "sandbox do Mercado Pago:" in saida
+    assert "nao e um kind descartavel" in saida
+    assert "Traceback" not in saida
+    assert (estado / "chamadas").read_text() == ""
+
+
+def test_a_saga_continua_com_traceback_no_guarda_de_contexto(tmp_path: Path) -> None:
+    # Fora do sandbox o guarda do E2E da saga e o de sempre: erro com traceback.
+    estado = criar_cluster_falso(tmp_path)
+
+    resultado = _pytest(
+        "e2e",
+        "-m",
+        "borda",
+        "-p",
+        "no:randomly",
+        ambiente=_ambiente(
+            KUBE_CONTEXT="k3s-da-vm",
+            FALSO_ESTADO=str(estado),
+            PATH=f"{tmp_path / 'bin'}{os.pathsep}{os.environ['PATH']}",
+        ),
+    )
+
+    assert resultado.returncode != 0
+    assert "ContextoNaoDescartavelError" in resultado.stdout
