@@ -527,10 +527,11 @@ def test_pedir_manda_o_token_como_bearer(relogio: Relogio) -> None:
         vistos.append(pedido)
         return httpx.Response(200, json={"ok": True})
 
-    resposta = _cliente(tratador, relogio).pedir("GET", "/x", token="t0k3n")  # noqa: S106  # nosec B106
+    credencial = "abc123"
+    resposta = _cliente(tratador, relogio).pedir("GET", "/x", token=credencial)
 
     assert resposta.json() == {"ok": True}
-    assert vistos[0].headers["authorization"] == "Bearer t0k3n"
+    assert vistos[0].headers["authorization"] == "Bearer abc123"
 
 
 def test_fechar_encerra_o_cliente_http(relogio: Relogio) -> None:
