@@ -751,7 +751,7 @@ O terminal imprime o link do checkout e o que fazer: abrir uma **janela anônima
 
 O quadro com o link diz o site dele (`www.mercadopago.com.br`) antes de a espera começar. Se a página mostrar erro de conta (usuário errado, conta real logada, país diferente), dê **um** `Ctrl-C`: o script desfaz o modo real, e você não espera os 15 min para ouvir "O Mercado Pago não recebeu nenhum pagamento deste link. Você pagou?".
 
-O `make mp-sandbox` leva cerca de 2 min de máquina (a criação da cobrança, a conciliação de cada pagamento, que o `prazos` faz a cada 30 s, e os rollouts do modo real e do desfazer), mais o tempo de você pagar duas vezes no navegador. Quando tudo passa, o fim do terminal é este (os tempos mudam):
+O `make mp-sandbox` leva cerca de 100 s de máquina (a criação da cobrança, a conciliação de cada pagamento, que o `prazos` faz a cada 30 s, e os rollouts do modo real e do desfazer), mais o tempo de você pagar duas vezes no navegador. Quando tudo passa, o fim do terminal é este (os tempos mudam):
 
 ```text
 [mp-sandbox] Billing: desfazendo o modo real em 3 passos (Secret, variáveis e reinício). Não feche o terminal e não use kill -9.
