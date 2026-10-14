@@ -1,14 +1,16 @@
 """Modo de pagamento do Billing no kind: liga o Mercado Pago real e desfaz no fim.
 
 Ligar o modo real e criar o Secret ``billing-mercadopago`` com o Access Token e a
-assinatura do webhook, trocar ``MP_MODE`` e ``SIMULADOR_PERMITIDO`` nos Deployments
-e reiniciar. O token so passa pelo stdin do ``kubectl apply`` (o manifesto em JSON
-nasce em memoria): nunca em argv, nunca em arquivo, nunca no log.
+assinatura do webhook, definir ``MP_MODE``, ``SIMULADOR_PERMITIDO`` e
+``MP_NOTIFICATION_URL`` nos Deployments e reiniciar. O token so passa pelo stdin do
+``kubectl apply`` (o manifesto em JSON nasce em memoria): nunca em argv, nunca em
+arquivo, nunca no log.
 
-Desfazer e a metade que importa. Ele apaga o Secret, tira as variaveis dos
+Desfazer e a metade que importa. Ele apaga o Secret, tira as tres variaveis dos
 Deployments (valem de novo ``MP_MODE=simulado`` e ``SIMULADOR_PERMITIDO=true`` do
-ConfigMap do overlay), reinicia e espera. Roda sempre que algo foi mexido, com
-falha, Ctrl-C, SIGTERM ou SIGHUP no meio, e nenhum passo falho impede os seguintes.
+ConfigMap do overlay, e a URL de notificacao some), reinicia e espera. Roda sempre
+que algo foi mexido, com falha, Ctrl-C, SIGTERM ou SIGHUP no meio, e nenhum passo
+falho impede os seguintes.
 Nao cobre ``kill -9``, queda de energia nem terminal sem sinal: ai o ensaio
 (``make mp-sandbox-ensaio``) acha o que sobrou e devolve o Billing ao simulador.
 """
