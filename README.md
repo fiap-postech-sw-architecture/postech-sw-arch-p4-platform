@@ -26,16 +26,18 @@ O único commit da `main` fora de pull request é o `Initial commit` que o GitHu
 | Deploy automatizado em Kubernetes (l. 94 e 100) | `make kind-up deploy` com o overlay `kind-ci`, que o CD de cada serviço chama pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh) (`make -C platform kind-up deploy OVERLAY=kind-ci`), e o mesmo `make deploy` com o overlay `k3s` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)); o job `deploy-kind` do [CD](.github/workflows/cd.yml) implanta a plataforma no kind do runner, com o overlay `kind-ci`, em todo PR e push na `main`; os serviços entram em seguida pelo [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) (no CD de cada serviço, ou pelo `make kind-deploy` que cada serviço traz), conferidos pelo [`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh) ([Contrato com os serviços](#contrato-com-os-serviços)) |
 | Ferramentas de monitoramento e observabilidade da fase 3 (l. 102) | Prometheus, Grafana, Loki, Promtail e Jaeger em [`k8s/base/observabilidade/`](k8s/base/observabilidade); dashboards e alertas documentados em [`observabilidade/`](observabilidade/README.md) ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) |
 | `main` com PR obrigatório e checagens automáticas (l. 95) | Ruleset da `main` com os checks `manifests`, `contratos` e `gitleaks` do CI e `deploy-kind` do CD |
+| Pelo menos um fluxo completo testado com BDD (l. 82) | `make e2e`: a feature em português com a saga inteira e cada compensação, contra os três serviços no kind ([E2E da saga](#e2e-da-saga), [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)) |
+| Vídeo: fluxo completo de uma OS e saga com falhas (l. 119 e 120) | `make demo`: as demonstrações 1 e 2, com o status da OS a cada passo ([E2E da saga](#e2e-da-saga)) |
 | Diagrama geral, estratégia da saga e justificativa da divisão (l. 131 a 133) | [RFC-004](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) e ADRs em [`docs/arquitetura/`](docs/arquitetura) |
 
-O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md). Cobertura dos testes deste repositório: 100% de linhas e ramos do código de teste (gate de 90%), que é só um indicador aqui; o que protege os contratos é a bateria de negativos gerados (seção [Contratos de mensageria](#contratos-de-mensageria)).
+O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md). Cobertura dos testes deste repositório: acima de 99% de linhas e ramos do código de teste (gate de 90%), que é só um indicador aqui; o que protege os contratos é a bateria de negativos gerados (seção [Contratos de mensageria](#contratos-de-mensageria)).
 
 ## Pré-requisitos
 
 | Alvo do `make` | Precisa de |
 |---|---|
 | `kind-up`, `deploy`, `smoke`, `redrive`, `kong-check`, `status`, `port-forward` | Docker, [kind](https://kind.sigs.k8s.io/) 0.31.0, a versão que publicou o nó pinado e a que o CI instala (o 0.32.0 também sobe o cluster), kubectl de 1.34 a 1.36 (no máximo uma minor de distância do nó 1.35; traz o kustomize 5), jq, curl e openssl; portas 80 e 443 do loopback livres; o `smoke` também usa o uv (a prova do retry roda em Python) |
-| `e2e`, `demo` | O cluster com a plataforma no overlay `kind-ci` e os três serviços implantados ([E2E da saga](#e2e-da-saga-e-roteiro-do-vídeo)), uv, kubectl e a porta 443 do loopback |
+| `e2e`, `demo` | O cluster com a plataforma no overlay `kind-ci` e os três serviços implantados ([E2E da saga](#e2e-da-saga)), uv, kubectl e a porta 443 do loopback |
 | `up`, `down` | Docker com Compose v2 |
 | `lint`, `test` | [uv](https://docs.astral.sh/uv/), que instala o Python 3.14 do `.python-version`; Node 24 com npx (o `make test` roda o `@asyncapi/cli`); Docker (o `make lint` roda o shellcheck e o actionlint pelas imagens pinadas, o `make lint-scripts`) |
 | `prova-retry` | Docker e uv: o broker roda num container avulso, e a prova, em Python |
@@ -57,8 +59,8 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 | [`contratos/`](contratos) | AsyncAPI 3.0 dos comandos e eventos, JSON Schema do envelope e de cada mensagem, exemplos e testes |
 | [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong, segredos gerados no deploy, medição do kind, checagens do `make manifests` e, em [`scripts/ci/`](scripts/ci), os scripts do CD: deploy da plataforma, implantação e smoke dos serviços e diagnóstico ([Contrato com os serviços](#contrato-com-os-serviços)) |
 | [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md) e o [runbook da saga](docs/operacao/runbook-saga.md), com o procedimento para saga parada, falha na compensação, retomada e redrive da DLQ |
-| [`e2e/`](e2e) | O E2E BDD da saga (`make e2e`) e o roteiro do vídeo (`make demo`): a feature em português, os steps, as fixtures e o código auxiliar com testes próprios ([E2E da saga](#e2e-da-saga-e-roteiro-do-vídeo)) |
-| [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos, de medição do kind e de implantação e smoke dos serviços, e do código auxiliar do E2E |
+| [`e2e/`](e2e) | O E2E BDD da saga (`make e2e`) e as demonstrações 1 e 2 do vídeo (`make demo`): a feature em português, os steps, as fixtures e o código auxiliar com testes próprios ([E2E da saga](#e2e-da-saga)) |
+| [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos, de medição do kind e de implantação e smoke dos serviços, e do código auxiliar do E2E (em [`tests/e2e_apoio/`](tests/e2e_apoio)) |
 | [`Makefile`](Makefile) | Atalhos de cluster, deploy, compose e testes (`make` lista os alvos) |
 
 ## Subir a plataforma
@@ -687,23 +689,39 @@ Tudo o que pode pendurar no `implantar-servicos.sh` roda com prazo, e o estouro 
 
 Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl`, `sleep` e `date` falsos e conferem a ordem de cada namespace, os prazos, cada etapa reprovando o que deve (cada código HTTP errado, cada réplica fora do lugar), as esperas pelo tempo e o nome do serviço em toda falha.
 
-## E2E da saga e roteiro do vídeo
+## E2E da saga
 
-O E2E é o BDD de ponta a ponta do desafio ([enunciado, l. 82](docs/requisitos/fase4/desafio-tech-fase-4.md)): uma OS percorre os três serviços de verdade, no kind, pela borda, e cada falha da saga é provocada e conferida. Fica neste repositório porque nenhum serviço é dono do fluxo inteiro. A ferramenta é o `pytest-bdd` 8, com Gherkin em português (`# language: pt`), o mesmo runner e as mesmas fixtures do BDD de componente de cada serviço ([ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)); as tags do Gherkin viram markers do pytest.
+O E2E é o BDD de ponta a ponta do desafio ([enunciado, l. 82](docs/requisitos/fase4/desafio-tech-fase-4.md)): uma OS percorre os três serviços de verdade, no kind, pela borda, e cada falha da saga é provocada e conferida. Fica neste repositório porque nenhum serviço é dono do fluxo inteiro.
+
+A ferramenta é o `pytest-bdd` 8, com Gherkin em português (`# language: pt`). Usa o mesmo runner e as mesmas fixtures do BDD de componente de cada serviço ([ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)), e as tags do Gherkin viram markers do pytest.
 
 ### Como rodar
 
-Precisa do cluster com a plataforma **no overlay `kind-ci`** e os três serviços de pé (o orçamento vence em 72 s, a primeira recusa do provedor encerra a cobrança e o `prazos` do Billing roda a cada 5 s; os cenários `@expiracao` e de pagamento recusado dependem disso), `uv`, `kubectl` e a porta 443 do loopback:
+O E2E derruba o Billing com `kubectl scale`, cria usuários, preços, estoque e OS, e não limpa nada. **Rode só num cluster descartável**, uma execução por vez em cada cluster: duas execuções juntas se atropelam, porque a segunda religa o que a primeira acabou de derrubar. A sessão recusa um contexto que não comece por `kind-`, e que o nó do kind não publique a porta 443 do loopback, a borda que o E2E usa (o mesmo guarda roda no `make e2e` e no `make demo`). O escape é de propósito feio: `E2E_CONTEXTO_NAO_DESCARTAVEL=<o próprio contexto>`.
+
+Precisa do cluster com a plataforma **no overlay `kind-ci`** (o orçamento vence em 72 s, a primeira recusa do provedor encerra a cobrança, o `prazos` do Billing roda a cada 5 s e o rate limit da borda é multiplicado por 10) e das `main` dos três serviços, o OS já com o `notificador`: sem ele o e-mail com o link de decisão nunca chega. A sessão confere esses valores no começo e diz o que mudar. Também precisa de `uv`, `kubectl` e da porta 443 livre no loopback. Com os repositórios dos serviços ao lado deste:
 
 ```bash
 make kind-up deploy OVERLAY=kind-ci
 scripts/ci/implantar-servicos.sh --overlay kind-ci \
-  os-service=<checkout> billing-service=<checkout> execution-service=<checkout>
-make e2e      # os 13 cenários, cerca de 3 min (a expiração do orçamento, 75 s, e a resiliência dominam); relatórios em reports/e2e
-make demo     # só os cenários @demo (blocos 1 e 2 do vídeo), cerca de 1,5 min, com o status da OS a cada passo; relatórios em reports/demo
+  os-service=../postech-sw-arch-p4-os-service \
+  billing-service=../postech-sw-arch-p4-billing-service \
+  execution-service=../postech-sw-arch-p4-execution-service
+scripts/ci/smoke-servicos.sh
+make e2e      # os 13 cenários, cerca de 3 min; relatórios em reports/e2e
+make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 1,5 min; relatórios em reports/demo
 ```
 
-`KUBE_CONTEXT` escolhe o cluster (padrão `kind-pytstop-p4`). Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado.
+Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
+
+| Variável | Para quê | Padrão |
+|---|---|---|
+| `KUBE_CONTEXT` | contexto do `kubectl` | `kind-pytstop-p4` |
+| `E2E_URL` | borda do Kong | `https://localhost` |
+| `E2E_ADMIN_EMAIL` | e-mail do admin semeado | o `ADMIN_EMAIL` do ConfigMap do OS |
+| `E2E_RELATORIOS` | pasta dos relatórios | `reports/e2e` |
+| `E2E_NARRAR` | `1` imprime cada passo e o status da OS (o `make demo` liga) | desligado |
+| `E2E_CONTEXTO_NAO_DESCARTAVEL` | escape do guarda de contexto | ausente |
 
 ### Como o E2E enxerga o cluster
 
@@ -713,28 +731,30 @@ make demo     # só os cenários @demo (blocos 1 e 2 do vídeo), cerca de 1,5 mi
 | `kubectl port-forward` de sessão para `svc/mailpit` (8025), `svc/jaeger` (16686) e `svc/execution-service` (8000) | O e-mail com o link de decisão do orçamento, o trace da saga e o `/metrics` da API da Execução, que o Kong não publica. |
 | `kubectl` | A senha do admin (Secret `os-admin`), `scale` para derrubar o consumidor e a API do Billing, `rabbitmqctl list_queues` para as DLQs e `logs` da API do OS. Todo comando tem prazo. |
 
-Os usuários nascem uma vez por sessão: o E2E entra como o admin semeado e registra um atendente e um mecânico com e-mail e senha aleatórios (o OS limita login e registro a 5 por minuto por processo, e atrás do Kong todo cliente do kind tem o mesmo IP, então o cliente HTTP espera a janela passar se receber 429). A senha do admin e os tokens são registrados na máscara (`::add-mask::` no GitHub Actions) e saem como `***` de qualquer mensagem, junto com o token do link de decisão e o `token=` do checkout.
+Os usuários nascem uma vez por sessão: o E2E entra como o admin semeado e registra um atendente e um mecânico, cada um com e-mail e senha aleatórios. O OS limita login e registro a 5 por minuto, e atrás do Kong todo cliente do kind tem o mesmo IP. Por isso o cliente HTTP espera a janela passar quando recebe 429.
+
+**Segredos.** A senha do admin, as senhas geradas e os tokens entram numa máscara e saem como `***`, junto com o token do link de decisão e o `token=` do checkout. A máscara cobre três saídas: as mensagens do próprio E2E; um plugin do pytest, que passa a falha e as seções capturadas por ela antes do terminal, do `junit.xml` e do `cucumber.json`; e o `::add-mask::` do GitHub Actions, emitido numa linha própria e visível ao runner porque o `e2e/pytest.ini` usa `--capture=sys`. O plugin também faz o SIGTERM rodar o teardown (o `kubectl port-forward` não fica órfão).
 
 ### Dados, espera e desfazer
 
 - **Cada cenário cria os próprios dados**: cliente com CPF válido gerado (módulo 11) e e-mail único, veículo com placa Mercosul sorteada, preço do serviço e da peça no Billing e estoque na Execução, com códigos `SRV-E2E-<execução>-<n>` e `PEC-E2E-<execução>-<n>`. Nenhum cenário lê o que outro deixou, e o cluster não precisa ser limpo entre execuções.
-- **Só se espera por polling com prazo** (`esperar(condição, prazo)`, em [`e2e/apoio/espera.py`](e2e/apoio/espera.py)): nunca `sleep` fixo para "dar tempo". A condição roda ao menos uma vez e uma última no fim do prazo, e o erro diz o que faltou e o último valor visto. A única espera em tempo corrido são os 20 s do consumidor parado, e mesmo ela amostra a OS a cada 2 s e reprova se a saga andar.
-- **O que um cenário derruba volta no fim**: `kubectl scale` registra as réplicas originais e restaura no teardown (a sessão restaura o que ficou, e o início da sessão religa o que uma execução anterior deixou em 0).
+- **Só se espera por polling com prazo** (`esperar(condição, prazo)`, em [`e2e/apoio/espera.py`](e2e/apoio/espera.py)): nunca `sleep` fixo para "dar tempo". A condição roda ao menos uma vez e uma última no fim do prazo. O erro diz o que faltou e o último valor visto. A única espera em tempo corrido são os 20 s do consumidor parado, e mesmo ela amostra a OS a cada 2 s e reprova se a saga andar.
+- **O que um cenário derruba volta no fim do próprio cenário**: `kubectl scale` registra as réplicas originais e restaura no teardown de cada cenário. A sessão tenta restaurar tudo de novo no fim, e o início da sessão religa o que uma execução anterior deixou em 0.
 
 ### O que cada tag prova
 
 | Tag | Cenário | O que afirma | Rastreio |
 |---|---|---|---|
-| `@caminho-feliz` | abertura até a entrega | os 8 status em ordem; saga `concluida`; estoque reservado e depois baixado; e-mail do orçamento no Mailpit com o mesmo link da OS; trace no Jaeger (busca por `messaging.message.conversation_id` = `ordem_id`) com `os-service`, `billing-service` e `execution-service`; o `X-Request-ID` devolvido pelo Kong na linha de acesso da API do OS, com o `trace_id` igual ao do trace | RF-028 a RF-037, RNF-056 |
+| `@caminho-feliz` | abertura até a entrega | os 8 status em ordem; saga `concluida`; estoque reservado e depois baixado; a OS fora da fila antes do pagamento; e-mail do orçamento no Mailpit com o mesmo link da OS; trace no Jaeger (busca por `messaging.message.conversation_id` = `ordem_id`) com `os-service`, `billing-service` e `execution-service`, gravado quando duas leituras seguidas trazem o mesmo número de spans; o `X-Request-ID` devolvido pelo Kong na linha de acesso da API do OS, com o `trace_id` entre os traces da OS no Jaeger (a origem do id no Kong é provada por [`scripts/smoke.sh`](scripts/smoke.sh)) | RF-028 a RF-037, RN-027, RNF-056 |
 | `@compensacao` | cliente recusa pelo link | `cancelada`, motivo `orcamento_recusado`, só `DescartarDiagnostico`, diagnóstico `DESCARTADO` na Execução | RN-024 |
 | `@compensacao` | falta de peça | `ReservaDePecasFalhou`, `CancelarOrcamento` e `DescartarDiagnostico`, nenhum pagamento, estoque intacto, motivo `reserva_falhou` | RN-026 |
 | `@compensacao` | pagamento recusado no simulador | reserva liberada, orçamento `CANCELADO`, pagamento `RECUSADO` sem estorno, motivo `pagamento_recusado` | RN-025 |
-| `@compensacao @estorno` | cancelamento com a OS paga e na fila | 202 em `compensando`; `CancelarExecucao`, `EstornarPagamento`, `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` nessa ordem; pagamento `ESTORNADO`; OS fora da fila | RN-023, RN-026 |
-| `@validacao` | CPF de dígito errado | `POST /clientes` responde 422; o acompanhamento público dá o mesmo 404 (corpo igual, fora o `id_requisicao`) para CPF inválido e para CPF inexistente. Que o inválido não chega ao banco é provado nos testes do OS (`ConsultarAcompanhamento` valida o VO antes do repositório) | desconto nº 1 da fase 3 |
+| `@compensacao @estorno` | cancelamento com a OS paga e na fila | 202 em `compensando`; `CancelarExecucao`, `EstornarPagamento`, `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` nessa ordem; pagamento `ESTORNADO`; OS fora da fila; e-mail de cancelamento | RN-023, RN-026 |
+| `@validacao` | CPF de dígito errado | `POST /clientes` responde 422 `VALOR_INVALIDO`; o acompanhamento público dá o mesmo 404 (corpo igual, fora o `id_requisicao`) para CPF inválido e para CPF inexistente. Que o inválido não chega ao banco é provado nos testes do OS (`TestConsultarAcompanhamento`, em `test_use_cases_os.py`, e `test_documento_invalido_falha_antes_do_banco`, em `test_use_cases_cliente.py`) | RF-028, RF-030 (lição da fase 3) |
 | `@ponto-de-nao-retorno` | cancelamento depois do início | 409 `TRANSICAO_STATUS_INVALIDA` ("Cancelamento recusado: execução já iniciada"); a OS segue `em_execucao` | RN-029 |
 | `@expiracao` | orçamento vencido (72 s no `kind-ci`) | `OrcamentoExpirado`, `cancelada`, motivo `orcamento_expirado`, só `DescartarDiagnostico` | RN-024 |
-| `@resiliencia` | consumidor do Billing em 0 por 20 s | a OS fica em `em_diagnostico` durante os 20 s, segue na volta até `aguardando_aprovacao`, e nenhuma DLQ ganha mensagem | RNF-055, RN-028 |
-| `@resiliencia` | API do Billing em 0 na conclusão do diagnóstico | duas conclusões dão 503; `pytstop_circuit_breaker_aberto{dependencia="billing"}` = 1 (lido do Service da Execução); com o Billing de volta, o teste espera o circuito sair do aberto (30 s, RFC-004 6.1 e 10.3) e a conclusão passa, com o gauge em 0 | RNF-034, RNF-055 |
+| `@resiliencia` | consumidor do Billing em 0 por 20 s | a OS fica em `em_diagnostico` durante os 20 s, segue na volta até `aguardando_aprovacao`, e nenhuma das três DLQs ganha mensagem (amostra por 8 s, porque a contagem das filas quorum atualiza a cada ~5 s) | RNF-055, RN-028 |
+| `@resiliencia` | API do Billing em 0 na conclusão do diagnóstico | duas conclusões dão 503; o indicador (*gauge*) `pytstop_circuit_breaker_aberto{dependencia="billing"}` vale 1 (lido do Service da Execução; 0,5 é meia-abertura e 0, fechado); com o Billing de volta, o teste espera o circuito sair do aberto, que dura 30 s ([RFC-004, 6.1](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#61-rotas-por-serviço) e [10.3](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#103-parâmetros-e-variáveis-de-ambiente)); a conclusão passa e o indicador volta a 0 | RNF-034, RNF-055 |
 | `@borda` | Swagger pelo Kong | `/os/docs`, `/billing/docs` e `/execucao/docs` abrem e o `openapi.json` declara `servers: [{url: "/<prefixo>"}]` | ADR-038 |
 
 As mensagens de erro de negócio se afirmam pelo código (`TRANSICAO_STATUS_INVALIDA`) e, quando o texto aparece, sem depender de acento ou de caixa. As compensações se afirmam pela ordem dos comandos nos passos da saga (`GET /os/api/v1/sagas/{id}`, só do admin), não pelo texto livre do histórico.
@@ -745,14 +765,14 @@ As mensagens de erro de negócio se afirmam pelo código (`TRANSICAO_STATUS_INVA
 
 | Arquivo | Conteúdo |
 |---|---|
-| `junit.xml`, `cucumber.json` | Resultado de cada cenário e passo, nos formatos nativos do `pytest-bdd` |
+| `junit.xml`, `cucumber.json` | Resultado de cada cenário e passo, nos formatos nativos do `pytest-bdd`. O `junit.xml` traz o nome da máquina: na evidência da entrega, anexe o `resumo.md` |
 | `resumo.md` | Uma linha por cenário: tags, resultado, duração, `ordem_id` (= `correlation_id` da saga) e `trace_id`; também vai para o `$GITHUB_STEP_SUMMARY` |
 | `cenarios.json` | O `ordem_id` e o `trace_id` que cada cenário registrou |
 | `trace-<trace_id>.json` | O trace do caminho feliz, como o Jaeger o serve em `/api/traces/<id>` (o Jaeger guarda em memória e perde tudo ao reiniciar) |
 
-### Roteiro do vídeo (`make demo`)
+### Demonstrações 1 e 2 do vídeo (`make demo`)
 
-O `make demo` reaproveita os cenários marcados `@demo` e as mesmas fixtures: o **bloco 1** é o fluxo completo (`@caminho-feliz`, até 4 min) e o **bloco 2**, as falhas (`@bloco-2`, até 4 min): reserva sem saldo, cancelamento com estorno, 409 depois do início, consumidor parado e API do Billing parada. A cada passo, imprime o passo e o status e a etapa da OS:
+O `make demo` reaproveita os cenários marcados `@demo` e as mesmas fixtures. A **demonstração 1** é o fluxo completo (`@bloco-1`, até 4 min). A **demonstração 2** são as falhas (`@bloco-2`, até 4 min): reserva sem saldo, cancelamento com estorno, 409 depois do início, consumidor parado e API do Billing parada. A cada passo, imprime o passo e o status e a etapa da OS, e no fim o tempo de cada bloco:
 
 ```text
 === A OS percorre os três serviços da abertura à entrega (@bloco-1 @caminho-feliz @demo)
@@ -760,9 +780,13 @@ O `make demo` reaproveita os cenários marcados `@demo` e as mesmas fixtures: o 
       -> OS 64db2c4d: status=recebida etapa=aguardando_diagnostico
 ```
 
+Ficam de fora a demonstração do deploy com testes e a do monitoramento (Jaeger, Grafana e Loki), que não são do E2E.
+
 ### Testes do código auxiliar
 
-O que o E2E tem de crítico e não precisa de cluster está em [`e2e/apoio/`](e2e/apoio) e é testado por [`tests/test_e2e_apoio.py`](tests/test_e2e_apoio.py), no `make test` e no CI, com cobertura de linhas e ramos (a espera e seu prazo, a máscara de segredos, o parser do Mailpit e do Jaeger, a leitura das métricas e das DLQs, o desfazer do `kubectl scale`, o cliente HTTP e o resumo). O `conftest.py`, os steps e o cliente dos serviços só rodam contra o cluster e ficam fora da cobertura; `ruff`, `mypy` e `bandit` cobrem tudo em `e2e/`.
+O que o E2E tem de crítico e não precisa de cluster está em [`e2e/apoio/`](e2e/apoio) e é testado por [`tests/e2e_apoio/`](tests/e2e_apoio), um arquivo por módulo, no `make test` e no CI, com cobertura de linhas e ramos. São a espera e seu prazo, a máscara de segredos e o plugin que a aplica ao relatório, o guarda de contexto e o preflight do overlay, `Credenciais`, o parser do Mailpit e do Jaeger, as métricas e as DLQs, o desfazer do `kubectl scale`, o port-forward, o cliente HTTP e o resumo. Dois testes rodam o pytest do E2E num subprocesso (a captura do `::add-mask::` e o guarda de contexto com um `kubectl` falso).
+
+O `make test` também coleta o E2E sem cluster (`pytest --collect-only` e `--generate-missing`): import quebrado, tag sem marker e step sem definição reprovam no CI, e não no primeiro `make e2e`. O `conftest.py`, os steps e o cliente dos serviços só rodam contra o cluster e ficam fora da cobertura. `ruff`, `mypy` e `bandit` cobrem tudo em `e2e/`.
 
 ## Contratos de mensageria
 
