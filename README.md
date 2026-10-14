@@ -694,7 +694,7 @@ O ensaio com os três serviços reais no kind (tempos, memória e CPU de cada po
 
 ## Mercado Pago na sandbox
 
-Prova que o Billing cria uma cobrança no Mercado Pago, confirma o pagamento e estorna, com as credenciais de teste do Mercado Pago e sem mover dinheiro ([ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md), RF-032 a RF-034). O CI, o `make e2e` e o `make demo` ficam no simulador do Billing; esta prova é rodada por quem tem as credenciais, num kind local, com dois alvos:
+Prova que o Billing cria uma cobrança no Mercado Pago, confirma o pagamento e estorna, com as credenciais de teste do Mercado Pago e sem mover dinheiro ([ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md), RF-032 a RF-034). O CI, o `make e2e` e o `make demo` ficam no simulador do Billing; quem tem as credenciais roda esta prova num kind local, com dois alvos:
 
 | Alvo | O que faz | Credencial |
 |---|---|---|
@@ -749,7 +749,7 @@ O terminal imprime o link do checkout e o que fazer: abrir uma **janela anônima
 | Conferência | Em segundos e antes de mexer no cluster: contexto `kind-*` e borda local, as duas credenciais (presentes, sem espaço nem quebra de linha; a mensagem nunca mostra o valor nem o tamanho), o token no próprio Mercado Pago (uma busca por referência que não existe, sem efeito; 401 e 403 barram, e outro 4xx vira aviso e o roteiro segue), o overlay `kind` (orçamento de pelo menos 1 h, cobrança de pelo menos 15 min e 2 recusas), os três serviços saudáveis e o modo do Billing (`simulado` ou `mercadopago`) |
 | Liga o modo real | Cria o Secret `billing-mercadopago` com `kubectl apply --server-side -f -`, o manifesto em JSON montado em memória e enviado pelo stdin, define `MP_MODE=mercadopago` e `SIMULADOR_PERMITIDO=false` (e `MP_NOTIFICATION_URL`, se pedido) em todos os Deployments do Billing, reinicia e espera cada rollout. Só segue com `/billing/api/v1/saude` dizendo `mercadopago` |
 | Cenários | Cada um cria os próprios dados, com códigos únicos, como no E2E da saga |
-| Desfaz, sempre | Apaga o Secret, **tira** `MP_MODE` e `SIMULADOR_PERMITIDO` dos Deployments (os valores `simulado` e `true` do ConfigMap voltam a valer; deixar `simulado` escrito no Deployment sobreviveria ao próximo `make kind-deploy`), reinicia e espera. Roda com falha, `Ctrl-C` ou SIGTERM, e `Ctrl-C` e SIGTERM são ignorados enquanto ele roda. Cada passo é tentado mesmo que o anterior falhe, e o erro traz os três comandos para terminar à mão |
+| Desfaz, sempre | Apaga o Secret, **tira** `MP_MODE` e `SIMULADOR_PERMITIDO` dos Deployments (os valores `simulado` e `true` do ConfigMap voltam a valer; deixar `simulado` escrito no Deployment sobreviveria ao próximo `make kind-deploy`), reinicia e espera. Roda com falha, `Ctrl-C` ou SIGTERM, e `Ctrl-C` e SIGTERM são ignorados enquanto ele roda. Cada passo é tentado mesmo que o anterior falhe, e o erro traz os três comandos para terminar à mão. Não cobre `kill -9`, o terminal fechado nem o Mac dormindo: nesses casos o Billing pode ficar em modo real, e `make mp-sandbox-ensaio` o devolve ao simulador |
 | Ensaio | Não cria Secret. Só garante o Billing em `simulado`; se um `E2E_MP_MANTER=1` anterior o deixou em modo real, volta ao simulador. É também o jeito de desfazer um `E2E_MP_MANTER=1` |
 
 ### Relatórios
