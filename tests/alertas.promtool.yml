@@ -436,11 +436,11 @@ tests:
       - eval_time: 65m
         alertname: pytstop-compensacoes-acima-do-normal
         exp_alerts: []
-  - name: pytstop-compensacoes-acima-do-normal, 3 compensacoes sem saga iniciada nao disparam (denominador minimo de 10)
+  - name: pytstop-compensacoes-acima-do-normal, 3 compensacoes em 30 min sem saga iniciada nao disparam (denominador minimo de 10)
     interval: 1m
     input_series:
       - series: pytstop_saga_compensacoes_total{pod="os-api-1"}
-        values: 0x5 3x65
+        values: 0+0.1x70
       - series: pytstop_saga_iniciadas_total{pod="os-api-1"}
         values: 0x70
     alert_rule_test:
