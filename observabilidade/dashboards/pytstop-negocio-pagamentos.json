@@ -1,0 +1,480 @@
+{
+  "uid": "pytstop-negocio-pagamentos",
+  "title": "PytStop Negócio - Pagamentos",
+  "description": "Dashboard de negócio do PytStop (ADR-043), com a janela de 7 dias. Documentação painel a painel em observabilidade/negocio.md.",
+  "tags": [
+    "pytstop",
+    "negocio"
+  ],
+  "timezone": "utc",
+  "refresh": "1m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "editable": false,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [
+        "pytstop"
+      ],
+      "targetBlank": false,
+      "title": "Dashboards PytStop",
+      "tooltip": "",
+      "type": "dashboards",
+      "url": ""
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Faturamento no período",
+      "description": "Valor dos pagamentos confirmados no Mercado Pago, dos estornos de pagamentos confirmados (cancelamento depois do pagamento) e a diferença. Contado em centavos pelo Billing; o banco do Billing segue como fonte de verdade. O estornado conta pelo menos uma vez, no consumidor: uma reentrega da mensagem pode somá-lo de novo.",
+      "type": "stat",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyBRL",
+          "decimals": 2,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_pagamentos_valor_centavos_total{estado=\"confirmado\"}[$__range])) / 100",
+          "legendFormat": "Bruto",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_pagamentos_valor_centavos_total{estado=\"estornado\"}[$__range])) / 100",
+          "legendFormat": "Estornado",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "(sum(increase(pytstop_pagamentos_valor_centavos_total{estado=\"confirmado\"}[$__range])) - sum(increase(pytstop_pagamentos_valor_centavos_total{estado=\"estornado\"}[$__range]))) / 100",
+          "legendFormat": "Líquido",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Faturamento por dia",
+      "description": "Valor confirmado em cada dia (UTC).",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyBRL",
+          "decimals": 2,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "barAlignment": -1,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(pytstop_pagamentos_valor_centavos_total{estado=\"confirmado\"}[1d])) / 100, 0.01)",
+          "legendFormat": "Faturamento",
+          "interval": "1d"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "sum"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Pagamentos por desfecho",
+      "description": "Cobranças abertas no período e o desfecho, contados quando o OS processa o evento do Billing. Recusado: o provedor recusou PAGAMENTO_MAX_RECUSAS tentativas; expirado: o cliente não pagou em 60 min; cancelado e estornado vêm do cancelamento da OS ou de pagamento que chegou depois do encerramento.",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"PagamentoSolicitado\"}[$__range]))",
+          "legendFormat": "Cobranças abertas",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"PagamentoConfirmado\"}[$__range]))",
+          "legendFormat": "Pagas",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"PagamentoRecusado\"}[$__range]))",
+          "legendFormat": "Recusadas",
+          "instant": true
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"PagamentoExpirado\"}[$__range]))",
+          "legendFormat": "Expiradas",
+          "instant": true
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"PagamentoCancelado\"}[$__range]))",
+          "legendFormat": "Canceladas",
+          "instant": true
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"PagamentoEstornado\"}[$__range]))",
+          "legendFormat": "Estornadas",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Estornos e devoluções manuais",
+      "description": "Estornos concluídos por motivo (compensação da saga ou pagamento depois do encerramento), estornos automáticos que o provedor recusou (a devolução fica com o operador; vermelho acima de zero) e checkouts que o provedor não fechou na compensação. Os estornos contam pelo menos uma vez: uma reentrega da mensagem pode contar a mais.",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 6
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.001
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (motivo) (increase(pytstop_pagamentos_estornados_total[$__range]))",
+          "legendFormat": "Estornos: {{motivo}}",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_estornos_automaticos_recusados_total[$__range]))",
+          "legendFormat": "Estorno recusado pelo provedor",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_cancelamentos_de_cobranca_recusados_total[$__range]))",
+          "legendFormat": "Checkout não fechado",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Aguardando pagamento agora",
+      "description": "OS com peças reservadas esperando o pagamento e a espera da mais antiga. A cobrança expira em 60 min (PAGAMENTO_VALIDADE_MINUTOS) e a OS é cancelada.",
+      "type": "stat",
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1800
+                    },
+                    {
+                      "color": "red",
+                      "value": 3600
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(pytstop_saga_ativas{etapa=\"aguardando_pagamento\"})",
+          "legendFormat": "OS aguardando",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max(pytstop_saga_etapa_mais_antiga_segundos{etapa=\"aguardando_pagamento\"})",
+          "legendFormat": "Espera da mais antiga",
+          "instant": true
+        }
+      ],
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name"
+      }
+    }
+  ]
+}

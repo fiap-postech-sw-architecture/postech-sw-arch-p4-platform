@@ -1,13 +1,23 @@
 """Consistencia entre dashboards, alertas e a documentacao de observabilidade/.
 
 O ADR-043 pede cada painel com descricao e documentado, no formato da fase 3;
-este teste e a trava: painel sem descricao, painel ou consulta fora do
-observabilidade/README.md, ou regra de alerta com UID, titulo, consulta,
-severidade, janela, "sem dado" ou "onde" diferentes dos da tabela de alertas
-reprovam. Tambem reprova arquivo de alerta que o Grafana do cluster nao monta
-ou que o compose monta sem poder usar (as regras do Kong), e filtro por fila
-que nao seleciona o grupo certo de filas do definitions.json do RabbitMQ, e a
-retencao do Prometheus (15 dias num PVC no kind e no k3s, efemero no kind-ci).
+este teste e a trava:
+
+- o JSON de cada dashboard tem o esqueleto do ADR (uid igual ao nome do arquivo,
+  ids unicos, grade de 24 colunas, datasource Prometheus, uma das tags `negocio`
+  ou `tecnico`) e esta na doc da sua tag (negocio.md ou README.md);
+- o `description` de cada painel e o texto da coluna "Como ler" da doc, e as
+  consultas do painel estao na coluna "Consulta";
+- toda consulta de painel e de alerta usa so metrica e label do catalogo de
+  metricas do README (um nome que o servico nao emite deixaria o painel vazio);
+- regra de alerta com UID, titulo, consulta, severidade, janela, "sem dado" ou
+  "onde" diferentes dos da tabela de alertas, regra sem caso que dispara e sem
+  caso que nao dispara no arquivo do promtool, e o valor curto do "Outbox
+  parada" fora do overlay kind reprovam;
+- arquivo de alerta que o Grafana do cluster nao monta ou que o compose monta
+  sem poder usar (as regras que dependem do cluster) e filtro por fila que nao
+  seleciona o grupo certo de filas do definitions.json do RabbitMQ;
+- a retencao do Prometheus: 15 dias num PVC no kind e no k3s, efemero no kind-ci.
 """
 
 from __future__ import annotations
@@ -18,6 +28,7 @@ import re
 
 # subprocess so roda o kubectl kustomize dos overlays do repositorio, sem shell.
 import subprocess  # nosec B404
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,13 +38,30 @@ import yaml
 RAIZ = Path(__file__).resolve().parents[1]
 OBSERVABILIDADE = RAIZ / "observabilidade"
 DOC_CRU = (OBSERVABILIDADE / "README.md").read_text(encoding="utf-8")
+NEGOCIO_CRU = (OBSERVABILIDADE / "negocio.md").read_text(encoding="utf-8")
 # Tabela Markdown escapa o | das consultas.
 DOC = DOC_CRU.replace("\\|", "|")
+# A doc de cada area: os de negocio no negocio.md e os tecnicos no README.
+DOC_DA_AREA = {"negocio": NEGOCIO_CRU, "tecnico": DOC_CRU}
+ARQUIVO_DA_DOC = {
+    "negocio": "observabilidade/negocio.md",
+    "tecnico": "observabilidade/README.md",
+}
 DASHBOARDS = sorted((OBSERVABILIDADE / "dashboards").glob("*.json"))
+DASHBOARD_POR_UID: dict[str, dict[str, Any]] = {
+    arquivo.stem: json.loads(arquivo.read_text(encoding="utf-8"))
+    for arquivo in DASHBOARDS
+}
 ALERTAS = sorted((OBSERVABILIDADE / "grafana").glob("alertas*.yaml"))
 # Onde cada arquivo de alertas e provisionado: alertas.yaml no cluster e no
-# compose; alertas-cluster.yaml so no cluster (depende do Kong).
-ONDE = {"alertas.yaml": "cluster e compose", "alertas-cluster.yaml": "só cluster"}
+# compose; os outros so no cluster (dependem do Kong, do relay e do consumidor,
+# que o compose nao tem; o "Outbox parada" mora a parte para o overlay kind
+# trocar so ele).
+ONDE = {
+    "alertas.yaml": "cluster e compose",
+    "alertas-cluster.yaml": "só cluster",
+    "alertas-outbox-parada.yaml": "só cluster",
+}
 # (arquivo, regra) de todas as regras de alerta.
 REGRAS: list[tuple[str, dict[str, Any]]] = [
     (arquivo.name, regra)
@@ -48,6 +76,8 @@ DEFINITIONS = json.loads(
     )
 )
 FILAS = {fila["name"] for fila in DEFINITIONS["queues"]}
+PROMETHEUS = {"type": "prometheus", "uid": "prometheus"}
+AREAS = ("negocio", "tecnico")
 
 
 def ligadas_a(*exchanges: str) -> set[str]:
@@ -67,45 +97,171 @@ FILTRO_DE_FILA = {
     "Mensagens prontas por fila": TRABALHO,
     "Mensagens em processamento (sem ack)": TRABALHO,
     "Aguardando retry e DLQ": RETRY | DLQ,
+    "Retry por nível (msg/s)": RETRY,
     "pytstop-dlq-com-mensagens": DLQ,
 }
+
+
+def celulas(linha: str) -> list[str]:
+    """As celulas de uma linha de tabela Markdown; a consulta pode levar \\|."""
+    return [c.strip() for c in re.split(r"(?<!\\)\|", linha)[1:-1]]
 
 
 def linhas_de_alerta() -> dict[str, dict[str, str]]:
     """uid -> {coluna: celula} da tabela "Regras de alerta" do README."""
     secao = DOC_CRU.split("\n## Regras de alerta", 1)[1].split("\n## ", 1)[0]
     tabela = [linha for linha in secao.splitlines() if linha.startswith("|")]
-    # Divide so nas barras sem escape: a consulta pode levar \|.
-    celulas = [
-        [c.strip() for c in re.split(r"(?<!\\)\|", linha)[1:-1]] for linha in tabela
-    ]
-    colunas = celulas[0]
-    return {c[0].strip("`"): dict(zip(colunas, c, strict=True)) for c in celulas[2:]}
+    colunas = celulas(tabela[0])
+    return {
+        c[0].strip("`"): dict(zip(colunas, c, strict=True))
+        for c in (celulas(linha) for linha in tabela[2:])
+    }
+
+
+def area(dashboard: dict[str, Any]) -> str:
+    tags: list[str] = dashboard["tags"]
+    (a,) = [tag for tag in tags if tag in AREAS]
+    return a
+
+
+def cabecalho(dashboard: dict[str, Any]) -> str:
+    return f"## Dashboard {dashboard['title']} (`{dashboard['uid']}`)"
+
+
+def tabela_do_dashboard(dashboard: dict[str, Any]) -> dict[int, list[str]]:
+    """id do painel -> celulas da linha dele na secao do dashboard, na doc da area."""
+    doc = DOC_DA_AREA[area(dashboard)]
+    secao = doc.split(f"\n{cabecalho(dashboard)}\n", 1)[1].split("\n## ", 1)[0]
+    linhas = [linha for linha in secao.splitlines() if linha.startswith("|")]
+    return {int(c[0]): c for c in (celulas(linha) for linha in linhas[2:])}
 
 
 def paineis() -> list[Any]:
     return [
-        pytest.param(painel, id=f"{arquivo.stem}-{painel['id']}")
-        for arquivo in DASHBOARDS
-        for painel in json.loads(arquivo.read_text(encoding="utf-8"))["panels"]
+        pytest.param(dashboard, painel, id=f"{uid}-{painel['id']}")
+        for uid, dashboard in DASHBOARD_POR_UID.items()
+        for painel in dashboard["panels"]
     ]
 
 
-@pytest.mark.parametrize("arquivo", DASHBOARDS, ids=lambda p: p.stem)
-def test_dashboard_documentado_com_uid_e_titulo(arquivo: Path) -> None:
-    dashboard = json.loads(arquivo.read_text(encoding="utf-8"))
+def geradores_da_kustomization() -> dict[str, list[str]]:
+    kustomization = yaml.safe_load(
+        (OBSERVABILIDADE / "kustomization.yaml").read_text(encoding="utf-8")
+    )
+    return {
+        gerador["name"]: gerador["files"]
+        for gerador in kustomization["configMapGenerator"]
+    }
 
-    assert f"## Dashboard {dashboard['title']} (`{dashboard['uid']}`)" in DOC
+
+@pytest.mark.parametrize("uid", DASHBOARD_POR_UID)
+def test_dashboard_tem_o_esqueleto_do_adr(uid: str) -> None:
+    dashboard = DASHBOARD_POR_UID[uid]
+    ids = [painel["id"] for painel in dashboard["panels"]]
+
+    assert dashboard["uid"] == uid
+    assert dashboard["schemaVersion"] == 39
+    assert dashboard["editable"] is False
+    assert ARQUIVO_DA_DOC[area(dashboard)] in dashboard["description"]
+    assert "pytstop" in dashboard["tags"]
+    # Um menu com os demais dashboards, por tag.
+    assert [(link["type"], link["tags"]) for link in dashboard["links"]] == [
+        ("dashboards", ["pytstop"])
+    ]
+    assert len(ids) == len(set(ids))
+    for painel in dashboard["panels"]:
+        assert painel["gridPos"]["x"] + painel["gridPos"]["w"] <= 24
+        assert painel["datasource"] == PROMETHEUS
+        assert [alvo["datasource"] for alvo in painel["targets"]] == [PROMETHEUS] * len(
+            painel["targets"]
+        )
 
 
-@pytest.mark.parametrize("painel", paineis())
-def test_painel_tem_descricao_e_esta_na_tabela_com_as_consultas(
-    painel: dict[str, Any],
+@pytest.mark.parametrize("uid", DASHBOARD_POR_UID)
+def test_dashboard_tem_exatamente_uma_das_tags_negocio_ou_tecnico(uid: str) -> None:
+    tags = DASHBOARD_POR_UID[uid]["tags"]
+
+    assert len([tag for tag in tags if tag in AREAS]) == 1
+    # O nome do arquivo segue a tag: os de negocio levam pytstop-negocio-.
+    assert uid.startswith("pytstop-negocio-") == ("negocio" in tags)
+
+
+@pytest.mark.parametrize("uid", DASHBOARD_POR_UID)
+def test_janela_e_atualizacao_de_cada_dashboard(uid: str) -> None:
+    dashboard = DASHBOARD_POR_UID[uid]
+    # Negocio: 7 dias e 1 min (os paineis por dia e o funil olham dias). Tecnicos:
+    # 1 hora e 30 s, e a Saga olha 24 horas.
+    janelas = {"negocio": ("now-7d", "1m"), "tecnico": ("now-1h", "30s")}
+    janela, atualizacao = janelas[area(dashboard)]
+    if uid == "pytstop-saga":
+        janela = "now-24h"
+
+    assert dashboard["time"]["from"] == janela
+    assert dashboard["refresh"] == atualizacao
+
+
+@pytest.mark.parametrize("uid", DASHBOARD_POR_UID)
+def test_dashboard_esta_na_doc_da_sua_area_e_so_nela(uid: str) -> None:
+    dashboard = DASHBOARD_POR_UID[uid]
+    outra = next(a for a in AREAS if a != area(dashboard))
+
+    assert cabecalho(dashboard) in DOC_DA_AREA[area(dashboard)]
+    assert cabecalho(dashboard) not in DOC_DA_AREA[outra]
+    # A tabela lista os paineis do JSON, nem a mais nem a menos.
+    assert set(tabela_do_dashboard(dashboard)) == {
+        painel["id"] for painel in dashboard["panels"]
+    }
+
+
+@pytest.mark.parametrize(("dashboard", "painel"), paineis())
+def test_description_do_painel_e_o_como_ler_da_doc_e_as_consultas_estao_nela(
+    dashboard: dict[str, Any], painel: dict[str, Any]
 ) -> None:
+    linha = tabela_do_dashboard(dashboard)[painel["id"]]
+    como_ler = linha[-1].replace("\\|", "|")
+    consultas = linha[-2].replace("\\|", "|")
+
     assert painel["description"].strip()
-    assert f"| {painel['id']} | {painel['title']} |" in DOC
+    assert linha[1] == painel["title"]
+    assert como_ler == painel["description"]
     for alvo in painel["targets"]:
-        assert f"`{alvo['expr']}`" in DOC, alvo["expr"]
+        assert f"`{alvo['expr']}`" in consultas, alvo["expr"]
+
+
+def test_dashboard_de_atendimento_tem_os_paineis_que_a_banca_pediu() -> None:
+    titulos = {
+        painel["title"]
+        for painel in DASHBOARD_POR_UID["pytstop-negocio-atendimento"]["panels"]
+    }
+
+    assert {"Volume diário de OS", "Tempo médio por status"} <= titulos
+
+
+@pytest.mark.parametrize(
+    ("uid", "titulo"),
+    [
+        ("pytstop-negocio-atendimento", "Volume diário de OS"),
+        ("pytstop-negocio-pagamentos", "Faturamento por dia"),
+    ],
+)
+def test_painel_por_dia_arredonda_o_increase_e_usa_passo_de_um_dia(
+    uid: str, titulo: str
+) -> None:
+    # increase() extrapola as bordas da janela e devolve fracao: o painel por dia
+    # arredonda, com o passo minimo de 1d (dias em UTC).
+    (painel,) = [p for p in DASHBOARD_POR_UID[uid]["panels"] if p["title"] == titulo]
+    (alvo,) = painel["targets"]
+
+    assert alvo["expr"].startswith("round(sum(increase(")
+    assert "[1d]" in alvo["expr"]
+    assert alvo["interval"] == "1d"
+    assert DASHBOARD_POR_UID[uid]["timezone"] == "utc"
+
+
+def test_configmap_dos_dashboards_lista_todos_os_json() -> None:
+    arquivos = geradores_da_kustomization()["grafana-dashboards"]
+
+    assert sorted(arquivos) == sorted(f"dashboards/{a.name}" for a in DASHBOARDS)
 
 
 @pytest.mark.parametrize("regra", [regra for _, regra in REGRAS], ids=IDS_DAS_REGRAS)
@@ -129,9 +285,9 @@ def test_tabela_de_alertas_diz_o_que_a_regra_faz(
 
 
 def test_saga_parada_dispara_acima_de_zero_depois_de_5_min() -> None:
-    # O scripts/alerta-saga-parada.sh le o limiar e a janela do proprio arquivo e
-    # so modela o tipo gt; este teste prende a forma da regra e o valor que a
-    # tabela do README e o runbook dizem (acima de 0, 5 min).
+    # O scripts/alertas-promtool.sh le o limiar, o tipo e a janela do proprio
+    # arquivo e so modela gt e lt; este teste prende a forma da regra e o valor
+    # que a tabela do README e o runbook dizem (acima de 0, 5 min).
     regra = next(r for _, r in REGRAS if r["uid"] == "pytstop-saga-parada")
     (limiar,) = [d["model"] for d in regra["data"] if d["refId"] == "C"]
 
@@ -147,13 +303,7 @@ def test_tabela_de_alertas_nao_tem_regra_que_nenhum_arquivo_define() -> None:
 
 
 def test_grafana_do_cluster_monta_todos_os_alertas_e_o_compose_so_os_comuns() -> None:
-    kustomization = yaml.safe_load(
-        (OBSERVABILIDADE / "kustomization.yaml").read_text(encoding="utf-8")
-    )
-    arquivos = {
-        gerador["name"]: gerador["files"]
-        for gerador in kustomization["configMapGenerator"]
-    }
+    arquivos = geradores_da_kustomization()
     compose = yaml.safe_load(
         (RAIZ / "compose" / "docker-compose.yml").read_text(encoding="utf-8")
     )
@@ -164,22 +314,199 @@ def test_grafana_do_cluster_monta_todos_os_alertas_e_o_compose_so_os_comuns() ->
     ]
     assert "grafana/alertas.yaml:" in montados
     assert "alertas-cluster" not in montados
+    assert "alertas-outbox-parada" not in montados
+    # O compose monta a pasta inteira dos dashboards.
+    assert "../observabilidade/dashboards:/var/lib/grafana/dashboards" in montados
 
+
+# ---------------------------------------------------------------------------
+# Catalogo de metricas: toda consulta usa so metrica e label que a doc lista.
+
+# Funcoes, agregacoes, operadores e palavras-chave do PromQL.
+FUNCOES_E_OPERADORES = frozenset(
+    """
+    abs absent absent_over_time and avg avg_over_time bool bottomk ceil changes
+    clamp clamp_max clamp_min count count_over_time count_values day_of_month
+    day_of_week day_of_year days_in_month delta deriv exp floor group
+    histogram_quantile hour idelta increase inf irate label_join label_replace
+    last_over_time ln log10 log2 max max_over_time min min_over_time minute month
+    nan offset or predict_linear present_over_time quantile quantile_over_time
+    rate resets round scalar sgn sort sort_desc sqrt stddev stddev_over_time
+    stdvar sum sum_over_time time timestamp topk unless vector year
+    """.split()  # noqa: SIM905  # lista longa: um nome por linha nao ajuda a ler
+)
+SUFIXOS_DE_HISTOGRAMA = ("_bucket", "_sum", "_count")
+# Labels que o Prometheus poe em todo alvo (relabel_configs) e o le do bucket.
+LABELS_COMUNS = frozenset({"job", "app", "processo", "namespace", "pod", "instance"})
+LITERAIS = re.compile(r"\"(?:\\.|[^\"\\])*\"|'(?:\\.|[^'\\])*'|`[^`]*`")
+AGRUPAMENTO = re.compile(
+    r"\b(?:by|without|on|ignoring|group_left|group_right)\s*\(([^)]*)\)"
+)
+SELETOR = re.compile(r"([A-Za-z_:][\w:]*)\s*\{([^{}]*)\}")
+# Os quatro ultimos argumentos do label_replace: "destino", "troca", "origem", "regex".
+LABEL_REPLACE = re.compile(r',\s*"(\w+)"\s*,\s*"[^"]*"\s*,\s*"\w+"\s*,\s*"[^"]*"\s*\)')
+
+
+@dataclass(frozen=True)
+class Analise:
+    metricas: frozenset[str]
+    # (nome antes da chave, labels dos matchers)
+    seletores: tuple[tuple[str, frozenset[str]], ...]
+    agrupamentos: frozenset[str]
+    criados: frozenset[str]
+
+
+def analisar(expr: str) -> Analise:
+    """Os identificadores de uma consulta PromQL, sem strings, funcoes e numeros."""
+    criados = frozenset(LABEL_REPLACE.findall(expr))
+    resto = LITERAIS.sub('""', expr)
+    seletores = tuple(
+        (nome, frozenset(re.findall(r"(\w+)\s*(?:=~|!~|!=|=)", corpo)))
+        for nome, corpo in SELETOR.findall(resto)
+    )
+    agrupamentos = frozenset(
+        rotulo.strip()
+        for corpo in AGRUPAMENTO.findall(resto)
+        for rotulo in corpo.split(",")
+        if rotulo.strip()
+    )
+    for removivel in (
+        r"\{[^{}]*\}",
+        r"\[[^\]]*\]",
+        AGRUPAMENTO.pattern,
+        r"\b\d\w*(?:\.\d+)?",
+    ):
+        resto = re.sub(removivel, "", resto)
+    identificadores = frozenset(re.findall(r"[A-Za-z_:][A-Za-z0-9_:]*", resto))
+    return Analise(
+        identificadores - FUNCOES_E_OPERADORES, seletores, agrupamentos, criados
+    )
+
+
+def catalogo() -> dict[str, tuple[str, frozenset[str]]]:
+    """nome da metrica -> (tipo, labels) da tabela "Catalogo de metricas" do README."""
+    secao = DOC_CRU.split("\n## Catálogo de métricas", 1)[1].split("\n## ", 1)[0]
+    linhas = [celulas(c) for c in secao.splitlines() if c.startswith("|")]
+    resultado: dict[str, tuple[str, frozenset[str]]] = {}
+    for coluna in linhas[2:]:
+        # Nome entre crases; o que vem entre parenteses nos labels sao valores.
+        labels = frozenset(re.findall(r"`(\w+)`", re.sub(r"\([^)]*\)", "", coluna[2])))
+        for nome in re.findall(r"`(\w+)`", coluna[0]):
+            resultado[nome] = (coluna[1], labels)
+    return resultado
+
+
+CATALOGO = catalogo()
+
+
+def metrica_do_catalogo(identificador: str) -> str | None:
+    """O nome no catalogo: o proprio, ou o do histograma de uma serie _bucket/_sum."""
+    if identificador in CATALOGO:
+        return identificador
+    base = identificador.rsplit("_", 1)[0]
+    if identificador.endswith(SUFIXOS_DE_HISTOGRAMA) and base in CATALOGO:
+        return base if CATALOGO[base][0].startswith("histograma") else None
+    return None
+
+
+def violacoes_do_catalogo(expr: str) -> list[str]:
+    analise = analisar(expr)
+    achados = []
+    nomes = {i: metrica_do_catalogo(i) for i in analise.metricas}
+    achados += [f"metrica fora do catalogo: {i}" for i, n in nomes.items() if n is None]
+    labels_das_metricas = frozenset().union(
+        *(CATALOGO[n][1] for n in nomes.values() if n is not None)
+    )
+    for nome, rotulos in analise.seletores:
+        base = metrica_do_catalogo(nome)
+        permitidos = (CATALOGO[base][1] if base else frozenset()) | LABELS_COMUNS
+        achados += [
+            f"label {r} nao existe em {nome}" for r in sorted(rotulos - permitidos)
+        ]
+    conhecidos = labels_das_metricas | LABELS_COMUNS | analise.criados | {"le"}
+    achados += [
+        f"agrupa por {r}, que nenhuma metrica da consulta tem"
+        for r in sorted(analise.agrupamentos - conhecidos)
+    ]
+    return achados
+
+
+def consultas() -> list[tuple[str, str]]:
+    """(titulo do painel ou uid da regra, consulta) de todo painel e todo alerta."""
+    return [
+        (painel["title"], alvo["expr"])
+        for dashboard in DASHBOARD_POR_UID.values()
+        for painel in dashboard["panels"]
+        for alvo in painel["targets"]
+    ] + [
+        (regra["uid"], dado["model"]["expr"])
+        for _, regra in REGRAS
+        for dado in regra["data"]
+        if "expr" in dado["model"]
+    ]
+
+
+CONSULTAS = consultas()
+
+
+@pytest.mark.parametrize(
+    ("nome", "expr"), CONSULTAS, ids=[f"{i}-{n}" for i, (n, _) in enumerate(CONSULTAS)]
+)
+def test_consulta_so_usa_metrica_e_label_do_catalogo(nome: str, expr: str) -> None:
+    assert violacoes_do_catalogo(expr) == [], nome
+
+
+def test_analise_ignora_literais_funcoes_agrupamentos_e_numeros() -> None:
+    analise = analisar(
+        "topk(10, sum by (le, nivel) (label_replace("
+        'rate(a_bucket{queue=~"b_total", c!="d"}[5m]), '
+        '"nivel", "$1", "queue", "e_total")) / 100 > bool 0.5) or vector(0)'
+    )
+
+    assert analise.metricas == {"a_bucket"}
+    assert analise.seletores == (("a_bucket", frozenset({"queue", "c"})),)
+    assert analise.agrupamentos == {"le", "nivel"}
+    assert analise.criados == {"nivel"}
+
+
+@pytest.mark.parametrize(
+    ("expr", "achado"),
+    [
+        (
+            "sum(pytstop_inventada_total)",
+            "metrica fora do catalogo: pytstop_inventada_total",
+        ),
+        # Sufixo de histograma so vale em histograma.
+        ("rate(outbox_dead_count[5m])", "metrica fora do catalogo: outbox_dead_count"),
+        ('up{rota="x"}', "label rota nao existe em up"),
+        (
+            "sum by (tipo) (pytstop_os_criadas_total)",
+            "agrupa por tipo, que nenhuma metrica da consulta tem",
+        ),
+    ],
+)
+def test_analise_do_catalogo_reprova_nome_label_e_agrupamento_inventados(
+    expr: str, achado: str
+) -> None:
+    assert achado in violacoes_do_catalogo(expr)
+
+
+def test_catalogo_conhece_o_tipo_e_os_labels_de_um_histograma() -> None:
+    tipo, labels = CATALOGO["http_request_duration_seconds"]
+
+    assert tipo.startswith("histograma")
+    assert labels == {"method", "rota", "status"}
+    assert metrica_do_catalogo("http_request_duration_seconds_bucket") == (
+        "http_request_duration_seconds"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Filtros por fila contra a topologia do RabbitMQ.
 
 # Matcher de regex no label queue, com ou sem espaco e com qualquer aspa do
 # PromQL.
 FILTRO_REGEX_DE_FILA = re.compile(r"""queue\s*(=~|!~)\s*["'`]([^"'`]*)["'`]""")
-CONSULTAS: list[tuple[str, str]] = [
-    (painel["title"], alvo["expr"])
-    for arquivo in DASHBOARDS
-    for painel in json.loads(arquivo.read_text(encoding="utf-8"))["panels"]
-    for alvo in painel["targets"]
-] + [
-    (regra["uid"], dado["model"]["expr"])
-    for _, regra in REGRAS
-    for dado in regra["data"]
-    if "expr" in dado["model"]
-]
 COM_FILTRO_DE_FILA = [
     (nome, expr) for nome, expr in CONSULTAS if FILTRO_REGEX_DE_FILA.search(expr)
 ]
@@ -206,6 +533,10 @@ def test_filtro_de_fila_seleciona_o_grupo_certo_da_topologia(
 
     assert outros == []
     assert (casam if operador == "=~" else FILAS - casam) == FILTRO_DE_FILA[nome]
+
+
+# ---------------------------------------------------------------------------
+# Kustomize: retencao do Prometheus.
 
 
 @functools.cache

@@ -27,3 +27,11 @@ configMapGenerator:
   - name: grafana-dashboards
     files:
       - dashboards/pytstop-plataforma.json
+      - dashboards/pytstop-saga.json
+      - dashboards/pytstop-mensageria.json
+      - dashboards/pytstop-servicos.json
+      - dashboards/pytstop-bancos.json
+      - dashboards/pytstop-negocio-atendimento.json
+      - dashboards/pytstop-negocio-orcamentos.json
+      - dashboards/pytstop-negocio-pagamentos.json
+      - dashboards/pytstop-negocio-execucao.json
