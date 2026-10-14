@@ -242,18 +242,26 @@ Para comparar, o [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes
 | `kubectl top node` em repouso | 3.147 MiB (22%), 299 m | 3.362 MiB (24%), 351 m |
 | `memory.peak` do cgroup do nó (conta o cache de arquivos, que o kernel devolve sob pressão) | 5.476 MiB | 6.738 MiB |
 
-Para comparar, o ADR-042 mediu, só com a plataforma e no runner, working set de até 1,5 GiB e pico de 3,5 GiB no cgroup. Aqui, com os três serviços e em arm64 local, o working set subiu 1,6 GiB (para 3,1) e o pico, 1,9 GiB (para 5,35). Os 13 pods dos serviços somam 0,84 GiB, a plataforma 0,53 GiB e o control plane cerca de 0,5 GiB, no `kubectl top`: 1,9 GiB no total. O resto do working set do nó, cerca de 1,1 GiB, não é de pod; a `memory.stat` do nó, lida na primeira execução, divide o working set assim:
+Para comparar com o ADR-042, que mediu só a plataforma, no runner:
 
-| Parcela da `memory.stat` do nó (90 s depois do smoke dos serviços) | MiB |
+- working set: 1,5 GiB no ADR e 3,1 GiB aqui, 1,6 GiB a mais com os três serviços (e em arm64 local);
+- pico de cgroup: 3,5 GiB no ADR e 5,35 GiB aqui, 1,8 GiB a mais (5.476 MiB menos 3.584 MiB).
+
+Na primeira execução, o `kubectl top` soma os pods em 1.908 MiB (1,9 GiB): 864 MiB dos 13 pods de serviço, 543 MiB da plataforma e cerca de 501 MiB do control plane. A `memory.stat` do nó, lida na primeira execução 90 s depois do smoke dos serviços, deu 3.019 MiB de working set (o `kubectl top node` deu 3.147 MiB no mesmo momento). Sobram então cerca de 1.111 MiB (1,1 GiB) que não são de pod. A `memory.stat` divide o working set assim:
+
+| Parcela da `memory.stat` do nó | MiB |
 |---|---|
 | `memory.current` | 5.317 |
 | menos `inactive_file`, o cache que o kubelet não conta | 2.298 |
-| igual ao working set | 3.019 |
+| igual ao working set, na leitura da `memory.stat` | 3.019 |
 | dele, `anon` (memória anônima: pods, containerd, kubelet) | 2.078 |
 | dele, `active_file` (cache de arquivos usado há pouco) | 570 |
-| dele, outros (kernel, slab, memória compartilhada) | 371 |
+| dele, o resto, que a leitura não separa por parcela | 371 |
 
-A memória anônima do nó passa em cerca de 170 MiB a soma dos pods (conta aproximada, porque o `kubectl top` dos pods inclui parte do cache), o que cabe aos processos do nó fora deles, como o containerd e o kubelet; o cache ativo e o restante respondem pelo resto. O ensaio não mediu o cache por consumidor, então não diz quanto dele é das imagens e dos dados dos bancos. No momento da leitura, o `memory.current` de 5,2 GiB tinha 2,2 GiB de cache inativo, que o kernel devolve sob pressão; o pico de 5,35 GiB não foi decomposto. Nos 16 GB do `ubuntu-24.04` o nó cabe com folga nos dois overlays, mas a comparação com o ADR mistura arm64 local e amd64 do runner.
+- A memória anônima do nó passa em cerca de 170 MiB a soma dos pods. A conta é aproximada, porque o `kubectl top` dos pods inclui parte do cache; a diferença cabe aos processos do nó fora dos pods, como o containerd e o kubelet.
+- O cache ativo (570 MiB) e o resto (371 MiB) respondem pelo restante. O ensaio não mediu o cache por consumidor, então não diz quanto dele é das imagens e dos dados dos bancos.
+- No momento da leitura, o `memory.current` de 5,2 GiB tinha 2,2 GiB de cache inativo, que o kernel devolve sob pressão; o pico de 5,35 GiB não foi decomposto.
+- Nos 16 GB do `ubuntu-24.04` o nó cabe com folga nos dois overlays, mas a comparação com o ADR mistura arm64 local e amd64 do runner.
 
 ### Por pod
 
