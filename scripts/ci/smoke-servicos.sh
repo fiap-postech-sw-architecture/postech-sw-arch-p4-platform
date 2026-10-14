@@ -3,9 +3,10 @@
 # por namespace: o Job de inicializacao completo; os Deployments e o banco com
 # todas as replicas prontas e atualizadas; pela borda, a saude em 200 (ate 1
 # min), o Swagger (/docs e /openapi.json) em 200 e o /metrics e o
-# /api/v1/admin/* em 404; cada pod anotado com up = 1 no Prometheus e o
-# exporter do banco com pg_up (PostgreSQL) ou mongodb_up (MongoDB) em 1, as
-# duas esperas juntas por ate 45 s; no PostgreSQL, o 127.0.0.1 do pod do banco
+# /api/v1/admin/* em 404 com o corpo do Kong (o Ingress fora-da-borda); cada
+# pod anotado com up = 1 no Prometheus e o exporter do banco com pg_up
+# (PostgreSQL) ou mongodb_up (MongoDB) em 1, as duas esperas juntas por ate
+# 45 s; no PostgreSQL, o 127.0.0.1 do pod do banco
 # pedindo senha (sem trust); e a NetworkPolicy barrando o banco a quem vem de
 # outro namespace, numa conexao do rabbitmq-0 da plataforma que tem de esgotar
 # o prazo (recusa ou nome que nao resolve nao provam a regra), depois de uma
@@ -25,6 +26,9 @@ K="kubectl --context ${KUBE_CONTEXT:-kind-$CLUSTER} --request-timeout=20s"
 BORDA="${BORDA:-https://localhost}"
 PLATAFORMA=pytstop-plataforma
 INICIALIZACAO=app.kubernetes.io/component=inicializacao
+# Corpo que o plugin request-termination do fora-da-borda devolve (message em
+# k8s/base/kong/plugins.yaml; o teste confere os dois).
+MENSAGEM_DO_KONG="no Route matched with those values"
 # Esperas, em segundos, e o intervalo entre as tentativas de cada uma.
 ESPERA_SAUDE=60
 INTERVALO_SAUDE=2
@@ -81,6 +85,26 @@ borda() {
   local obtido
   obtido=$(status "$2" 10)
   registra "$1" "GET $2" "$obtido" "$([ "$obtido" = "$3" ] && echo sim)"
+}
+
+# cortada <servico> <caminho>: um GET pela borda que o Ingress fora-da-borda
+# barra, com 404 e o corpo do Kong. O status sozinho nao prova o corte do
+# /api/v1/admin/outbox: nenhum dos tres servicos tem essa rota, e o proprio
+# servico tambem responderia 404, com o corpo dele. O corpo e o do plugin.
+cortada() {
+  local resposta obtido corpo detalhe ok=nao
+  resposta=$(curl -s ${tls:+"$tls"} --max-time 10 -w '\n%{http_code}' "$BORDA$2" || true)
+  obtido=${resposta##*$'\n'}
+  corpo=${resposta%$'\n'*}
+  if [ "$obtido" != 404 ]; then
+    detalhe=$obtido
+  elif [[ "$corpo" == *"$MENSAGEM_DO_KONG"* ]]; then
+    detalhe="404 (Kong fora-da-borda)"
+    ok=sim
+  else
+    detalhe="404 without the Kong fora-da-borda body"
+  fi
+  registra "$1" "GET $2" "$detalhe" "$ok"
 }
 
 # serie <metrica> <namespace>: "<pod> <valor>" de cada pod do namespace com a
@@ -140,11 +164,11 @@ for nome in "$@"; do
   done
   registra "$nome" "GET $prefixo/api/v1/saude" "$obtido" "$([ "$obtido" = 200 ] && echo sim)"
   # Rotas que o Ingress fora-da-borda responde com 404 sem chamar o servico
-  # (um 404 do Kong sem rota seria igual: o admin/outbox existe no servico e
-  # responderia 401 ou 403), e o Swagger, que so sai pela borda com o
-  # --root-path do servico certo.
-  borda "$nome" "$prefixo/metrics" 404
-  borda "$nome" "$prefixo/api/v1/admin/outbox" 404
+  # (o admin/outbox nao existe em nenhum servico, que tambem responderia 404:
+  # so o corpo distingue o corte do Kong), e o Swagger, que so sai pela borda
+  # com o --root-path do servico certo.
+  cortada "$nome" "$prefixo/metrics"
+  cortada "$nome" "$prefixo/api/v1/admin/outbox"
   borda "$nome" "$prefixo/docs" 200
   borda "$nome" "$prefixo/openapi.json" 200
 

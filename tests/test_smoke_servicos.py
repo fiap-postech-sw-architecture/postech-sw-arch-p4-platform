@@ -28,11 +28,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import pytest
+import yaml
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "ci" / "smoke-servicos.sh"
+RAIZ = Path(__file__).resolve().parents[1]
+SCRIPT = RAIZ / "scripts" / "ci" / "smoke-servicos.sh"
+PLUGINS_DO_KONG = RAIZ / "k8s" / "base" / "kong" / "plugins.yaml"
 SERVICOS = {
     "os-service": ("pytstop-os", "/os", "os-postgres", "5432"),
     "billing-service": ("pytstop-billing", "/billing", "billing-mongo", "27017"),
@@ -44,6 +47,9 @@ CONEXAO = {
     "billing-service": "mongodb_up",
     "execution-service": "pg_up",
 }
+# O corpo que o request-termination do fora-da-borda devolve (message em
+# k8s/base/kong/plugins.yaml).
+CORPO_DO_KONG = '{"message":"no Route matched with those values"}'
 MENSAGEM_SEM_SENHA = (
     'psql: error: connection to server at "127.0.0.1", port 5432 failed: '
     "fe_sendauth: no password supplied"
@@ -112,12 +118,16 @@ def cluster_saudavel() -> dict[str, Any]:
         ns: namespace_saudavel(servico) for servico, (ns, *_) in SERVICOS.items()
     }
     estado["curl"] = {}
+    estado["corpo"] = {}
     for _, prefixo, _, _ in SERVICOS.values():
         estado["curl"][f"{prefixo}/api/v1/saude"] = "200"
         estado["curl"][f"{prefixo}/metrics"] = "404"
         estado["curl"][f"{prefixo}/api/v1/admin/outbox"] = "404"
         estado["curl"][f"{prefixo}/docs"] = "200"
         estado["curl"][f"{prefixo}/openapi.json"] = "200"
+        # So o Kong do fora-da-borda responde com este corpo.
+        estado["corpo"][f"{prefixo}/metrics"] = CORPO_DO_KONG
+        estado["corpo"][f"{prefixo}/api/v1/admin/outbox"] = CORPO_DO_KONG
     return estado
 
 
@@ -263,7 +273,14 @@ if isinstance(resposta, list):
     n = int(contador.read_text()) if contador.exists() else 0
     contador.write_text(str(n + 1))
     resposta = resposta[min(n, len(resposta) - 1)]
-print(resposta, end="")
+# O script pede "\n%{http_code}" (a barra e o n chegam literais): corpo, quebra
+# de linha e codigo, como o curl imprime.
+if args[args.index("-w") + 1] == "\\n%{http_code}":
+    # Com -o o curl grava o corpo no arquivo e nao o imprime.
+    print("" if "-o" in args else estado.get("corpo", {}).get(caminho, ""), end="")
+    print("\n" + resposta, end="")
+else:
+    print(resposta, end="")
 """
 
 # O relogio falso: o sleep registra o argumento e adianta o relogio (sem
@@ -389,8 +406,12 @@ def linhas_saudaveis(servico: str) -> list[tuple[str, str, str]]:
         ),
         (servico, "rollouts", "ok: 3 ready"),
         (servico, f"GET {prefixo}/api/v1/saude", "ok: 200"),
-        (servico, f"GET {prefixo}/metrics", "ok: 404"),
-        (servico, f"GET {prefixo}/api/v1/admin/outbox", "ok: 404"),
+        (servico, f"GET {prefixo}/metrics", "ok: 404 (Kong fora-da-borda)"),
+        (
+            servico,
+            f"GET {prefixo}/api/v1/admin/outbox",
+            "ok: 404 (Kong fora-da-borda)",
+        ),
         (servico, f"GET {prefixo}/docs", "ok: 200"),
         (servico, f"GET {prefixo}/openapi.json", "ok: 200"),
         (servico, "up = 1 in Prometheus", "ok: 3 pods"),
@@ -745,6 +766,69 @@ def test_borda_com_status_diferente_do_esperado_reprova_so_aquele_get(
     assert smoke.reprovadas() == [
         ("billing-service", f"GET {caminho}", f"FAILED: {obtido}")
     ]
+
+
+CORTADAS = ["/billing/metrics", "/billing/api/v1/admin/outbox"]
+
+
+@pytest.mark.parametrize("caminho", CORTADAS)
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        # O 404 do proprio servico (o admin/outbox nao existe em nenhum dos tres
+        # e o servico tambem responderia 404): status igual, corpo diferente.
+        '{"detail":"Not Found"}',
+        '{"erro":{"codigo":"ENTIDADE_NAO_ENCONTRADA"}}',
+        "",
+        # Pedaco da mensagem nao basta.
+        '{"message":"no Route matched"}',
+    ],
+    ids=["fastapi", "envelope", "vazio", "pedaco"],
+)
+def test_404_sem_o_corpo_do_kong_reprova_porque_nao_prova_o_corte_da_borda(
+    smoke: Smoke, caminho: str, corpo: str
+) -> None:
+    estado = cluster_saudavel()
+    estado["corpo"][caminho] = corpo
+
+    processo = smoke.roda(estado)
+
+    assert processo.returncode == 1
+    assert smoke.reprovadas() == [
+        (
+            "billing-service",
+            f"GET {caminho}",
+            "FAILED: 404 without the Kong fora-da-borda body",
+        )
+    ]
+
+
+def test_corpo_do_kong_com_status_diferente_de_404_reprova(smoke: Smoke) -> None:
+    # O corpo vem de qualquer resposta que o Kong de a esta rota; o que vale e
+    # o status junto.
+    estado = cluster_saudavel()
+    estado["curl"]["/billing/metrics"] = "200"
+
+    processo = smoke.roda(estado)
+
+    assert processo.returncode == 1
+    assert smoke.reprovadas() == [
+        ("billing-service", "GET /billing/metrics", "FAILED: 200")
+    ]
+
+
+def test_a_mensagem_do_script_e_a_do_plugin_fora_da_borda() -> None:
+    plugins = [
+        doc
+        for doc in yaml.safe_load_all(PLUGINS_DO_KONG.read_text(encoding="utf-8"))
+        if doc and doc["metadata"]["name"] == "fora-da-borda"
+    ]
+    (fora_da_borda,) = plugins
+    mensagem = fora_da_borda["config"]["message"]
+
+    assert fora_da_borda["config"]["status_code"] == 404
+    assert f'MENSAGEM_DO_KONG="{mensagem}"' in SCRIPT.read_text(encoding="utf-8")
+    assert json.loads(CORPO_DO_KONG) == {"message": mensagem}
 
 
 def test_erro_do_cluster_vira_failed_e_o_smoke_segue(smoke: Smoke) -> None:
