@@ -9,6 +9,7 @@ import httpx
 import pytest
 
 from e2e.apoio.http import (
+    PISO_DA_ESPERA_429,
     Cliente,
     RespostaInesperadaError,
     verificar_tls,
@@ -170,13 +171,40 @@ def test_pedir_429_desiste_quando_a_janela_acaba(relogio: Relogio) -> None:
 @pytest.mark.parametrize(
     ("url", "verifica"),
     [
-        ("https://localhost", False),
-        ("https://127.0.0.1:8443", False),
-        ("https://[::1]", False),
-        ("https://localhost.evil.example", True),
-        ("https://exemplo.com.br", True),
-        ("https://10.0.0.5", True),
+        pytest.param("https://localhost", False, id="localhost"),
+        pytest.param("https://127.0.0.1:8443", False, id="loopback-ipv4"),
+        pytest.param("https://[::1]", False, id="loopback-ipv6"),
+        pytest.param("https://localhost.evil.example", True, id="host-parecido"),
+        pytest.param("https://exemplo.com.br", True, id="dominio"),
+        pytest.param("https://10.0.0.5", True, id="ip-privado"),
     ],
 )
 def test_verificar_tls_so_dispensa_para_localhost(url: str, verifica: bool) -> None:
     assert verificar_tls(url) is verifica
+
+
+@pytest.mark.parametrize("retry_after", ["0", "-5"])
+def test_pedir_429_retry_after_zero_ou_negativo_tem_piso_de_espera(
+    relogio: Relogio, retry_after: str
+) -> None:
+    respostas = iter(
+        [httpx.Response(429, headers={"retry-after": retry_after}), httpx.Response(200)]
+    )
+
+    _cliente(lambda _: next(respostas), relogio).pedir("GET", "/x", esperado=[200])
+
+    assert relogio.dormidas == [PISO_DA_ESPERA_429]
+
+
+def test_descrever_mascara_o_corpo_inteiro_antes_de_cortar(relogio: Relogio) -> None:
+    jwt = "eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJh"
+    corpo = "x" * 380 + jwt  # o corte em 400 caracteres cairia no meio do JWT
+
+    def tratador(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(500, text=corpo)
+
+    with pytest.raises(RespostaInesperadaError) as erro:
+        _cliente(tratador, relogio).pedir("GET", "/x", esperado=[200])
+
+    assert "eyJ" not in str(erro.value)
+    assert "***" in str(erro.value)

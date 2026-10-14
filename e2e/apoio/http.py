@@ -21,6 +21,8 @@ if TYPE_CHECKING:
 
 HOSTS_SEM_VERIFICACAO: Final = frozenset({"localhost", "127.0.0.1", "::1"})
 _TAMANHO_DO_CORPO_NO_ERRO: Final = 400
+# Retry-After 0 (ou negativo) nao pode virar um laco sem pausa contra o Kong.
+PISO_DA_ESPERA_429: Final = 1.0
 
 
 class RespostaInesperadaError(AssertionError):
@@ -93,7 +95,7 @@ class Cliente:
 def _espera_pedida(resposta: httpx.Response, padrao: float) -> float:
     """Segundos do ``Retry-After``, ou ``padrao`` se nao ha (ou nao e numero)."""
     try:
-        return max(float(resposta.headers["retry-after"]), 0.0)
+        return max(float(resposta.headers["retry-after"]), PISO_DA_ESPERA_429)
     except (KeyError, ValueError):
         return padrao
 
@@ -102,7 +104,8 @@ def descrever(
     metodo: str, caminho: str, resposta: httpx.Response, esperado: Iterable[int]
 ) -> str:
     """Erro com status, ``X-Request-ID`` e o inicio do corpo, tudo mascarado."""
-    corpo = resposta.text[:_TAMANHO_DO_CORPO_NO_ERRO]
+    # Mascara o corpo inteiro e so entao corta: um JWT cortado ao meio escaparia.
+    corpo = mascarar(resposta.text)[:_TAMANHO_DO_CORPO_NO_ERRO]
     pedido = resposta.headers.get("x-request-id", "-")
     texto = (
         f"{metodo} {caminho}: HTTP {resposta.status_code} (esperado "

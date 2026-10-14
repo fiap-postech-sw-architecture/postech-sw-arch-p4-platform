@@ -15,10 +15,28 @@ def test_mascarar_troca_segredo_registrado() -> None:
     assert segredos.mascarar("senha=abcdef123456 fim") == "senha=*** fim"
 
 
-def test_mascarar_valor_curto_nao_e_registrado() -> None:
-    segredos.registrar("abc")
+@pytest.mark.parametrize(
+    ("valor", "mascarado"),
+    [
+        pytest.param("abc", False, id="3-caracteres"),
+        pytest.param("abcde", False, id="5-caracteres"),
+        pytest.param("abcdef", True, id="6-caracteres"),
+        pytest.param("abcdefg", True, id="7-caracteres"),
+    ],
+)
+def test_mascarar_so_registra_valor_de_6_caracteres_ou_mais(
+    valor: str, mascarado: bool
+) -> None:
+    segredos.registrar(valor)
 
-    assert segredos.mascarar("abc abc") == "abc abc"
+    esperado = "x *** x" if mascarado else f"x {valor} x"
+    assert segredos.mascarar(f"x {valor} x") == esperado
+
+
+def test_mascarar_linha_curta_de_segredo_de_varias_linhas_fica_de_fora() -> None:
+    segredos.registrar("abcde\nabcdef")
+
+    assert segredos.mascarar("abcde abcdef") == "abcde ***"
 
 
 def test_mascarar_o_maior_segredo_primeiro() -> None:
@@ -39,25 +57,50 @@ def test_mascarar_segredo_de_varias_linhas_mascara_cada_linha() -> None:
 @pytest.mark.parametrize(
     ("entrada", "esperado"),
     [
-        (
+        pytest.param(
             "https://localhost/billing/api/v1/publico/orcamentos/abc.123.XYZ-_/decisao",
             "https://localhost/billing/api/v1/publico/orcamentos/***/decisao",
+            id="link-de-decisao-no-meio",
         ),
-        (
+        pytest.param(
             "POST /billing/api/v1/publico/orcamentos/tok.en-1_2",
             "POST /billing/api/v1/publico/orcamentos/***",
+            id="link-de-decisao-no-fim",
         ),
-        (
+        pytest.param(
             "https://localhost/billing/simulador/checkout/84ea5cc1?token=abc123&x=1",
             "https://localhost/billing/simulador/checkout/84ea5cc1?token=***&x=1",
+            id="checkout",
         ),
-        ("/aprovar?token=segredo", "/aprovar?token=***"),
-        ("Authorization: Bearer abc.def-ghi", "Authorization: Bearer ***"),
-        (
+        pytest.param(
+            "/aprovar?token=segredo", "/aprovar?token=***", id="token-na-query"
+        ),
+        pytest.param(
+            "/aprovar?a=1&token=segredo",
+            "/aprovar?a=1&token=***",
+            id="token-apos-outro",
+        ),
+        pytest.param(
+            "Authorization: Bearer abc.def-ghi",
+            "Authorization: Bearer ***",
+            id="bearer",
+        ),
+        pytest.param(
+            "authorization: bearer abc.def-ghi",
+            "authorization: bearer ***",
+            id="bearer-minusculo",
+        ),
+        pytest.param(
             "token eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0.c2ln fim",
             "token *** fim",
+            id="jwt",
         ),
-        ("sem credencial nenhuma", "sem credencial nenhuma"),
+        pytest.param(
+            "token eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiIxIn0. fim",
+            "token *** fim",
+            id="jwt-sem-assinatura",
+        ),
+        pytest.param("sem credencial nenhuma", "sem credencial nenhuma", id="nada"),
     ],
 )
 def test_mascarar_padroes_de_credencial(entrada: str, esperado: str) -> None:

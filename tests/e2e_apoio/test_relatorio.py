@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+import pytest
+
 from e2e.apoio.relatorio import (
     Registro,
     escrever_resumo,
@@ -14,8 +16,6 @@ from e2e.apoio.relatorio import (
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 def _cucumber() -> list[dict[str, Any]]:
@@ -60,13 +60,13 @@ def test_gerar_resumo_lista_cada_cenario_com_resultado_duracao_e_rastreio() -> N
 
     linhas = texto.splitlines()
     assert linhas[0] == "## Titulo"
-    assert "3 cenarios, 2 com falha, 8 s no total." in texto
+    assert "3 cenários, 2 sem passar, 8 s no total." in texto
     assert (
-        "| A OS percorre os tres servicos | `@caminho-feliz` `@demo` | passou | 4.0 | "
+        "| A OS percorre os tres servicos | `@caminho-feliz` `@demo` | passou | 4,0 | "
         "`ord-1` | `trace-1` |"
     ) in linhas
-    assert "| Orcamento vence | `@expiracao` | falhou | 4.0 | `-` | `-` |" in linhas
-    assert "| Pulado |  | nao executado | 0.0 | `-` | `-` |" in linhas
+    assert "| Orcamento vence | `@expiracao` | falhou | 4,0 | `-` | `-` |" in linhas
+    assert "| Pulado |  | não executado | 0,0 | `-` | `-` |" in linhas
 
 
 def test_gerar_resumo_cenario_de_esquema_leva_o_exemplo_no_nome() -> None:
@@ -102,7 +102,7 @@ def test_gerar_resumo_cenario_de_esquema_leva_o_exemplo_no_nome() -> None:
 def test_gerar_resumo_sem_cenarios() -> None:
     texto = gerar_resumo([{"elements": []}], {}, "Vazio")
 
-    assert "0 cenarios, 0 com falha, 0 s no total." in texto
+    assert "0 cenários, 0 sem passar, 0 s no total." in texto
 
 
 def test_registro_anota_por_cenario_e_salva_json(tmp_path: Path) -> None:
@@ -162,3 +162,36 @@ def test_principal_escreve_o_resumo(
 
     assert principal([str(tmp_path)]) == 0
     assert "resumo escrito em" in capsys.readouterr().out
+
+
+def _cenario_com_passos(*estados: str) -> list[dict[str, Any]]:
+    passos = [{"result": {"status": estado, "duration": 0}} for estado in estados]
+    return [{"elements": [{"name": "C", "tags": [], "steps": passos}]}]
+
+
+@pytest.mark.parametrize(
+    ("estados", "resultado"),
+    [
+        pytest.param(("passed", "passed"), "passou", id="tudo-passou"),
+        pytest.param(("passed", "failed"), "falhou", id="um-falhou"),
+        pytest.param(("passed", "pending"), "não executado", id="passo-pendente"),
+        pytest.param(("passed", "skipped"), "não executado", id="passo-pulado"),
+        pytest.param(("passed", "undefined"), "não executado", id="sem-definicao"),
+        pytest.param((), "não executado", id="sem-passos"),
+    ],
+)
+def test_gerar_resumo_so_diz_passou_se_todo_passo_passou(
+    estados: tuple[str, ...], resultado: str
+) -> None:
+    linhas = gerar_resumo(_cenario_com_passos(*estados), {}, "T").splitlines()
+
+    assert any(
+        f"| {resultado} |" in linha for linha in linhas if linha.startswith("| C")
+    )
+
+
+def test_principal_sem_cucumber_json_diz_o_que_aconteceu(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert principal([str(tmp_path)]) == 1
+    assert "terminou antes de escrever" in capsys.readouterr().err

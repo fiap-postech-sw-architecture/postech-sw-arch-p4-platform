@@ -38,6 +38,11 @@ def _duracao(cenario: dict[str, Any]) -> float:
     return nanos / NS_POR_S
 
 
+def _virgula(segundos: float) -> str:
+    """``8,3``: a vírgula decimal do README e do corpo do PR."""
+    return f"{segundos:.1f}".replace(".", ",")
+
+
 def _exemplo(cenario: dict[str, Any]) -> str:
     """`` [/os]`` de um cenario de esquema: o id do pytest-bdd leva o exemplo."""
     identificador = str(cenario.get("id", ""))
@@ -52,11 +57,9 @@ def _resultado(cenario: dict[str, Any]) -> str:
     }
     if "failed" in estados:
         return "falhou"
-    if estados == {"passed"}:
-        return "passou"
-    return (
-        "nao executado" if "skipped" in estados or "undefined" in estados else "passou"
-    )
+    # "passou" so quando todo passo passou: cenario sem passo, ou com passo pendente,
+    # pulado ou sem definicao, nao prova nada.
+    return "passou" if estados == {"passed"} else "não executado"
 
 
 def gerar_resumo(
@@ -77,15 +80,15 @@ def gerar_resumo(
             falhas += resultado != "passou"
             achados = registros.get(nome, {})
             linhas.append(
-                f"| {exibido} | {tags} | {resultado} | {duracao:.1f} | "
+                f"| {exibido} | {tags} | {resultado} | {_virgula(duracao)} | "
                 f"`{achados.get('ordem_id', '-')}` | `{achados.get('trace_id', '-')}` |"
             )
     cabecalho = [
         f"## {titulo}",
         "",
-        f"{len(linhas)} cenarios, {falhas} com falha, {total:.0f} s no total.",
+        f"{len(linhas)} cenários, {falhas} sem passar, {total:.0f} s no total.",
         "",
-        "| Cenario | Tags | Resultado | Duracao (s) | ordem_id | trace_id |",
+        "| Cenário | Tags | Resultado | Duração (s) | ordem_id | trace_id |",
         "|---|---|---|---|---|---|",
     ]
     return "\n".join([*cabecalho, *linhas, ""])
@@ -112,6 +115,15 @@ def principal(argumentos: list[str]) -> int:
     if len(argumentos) != 1:
         print("uso: python -m e2e.resumo <diretorio dos relatorios>", file=sys.stderr)
         return 2
-    destino = escrever_resumo(Path(argumentos[0]))
+    diretorio = Path(argumentos[0])
+    try:
+        destino = escrever_resumo(diretorio)
+    except FileNotFoundError:
+        print(
+            f"sem {diretorio / 'cucumber.json'}: o pytest terminou antes de escrever "
+            "os relatorios (veja a saida acima)",
+            file=sys.stderr,
+        )
+        return 1
     print(f"resumo escrito em {destino}")
     return 0
