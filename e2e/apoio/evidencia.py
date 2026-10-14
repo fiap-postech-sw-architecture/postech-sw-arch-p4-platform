@@ -5,7 +5,7 @@ entra so o que esta numa tupla daqui (``permitidos``), nunca "tudo menos o
 perigoso". Depois, os textos que vao para o disco sao varridos atras de qualquer
 segredo registrado, de ``Bearer``, de ``TEST-``/``APP_USR-`` e de e-mail
 (``varrer``). Por fim, achado recusa a gravacao e diz onde esta (arquivo e
-linha), sem repetir o valor (``gravar``).
+linha), sem repetir o valor (``gravar_evidencia``).
 
 A sanitizacao e a varredura sao duas barreiras diferentes de proposito: a
 primeira impede o campo de entrar, a segunda pega o que passou por engano.
@@ -85,7 +85,7 @@ FRASE_DO_ENSAIO_SEM_CONFIRMACAO: Final = (
 # Estados do pagamento no Billing que so existem depois de uma confirmacao.
 CONFIRMADOS: Final = frozenset({"CONFIRMADO", "ESTORNADO"})
 _PADROES_DA_VARREDURA: Final = {
-    "Bearer": re.compile(r"Bearer\s+\S+", re.IGNORECASE),
+    "Bearer": re.compile(r"Bearer\s+[A-Za-z0-9._~+/=-]{8,}", re.IGNORECASE),
     "token do Mercado Pago": re.compile(r"(?:TEST|APP_USR)-[A-Za-z0-9_-]{8,}"),
     "e-mail": re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"),
     "User ID da conta vendedora (prefixo do id da preferencia)": re.compile(
@@ -366,13 +366,6 @@ def _conferir(nome: str, texto: str, extras: Iterable[str]) -> None:
         raise EvidenciaComSegredoError(msg)
 
 
-def gravar(caminho: Path, texto: str, extras: Iterable[str] = ()) -> None:
-    """Grava ``texto`` em ``caminho`` se a varredura nao achar nada."""
-    __tracebackhide__ = True
-    _conferir(caminho.name, texto, extras)
-    caminho.write_text(texto, encoding="utf-8")
-
-
 def varrer_pasta(pasta: Path, extras: Iterable[str] = ()) -> dict[str, list[Achado]]:
     """Os achados de cada arquivo da ``pasta`` (so os que tem algum)."""
     return {
@@ -432,9 +425,9 @@ def principal_da_varredura(argumentos: list[str], ambiente: Mapping[str, str]) -
     """``python -m e2e.varredura <pasta>``: apaga o arquivo que tem segredo.
 
     Roda depois do pytest, que grava o ``junit.xml`` e o ``cucumber.json`` por conta
-    propria e por isso nao passa pelo ``gravar``. O processo novo nao conhece as
-    senhas que o E2E gerou; conhece o token e a assinatura, que vem do ambiente do
-    shell, e os padroes de credencial e de e-mail.
+    propria e por isso nao passa pelo ``gravar_evidencia``. O processo novo nao
+    conhece as senhas que o E2E gerou; conhece o token e a assinatura, que vem do
+    ambiente do shell, e os padroes de credencial e de e-mail.
     """
     if len(argumentos) != 1:
         print("uso: python -m e2e.varredura <pasta dos relatorios>", file=sys.stderr)

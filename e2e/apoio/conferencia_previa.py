@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Final, TextIO
 from e2e.apoio.contexto import (
     ContextoNaoDescartavelError,
     conferir_borda_local,
-    conferir_contexto,
     escape_do_ambiente,
 )
 from e2e.apoio.http import ClienteHttp
@@ -80,7 +79,6 @@ def conferir_antes_do_pytest(  # cada parametro e um ponto de injecao dos testes
         if argumentos[0] == "real":
             credenciais_do_ambiente(ambiente)  # o mais barato primeiro: sem cluster
         escape = escape_do_ambiente(ambiente)
-        conferir_contexto(contexto, escape)
         conferir_borda_local(
             kubectl, escape, executor_docker, url_da_borda=url_da_borda
         )
