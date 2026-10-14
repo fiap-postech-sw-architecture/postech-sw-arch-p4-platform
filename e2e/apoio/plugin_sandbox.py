@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 from typing import TYPE_CHECKING, Final
 
 import pytest
@@ -30,7 +31,7 @@ if TYPE_CHECKING:
 _ESTADO: Final = {"interrompida": False}
 TAG_DO_SANDBOX: Final = "mp_sandbox"
 SEM_MODO: Final = "sandbox do Mercado Pago: use make mp-sandbox"
-COM_MODO: Final = "E2E_MP_MODO definido: so o sandbox roda"
+COM_MODO: Final = "E2E_MP_MODO definido: só o sandbox roda"
 
 
 class LigacaoDoResultadoError(AssertionError):
@@ -138,12 +139,15 @@ def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
     modo = _modo()
     do_sandbox = [item.get_closest_marker(TAG_DO_SANDBOX) is not None for item in items]
     if modo and items and not any(do_sandbox):
-        pytest.exit(
-            f"E2E_MP_MODO={modo} esta no seu shell, mas nenhum cenario do sandbox "
-            "do Mercado Pago foi selecionado: make e2e e make demo nao o usam. "
-            "Rode `unset E2E_MP_MODO` e tente de novo.",
-            returncode=2,
+        # A mensagem inteira sai limpa; o Exit so leva o resumo, que o pytest imprime
+        # depois do prefixo "! _pytest.outcomes.Exit:".
+        print(
+            f"[e2e] E2E_MP_MODO={modo} está no seu shell, mas nenhum cenário do "
+            "sandbox do Mercado Pago foi selecionado: o make e2e e o make demo não o "
+            "usam. Rode `unset E2E_MP_MODO` e tente de novo.",
+            file=sys.stderr,
         )
+        pytest.exit("E2E_MP_MODO esquecido no shell", returncode=2)
     for item, e_sandbox in zip(items, do_sandbox, strict=True):
         if e_sandbox and not modo:
             item.add_marker(pytest.mark.skip(reason=SEM_MODO))

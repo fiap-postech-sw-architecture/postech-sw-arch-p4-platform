@@ -95,7 +95,7 @@ _PADROES_DA_VARREDURA: Final = {
         r"(?!(?:[A-Za-z0-9-]+\.)*pytstop\.dev(?![A-Za-z0-9-]|\.[A-Za-z0-9]))"
         r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+"
     ),
-    "User ID da conta vendedora (prefixo do id da preferencia)": re.compile(
+    "User ID da conta vendedora (prefixo do id da preferência)": re.compile(
         r"\b\d{6,}-[0-9a-f]{8}-[0-9a-f]{4}"
     ),
 }
@@ -184,7 +184,7 @@ class RegistroDoCenario:
     """O que um cenario descobriu e vai para o ``resumo.md`` e o JSON."""
 
     nome: str
-    resultado: str = "nao executado"
+    resultado: str = "não executado"
     duracao: float = 0.0
     ordem_id: str = ""
     pagamento_id: str = ""

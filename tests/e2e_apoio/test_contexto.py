@@ -95,7 +95,7 @@ def test_conferir_borda_local_recusa_kind_que_nao_publica_a_443() -> None:
     kubectl, _ = _kubectl("node/pytstop-p4-control-plane")
     docker = ExecutorFalso({"docker port": "127.0.0.1:8443\n"})
 
-    with pytest.raises(ContextoNaoDescartavelError, match="nao publica a borda"):
+    with pytest.raises(ContextoNaoDescartavelError, match="não publica a borda"):
         conferir_borda_local(kubectl, {}, docker)
 
 
@@ -114,7 +114,7 @@ def test_conferir_borda_local_docker_que_falha_vira_erro_de_contexto() -> None:
         del argumentos, prazo
         raise ErroDeComandoError("docker: no such container")
 
-    with pytest.raises(ContextoNaoDescartavelError, match="nao consegui conferir"):
+    with pytest.raises(ContextoNaoDescartavelError, match="não consegui conferir"):
         conferir_borda_local(kubectl, {}, docker_fora)
 
 

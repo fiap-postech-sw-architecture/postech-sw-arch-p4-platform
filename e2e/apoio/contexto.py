@@ -50,7 +50,7 @@ def publicacao_esperada(url_da_borda: str) -> tuple[str, str]:
     partes = urlsplit(url_da_borda)
     if partes.hostname not in HOSTS_DA_BORDA_LOCAL:
         msg = (
-            f"a borda {url_da_borda!r} nao e o loopback do kind "
+            f"a borda {url_da_borda!r} não é o loopback do kind "
             f"({sorted(HOSTS_DA_BORDA_LOCAL)}): a senha do admin iria para outro "
             f"host. Para rodar assim mesmo, exporte {ESCAPE}=<o contexto>."
         )
@@ -70,8 +70,8 @@ def conferir_contexto(contexto: str, ambiente: Mapping[str, str]) -> None:
     if contexto.startswith(PREFIXO_DO_KIND) or escapou(contexto, ambiente):
         return
     msg = (
-        f"o contexto {contexto!r} nao e um kind descartavel (kind-<cluster>): o E2E "
-        "derruba o Billing, cria usuarios e nao limpa. Para rodar assim mesmo, "
+        f"o contexto {contexto!r} não é um kind descartável (kind-<cluster>): o E2E "
+        "derruba o Billing, cria usuários e não limpa. Para rodar assim mesmo, "
         f"exporte {ESCAPE}={contexto}."
     )
     raise ContextoNaoDescartavelError(msg)
@@ -100,19 +100,19 @@ def conferir_borda_local(
     nos = kubectl.executar("get", "nodes", "-o", "name", prazo=30).split()
     if f"node/{no}" not in nos:
         msg = (
-            f"o contexto {contexto!r} nao e o kind {cluster!r}: o kubectl enxerga os "
-            f"nos {nos or 'nenhum'}, e o esperado era node/{no}."
+            f"o contexto {contexto!r} não é o kind {cluster!r}: o kubectl enxerga os "
+            f"nós {nos or 'nenhum'}, e o esperado era node/{no}."
         )
         raise ContextoNaoDescartavelError(msg)
     try:
         publicacao = executor(["docker", "port", no, nodeport], 20)
     except ErroDeComandoError as erro:
-        msg = f"nao consegui conferir a borda do no {no}: {erro}"
+        msg = f"não consegui conferir a borda do nó {no}: {erro}"
         raise ContextoNaoDescartavelError(msg) from erro
     if publicacao_do_loopback not in publicacao.split():
         msg = (
-            f"o no {no} nao publica a borda em {publicacao_do_loopback} "
+            f"o nó {no} não publica a borda em {publicacao_do_loopback} "
             f"(docker port: {publicacao.strip() or 'vazio'}): o {url_da_borda} "
-            "do E2E nao seria deste cluster."
+            "do E2E não seria deste cluster."
         )
         raise ContextoNaoDescartavelError(msg)

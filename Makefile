@@ -256,12 +256,12 @@ demo: ## roda os blocos 1 e 2 do video (cenarios @demo) imprimindo o status da O
 # ambiente, sem export (MP_ACCESS_TOKEN="$MP_ACCESS_TOKEN" make mp-sandbox).
 ifneq ($(filter mp-sandbox mp-sandbox-ensaio,$(MAKECMDGOALS)),)
 ifneq ($(filter command line,$(origin MP_ACCESS_TOKEN) $(origin MP_WEBHOOK_SECRET)),)
-$(error MP_ACCESS_TOKEN e MP_WEBHOOK_SECRET nao vao na linha do make: aparecem no ps e no historico do shell. Leia com read -rs e passe so ao make: MP_ACCESS_TOKEN="$$MP_ACCESS_TOKEN" MP_WEBHOOK_SECRET="$$MP_WEBHOOK_SECRET" make mp-sandbox)
+$(error MP_ACCESS_TOKEN e MP_WEBHOOK_SECRET não vão na linha do make: aparecem no ps e no histórico do shell. Leia com read -rs e passe só ao make: MP_ACCESS_TOKEN="$$MP_ACCESS_TOKEN" MP_WEBHOOK_SECRET="$$MP_WEBHOOK_SECRET" make mp-sandbox)
 endif
 endif
 
 GUARDA_DE_KIND := case "$(KUBE_CONTEXT)" in kind-*) ;; *) \
-	echo "contexto $(KUBE_CONTEXT) nao e um kind: o sandbox grava o Access Token num Secret do cluster, e o escape do E2E nao vale aqui" >&2; exit 2;; esac
+	echo "contexto $(KUBE_CONTEXT) não é um kind: o sandbox grava o Access Token num Secret do cluster, e o escape do E2E não vale aqui" >&2; exit 2;; esac
 # A conferencia roda ANTES do pytest e da pasta de relatorios: se reprova (cluster fora do
 # ar, credencial esquecida), le-se so a mensagem, e a evidencia de uma execucao boa fica.
 CONFERIR_SANDBOX := KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e python -m e2e.conferir_sandbox

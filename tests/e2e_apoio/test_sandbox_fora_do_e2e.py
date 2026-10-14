@@ -139,8 +139,8 @@ def test_make_do_sandbox_recusa_contexto_que_nao_e_kind_e_nao_tem_escape() -> No
         )
 
         assert resultado.returncode == 2, resultado.stdout
-        assert "nao e um kind" in resultado.stderr
-        assert "o escape do E2E nao vale aqui" in resultado.stderr
+        assert "não é um kind" in resultado.stderr
+        assert "o escape do E2E não vale aqui" in resultado.stderr
         assert "uv run" not in resultado.stdout.replace("echo", "")
 
 
@@ -214,7 +214,7 @@ def test_credencial_na_linha_do_make_e_recusada_sem_repetir_o_valor(
 
     saida = resultado.stdout + resultado.stderr
     assert resultado.returncode == 2, saida
-    assert "nao vao na linha do make" in saida
+    assert "não vão na linha do make" in saida
     assert 'MP_ACCESS_TOKEN="$MP_ACCESS_TOKEN"' in saida, (
         "a forma certa vem na mensagem"
     )
@@ -340,7 +340,7 @@ def test_modo_esquecido_no_shell_faz_a_saga_falhar_em_vez_de_pular_tudo(
 
     saida = resultado.stdout + resultado.stderr
     assert resultado.returncode == 2, saida
-    assert "E2E_MP_MODO=ensaio esta no seu shell" in saida
+    assert "E2E_MP_MODO=ensaio está no seu shell" in saida
     assert "unset E2E_MP_MODO" in saida
     assert " passed" not in saida
     assert " skipped" not in saida
@@ -479,7 +479,7 @@ def test_contexto_que_nao_e_kind_sem_escape_tambem_sai_sem_traceback(
     saida = resultado.stdout + resultado.stderr
     assert resultado.returncode == 2
     assert "sandbox do Mercado Pago:" in saida
-    assert "nao e um kind descartavel" in saida
+    assert "não é um kind descartável" in saida
     assert "Traceback" not in saida
     assert (estado / "chamadas").read_text() == ""
 

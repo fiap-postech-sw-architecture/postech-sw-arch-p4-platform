@@ -311,7 +311,7 @@ class ClienteMercadoPago:
 
     def preferencia(self, preferencia_id: str) -> PreferenciaMp:
         """``GET /checkout/preferences/{id}``."""
-        _id_valido(preferencia_id, "id da preferencia")
+        _id_valido(preferencia_id, "id da preferência")
         return _preferencia(self._ler(f"/checkout/preferences/{preferencia_id}"))
 
     def validar_token(self) -> None:

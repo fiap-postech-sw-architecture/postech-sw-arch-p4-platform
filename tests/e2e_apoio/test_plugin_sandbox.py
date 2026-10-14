@@ -215,11 +215,11 @@ def test_com_modo_so_os_cenarios_do_sandbox_rodam(
     plugin_sandbox.pytest_collection_modifyitems([sandbox, saga])  # type: ignore[list-item]  # itens falsos
 
     assert sandbox.adicionados == []
-    assert _razoes(saga) == ["E2E_MP_MODO definido: so o sandbox roda"]
+    assert _razoes(saga) == ["E2E_MP_MODO definido: só o sandbox roda"]
 
 
 def test_modo_esquecido_no_shell_sem_cenario_do_sandbox_e_erro_e_nao_verde(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("E2E_MP_MODO", "real")
     saga = ItemFalso()
@@ -228,8 +228,13 @@ def test_modo_esquecido_no_shell_sem_cenario_do_sandbox_e_erro_e_nao_verde(
         plugin_sandbox.pytest_collection_modifyitems([saga])  # type: ignore[list-item]  # item falso
 
     assert erro.value.returncode == 2
-    assert "E2E_MP_MODO=real esta no seu shell" in str(erro.value)
-    assert "unset E2E_MP_MODO" in str(erro.value)
+    assert str(erro.value) == "E2E_MP_MODO esquecido no shell"
+    # A mensagem inteira sai limpa no stderr, sem o prefixo do pytest.
+    avisado = capsys.readouterr().err
+    assert avisado.startswith("[e2e] E2E_MP_MODO=real está no seu shell")
+    assert "nenhum cenário do sandbox do Mercado Pago" in avisado
+    assert "Rode `unset E2E_MP_MODO` e tente de novo." in avisado
+    assert "_pytest" not in avisado
     assert saga.adicionados == []
 
 

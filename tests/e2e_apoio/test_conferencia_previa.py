@@ -253,7 +253,7 @@ def test_borda_de_outro_cluster_recusa_dizendo_o_que_o_no_publica(
     codigo, erro = mundo.conferir(["ensaio"], {})
 
     assert codigo == 2
-    assert "nao publica a borda em 127.0.0.1:443" in erro
+    assert "não publica a borda em 127.0.0.1:443" in erro
 
 
 def test_overlay_do_kind_ci_recusa_com_a_instrucao_de_refazer_o_cluster(

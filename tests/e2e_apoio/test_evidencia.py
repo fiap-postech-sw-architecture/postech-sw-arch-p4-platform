@@ -858,7 +858,7 @@ def test_o_json_da_varredura_aceita_dados_de_qualquer_tipo_na_saga() -> None:
 
 ID_DA_PREFERENCIA = "1462278261-c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6"
 UUID_DA_PREFERENCIA = "c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6"
-TIPO_DO_USER_ID = "User ID da conta vendedora (prefixo do id da preferencia)"
+TIPO_DO_USER_ID = "User ID da conta vendedora (prefixo do id da preferência)"
 
 
 def test_pagamento_do_billing_guarda_so_o_uuid_da_preferencia() -> None:
