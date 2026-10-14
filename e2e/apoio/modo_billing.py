@@ -128,6 +128,7 @@ def _base64(valor: str) -> str:
     return base64.b64encode(valor.encode()).decode()
 
 
+# Any: o manifesto e JSON do Kubernetes; so o kubectl o le.
 def manifesto_do_segredo(token: str, assinatura: str) -> dict[str, Any]:
     """O Secret ``billing-mercadopago``, em JSON, so em memoria.
 

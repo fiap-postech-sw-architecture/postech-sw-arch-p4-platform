@@ -38,6 +38,7 @@ FILAS_MORTAS: Final = (
     "os.eventos.dlq",
 )
 _TAMANHO_DO_ERRO: Final = 400
+PRAZO_DAS_DLQS: Final = 40.0
 
 
 class ErroDeComandoError(AssertionError):
@@ -116,7 +117,10 @@ class Kubectl:
         return self._executor_com_entrada(comando, prazo, entrada)
 
     def aplicar_json(
-        self, manifesto: Mapping[str, Any], *, prazo: float = 60.0
+        self,
+        manifesto: Mapping[str, Any],  # Any: JSON livre do Kubernetes
+        *,
+        prazo: float = 60.0,
     ) -> None:
         """``kubectl apply`` de um manifesto montado em memoria.
 
@@ -213,7 +217,7 @@ class Kubectl:
             "list_queues",
             "name",
             "messages",
-            prazo=40,
+            prazo=PRAZO_DAS_DLQS,
         )
         filas = ler_filas_mortas(saida)
         ausentes = [fila for fila in FILAS_MORTAS if fila not in filas]

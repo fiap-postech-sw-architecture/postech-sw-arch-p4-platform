@@ -13,7 +13,7 @@ import itertools
 import time
 from datetime import UTC, datetime
 from functools import partial
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Final
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -427,6 +427,11 @@ class Prova:
         self._avisar(self.diagnostico(passo, erro))
 
     def diagnostico(self, passo: str, erro: Exception) -> str:
+        """O texto do diagnostico do ``passo`` que falhou com ``erro``, ja mascarado.
+
+        Junta o estado da OS e da saga, o pagamento no Billing e no Mercado Pago, as
+        DLQs, o log filtrado das tres pecas do Billing e a causa provavel.
+        """
         sinais = diagnostico.Sinais(
             cenario=self.registro.nome,
             passo=passo,
@@ -483,7 +488,7 @@ class Prova:
             self.registro.observacoes.append(f"falhou no passo: {self.falhou}")
         if not self.cenario.ordem_id:
             return
-        pagamento: dict[str, Any] = {}
+        pagamento: Json = {}
         if self.cenario.pagamento_id:
             pagamento = (
                 diagnostico.coletar(

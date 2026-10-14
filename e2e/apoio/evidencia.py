@@ -98,6 +98,9 @@ class EvidenciaComSegredoError(AssertionError):
     """A varredura achou algo que nao pode ir para o disco. Nada foi gravado."""
 
 
+# Any: o JSON dos servicos e do Mercado Pago chega sem esquema; so entra o que uma
+# lista de campos permitidos deixa (``permitidos``), e o resto e varrido antes de
+# gravar.
 def permitidos(dados: Mapping[str, Any], campos: Iterable[str]) -> dict[str, Any]:
     """So os ``campos`` de ``dados``, na ordem da lista (campo ausente nao entra)."""
     return {campo: dados[campo] for campo in campos if campo in dados}
@@ -180,6 +183,7 @@ class RegistroDoCenario:
     pagamento_id: str = ""
     pagamento_mp_id: str = ""
     transicoes: list[tuple[datetime, str]] = field(default_factory=list)
+    # Any: as respostas JSON dos servicos e do Mercado Pago, como vieram.
     billing: dict[str, Any] = field(default_factory=dict)
     mercadopago: dict[str, Any] = field(default_factory=dict)
     preferencia: dict[str, Any] = field(default_factory=dict)
@@ -191,6 +195,7 @@ class RegistroDoCenario:
         self.transicoes.append((agora or datetime.now(UTC), f"script: {texto}"))
 
     def para_json(self) -> dict[str, Any]:
+        """O registro no formato do ``evidencia.json``, com as transicoes em ordem."""
         return {
             "cenario": self.nome,
             "resultado": self.resultado,
@@ -265,6 +270,23 @@ def _linha_da_notificacao(url: str) -> str:
     )
 
 
+def _tabela(registros: Iterable[RegistroDoCenario]) -> list[str]:
+    """A tabela do resumo: uma linha por cenario, com os ids do que ele exerceu."""
+    linhas = [
+        (
+            "| Cenário | Resultado | Duração (s) | `ordem_id` | `pagamento_id` "
+            "| Pagamento no Mercado Pago |"
+        ),
+        "|---|---|---|---|---|---|",
+    ]
+    linhas += [
+        f"| {r.nome} | {r.resultado} | {r.duracao:.0f} | `{r.ordem_id or '-'}` | "
+        f"`{r.pagamento_id or '-'}` | `{r.pagamento_mp_id or '-'}` |"
+        for r in registros
+    ]
+    return linhas
+
+
 def gerar_resumo(
     registros: Iterable[RegistroDoCenario],
     *,
@@ -302,16 +324,7 @@ def gerar_resumo(
         "",
         f"> {_frase(real=real, confirmou=confirmou)}",
         "",
-        (
-            "| Cenário | Resultado | Duração (s) | `ordem_id` | `pagamento_id` "
-            "| Pagamento no Mercado Pago |"
-        ),
-        "|---|---|---|---|---|---|",
-    ]
-    cabecalho += [
-        f"| {r.nome} | {r.resultado} | {r.duracao:.0f} | `{r.ordem_id or '-'}` | "
-        f"`{r.pagamento_id or '-'}` | `{r.pagamento_mp_id or '-'}` |"
-        for r in lista
+        *_tabela(lista),
     ]
     corpo = [linha for r in lista for linha in ["", *_secao(r, real=real)]]
     rodape = ["", "## Prints que você tira (o script não tira)", ""]
@@ -321,6 +334,8 @@ def gerar_resumo(
 
 @dataclass(frozen=True)
 class Achado:
+    """Onde a varredura achou segredo: o tipo e a linha, nunca o valor."""
+
     tipo: str
     linha: int
 

@@ -251,6 +251,7 @@ class ClienteMercadoPago:
         return "ClienteMercadoPago()"
 
     def fechar(self) -> None:
+        """Fecha as conexoes do cliente."""
         self._http.close()
 
     def _ler(self, caminho: str, **params: str) -> Any:  # JSON do provedor

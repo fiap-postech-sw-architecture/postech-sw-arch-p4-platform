@@ -83,7 +83,31 @@ def instrucoes_de_pagamento(
     )
 
 
-def esperar_pagamento(
+def _aviso_da_recusa(recusas: int, max_recusas: int) -> str:
+    return (
+        f"O Mercado Pago recusou a tentativa de pagamento ({recusas} de "
+        f"{max_recusas}). Confira o nome do titular (APRO aprova), o cartão "
+        "de teste e se está na janela anônima com o usuário Comprador de teste."
+    )
+
+
+def _confirmado_ou_encerrado(
+    pagamento: Mapping[str, Any], recusas: int, max_recusas: int
+) -> Mapping[str, Any] | None:
+    """O pagamento se ``CONFIRMADO``; erro se a cobranca acabou sem ser paga."""
+    if pagamento["status"] == "CONFIRMADO":
+        return pagamento
+    if pagamento["status"] in ENCERRADOS:
+        msg = (
+            f"a cobrança terminou {pagamento['status']} sem ser paga "
+            f"(motivo: {pagamento.get('motivo')}, "
+            f"recusas: {recusas} de {max_recusas})"
+        )
+        raise CobrancaEncerradaError(msg)
+    return None
+
+
+def esperar_pagamento(  # Any: o JSON do Billing; so status, recusas e motivo sao lidos
     ler: Callable[[], Mapping[str, Any]],
     *,
     prazo: float,
@@ -100,29 +124,15 @@ def esperar_pagamento(
     recusada pelo Mercado Pago e avisada quando aparece.
     """
     visto: dict[str, Any] = {"status": "?", "recusas": 0}
+    ultimo_aviso: list[float] = []
 
     def confirmado() -> Mapping[str, Any] | None:
         pagamento = ler()
         recusas = int(pagamento.get("recusas") or 0)
         if recusas > visto["recusas"]:
-            avisar(
-                f"O Mercado Pago recusou a tentativa de pagamento ({recusas} de "
-                f"{max_recusas}). Confira o nome do titular (APRO aprova), o cartão "
-                "de teste e se está na janela anônima com o usuário Comprador de teste."
-            )
+            avisar(_aviso_da_recusa(recusas, max_recusas))
         visto.update(status=pagamento["status"], recusas=recusas)
-        if pagamento["status"] == "CONFIRMADO":
-            return pagamento
-        if pagamento["status"] in ENCERRADOS:
-            msg = (
-                f"a cobrança terminou {pagamento['status']} sem ser paga "
-                f"(motivo: {pagamento.get('motivo')}, "
-                f"recusas: {recusas} de {max_recusas})"
-            )
-            raise CobrancaEncerradaError(msg)
-        return None
-
-    ultimo_aviso: list[float] = []
+        return _confirmado_ou_encerrado(pagamento, recusas, max_recusas)
 
     def contagem(restante: float, _visto: object) -> None:
         if not ultimo_aviso or ultimo_aviso[-1] - restante >= AVISO_A_CADA:

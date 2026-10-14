@@ -191,32 +191,42 @@ def conferir_kind(contexto: str) -> None:
         raise PreflightDoSandboxError(msg)
 
 
+# Os ConfigMaps do ``envFrom`` do container ``api``, pelo nome do container e nao pela
+# posicao: a ordem das listas e do manifesto do Billing, que este E2E nao controla.
+CONFIGMAPS_DA_API: Final = (
+    '{.spec.template.spec.containers[?(@.name=="api")].envFrom[*].configMapRef.name}'
+)
+
+
 def configmap_do_billing(kubectl: Kubectl) -> Mapping[str, str]:
-    """O ConfigMap que a API do Billing usa de verdade (o nome leva o hash).
+    """A configuracao que a API do Billing usa de verdade (o nome leva o hash).
 
     Ler pelo Deployment evita o ConfigMap velho que um deploy anterior deixou no
-    namespace e que um ``get configmap`` generico misturaria com o atual.
+    namespace e que um ``get configmap`` generico misturaria com o atual. Com mais de
+    um ConfigMap no ``envFrom``, vale o ultimo para a chave repetida, como no pod.
     """
-    nome = kubectl.executar(
+    nomes = kubectl.executar(
         "-n",
         NAMESPACE_BILLING,
         "get",
         "deployment",
         "billing-service-api",
         "-o",
-        "jsonpath={.spec.template.spec.containers[0].envFrom[0].configMapRef.name}",
-    ).strip()
-    if not nome:
+        f"jsonpath={CONFIGMAPS_DA_API}",
+    ).split()
+    if not nomes:
         msg = "o Deployment billing-service-api não referencia um ConfigMap (envFrom)"
         raise PreflightDoSandboxError(msg)
-    saida = kubectl.executar(
-        "-n", NAMESPACE_BILLING, "get", "configmap", nome, "-o", "jsonpath={.data}"
-    )
-    try:
-        valores: Mapping[str, str] = json.loads(saida)
-    except ValueError:
-        msg = f"não consegui ler o ConfigMap {nome} do Billing (a saída não é JSON)"
-        raise PreflightDoSandboxError(msg) from None
+    valores: dict[str, str] = {}
+    for nome in nomes:
+        saida = kubectl.executar(
+            "-n", NAMESPACE_BILLING, "get", "configmap", nome, "-o", "jsonpath={.data}"
+        )
+        try:
+            valores |= json.loads(saida)
+        except ValueError:
+            msg = f"não consegui ler o ConfigMap {nome} do Billing (a saída não é JSON)"
+            raise PreflightDoSandboxError(msg) from None
     return valores
 
 

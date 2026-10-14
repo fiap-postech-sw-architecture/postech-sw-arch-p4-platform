@@ -80,6 +80,7 @@ class LinhaDeLog:
     chamada_ao_mp: tuple[str, str, int] | None = None
 
     def texto(self) -> str:
+        """A linha como o diagnostico a mostra: hora, nivel e os campos da lista."""
         if self.chamada_ao_mp:
             metodo, caminho, status = self.chamada_ao_mp
             detalhe = f"Mercado Pago: {metodo} {caminho} respondeu {status}"
@@ -158,6 +159,7 @@ class Sinais:
     contexto: str  # o kubectl que a dica manda rodar leva o --context do script
     url_de_notificacao: str = ""  # a que o Billing usou na preferencia, se se sabe
     estado_da_os: str | None = None
+    # Any: o pagamento e o JSON do Billing; so alguns campos entram no texto.
     pagamento: Mapping[str, Any] | None = None
     mercadopago: list[PagamentoMp] | None = None
     filas_mortas: Mapping[str, int] | None = None

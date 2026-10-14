@@ -357,9 +357,30 @@ def test_configmap_do_billing_le_o_que_a_api_usa_de_verdade() -> None:
 
     assert valores == {"MP_MODE": "simulado"}
     assert "get deployment billing-service-api" in " ".join(executor.comandos[0])
-    assert "configMapRef.name" in " ".join(executor.comandos[0])
+    # Pelo nome do container e por todos os envFrom, e nao pela posicao nas listas.
+    assert '[?(@.name=="api")].envFrom[*].configMapRef.name' in " ".join(
+        executor.comandos[0]
+    )
+    assert "containers[0]" not in " ".join(executor.comandos[0])
+    assert "envFrom[0]" not in " ".join(executor.comandos[0])
     assert "get configmap billing-service-abc123" in " ".join(executor.comandos[1])
     assert "-n pytstop-billing" in " ".join(executor.comandos[1])
+
+
+def test_configmap_do_billing_junta_os_envfrom_e_o_ultimo_vence_a_chave_repetida() -> (
+    None
+):
+    executor = ExecutorFalso(
+        {
+            "get deployment": "cm-base cm-overlay",
+            "configmap cm-base": json.dumps({"MP_MODE": "simulado", "A": "1"}),
+            "configmap cm-overlay": json.dumps({"MP_MODE": "mercadopago", "B": "2"}),
+        }
+    )
+
+    valores = configmap_do_billing(Kubectl("kind-x", executor=executor))
+
+    assert valores == {"MP_MODE": "mercadopago", "A": "1", "B": "2"}
 
 
 def test_configmap_do_billing_sem_envfrom_diz_o_que_falta() -> None:
