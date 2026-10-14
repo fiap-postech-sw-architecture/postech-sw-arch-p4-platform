@@ -38,6 +38,7 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 |---|---|
 | `kind-up`, `deploy`, `smoke`, `redrive`, `kong-check`, `status`, `port-forward` | Docker, [kind](https://kind.sigs.k8s.io/) 0.31.0, a versão que publicou o nó pinado e a que o CI instala (o 0.32.0 também sobe o cluster), kubectl de 1.34 a 1.36 (no máximo uma minor de distância do nó 1.35; traz o kustomize 5), jq, curl e openssl; portas 80 e 443 do loopback livres; o `smoke` também usa o uv (a prova do retry roda em Python) |
 | `e2e`, `demo` | O cluster com a plataforma no overlay `kind-ci` e os três serviços implantados ([E2E da saga](#e2e-da-saga)), uv, kubectl e a porta 443 do loopback |
+| `mp-sandbox-ensaio`, `mp-sandbox` | O cluster com a plataforma no overlay `kind` (o padrão) e os três serviços implantados, uv, kubectl e a porta 443 do loopback; o `mp-sandbox` também precisa do Access Token de teste e da assinatura do webhook no ambiente do shell ([Mercado Pago na sandbox](#mercado-pago-na-sandbox)) |
 | `up`, `down` | Docker com Compose v2 |
 | `lint`, `test` | [uv](https://docs.astral.sh/uv/), que instala o Python 3.14 do `.python-version`; Node 24 com npx (o `make test` roda o `@asyncapi/cli`); Docker (o `make lint` roda o shellcheck e o actionlint pelas imagens pinadas, o `make lint-scripts`) |
 | `prova-retry` | Docker e uv: o broker roda num container avulso, e a prova, em Python |
@@ -59,7 +60,7 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 | [`contratos/`](contratos) | AsyncAPI 3.0 dos comandos e eventos, JSON Schema do envelope e de cada mensagem, exemplos e testes |
 | [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong, segredos gerados no deploy, medição do kind, checagens do `make manifests` e, em [`scripts/ci/`](scripts/ci), os scripts do CD: deploy da plataforma, implantação e smoke dos serviços e diagnóstico ([Contrato com os serviços](#contrato-com-os-serviços)) |
 | [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md), o [runbook da saga](docs/operacao/runbook-saga.md) (saga parada, falha na compensação, retomada e redrive da DLQ) e o [ensaio integrado](docs/operacao/ensaio-integrado.md) (os três serviços no kind, com tempo, memória e CPU por pod) |
-| [`e2e/`](e2e) | O E2E BDD da saga (`make e2e`) e as demonstrações 1 e 2 do vídeo (`make demo`): a feature em português, os steps, as fixtures e o código auxiliar com testes próprios ([E2E da saga](#e2e-da-saga)) |
+| [`e2e/`](e2e) | O E2E BDD da saga (`make e2e`), as demonstrações 1 e 2 do vídeo (`make demo`) e a evidência do Mercado Pago na sandbox (`make mp-sandbox` e `make mp-sandbox-ensaio`): as features em português, os steps, as fixtures e o código auxiliar com testes próprios ([E2E da saga](#e2e-da-saga), [Mercado Pago na sandbox](#mercado-pago-na-sandbox)) |
 | [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos, de medição do kind e de implantação e smoke dos serviços, e do código auxiliar do E2E (em [`tests/e2e_apoio/`](tests/e2e_apoio)) |
 | [`Makefile`](Makefile) | Atalhos de cluster, deploy, compose e testes (`make` lista os alvos) |
 
@@ -690,6 +691,105 @@ Tudo o que pode pendurar no `implantar-servicos.sh` roda com prazo, e o estouro 
 Os testes dos dois scripts ([`test_implantar_servicos.py`](tests/test_implantar_servicos.py) e [`test_smoke_servicos.py`](tests/test_smoke_servicos.py)) rodam com `docker`, `kind`, `kubectl`, `curl`, `sleep` e `date` falsos e conferem a ordem de cada namespace, os prazos, cada etapa reprovando o que deve (cada código HTTP errado, cada réplica fora do lugar), as esperas pelo tempo e o nome do serviço em toda falha.
 
 O ensaio com os três serviços reais no kind (tempos, memória e CPU de cada pod contra o orçamento do ADR-042, e a saída do smoke) está em [`docs/operacao/ensaio-integrado.md`](docs/operacao/ensaio-integrado.md).
+
+## Mercado Pago na sandbox
+
+Prova que o Billing cria uma cobrança no Mercado Pago, confirma o pagamento e estorna, com as credenciais de teste do Mercado Pago e sem mover dinheiro ([ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md), RF-032 a RF-034). O CI, o `make e2e` e o `make demo` ficam no simulador do Billing; esta prova é rodada por quem tem as credenciais, num kind local, com dois alvos:
+
+| Alvo | O que faz | Credencial |
+|---|---|---|
+| `make mp-sandbox-ensaio` | O mesmo roteiro com o simulador do Billing no lugar do comprador. Prova o fluxo, o formato da evidência e o desfazer | nenhuma |
+| `make mp-sandbox` | O roteiro de verdade: o Billing em modo `mercadopago`, o link do checkout impresso no terminal e o pagamento feito por você no navegador | `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` no ambiente do shell |
+
+### O que prova e o que não prova
+
+| Cenário | O que afirma |
+|---|---|
+| Pagamento no checkout | A cobrança nasce com `provedor=mercadopago`; depois que o comprador de teste paga, o Billing a confirma (conciliação do `prazos`) e a OS chega a `aguardando_execucao`. No Mercado Pago, `GET /v1/payments/{id}` mostra `approved`, no valor e na moeda do orçamento, com o `external_reference` igual ao `pagamento_id` do Billing e `live_mode` diferente de `true` |
+| Cancelamento depois do pagamento | Segunda OS, paga do mesmo jeito e cancelada antes da execução: saga `compensada` (`CancelarExecucao`, `EstornarPagamento`, `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico`), pagamento `ESTORNADO` no Billing e `refunded` no Mercado Pago |
+| Cancelamento sem pagar | Terceira OS, levada ao checkout e cancelada: cobrança `CANCELADO` no Billing e preferência expirada no Mercado Pago (`GET /checkout/preferences/{id}` com `expires` e `expiration_date_to` no passado) |
+
+**Não prova o webhook.** A documentação do Mercado Pago diz que pagamentos de teste não enviam notificações, e a `notification_url` do kind (`https://localhost/billing/...`) não é alcançável de fora. A confirmação vem da conciliação do processo `prazos` do Billing (`GET /v1/payments/search?external_reference=` a cada 30 s), e o `resumo.md` diz isso. O `MP_WEBHOOK_SECRET` é exigido porque o Billing não sobe em modo real sem ele, mas nenhuma notificação o exercita. Também não prova pagamento em produção, e o formato real das respostas do Mercado Pago só aparece no primeiro uso com credencial (o ensaio usa o simulador).
+
+### Como rodar
+
+Precisa do cluster no overlay `kind` (o padrão do `make deploy`; o `kind-ci` expira o orçamento em 72 s, curto demais para abrir o link e pagar) com a plataforma e os três serviços, `uv` e `kubectl`. Com os repositórios dos serviços ao lado deste:
+
+```bash
+make kind-up deploy
+scripts/ci/implantar-servicos.sh --overlay kind \
+  os-service=../postech-sw-arch-p4-os-service \
+  billing-service=../postech-sw-arch-p4-billing-service \
+  execution-service=../postech-sw-arch-p4-execution-service
+make mp-sandbox-ensaio
+```
+
+Para o modo real, crie no painel do Mercado Pago a aplicação (Checkout Pro), as contas de teste Vendedor e Comprador, o Access Token de teste e a assinatura secreta do webhook ([Notas do ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md#notas) traz a documentação). As duas credenciais ficam só no ambiente do shell, lidas sem eco e sem argumento de comando:
+
+```bash
+read -rs MP_ACCESS_TOKEN && export MP_ACCESS_TOKEN
+read -rs MP_WEBHOOK_SECRET && export MP_WEBHOOK_SECRET
+make mp-sandbox
+```
+
+O terminal imprime o link do checkout e o que fazer: abrir uma **janela anônima**, entrar no Mercado Pago só com o usuário Comprador de teste (nunca a sua conta real) e pagar com o cartão de teste da documentação (nome do titular `APRO` aprova; `OTHE`, `FUND` e `SECU` recusam). O script espera até 15 min por pagamento, consulta o Billing a cada 5 s, mostra a contagem regressiva a cada 30 s e avisa cada tentativa recusada (a cobrança encerra na recusa de número `PAGAMENTO_MAX_RECUSAS`, 3 no `kind`). São dois pagamentos seus, nos dois primeiros cenários.
+
+| Variável | Para quê | Padrão |
+|---|---|---|
+| `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | Credenciais de teste, lidas do ambiente do shell (`make mp-sandbox`) | ausentes |
+| `E2E_MP_MANTER` | `1` deixa o Billing em modo real no fim, para gravar o vídeo; sem ele, o script desfaz | desfaz |
+| `E2E_MP_NOTIFICATION_URL` | URL https pública para o `MP_NOTIFICATION_URL` do Billing, se o Mercado Pago recusar a `notification_url` local (exemplo: `https://example.com/api/v1/webhooks/mercadopago`) | a do kind |
+| `E2E_MP_MODO` | `real` ou `ensaio`; quem define é o `make`, e sem ele os cenários `@mp_sandbox` são pulados | — |
+| `KUBE_CONTEXT`, `E2E_URL` | Os mesmos do E2E da saga; o contexto tem de ser `kind-*` e o escape do E2E (`E2E_CONTEXTO_NAO_DESCARTAVEL`) não vale aqui | `kind-pytstop-p4`, `https://localhost` |
+
+### O que o script faz e desfaz
+
+| Etapa | O que acontece |
+|---|---|
+| Conferência | Em segundos e antes de mexer no cluster: contexto `kind-*` e borda local, as duas credenciais (presentes, sem espaço nem quebra de linha; a mensagem nunca mostra o valor nem o tamanho), o token no próprio Mercado Pago (uma busca por referência que não existe, sem efeito), o overlay `kind` (orçamento de pelo menos 1 h, cobrança de pelo menos 15 min e 2 recusas), os três serviços saudáveis e o modo do Billing (`simulado` ou `mercadopago`) |
+| Liga o modo real | Cria o Secret `billing-mercadopago` com `kubectl apply --server-side -f -`, o manifesto em JSON montado em memória e enviado pelo stdin, define `MP_MODE=mercadopago` e `SIMULADOR_PERMITIDO=false` (e `MP_NOTIFICATION_URL`, se pedido) em todos os Deployments do Billing, reinicia e espera cada rollout. Só segue com `/billing/api/v1/saude` dizendo `mercadopago` |
+| Cenários | Cada um cria os próprios dados, com códigos únicos, como no E2E da saga |
+| Desfaz, sempre | Apaga o Secret, **tira** `MP_MODE` e `SIMULADOR_PERMITIDO` dos Deployments (os valores `simulado` e `true` do ConfigMap voltam a valer; deixar `simulado` escrito no Deployment sobreviveria ao próximo `make kind-deploy`), reinicia e espera. Roda com falha, `Ctrl-C` ou SIGTERM, e `Ctrl-C` e SIGTERM são ignorados enquanto ele roda. Cada passo é tentado mesmo que o anterior falhe, e o erro traz os três comandos para terminar à mão |
+| Ensaio | Não cria Secret. Só garante o Billing em `simulado`; se um `E2E_MP_MANTER=1` anterior o deixou em modo real, volta ao simulador. É também o jeito de desfazer um `E2E_MP_MANTER=1` |
+
+### Relatórios
+
+`reports/mp-sandbox/` no modo real e `reports/mp-sandbox-ensaio/` no ensaio (pastas ignoradas pelo git; uma execução real guarda a anterior em `reports/mp-sandbox.anterior`, e o ensaio nunca a toca):
+
+| Arquivo | Conteúdo |
+|---|---|
+| `resumo.md` | Modo, data, cenário, resultado, duração, `ordem_id`, `pagamento_id`, id do pagamento no Mercado Pago, as transições com a hora que o serviço registrou (histórico da OS, passos da saga e datas do pagamento), o que veio do Mercado Pago, a frase de que a confirmação veio da conciliação, e os prints que você tira |
+| `evidencia.json` | O mesmo em JSON, sanitizado |
+| `relatorio-e2e.md`, `junit.xml`, `cucumber.json`, `cenarios.json` | O relatório do E2E, como em `reports/e2e`. O `junit.xml` traz o nome da máquina: na evidência da entrega, anexe o `resumo.md` |
+
+A sanitização é por **lista de campos permitidos**. Do Mercado Pago entram só `id`, `status`, `transaction_amount`, `currency_id`, `date_approved`, `external_reference` e `live_mode` (nunca e-mail, nome, documento ou cartão do pagador). Do Billing, o pagamento sem o `checkout_url`; da saga, a etapa, o motivo e o rastro de cada passo. Antes de gravar, todo texto é varrido atrás do token, da assinatura, de qualquer segredo que o E2E registrou, de `Bearer`, de `TEST-`/`APP_USR-` e de padrão de e-mail; se achar, o script recusa gravar e diz o arquivo e a linha (sem repetir o valor). Depois do pytest, `python -m e2e.varredura` varre a pasta toda e apaga o arquivo em que achar algo.
+
+Quando uma afirmação falha ou o prazo estoura, o terminal mostra, mascarado, o estado da OS e da saga, o pagamento no Billing, os pagamentos que o Mercado Pago tem para aquele `external_reference`, as filas mortas, as últimas 40 linhas do log da `api`, do `consumidor` e do `prazos` (só as que importam, e só os campos `erro`, `codigo`, `resultado`, `operacao` e o status HTTP de cada chamada ao Mercado Pago que o Billing registra) e a causa provável.
+
+### Segurança
+
+- O token e a assinatura nunca vão em argumento de comando (`ps`), em arquivo, no `repr` de fixture, no traceback, no `junit.xml`, no `cucumber.json` nem no resumo. Entram na máscara do E2E assim que lidos, antes de qualquer conferência que possa reprovar, e a máscara central do plugin do pytest cobre também `TEST-` e `APP_USR-`. O ambiente inteiro nunca é argumento de quem pode falhar (o pytest mostra os argumentos no traceback): só as cinco chaves do sandbox são recortadas.
+- As chamadas ao Mercado Pago só leem, têm prazo de 10 s e User-Agent próprio, nunca seguem redirecionamento para outro host (o cabeçalho com o token iria junto) e verificam o TLS. O host é fixo (`api.mercadopago.com`), e o id que entra no caminho da URL é validado.
+- Recusa rodar fora de um kind, sem escape, porque o token vai para um Secret do cluster.
+
+### Solução de problemas
+
+| Sintoma | Causa provável | O que fazer |
+|---|---|---|
+| `MP_ACCESS_TOKEN tem espaço ou quebra de linha` | Valor colado, ou `read` sem `-r` | Leia de novo com `read -rs` |
+| `o Mercado Pago não aceita o MP_ACCESS_TOKEN (HTTP 401)` | Token de produção, de outra aplicação, revogado ou com espaço no fim | Use o Access Token de teste da aplicação, da mesma conta de teste |
+| `o Billing está com os prazos do E2E (kind-ci)` | Cluster subido com `OVERLAY=kind-ci` | Suba um cluster novo no overlay `kind` (trocar de overlay no mesmo cluster não desfaz o anterior) |
+| O Mercado Pago recusou criar a cobrança (`POST /checkout/preferences` com 4xx) | `notification_url` local (`https://localhost/billing/...`), que a documentação manda não usar | `E2E_MP_NOTIFICATION_URL=https://example.com/api/v1/webhooks/mercadopago make mp-sandbox`, ou, com o modo real mantido, `kubectl -n pytstop-billing set env deployment --all MP_NOTIFICATION_URL=...` |
+| O Mercado Pago recusou o pagamento | Nome do titular diferente de `APRO`, cartão errado, janela comum ou conta real logada | Janela anônima e só o usuário Comprador de teste; o cartão está no terminal |
+| O pagamento não confirma em 2 min | Conciliação parada | `kubectl -n pytstop-billing logs deploy/billing-service-prazos` (a linha `deadlines_started` diz `conciliacao: true`) |
+| `o Billing pode ter ficado em modo real` | O desfazer falhou em algum passo | Rode os comandos que a mensagem traz, ou `make mp-sandbox-ensaio` |
+| `a expiração NÃO foi provada` (no `resumo.md`) | A consulta da preferência não trouxe `expires` e `expiration_date_to` no formato esperado | Não reprova: o `resumo.md` registra a observação, e a prova indireta é o log do consumidor e a métrica `pytstop_mercadopago_requisicoes_total{operacao="cancelar_cobranca"}` |
+
+### O que fica fora do `make e2e`, do `make demo` e do CI
+
+O `make e2e` pede `-m "not mp_sandbox"`, o `make demo` pede `-m demo`, e nenhum workflow cita o sandbox. Quem roda o pytest cru, sem `E2E_MP_MODO`, vê os três cenários pulados sem que o `kubectl` seja chamado, e com `E2E_MP_MODO` definido só eles rodam. O `make test` coleta o E2E sem cluster, e a falta de definição de um passo do feature reprova ali.
+
+Os testes ficam em [`tests/e2e_apoio/`](tests/e2e_apoio), com 100% de linhas e ramos do código novo de [`e2e/apoio/`](e2e/apoio): um `kubectl` que grava argumentos e stdin prova que o token só passa pelo stdin e que o Secret não aparece em nenhum argumento; o desfazer roda com exceção, `KeyboardInterrupt` e falha no meio do ligar; o cliente do Mercado Pago é testado com `httpx.MockTransport` (formatos de `payments/{id}`, `payments/search` e `checkout/preferences/{id}`, erros 4xx e 5xx, redirecionamento); a espera e o prazo, com relógio falso; e o pytest de verdade, num subprocesso, prova a exclusão do sandbox, o preflight que para antes de qualquer mudança no cluster e o relatório sem credencial.
 
 ## E2E da saga
 
