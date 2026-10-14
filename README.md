@@ -725,7 +725,7 @@ scripts/ci/implantar-servicos.sh --overlay kind \
 make mp-sandbox-ensaio
 ```
 
-O ensaio termina com `3 passed, 13 deselected` e `varredura de reports/mp-sandbox-ensaio: nenhum segredo`, e deixa `reports/mp-sandbox-ensaio/resumo.md`. O Billing continua em `simulado` (`curl -sk https://localhost/billing/api/v1/saude` diz `"modo":"simulado"`), e o Secret `billing-mercadopago` não existe.
+O ensaio leva cerca de meio minuto num kind sem outra carga e termina com `3 passed, 13 deselected` (e o tempo) e `varredura de reports/mp-sandbox-ensaio: nenhum segredo`, e deixa `reports/mp-sandbox-ensaio/resumo.md`. O Billing continua em `simulado` (`curl -sk https://localhost/billing/api/v1/saude` diz `"modo":"simulado"`), e o Secret `billing-mercadopago` não existe.
 
 Se um ensaio foi interrompido ou reprovado, apague o cluster e suba outro (`make kind-down` e o bloco acima de novo) antes do `make mp-sandbox`: um pagamento `SOLICITADO` que sobrou dele seria conciliado no Mercado Pago de verdade. A conferência prévia avisa disso, mas não tem como conferir.
 
