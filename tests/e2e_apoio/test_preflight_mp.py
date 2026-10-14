@@ -609,3 +609,48 @@ def test_kubectl_que_falha_na_leitura_do_billing_vira_recusa_clara(
 
     assert "o kubectl falhou ao ler a configuração do Billing" in str(erro.value)
     assert "NotFound" in str(erro.value)
+
+
+@pytest.mark.parametrize("status", [400, 404, 422, 499])
+def test_conferencia_do_token_com_4xx_que_nao_e_de_credencial_avisa_e_segue(
+    status: int, relogio: Relogio
+) -> None:
+    avisos: list[str] = []
+    mp = MercadoPagoFalso(
+        erro=ErroDoMercadoPagoError("GET /v1/payments/search: HTTP 400", status=status)
+    )
+
+    sandbox = _preparar(
+        _kubectl(),
+        _borda(relogio),
+        AMBIENTE,
+        cliente=_fabrica(mp),
+        avisar=avisos.append,
+    )
+
+    assert id(sandbox.mercadopago) == id(mp)
+    assert not mp.fechado
+    assert len(avisos) == 1
+    assert "atenção: a conferência do token respondeu" in avisos[0]
+    assert "o roteiro segue sem ela" in avisos[0]
+    assert CHAVE_DO_MP not in avisos[0]
+
+
+@pytest.mark.parametrize("status", [500, 502, 503, None])
+def test_mercado_pago_que_nao_responde_ou_cai_barra_o_roteiro(
+    status: int | None, relogio: Relogio
+) -> None:
+    avisos: list[str] = []
+    mp = MercadoPagoFalso(erro=ErroDoMercadoPagoError("sem resposta", status=status))
+
+    with pytest.raises(PreflightDoSandboxError, match="não consegui falar"):
+        _preparar(
+            _kubectl(),
+            _borda(relogio),
+            AMBIENTE,
+            cliente=_fabrica(mp),
+            avisar=avisos.append,
+        )
+
+    assert mp.fechado
+    assert avisos == []

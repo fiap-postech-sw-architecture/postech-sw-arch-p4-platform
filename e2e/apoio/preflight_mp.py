@@ -46,6 +46,8 @@ VALIDADE_MINIMA_DO_ORCAMENTO_HORAS: Final = 1.0
 VALIDADE_MINIMA_DO_PAGAMENTO_MINUTOS: Final = 15.0
 RECUSAS_MINIMAS: Final = 2.0
 PRAZO_DA_SAUDE: Final = 20.0
+HTTP_ERRO_DE_CLIENTE: Final = 400
+HTTP_ERRO_DO_SERVIDOR: Final = 500
 
 
 class PreflightDoSandboxError(AssertionError):
@@ -258,6 +260,7 @@ def preparar_sandbox(
     ambiente: Mapping[str, str],
     *,
     cliente: Callable[[str], ClienteMercadoPago] = ClienteMercadoPago,
+    avisar: Callable[[str], None] = print,
     relogio: Callable[[], float] = time.monotonic,
     dormir: Callable[[float], None] = time.sleep,
 ) -> Sandbox:
@@ -279,7 +282,7 @@ def preparar_sandbox(
         msg = f"o kubectl falhou ao ler a configuração do Billing: {erro}"
         raise PreflightDoSandboxError(msg) from None
     conferir_servicos(borda, relogio=relogio, dormir=dormir)
-    mercadopago = _validar_token(cliente, credenciais[0]) if real else None
+    mercadopago = _validar_token(cliente, credenciais[0], avisar) if real else None
     return Sandbox(
         modo=modo,
         token=credenciais[0],
@@ -303,8 +306,16 @@ def _url_de_notificacao(ambiente: Mapping[str, str]) -> str:
 
 
 def _validar_token(
-    cliente: Callable[[str], ClienteMercadoPago], token: str
+    cliente: Callable[[str], ClienteMercadoPago],
+    token: str,
+    avisar: Callable[[str], None],
 ) -> ClienteMercadoPago:
+    """Falha cedo se o Mercado Pago recusa o token ou nao responde.
+
+    Um 4xx que nao seja 401 nem 403 diz que a conferencia, e nao o token, tem
+    algo errado (o formato da busca): avisa e segue, para uma conferencia
+    previa nao barrar uma credencial boa. A primeira chamada real diz o resto.
+    """
     mercadopago = cliente(token)
     try:
         mercadopago.validar_token()
@@ -317,6 +328,15 @@ def _validar_token(
         )
         raise PreflightDoSandboxError(msg) from None
     except ErroDoMercadoPagoError as erro:
+        if erro.status is not None and (
+            HTTP_ERRO_DE_CLIENTE <= erro.status < HTTP_ERRO_DO_SERVIDOR
+        ):
+            avisar(
+                f"[mp-sandbox] atenção: a conferência do token respondeu {erro} "
+                "e o roteiro segue sem ela; a primeira chamada real diz se o "
+                "token serve"
+            )
+            return mercadopago
         mercadopago.fechar()
         msg = f"não consegui falar com o Mercado Pago (api.mercadopago.com): {erro}"
         raise PreflightDoSandboxError(msg) from None
