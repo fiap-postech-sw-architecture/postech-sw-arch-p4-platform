@@ -245,7 +245,7 @@ A linha `dead` é a que o relay desistiu de publicar, depois de cinco falhas da 
 Reprocessar é um `UPDATE` no banco do serviço, uma linha por vez. Não passa por API (não há rota administrativa, [ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)) e não gera log de auditoria, então quem o faz deixa o registro no ticket do incidente:
 
 1. Corrija a causa. O `ultimo_erro` da linha diz o nome da exceção; envelope fora do contrato não se conserta repetindo, e quem mantém o serviço decide.
-2. Leia a linha e anote no ticket o `id`, o `message_id`, o tipo, o `correlation_id`, quem vai reprocessar, quando e por quê.
+2. Leia a linha e anote no ticket o `id`, o `message_id`, o tipo, o `correlation_id`, quem vai reprocessar, quando e por quê. No Billing, a leitura é o primeiro bloco do MongoDB, mais abaixo (`_id`, `tipo` e `envelope.correlation_id`).
 3. Devolva só essa linha ao relay, e só se ainda estiver `dead`. No PostgreSQL do OS Service (na Execução, troque o namespace por `pytstop-execucao`, o StatefulSet por `execucao-postgres` e o papel por `execucao_app`); troque o `42` pelo `id` da leitura:
 
    ```bash
@@ -258,7 +258,31 @@ Reprocessar é um `UPDATE` no banco do serviço, uma linha por vez. Não passa p
    SQL
    ```
 
-   O `UPDATE` devolve o `id` da linha que mudou, e nenhuma linha se ela já não estava `dead`. Ele não emite `NOTIFY`: o relay a pega no próximo ciclo de poll (`OUTBOX_POLL_SEGUNDOS`). No Billing (MongoDB), a linha é um documento da coleção `outbox`, e o `updateOne` está no [README do Billing Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service), na seção de mensageria (retenção da outbox).
+   O `UPDATE` devolve o `id` da linha que mudou, e nenhuma linha se ela já não estava `dead`. Ele não emite `NOTIFY`: o relay a pega no próximo ciclo de poll (`OUTBOX_POLL_SEGUNDOS`).
+
+   No Billing (MongoDB), a linha é um documento da coleção `outbox` do banco `billing`, com o `_id` igual ao `id` da mensagem. O `mongosh` lê o script como arquivo (`--file /dev/stdin`), e o contêiner autentica como root com a variável do próprio contêiner; se a senha do root foi trocada sem reiniciar o StatefulSet, ela está defasada ([troca de senha do banco](../../README.md#troca-de-senha-do-banco)). Primeiro, a leitura:
+
+   ```bash
+   kubectl --context kind-pytstop-p4 -n pytstop-billing exec -i statefulset/billing-mongo -c mongo -- \
+     sh -c 'exec mongosh --quiet --norc --file /dev/stdin' <<'JS'
+   db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD)
+   printjson(db.getSiblingDB("billing").outbox.find({status: "dead"}, {tipo: 1, routing_key: 1, tentativas: 1, ultimo_erro: 1, morta_em: 1, "envelope.correlation_id": 1}).toArray())
+   JS
+   ```
+
+   Depois, a devolução, com o `_id` da leitura no lugar do UUID de exemplo:
+
+   ```bash
+   kubectl --context kind-pytstop-p4 -n pytstop-billing exec -i statefulset/billing-mongo -c mongo -- \
+     sh -c 'exec mongosh --quiet --norc --file /dev/stdin' <<'JS'
+   db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD)
+   printjson(db.getSiblingDB("billing").outbox.updateOne(
+     {_id: UUID("018f3b0e-7c1a-7d2e-9b4f-0123456789ab"), status: "dead"},
+     {$set: {status: "pendente", tentativas: 0, proxima_tentativa_em: new Date()}, $unset: {morta_em: "", ultimo_erro: ""}}))
+   JS
+   ```
+
+   `matchedCount: 1` é o sinal de que a linha estava `dead` e voltou a `pendente`; `matchedCount: 0` quer dizer que o `_id` não existe ou a linha já não estava `dead`, e nada mudou. O filtro `status: "dead"` é a guarda: sem ele, o comando devolveria ao relay uma linha já `entregue` e a mensagem sairia de novo.
 
 Os e-mails ao cliente que esgotaram as tentativas ficam na tabela `notificacoes` do OS Service (`situacao = 'dead'`), sem métrica nem alerta; o README do OS Service traz a consulta e o `UPDATE` ([Operação do e-mail](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#operação-do-e-mail)).
 
