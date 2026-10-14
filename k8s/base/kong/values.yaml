@@ -11,6 +11,10 @@ image:
 env:
   database: "off"
   anonymous_reports: "off"
+  # Sem Server, Via e X-Kong-* nas respostas, as proprias do Kong (404 de rota
+  # inexistente, 429 do rate limiting) e as dos servicos: nao revela produto
+  # nem versao (ADR-038). O make smoke prova que os cabecalhos nao saem.
+  headers: "off"
 
 ingressController:
   enabled: true

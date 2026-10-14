@@ -73,6 +73,15 @@ implantado() {
 
 cabecalho() { tr -d '\r' < "$TMP/h" | awk -v nome="$1:" 'tolower($1) == nome {print $2}'; }
 
+# reveladores: os cabecalhos da ultima resposta ($TMP/h) que dizem que ha um
+# Kong ali, com a versao (Server, Via e X-Kong-*), separados por virgula, ou
+# "none". O Kong os poe sozinho; o headers=off do values.yaml os tira.
+reveladores() {
+  local achados
+  achados=$(tr -d '\r' < "$TMP/h" | awk -F: 'tolower($1) ~ /^(server|via|x-kong-[a-z-]+)$/ {printf "%s%s", sep, $1; sep = ","}')
+  echo "${achados:-none}"
+}
+
 # pede <metodo> <caminho> [<status esperado> [<caminho que o servico deve
 # receber>]]: status, o caminho que o eco recebeu e o balde de rate limiting da
 # rota (limite por minuto e quanto sobra nele). Com o status esperado, confere
@@ -253,18 +262,30 @@ printf 'upstream got:   %s\n' "$id_servico"
 confere "X-Request-ID the Kong generated" "present" "$([ -n "$id_resposta" ] && echo present || echo missing)"
 confere "X-Request-ID in the response vs at the service" "$id_resposta" "$id_servico"
 
+titulo "headers=off: no Server, Via or X-Kong-* header, on an answer from the service and on the ones the Kong itself generates"
+for caminho in /os/api/v1/ordens-de-servico /os/metrics /rota-que-nao-existe; do
+  status=$(curl -s --max-time 10 -D "$TMP/h" -o /dev/null -w '%{http_code}' "$BORDA$caminho")
+  printf 'GET %-34s -> %s  headers that reveal the Kong: %s\n' "$caminho" "$status" "$(reveladores)"
+  confere "GET $caminho: headers that reveal the Kong" none "$(reveladores)"
+done
+
 titulo "login rate limit (5/min, x10 on kind): POSTs in a row until the first 429 (the login requests above count if they fell in the same minute)"
 # Janela fixa por minuto: se a rajada atravessar a virada, o contador zera e o
 # 429 vem um pouco depois; 120 POSTs sempre passam do limite de duas janelas.
 primeiro_429=""
 for n in $(seq 120); do
-  if [ "$(curl -s --max-time 10 -o /dev/null -w '%{http_code}' -X POST "$BORDA/os/api/v1/autenticacao/login")" = 429 ]; then
+  if [ "$(curl -s --max-time 10 -D "$TMP/h" -o /dev/null -w '%{http_code}' -X POST "$BORDA/os/api/v1/autenticacao/login")" = 429 ]; then
     primeiro_429=$n
     break
   fi
 done
 echo "first 429 at login POST #${primeiro_429:-none}"
 confere "login reached 429 (rate-limiting-login)" "yes" "$([ -n "$primeiro_429" ] && echo yes || echo no)"
+# O $TMP/h tem os cabecalhos desse 429, gerado pelo plugin, nao pelo servico.
+if [ -n "$primeiro_429" ]; then
+  echo "headers that reveal the Kong on that 429: $(reveladores)"
+  confere "429 from rate-limiting-login: headers that reveal the Kong" none "$(reveladores)"
+fi
 echo "separate bucket: refresh still answers"
 pede POST /os/api/v1/autenticacao/refresh 200 /api/v1/autenticacao/refresh
 printf 'client IP seen by Kong (last access log line): '
