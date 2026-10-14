@@ -39,18 +39,15 @@ grupos=$(printf '%s' "$regras" | jq -c -s '
 printf '%s' "$regras" | jq -r '"rule \(.uid) (for \(.for), \(.tipo) \(.limiar)): \(.expr)"'
 
 # Os mesmos exprs dos paineis e dos alertas, como regras de gravacao so para a
-# checagem de sintaxe.
-# shellcheck disable=SC2016 # $__range e $__rate_interval sao do Grafana, vao literais ao sed
-consultas=$(
-  {
-    jq -r '.panels[].targets[].expr' observabilidade/dashboards/*.json
-    printf '%s' "$regras" | jq -r '.expr'
-  } | sed -e 's/\$__range/1h/g' -e 's/\$__rate_interval/5m/g'
-)
-consultas_json=$(printf '%s\n' "$consultas" | jq -c -R -s '
-  split("\n") | map(select(length > 0)) | to_entries
+# checagem de sintaxe, com o $__range e o $__rate_interval do Grafana resolvidos.
+consultas_json=$(jq -c -n \
+  --argjson paineis "$(jq -c -s '[.[].panels[].targets[].expr]' observabilidade/dashboards/*.json)" \
+  --argjson alertas "$(printf '%s' "$regras" | jq -c -s '[.[].expr]')" '
+  ($paineis + $alertas)
+  | map(gsub("\\$__range"; "1h") | gsub("\\$__rate_interval"; "5m"))
+  | to_entries
   | {groups: [{name: "consultas", rules: map({record: "consulta:\(.key)", expr: .value})}]}')
-echo "queries: $(printf '%s\n' "$consultas" | grep -c .) panel and alert expressions"
+echo "queries: $(printf '%s' "$consultas_json" | jq '.groups[0].rules | length') panel and alert expressions"
 
 docker run --rm -i -e REGRAS="$grupos" -e CONSULTAS="$consultas_json" --entrypoint sh "$PROMETHEUS_IMAGE" -c '
   cd /tmp && cat > teste.yml &&
