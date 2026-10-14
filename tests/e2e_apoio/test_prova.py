@@ -227,6 +227,21 @@ def test_ler_o_pagamento_do_billing_registra_o_user_id_da_vendedora(
     )
 
 
+def test_a_cobranca_aberta_tambem_registra_o_user_id_da_vendedora(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.billing = _pagamento_billing(referencia_preferencia=CONTA_E_UUID)
+    prova, _, _ = _prova(mundo, relogio, real=True)
+    prova.api.os.ordem = lambda _id: {  # type: ignore[assignment]  # troca o metodo pelo falso
+        "pagamento": {"pagamento_id": "p-1", "status": "solicitado"}
+    }
+
+    prova.cobranca_aberta()
+
+    assert mascarar(CONTA_E_UUID) == "***-c5ca3674-5b81-4eef-bfb1-b4bfdccfa6b6"
+
+
 def test_ler_o_pagamento_sem_referencia_da_preferencia_nao_registra_nada(
     relogio: Relogio,
 ) -> None:
