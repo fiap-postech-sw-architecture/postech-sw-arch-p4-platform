@@ -317,6 +317,7 @@ Todas as imagens têm tag fixa, e a mesma versão roda no kind, no k3s e no comp
 | mongodb_exporter | `percona/mongodb_exporter:0.53.0` | Métricas do MongoDB, sidecar do banco do Billing, porta 9216, que conecta com o usuário `exporter`, com `--collector.dbstats` e `--collector.replicasetstatus` | sidecar do StatefulSet do banco |
 | SonarQube (CI dos serviços) | `sonarqube:26.9.0.129388-community` | Servidor efêmero do job `sonarqube` de cada serviço, que aplica o quality gate ([ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)) | service container do job |
 | SonarScanner (CI dos serviços) | `sonarsource/sonar-scanner-cli:12.2.0.4256_8.1.0` | Análise do código no mesmo job | - |
+| OWASP ZAP (job `e2e` do `platform`) | `ghcr.io/zaproxy/zaproxy:2.17.0@sha256:7aaa659b0d43078febd82e29bad112285c370727e86ab8340444220e17d9f0d2` | Varredura passiva (*baseline*) da borda do kind, um serviço por vez ([ZAP baseline na borda](#zap-baseline-na-borda), [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)); o digest é o do índice da imagem, que serve amd64 e arm64 | container do runner, na rede do host |
 
 Prometheus, Grafana, Loki, Promtail, kube-state-metrics, Mailpit e Jaeger vieram dos manifests da fase 3, ajustados para vários serviços em vários namespaces e com probes de liveness e readiness em todos.
 
@@ -420,6 +421,8 @@ No overlay kind os limites são multiplicados por 10 ([`rate-limit-x10.yaml`](k8
 IP do cliente: o `kong-proxy` usa `externalTrafficPolicy: Local`, que entrega o pacote sem o SNAT (*source NAT*) do kube-proxy. No kind, o tráfego entra pelo mapeamento de porta do Docker, e todo cliente do host chega com o IP do gateway da rede do Docker: um balde só por limite, o que basta para a demonstração. No k3s, o ServiceLB com `externalTrafficPolicy: Local` deve entregar o IP de origem, mas isso ainda não foi conferido com dois clientes: até lá, o limite por IP no k3s é esperado, não verificado. Se um balanceador ou proxy entrar na frente da VM, configure em [`values.yaml`](k8s/base/kong/values.yaml) `env.trusted_ips` com o CIDR exato dele e `env.real_ip_header: X-Forwarded-For` e rode `make kong-render`. Nunca use `0.0.0.0/0`: o cliente escolheria o próprio IP pelo header e escaparia do limite.
 
 O `X-Request-ID` gerado pelo Kong é um UUID simples (`generator: uuid`), aceito como está pelo middleware de request id que os serviços herdaram da fase 3 (`[A-Za-z0-9._=-]{1,128}`); o formato `uuid#counter` seria descartado por ele. Se o cliente mandar um `X-Request-ID`, o Kong o mantém e o devolve na resposta. O FastAPI precisa de `root_path="/os"` fixo para o Swagger em `/os/docs` achar o `/os/openapi.json`; o header `X-Forwarded-Prefix` não serve, porque traz o trecho inteiro que a regra casou.
+
+O Kong não anuncia produto nem versão: `env.headers: "off"` em [`values.yaml`](k8s/base/kong/values.yaml) (`KONG_HEADERS=off`) tira `Server`, `Via` e todos os `X-Kong-*` das respostas, as que o Kong gera sozinho (404 de rota inexistente, o `fora-da-borda`, o 429 do rate limit) e as dos serviços, que já sobem sem o `server` do uvicorn. Sem isso o Kong 3.9.3 responde `Server: kong/3.9.3` e `Via: 1.1 kong/3.9.3`, o que o ZAP acusa ([regra 10036](#zap-baseline-na-borda)). O `make smoke` prova no cluster: pede uma rota publicada, `/os/metrics` (404 do `fora-da-borda`), uma rota que não existe (404 do Kong) e o 429 do login, e reprova se algum desses cabeçalhos aparecer. O `X-Request-ID` e os `X-RateLimit-*` continuam.
 
 ### Filas, exchanges e argumentos
 
@@ -714,7 +717,7 @@ make e2e      # os 13 cenários, cerca de 3 min; relatórios em reports/e2e
 make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 2 min; relatórios em reports/demo
 ```
 
-Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
+No CI quem roda isto é o job `e2e` do `cd.yml`, num kind do runner ([CI](#job-e2e-a-saga-e-a-borda-com-os-três-serviços)). Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
 
 | Variável | Para quê | Padrão |
 |---|---|---|
@@ -791,6 +794,45 @@ O que o E2E tem de crítico e não precisa de cluster está em [`e2e/apoio/`](e2
 
 O `make test` também coleta o E2E sem cluster (`pytest --collect-only` e `--generate-missing`): import quebrado, tag sem marker e step sem definição reprovam no CI, e não no primeiro `make e2e`. O `conftest.py`, os steps e o cliente dos serviços só rodam contra o cluster e ficam fora da cobertura. `ruff`, `mypy` e `bandit` cobrem tudo em `e2e/`.
 
+## ZAP baseline na borda
+
+O OWASP ZAP em modo *baseline* (varredura passiva, sem atacar) roda no job `e2e` do [`cd.yml`](.github/workflows/cd.yml), depois do E2E e no mesmo kind, contra a borda como um cliente de fora a vê: `https://localhost/<prefixo>/openapi.json` de cada serviço, pelo certificado padrão do Kong. É a varredura do [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md) (RNF-049), que roda aqui e não no CD de cada serviço, para não somar minutos a cada deploy. O alvo é o `openapi.json` porque o `/docs` é o HTML do Swagger e não lista rota.
+
+O [`scripts/ci/zap-baseline.sh`](scripts/ci/zap-baseline.sh) roda um container por serviço, na rede do host (no runner, o `localhost` é a porta 443 do kind), com a imagem da [tabela de versões](#componentes-e-versões) por digest e as regras de [`e2e/zap/regras.conf`](e2e/zap/regras.conf):
+
+```bash
+zap-baseline.py -t https://localhost/os/openapi.json -c regras.conf -m 1 -I -z "-silent" \
+  -r zap-os-service.html -J zap-os-service.json -w zap-os-service.md
+```
+
+- `-I`: aviso não reprova, só regra em `FAIL`. `-m 1`: o spider para em 1 minuto.
+- `-z "-silent"`: sem ele, o `zap-baseline.py` da imagem atualiza e instala add-ons ao iniciar (`-addonupdate -addoninstall`), e o ZAP verifica atualização; com ele, nada disso. A varredura só pede páginas ao Kong do kind.
+- O ZAP aceita o certificado autoassinado do Kong. Como a varredura que não leu página nenhuma (certificado recusado, borda fora) poderia terminar com "nada a reportar", o script exige ao menos uma URL lida, a linha de resumo do ZAP e o status 0, e reprova nomeando o serviço se faltar qualquer um. Um serviço que reprova não impede a varredura dos outros.
+- A pasta `reports/zap` (ignorada pelo git) recebe `regras.conf`, `zap-<serviço>.html`, `.json`, `.md` e `.log`. O CI a publica como o artefato `zap-baseline` (90 dias), e a tabela por serviço (FAIL, WARN, URLs lidas) mais o `.md` de cada um vão para o summary do job.
+
+Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_REDE` (rede do container, `host`), `RELATORIOS` (`reports/zap`) e `PRAZO_ZAP` (segundos por serviço, 600) trocam o alvo, a rede, a pasta e o prazo; foi assim que o script foi provado com um Kong avulso do 3.9.3 numa rede Docker sem saída para fora.
+
+### Regras e allowlist
+
+Cada regra tem uma linha em `regras.conf` (`id`, ação e motivo, separados por TAB), e a tabela abaixo é a mesma: um teste compara as duas. `FAIL` reprova o job, `WARN` aparece no relatório e no summary sem reprovar, `IGNORE` some do relatório. Regra que não está no arquivo fica em `WARN`. Regra nova ignorada só entra com o motivo na linha do arquivo e na descrição do PR, e achado real se corrige na causa (um cabeçalho de segurança no Kong, por exemplo), não aqui.
+
+| Regra | Ação | Motivo |
+|---|---|---|
+| 10036 | FAIL | Server Leaks Version Information via "Server": nome e versão da pilha. Os serviços sobem sem o `server` do uvicorn e o Kong com `headers=off` ([Gateway](#gateway-como-um-serviço-publica-as-rotas)); sem a regra, qualquer um dos dois voltaria a anunciar a versão em silêncio |
+| 10037 | FAIL | X-Powered-By: o mesmo motivo |
+| 10020 | WARN | Anti-clickjacking ausente. Os serviços põem o cabeçalho em toda resposta deles; a resposta que o Kong gera sozinho (404 de rota inexistente) sai sem ele. Passa a FAIL se o relatório mostrar o achado numa resposta de serviço |
+| 10021 | WARN | `X-Content-Type-Options` ausente: o mesmo caso do 10020 |
+| 10035 | WARN | `Strict-Transport-Security` ausente: o mesmo caso do 10020 |
+| 10038 | WARN | CSP ausente: o mesmo caso do 10020 |
+| 10017 | IGNORE | JavaScript de outro domínio: o Swagger UI do FastAPI carrega o bundle do jsDelivr; página de documentação, sem dado nem credencial |
+| 90003 | IGNORE | Sub Resource Integrity ausente: o mesmo script e o mesmo CSS do Swagger UI |
+| 10027 | IGNORE | Comentários suspeitos: bundle de terceiro do Swagger UI |
+| 10110 | IGNORE | Funções JavaScript perigosas: bundle de terceiro do Swagger UI |
+| 10096 | IGNORE | Timestamp no corpo: as datas das respostas são do contrato |
+| 10109 | IGNORE | Aplicação web moderna: informativo |
+| 10049 | IGNORE | Conteúdo armazenável em cache: informativo para uma API JSON |
+| 10015 | IGNORE | Diretivas de `Cache-Control`: informativo para uma API JSON, e os serviços respondem `no-store` |
+
 ## Contratos de mensageria
 
 | Arquivo | Conteúdo |
@@ -852,9 +894,23 @@ O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `mai
 
 `make check` roda `lint`, `test`, `prova-retry` e `manifests` localmente.
 
-O `make e2e` precisa do cluster com os três serviços e por isso não está no `make check` nem no `ci.yml`; o job `deploy-kind` ainda não o executa.
+O `make e2e` precisa do cluster com os três serviços e por isso não está no `make check` nem no `ci.yml`: quem o roda é o job `e2e` do `cd.yml`, descrito abaixo.
 
-O workflow [`cd.yml`](.github/workflows/cd.yml) tem o job `deploy-kind` ([Kind no CI](#kind-no-ci-overlay-kind-ci)) e, no push na `main`, o job `ci`, que roda o `ci.yml` no commit que entrou; ali o `deploy-kind` só começa com o CI verde. Os jobs dos dois workflows rodam no runner fixo `ubuntu-24.04`: o `ubuntu-latest` passa para o Ubuntu 26.04 a partir de 19/10/2026. O sistema só muda com commit; as ferramentas que vêm no runner (kubectl, Docker, jq) mudam com a imagem semanal dele, e as que precisam de versão certa vêm pinadas: as imagens do Makefile e, no `deploy-kind`, o kind e o kubectl.
+O workflow [`cd.yml`](.github/workflows/cd.yml) tem os jobs `deploy-kind` ([Kind no CI](#kind-no-ci-overlay-kind-ci)) e `e2e` e, no push na `main`, o job `ci`, que roda o `ci.yml` no commit que entrou; ali o `deploy-kind` e o `e2e` só começam com o CI verde. Os jobs dos dois workflows rodam no runner fixo `ubuntu-24.04`: o `ubuntu-latest` passa para o Ubuntu 26.04 a partir de 19/10/2026. O sistema só muda com commit; as ferramentas que vêm no runner (kubectl, Docker, jq) mudam com a imagem semanal dele, e as que precisam de versão certa vêm pinadas: as imagens do Makefile e, no `deploy-kind`, o kind e o kubectl.
+
+### Job `e2e`: a saga e a borda com os três serviços
+
+O job `e2e` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)) roda em todo pull request para a `main`, a cada push na `main` e sob demanda, sem filtro de caminhos, em paralelo com o `deploy-kind`, cada um no próprio runner e no próprio kind. Tem 50 minutos, as permissões `contents: read` e `actions: read` e nenhum segredo. Ainda não é check obrigatório do ruleset: vira depois de alguns runs verdes na `main`, como o `deploy-kind` virou.
+
+1. **Commits.** O platform é o commit do run (no pull request, o merge dele na `main`). Cada serviço entra no commit do último run verde do `cd.yml` dele na `main` (`branch=main`, `event=push`, pela API do GitHub), o mesmo critério e a mesma consulta que o CD de cada serviço usa para os vizinhos. Serviço sem nenhum run verde ainda usa a `main` HEAD, com um `::warning::` na anotação do run. A tabela dos quatro commits e da origem de cada um sai no summary.
+2. **Checkout** dos quatro repositórios em `platform/`, `os-service/`, `billing-service/` e `execution-service/`, sem guardar a credencial do GitHub.
+3. **Plataforma** no kind, pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh), e **os três serviços construídos do código** (nenhuma imagem do GHCR), pelo [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) no overlay `kind-ci`.
+4. **Smoke** por namespace ([`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh)), **`make e2e`** (os 13 cenários) e o **ZAP baseline** ([ZAP baseline na borda](#zap-baseline-na-borda)). O ZAP roda mesmo com o E2E reprovado, para um resultado não esconder o outro, mas não sem o smoke verde: sem os serviços de pé não há o que varrer.
+5. **Resumo e relatórios**, mesmo com falha: minutos e memória no summary ([`medir-kind.sh`](scripts/medir-kind.sh)), o artefato `e2e-kind` (`reports/` sem a pasta do ZAP: `reports/e2e` e, se existir, `reports/demo`; 90 dias) e o `zap-baseline` (90 dias). Em falha ou cancelamento, inclusive o do tempo limite, o [`diagnostico.sh`](scripts/ci/diagnostico.sh).
+
+Cada passo longo tem prazo próprio (plataforma 15 min, serviços 25, smoke 10, E2E 20, ZAP 20), dentro dos 50 do job: um que pendura não gasta o job inteiro, e o diagnóstico ainda roda. O [teste do workflow](tests/test_cd_workflow.py) trava essa estrutura: jobs, `needs`, permissões, prazos, ordem dos passos, os checkouts, as condições `if`, os artefatos e os SHAs das actions.
+
+Para reexecutar uma combinação de commits, `workflow_dispatch` aceita `sha_os_service`, `sha_billing_service` e `sha_execution_service` (40 hexadecimais minúsculos; vazio usa o do último run verde) e `sha_platform`, que só pode ficar vazio ou ser o commit do run. Dois serviços que mudam um contrato juntos ficam em impasse: o CD de cada um usa o outro no último verde, e nenhum dos dois está verde com a mudança do outro. O caminho é o `workflow_dispatch` do CD de cada um, com o commit novo do outro.
 
 ## Decisões e limites
 

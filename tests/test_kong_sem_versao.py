@@ -15,7 +15,6 @@ import re
 import subprocess  # nosec B404
 from pathlib import Path
 
-import pytest
 import yaml
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -26,19 +25,15 @@ def test_kong_sem_server_via_e_x_kong_nas_respostas() -> None:
     """headers=off no values.yaml e no kong.yaml que o make deploy aplica."""
     values = yaml.safe_load((KONG / "values.yaml").read_text(encoding="utf-8"))
     assert values["env"]["headers"] == "off"
-    for documento in yaml.safe_load_all(
-        (KONG / "kong.yaml").read_text(encoding="utf-8")
-    ):
-        if documento and documento["kind"] == "Deployment":
-            proxy = next(
-                c
-                for c in documento["spec"]["template"]["spec"]["containers"]
-                if c["name"] == "proxy"
-            )
-            ambiente = {e["name"]: e.get("value") for e in proxy["env"]}
-            assert ambiente["KONG_HEADERS"] == "off"
-            return
-    pytest.fail("sem Deployment do Kong no kong.yaml")
+    documentos = yaml.safe_load_all((KONG / "kong.yaml").read_text(encoding="utf-8"))
+    (deployment,) = [d for d in documentos if d and d["kind"] == "Deployment"]
+    (proxy,) = [
+        c
+        for c in deployment["spec"]["template"]["spec"]["containers"]
+        if c["name"] == "proxy"
+    ]
+    ambiente = {e["name"]: e.get("value") for e in proxy["env"]}
+    assert ambiente["KONG_HEADERS"] == "off"
 
 
 def reveladores(cabecalhos: str, tmp_path: Path) -> str:
