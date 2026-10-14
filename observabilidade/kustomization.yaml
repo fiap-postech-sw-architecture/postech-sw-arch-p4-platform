@@ -16,12 +16,15 @@ configMapGenerator:
   - name: grafana-dashboards-provider
     files:
       - grafana/dashboards.yaml
-  # Os dois arquivos entram no mesmo diretorio de provisioning do Grafana. O
-  # compose monta so alertas.yaml: alertas-cluster.yaml depende do Kong.
+  # Os tres arquivos entram no mesmo diretorio de provisioning do Grafana. O
+  # compose monta so alertas.yaml: os outros dependem do Kong, do relay e do
+  # consumidor, que o compose nao tem. O overlay kind troca o
+  # alertas-outbox-parada.yaml por uma copia com 30 s e 1 minuto (demonstracao).
   - name: grafana-alerting
     files:
       - grafana/alertas.yaml
       - grafana/alertas-cluster.yaml
+      - grafana/alertas-outbox-parada.yaml
   # Um arquivo por dashboard. O `make manifests` (e o CI) reprova JSON de
   # dashboards/ que nao esteja nesta lista.
   - name: grafana-dashboards

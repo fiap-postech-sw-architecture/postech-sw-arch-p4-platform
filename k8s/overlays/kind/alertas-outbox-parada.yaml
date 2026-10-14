@@ -1,0 +1,52 @@
+# Copia de observabilidade/grafana/alertas-outbox-parada.yaml para a demonstracao
+# no video: o alerta "Outbox parada" com 30 s e 1 minuto, no lugar dos 300 s e 5
+# minutos de producao (base e k3s). Com os valores de producao, mostrar o alerta
+# disparado (escalar o relay de um servico a 0, gerar trafego e esperar) levaria
+# mais de 11 minutos: a linha pendente precisa envelhecer 300 s, o `for` soma 5
+# minutos e o Grafana avalia a cada minuto. Com 30 s e 1 minuto leva cerca de 3.
+# O overlay kind troca o arquivo inteiro (configMapGenerator, behavior merge) e o
+# teste de observabilidade confere que so o `for` e o limiar diferem do original.
+apiVersion: 1
+groups:
+  - orgId: 1
+    name: pytstop-outbox
+    folder: PytStop
+    interval: 1m
+    rules:
+      # Outbox parada (ADR-043): a idade da linha pendente mais antiga de cada servico,
+      # acima de 300 s por 5 minutos (valores de producao: base e k3s). Vem do coletor
+      # da API, entao continua certa com o relay parado; a idade e o que separa o relay
+      # parado do trafego continuo, que deixa linhas pendentes por poucos segundos. O
+      # Billing exporta a idade da API e do relay: max por namespace, nunca soma. Com o
+      # banco fora a serie some (nunca vira zero) e a regra fica em OK sem dado.
+      # Mora a parte, em grupo proprio, porque o overlay kind a troca inteira por uma
+      # copia com 30 s e 1 minuto (k8s/overlays/kind), para o alerta disparar dentro do
+      # tempo do video; o teste de observabilidade confere que so essas duas coisas
+      # diferem.
+      - uid: pytstop-outbox-parada
+        title: Outbox parada
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: A linha pendente mais antiga da outbox de um serviço (o label namespace diz qual) passou do limite; o broker está fora ou o relay parou.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max by (namespace) (pytstop_outbox_mais_antiga_segundos)
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [30]}

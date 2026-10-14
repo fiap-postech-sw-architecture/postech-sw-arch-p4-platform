@@ -41,3 +41,141 @@ groups:
               expression: A
               conditions:
                 - evaluator: {type: lt, params: [1]}
+      # Fila de trabalho sem consumidor (ADR-043): billing.comandos, execucao.comandos
+      # ou os.eventos com zero consumidores. As DLQs e as filas de retry nao tem
+      # consumidor por desenho e ficam fora do filtro. So no cluster: o compose nao
+      # roda o consumidor, e la a regra ficaria sempre em alerta. E a cobertura do
+      # consumidor parado e do banco fora (o consumidor fecha a assinatura e sai da
+      # prontidao depois de erro de banco num handler).
+      - uid: pytstop-fila-sem-consumidor
+        title: Fila de trabalho sem consumidor (2min)
+        condition: C
+        for: 2m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Uma fila de trabalho (o label queue diz qual) está sem consumidor há 2 minutos; o consumidor do serviço caiu e as mensagens acumulam.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: min by (queue) (rabbitmq_queue_consumers{queue!~".+[.](dlq|retry[.].+)"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+      # OS Service fora do ar: o max do up da API vale 0 com todas as replicas
+      # caidas e 1 com ao menos uma de pe (uma replica caida entre duas e do
+      # pytstop-alvo-fora). Pod apagado, Pending ou em falha some da descoberta e deixa
+      # o up sem serie, e aqui sem dado tambem e alerta. Cobre so o job os-service-api: relay,
+      # consumidor e prazos parados nao geram serie e tem cobertura propria (Outbox
+      # parada, Fila de trabalho sem consumidor e Saga parada). Este alerta nao se
+      # confunde com o da outbox: com o banco fora o /metrics responde sem as series do
+      # coletor e o up segue em 1.
+      - uid: pytstop-os-service-fora
+        title: OS Service fora do ar ou sem alvo (2min)
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O Prometheus não raspa a API do OS Service em nenhuma réplica há 2 minutos (pods fora do ar ou ausentes da descoberta).
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(up{job="os-service-api"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+      # Billing Service fora do ar: o max do up da API vale 0 com todas as replicas
+      # caidas e 1 com ao menos uma de pe (uma replica caida entre duas e do
+      # pytstop-alvo-fora). Pod apagado, Pending ou em falha some da descoberta e deixa
+      # o up sem serie, e aqui sem dado tambem e alerta. Cobre so o job billing-service-api: relay,
+      # consumidor e prazos parados nao geram serie e tem cobertura propria (Outbox
+      # parada, Fila de trabalho sem consumidor e Saga parada). Este alerta nao se
+      # confunde com o da outbox: com o banco fora o /metrics responde sem as series do
+      # coletor e o up segue em 1.
+      - uid: pytstop-billing-service-fora
+        title: Billing Service fora do ar ou sem alvo (2min)
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O Prometheus não raspa a API do Billing Service em nenhuma réplica há 2 minutos (pods fora do ar ou ausentes da descoberta).
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(up{job="billing-service-api"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+      # Execution Service fora do ar: o max do up da API vale 0 com todas as replicas
+      # caidas e 1 com ao menos uma de pe (uma replica caida entre duas e do
+      # pytstop-alvo-fora). Pod apagado, Pending ou em falha some da descoberta e deixa
+      # o up sem serie, e aqui sem dado tambem e alerta. Cobre so o job execution-service-api: relay,
+      # consumidor e prazos parados nao geram serie e tem cobertura propria (Outbox
+      # parada, Fila de trabalho sem consumidor e Saga parada). Este alerta nao se
+      # confunde com o da outbox: com o banco fora o /metrics responde sem as series do
+      # coletor e o up segue em 1.
+      - uid: pytstop-execution-service-fora
+        title: Execution Service fora do ar ou sem alvo (2min)
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O Prometheus não raspa a API do Execution Service em nenhuma réplica há 2 minutos (pods fora do ar ou ausentes da descoberta).
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(up{job="execution-service-api"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}

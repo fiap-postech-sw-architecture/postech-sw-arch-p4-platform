@@ -22,6 +22,7 @@ este teste e a trava:
 
 from __future__ import annotations
 
+import copy
 import functools
 import json
 import re
@@ -76,6 +77,14 @@ DEFINITIONS = json.loads(
     )
 )
 FILAS = {fila["name"] for fila in DEFINITIONS["queues"]}
+# Casos do promtool: (nome do teste, alertname, tem alerta esperado) de cada avaliacao.
+CASOS_DO_PROMTOOL = [
+    (teste["name"], caso["alertname"], bool(caso["exp_alerts"]))
+    for teste in yaml.safe_load(
+        (RAIZ / "tests" / "alertas.promtool.yml").read_text(encoding="utf-8")
+    )["tests"]
+    for caso in teste["alert_rule_test"]
+]
 PROMETHEUS = {"type": "prometheus", "uid": "prometheus"}
 AREAS = ("negocio", "tecnico")
 
@@ -99,6 +108,7 @@ FILTRO_DE_FILA = {
     "Aguardando retry e DLQ": RETRY | DLQ,
     "Retry por nível (msg/s)": RETRY,
     "pytstop-dlq-com-mensagens": DLQ,
+    "pytstop-fila-sem-consumidor": TRABALHO,
 }
 
 
@@ -317,6 +327,23 @@ def test_grafana_do_cluster_monta_todos_os_alertas_e_o_compose_so_os_comuns() ->
     assert "alertas-outbox-parada" not in montados
     # O compose monta a pasta inteira dos dashboards.
     assert "../observabilidade/dashboards:/var/lib/grafana/dashboards" in montados
+
+
+@pytest.mark.parametrize("uid", IDS_DAS_REGRAS)
+def test_regra_tem_caso_que_dispara_e_caso_que_nao_dispara_no_promtool(
+    uid: str,
+) -> None:
+    esperados = {
+        dispara for _, alertname, dispara in CASOS_DO_PROMTOOL if alertname == uid
+    }
+
+    assert esperados == {True, False}
+
+
+def test_promtool_so_testa_regra_que_existe() -> None:
+    # Um alertname que nenhuma regra tem passaria calado no promtool: o teste
+    # esperaria uma lista vazia de alertas de uma regra que nao existe.
+    assert {alertname for _, alertname, _ in CASOS_DO_PROMTOOL} <= set(IDS_DAS_REGRAS)
 
 
 # ---------------------------------------------------------------------------
@@ -621,3 +648,64 @@ def test_prometheus_tem_scrape_timeout_explicito_que_o_readme_documenta(
     assert globais["scrape_timeout"] == "10s"
     assert globais["scrape_interval"] == "15s"
     assert "`scrape_timeout: 10s`" in DOC
+
+
+def alertas_renderizados(caminho: str) -> dict[str, str]:
+    """arquivo -> texto do ConfigMap grafana-alerting que o kustomize renderiza."""
+    (configmap,) = [
+        o
+        for o in renderizar(caminho)
+        if o["kind"] == "ConfigMap"
+        and o["metadata"]["name"].startswith("grafana-alerting-")
+    ]
+    data: dict[str, str] = configmap["data"]
+    return data
+
+
+def outbox_parada(texto: str) -> dict[str, Any]:
+    regra: dict[str, Any] = yaml.safe_load(texto)["groups"][0]["rules"][0]
+    return regra
+
+
+def limiar_da_regra(regra: dict[str, Any]) -> float:
+    (condicao,) = [d["model"] for d in regra["data"] if d["refId"] == "C"]
+    limiar: float = condicao["conditions"][0]["evaluator"]["params"][0]
+    return limiar
+
+
+def test_so_o_overlay_kind_traz_o_outbox_parada_de_30_s_e_1_min() -> None:
+    base = alertas_renderizados("base")
+    kind = alertas_renderizados("overlays/kind")
+    k3s = alertas_renderizados("overlays/k3s")
+    regra_kind = outbox_parada(kind["alertas-outbox-parada.yaml"])
+    regra_k3s = outbox_parada(k3s["alertas-outbox-parada.yaml"])
+    igualada = copy.deepcopy(regra_kind)
+    igualada["for"] = regra_k3s["for"]
+    igualada["data"][1]["model"]["conditions"][0]["evaluator"]["params"] = [
+        limiar_da_regra(regra_k3s)
+    ]
+
+    assert (regra_kind["for"], limiar_da_regra(regra_kind)) == ("1m", 30)
+    assert (regra_k3s["for"], limiar_da_regra(regra_k3s)) == ("5m", 300)
+    # O base e o k3s sao os de producao, e o kind difere deles so nessa regra,
+    # e nela so no for e no limiar.
+    assert base == k3s
+    assert {nome for nome in kind if kind[nome] != k3s[nome]} == {
+        "alertas-outbox-parada.yaml"
+    }
+    assert igualada == regra_k3s
+    # Os valores de producao sao os do arquivo versionado em observabilidade/.
+    versionada = outbox_parada(
+        (OBSERVABILIDADE / "grafana" / "alertas-outbox-parada.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert (versionada["for"], limiar_da_regra(versionada)) == ("5m", 300)
+
+
+def test_kind_ci_nao_tem_grafana_nem_regras_de_alerta() -> None:
+    assert not [
+        o
+        for o in renderizar("overlays/kind-ci")
+        if o["metadata"]["name"].startswith("grafana")
+    ]

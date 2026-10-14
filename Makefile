@@ -168,7 +168,7 @@ lint-scripts: ## shellcheck nos scripts e actionlint nos workflows
 prova-retry: ## prova do retry num RabbitMQ avulso com as definitions e as permissoes daqui (Docker e uv)
 	RABBITMQ_IMAGE=$(RABBITMQ_IMAGE) scripts/prova-retry-avulso.sh
 
-manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, regra de saga parada, render do Kong, versoes, dashboards
+manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, consultas e alertas no promtool, render do Kong, versoes, dashboards
 	set -euo pipefail; \
 	for overlay in kind kind-ci k3s; do \
 		echo ">> kubeconform and trivy: k8s/overlays/$$overlay"; \
@@ -195,8 +195,8 @@ manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, regra de 
 			'cat > /tmp/promtail.yaml && promtail -check-syntax -config.file=/tmp/promtail.yaml' < "$$config"; \
 	done
 	PROMTAIL_IMAGE=$(PROMTAIL_IMAGE) scripts/promtail-mascara.sh
-	@echo ">> alert rule pytstop-saga-parada: each condition fires alone (promtool test rules)"
-	PROMETHEUS_IMAGE=$(PROMETHEUS_IMAGE) YQ_IMAGE=$(YQ_IMAGE) scripts/alerta-saga-parada.sh
+	@echo ">> panel and alert queries (promtool check rules) and alert rules (promtool test rules)"
+	PROMETHEUS_IMAGE=$(PROMETHEUS_IMAGE) YQ_IMAGE=$(YQ_IMAGE) scripts/alertas-promtool.sh
 	@echo ">> k8s/base/kong matches make kong-render"
 	set -euo pipefail; \
 	render=$$(mktemp -d); trap 'rm -rf "$$render"' EXIT; \

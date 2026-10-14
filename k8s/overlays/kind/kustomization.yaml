@@ -16,6 +16,16 @@ resources:
 components:
   - ../../componentes/prometheus-pvc
 
+# Alerta "Outbox parada" da demonstracao no video: 30 s e 1 minuto, no lugar dos
+# 300 s e 5 minutos de producao (base e k3s). O arquivo troca, no ConfigMap
+# grafana-alerting, o alertas-outbox-parada.yaml do base por uma copia so com
+# esses dois valores diferentes; o teste de observabilidade confere.
+configMapGenerator:
+  - name: grafana-alerting
+    behavior: merge
+    files:
+      - alertas-outbox-parada.yaml
+
 patches:
   - path: rate-limit-x10.yaml
   # O kind nao tem LoadBalancer: o Kong vira NodePort fixo, e o
