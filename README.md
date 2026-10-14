@@ -697,9 +697,9 @@ A ferramenta é o `pytest-bdd` 8, com Gherkin em português (`# language: pt`). 
 
 ### Como rodar
 
-O E2E derruba o Billing com `kubectl scale`, cria usuários, preços, estoque e OS, e não limpa nada. **Rode só num cluster descartável**, uma execução por vez em cada cluster: duas execuções juntas se atropelam, porque a segunda religa o que a primeira acabou de derrubar. A sessão recusa um contexto que não comece por `kind-`, e que o nó do kind não publique a porta 443 do loopback, a borda que o E2E usa (o mesmo guarda roda no `make e2e` e no `make demo`). O escape é de propósito feio: `E2E_CONTEXTO_NAO_DESCARTAVEL=<o próprio contexto>`.
+O E2E derruba o Billing com `kubectl scale`, cria usuários, preços, estoque e OS, e não limpa nada. **Rode só num cluster descartável**, uma execução por vez em cada cluster: duas execuções juntas se atropelam, porque a segunda religa o que a primeira acabou de derrubar. A sessão recusa um contexto que não comece por `kind-` e um nó do kind que não publique, no loopback, o host e a porta da `E2E_URL`, a borda que o E2E usa (por padrão a 443 de `https://localhost`; o guarda tira o par da própria URL, então uma `E2E_URL` para outro lugar também é recusada). O mesmo guarda roda no `make e2e` e no `make demo`. O escape é de propósito feio: `E2E_CONTEXTO_NAO_DESCARTAVEL=<o próprio contexto>`.
 
-Precisa do cluster com a plataforma **no overlay `kind-ci`** (o orçamento vence em 72 s, a primeira recusa do provedor encerra a cobrança, o `prazos` do Billing roda a cada 5 s e o rate limit da borda é multiplicado por 10) e das `main` dos três serviços, o OS já com o `notificador`: sem ele o e-mail com o link de decisão nunca chega. A sessão confere esses valores no começo e diz o que mudar. Também precisa de `uv`, `kubectl` e da porta 443 livre no loopback. Com os repositórios dos serviços ao lado deste:
+Precisa do cluster com a plataforma **no overlay `kind-ci`** (o orçamento vence em 72 s, a primeira recusa do provedor encerra a cobrança, o `prazos` do Billing roda a cada 5 s e o rate limit da borda é multiplicado por 10) e das `main` dos três serviços, o OS já com o `notificador`: sem ele o e-mail com o link de decisão nunca chega. A sessão confere esses valores no começo e diz o que mudar, e recusa um cluster com mensagem em alguma das três DLQs: a afirmação de DLQ vazia dos cenários compara com a contagem do início do cenário, e com a sessão exigindo DLQs vazias isso vale como zero num cluster limpo. Também precisa de `uv`, `kubectl` e da porta 443 livre no loopback. Com os repositórios dos serviços ao lado deste:
 
 ```bash
 make kind-up deploy OVERLAY=kind-ci
@@ -709,7 +709,7 @@ scripts/ci/implantar-servicos.sh --overlay kind-ci \
   execution-service=../postech-sw-arch-p4-execution-service
 scripts/ci/smoke-servicos.sh
 make e2e      # os 13 cenários, cerca de 3 min; relatórios em reports/e2e
-make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 1,5 min; relatórios em reports/demo
+make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 2 min; relatórios em reports/demo
 ```
 
 Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
@@ -717,7 +717,7 @@ Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e es
 | Variável | Para quê | Padrão |
 |---|---|---|
 | `KUBE_CONTEXT` | contexto do `kubectl` | `kind-pytstop-p4` |
-| `E2E_URL` | borda do Kong | `https://localhost` |
+| `E2E_URL` | borda do Kong; o guarda de contexto confere o host e a porta dela | `https://localhost` |
 | `E2E_ADMIN_EMAIL` | e-mail do admin semeado | o `ADMIN_EMAIL` do ConfigMap do OS |
 | `E2E_RELATORIOS` | pasta dos relatórios | `reports/e2e` |
 | `E2E_NARRAR` | `1` imprime cada passo e, depois de cada `Então`, o status da OS (o `make demo` liga) | desligado |
@@ -785,7 +785,7 @@ Ficam de fora a demonstração do deploy com testes e a do monitoramento (Jaeger
 
 ### Testes do código auxiliar
 
-O que o E2E tem de crítico e não precisa de cluster está em [`e2e/apoio/`](e2e/apoio) e é testado por [`tests/e2e_apoio/`](tests/e2e_apoio), um arquivo por módulo, no `make test` e no CI, com cobertura de linhas e ramos. São a espera e seu prazo, a máscara de segredos e o plugin que a aplica ao relatório, o guarda de contexto e o preflight do overlay, `Credenciais`, o parser do Mailpit e do Jaeger, as métricas e as DLQs, o desfazer do `kubectl scale`, o port-forward, o cliente HTTP e o resumo. Dois testes rodam o pytest do E2E num subprocesso (a captura do `::add-mask::` e o guarda de contexto com um `kubectl` falso).
+O que o E2E tem de crítico e não precisa de cluster está em [`e2e/apoio/`](e2e/apoio) e é testado por [`tests/e2e_apoio/`](tests/e2e_apoio), um arquivo por módulo, no `make test` e no CI, com cobertura de linhas e ramos. São a espera e seu prazo, a máscara de segredos e o plugin que a aplica ao relatório, o guarda de contexto e o preflight do overlay, `Credenciais`, o parser do Mailpit e do Jaeger, as métricas e as DLQs, o desfazer do `kubectl scale`, o port-forward, o cliente HTTP e o resumo. Quatorze testes rodam o pytest do E2E num subprocesso, com um `kubectl` e um `docker` falsos: a captura do `::add-mask::`, o relatório da falha sem credencial, o SIGTERM, o guarda de contexto e de borda, e as ligações do `conftest.py` (o que uma execução anterior deixou em zero é religado no começo, o que um cenário derrubou volta antes do seguinte e a sessão devolve tudo no fim, e overlay fora do `kind-ci` ou DLQ com mensagem param antes do primeiro `scale`).
 
 O `make test` também coleta o E2E sem cluster (`pytest --collect-only` e `--generate-missing`): import quebrado, tag sem marker e step sem definição reprovam no CI, e não no primeiro `make e2e`. O `conftest.py`, os steps e o cliente dos serviços só rodam contra o cluster e ficam fora da cobertura. `ruff`, `mypy` e `bandit` cobrem tudo em `e2e/`.
 
