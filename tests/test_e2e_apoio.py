@@ -48,6 +48,7 @@ from e2e.apoio.relatorio import (
     gerar_resumo,
     principal,
 )
+from e2e.apoio.texto import sem_acentos
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Sequence
@@ -1451,3 +1452,25 @@ def test_principal_escreve_o_resumo(
 
     assert principal([str(tmp_path)]) == 0
     assert "resumo escrito em" in capsys.readouterr().out
+
+
+# --- texto ------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("entrada", "esperado"),
+    [
+        (
+            "Cancelamento recusado: execução já iniciada",
+            "cancelamento recusado: execucao ja iniciada",
+        ),
+        ("Orçamento", "orcamento"),
+        ("sem acento", "sem acento"),
+    ],
+)
+def test_sem_acentos_tira_diacriticos_e_caixa(entrada: str, esperado: str) -> None:
+    assert sem_acentos(entrada) == esperado
+
+
+def test_sem_acentos_compara_mensagem_acentuada_com_a_da_spec() -> None:
+    assert sem_acentos("Execução JÁ iniciada") == sem_acentos("execucao ja iniciada")

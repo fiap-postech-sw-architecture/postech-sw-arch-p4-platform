@@ -23,7 +23,7 @@ class TempoEsgotadoError(AssertionError):
 
 
 def esperar[T](
-    condicao: Callable[[], T],
+    condicao: Callable[[], T | None],
     *,
     prazo: float,
     descricao: str,

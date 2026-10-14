@@ -1,0 +1,89 @@
+"""Ambiente do E2E: contexto, URL da borda, relatorios, narracao e port-forwards.
+
+Fica fora do ``conftest.py`` porque os steps tambem usam (um teste importando
+de conftest e frágil). Cluster-bound: so ``make e2e`` e ``make demo`` o exercitam.
+"""
+
+from __future__ import annotations
+
+import os
+from pathlib import Path
+from typing import Final
+
+from e2e.apoio.http import Cliente
+from e2e.apoio.jaeger import Jaeger
+from e2e.apoio.kube import NAMESPACE_DA_PLATAFORMA, Kubectl, PortForward
+from e2e.apoio.mailpit import Mailpit
+
+CONTEXTO: Final = os.environ.get("KUBE_CONTEXT", "kind-pytstop-p4")
+URL_DA_BORDA: Final = os.environ.get("E2E_URL", "https://localhost")
+RELATORIOS: Final = Path(os.environ.get("E2E_RELATORIOS", "reports/e2e"))
+NARRAR: Final = os.environ.get("E2E_NARRAR") == "1"
+NAMESPACE_BILLING: Final = "pytstop-billing"
+NAMESPACE_EXECUCAO: Final = "pytstop-execucao"
+NAMESPACE_OS: Final = "pytstop-os"
+# Deployments que os cenarios de resiliencia derrubam; uma execucao que caiu no
+# meio os deixa em 0, e o inicio da proxima os religa.
+ALVOS_DE_FALHA: Final = (
+    (NAMESPACE_BILLING, "billing-service-consumidor"),
+    (NAMESPACE_BILLING, "billing-service-api"),
+)
+
+
+def narrar(texto: str) -> None:
+    """Linha do roteiro do video (so com ``E2E_NARRAR=1``)."""
+    if NARRAR:
+        print(texto, flush=True)
+
+
+class Portas:
+    """Port-forwards de sessao do que nao sai pela borda (e-mail, trace, metricas)."""
+
+    def __init__(self, kubectl: Kubectl) -> None:
+        self._pontes = {
+            "mailpit": PortForward(
+                kubectl, NAMESPACE_DA_PLATAFORMA, "svc/mailpit", 8025
+            ),
+            "jaeger": PortForward(
+                kubectl, NAMESPACE_DA_PLATAFORMA, "svc/jaeger", 16686
+            ),
+            # /metrics da api da Execucao: o Kong o barra, o Service nao.
+            "execucao": PortForward(
+                kubectl, NAMESPACE_EXECUCAO, "svc/execution-service", 8000
+            ),
+        }
+        self._clientes: dict[str, Cliente] = {}
+
+    def iniciar(self) -> None:
+        for nome, ponte in self._pontes.items():
+            ponte.iniciar()
+            self._clientes[nome] = Cliente(ponte.url)
+
+    def encerrar(self) -> None:
+        for cliente in self._clientes.values():
+            cliente.fechar()
+        for ponte in self._pontes.values():
+            ponte.encerrar()
+
+    def _cliente(self, nome: str) -> Cliente:
+        self._pontes[nome].garantir()
+        return self._clientes[nome]
+
+    @property
+    def mailpit(self) -> Mailpit:
+        return Mailpit(self._cliente("mailpit"))
+
+    @property
+    def jaeger(self) -> Jaeger:
+        return Jaeger(self._cliente("jaeger"))
+
+    def baixar_trace(self, trace_id: str) -> str:
+        """JSON do trace, como o Jaeger o serve em ``/api/traces/<id>``."""
+        return (
+            self._cliente("jaeger")
+            .pedir("GET", f"/api/traces/{trace_id}", esperado=[200])
+            .text
+        )
+
+    def metricas_da_execucao(self) -> str:
+        return self._cliente("execucao").pedir("GET", "/metrics", esperado=[200]).text

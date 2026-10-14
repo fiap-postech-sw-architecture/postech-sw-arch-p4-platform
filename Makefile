@@ -62,7 +62,7 @@ TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
 KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE) YQ_IMAGE=$(YQ_IMAGE) \
 	NAMESPACE=$(NAMESPACE) scripts/kong-render.sh
 
-.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render
+.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render e2e demo
 
 help:
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
@@ -202,6 +202,30 @@ manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, regra de 
 	done
 
 check: lint test prova-retry manifests ## o mesmo que o CI roda
+
+# E2E BDD da saga contra o kind com a plataforma e os tres servicos de pe
+# (README, "E2E da saga"). Os relatorios ficam em reports/e2e; o resumo.md sai
+# mesmo com cenario reprovado, e o status do make e o do pytest.
+e2e: ## E2E BDD da saga contra o kind com os tres servicos (relatorios em reports/e2e)
+	rm -rf reports/e2e && mkdir -p reports/e2e
+	set -uo pipefail; \
+	KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e pytest -c e2e/pytest.ini e2e \
+		--junitxml=reports/e2e/junit.xml --cucumberjson=reports/e2e/cucumber.json; \
+	status=$$?; \
+	uv run --group e2e python -m e2e.resumo reports/e2e || true; \
+	exit $$status
+
+# Roteiro do video: bloco 1 (fluxo completo) e bloco 2 (falhas), com o status da
+# OS impresso a cada passo. Reusa os cenarios marcados @demo do E2E.
+demo: ## roda os blocos 1 e 2 do video (cenarios @demo) imprimindo o status da OS a cada passo
+	rm -rf reports/demo && mkdir -p reports/demo
+	set -uo pipefail; \
+	E2E_NARRAR=1 E2E_RELATORIOS=reports/demo KUBE_CONTEXT=$(KUBE_CONTEXT) \
+		uv run --group e2e pytest -c e2e/pytest.ini e2e -m demo -s -q \
+		--junitxml=reports/demo/junit.xml --cucumberjson=reports/demo/cucumber.json; \
+	status=$$?; \
+	uv run --group e2e python -m e2e.resumo reports/demo || true; \
+	exit $$status
 
 kong-render: ## regenera k8s/base/kong (kong.yaml, crds.yaml e o schema do plugin) do chart pinado
 	$(KONG_RENDER) k8s/base/kong
