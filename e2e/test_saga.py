@@ -8,9 +8,8 @@ e mesmo ela afirma, a cada amostra, que a saga nao andou.
 
 from __future__ import annotations
 
-import json
 import time
-from typing import TYPE_CHECKING, Any, Final, Literal
+from typing import TYPE_CHECKING, Final, Literal
 from urllib.parse import parse_qs, urlsplit
 
 import httpx
@@ -38,6 +37,12 @@ from e2e.apoio.jaeger import (
     validar_trace_id,
 )
 from e2e.apoio.metricas import valor_da_serie
+from e2e.apoio.saga import (
+    STATUS_EM_ORDEM,
+    achar_acesso,
+    comandos_de_compensacao,
+    sem_id_da_requisicao,
+)
 from e2e.apoio.segredos import mascarar, registrar
 from e2e.apoio.texto import sem_acentos
 
@@ -45,7 +50,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
     from e2e.ambiente import Portas
-    from e2e.apoio.http import Cliente
+    from e2e.apoio.http import ClienteHttp
     from e2e.apoio.kube import Escalas, Kubectl
     from e2e.servicos import Api, Cenario, Json
 
@@ -53,28 +58,14 @@ scenarios("features/saga_atendimento.feature")
 
 CONSUMIDOR_DO_BILLING: Final = "billing-service-consumidor"
 API_DO_BILLING: Final = "billing-service-api"
-STATUS_EM_ORDEM: Final = (
-    "recebida",
-    "em_diagnostico",
-    "aguardando_aprovacao",
-    "aguardando_pagamento",
-    "aguardando_execucao",
-    "em_execucao",
-    "finalizada",
-    "entregue",
-)
-COMPENSACOES: Final = frozenset(
-    {
-        "CancelarExecucao",
-        "EstornarPagamento",
-        "LiberarReserva",
-        "CancelarOrcamento",
-        "DescartarDiagnostico",
-    }
-)
 # Prazos por salto da saga: cada um leva cerca de 1 s no kind; o resto e folga
 # para o runner do CI, que e mais lento.
 PRAZO_DO_SALTO: Final = 30.0
+PRAZO_DA_SAUDE: Final = 60.0
+PRAZO_DO_CIRCUITO_BARRANDO: Final = 45.0
+PRAZO_DA_MEIA_ABERTURA: Final = 60.0
+PRAZO_DA_LEITURA_DO_CIRCUITO: Final = 15.0
+PRAZO_DO_LOG: Final = 30.0
 PRAZO_DA_EXPIRACAO: Final = 180.0
 PRAZO_DO_TRACE: Final = 90.0
 DURACAO_DA_AMOSTRA_DAS_DLQ: Final = 8.0
@@ -92,7 +83,7 @@ class OsCanceladaError(AssertionError):
     """A OS foi cancelada pela saga antes de chegar ao status esperado."""
 
 
-def diagnostico(api: Api, cenario: Cenario) -> str:
+def descrever_estado(api: Api, cenario: Cenario) -> str:
     """Onde a OS e a saga estao, para a mensagem de um cenario que nao chegou la."""
     try:
         ordem = api.os.ordem(cenario.ordem_id)
@@ -104,6 +95,26 @@ def diagnostico(api: Api, cenario: Cenario) -> str:
         f"{cenario.resumo}: status={ordem['status']} etapa={saga['etapa']} "
         f"motivo={saga['motivo']} falha={saga['falha']} ultimos passos={passos}"
     )
+
+
+def _esperar_e_descrever[T](
+    api: Api,
+    cenario: Cenario,
+    condicao: Callable[[], T | None],
+    descricao: str,
+    prazo: float,
+) -> T:
+    """``esperar`` que, no prazo esgotado, diz onde a OS e a saga estao."""
+    try:
+        return esperar(
+            condicao,
+            prazo=prazo,
+            intervalo=0.5,
+            descricao=descricao,
+            ignorar=ERROS_DE_REDE,
+        )
+    except TempoEsgotadoError as erro:
+        raise AssertionError(f"{erro}; {descrever_estado(api, cenario)}") from erro
 
 
 def esperar_status(
@@ -118,21 +129,14 @@ def esperar_status(
         if ordem["status"] == "cancelada":
             msg = (
                 f"a OS foi cancelada antes de chegar a {status}: "
-                f"{diagnostico(api, cenario)}"
+                f"{descrever_estado(api, cenario)}"
             )
             raise OsCanceladaError(msg)
         return None
 
-    try:
-        ordem = esperar(
-            condicao,
-            prazo=prazo,
-            intervalo=0.5,
-            descricao=f"{cenario.resumo} com status {status}",
-            ignorar=ERROS_DE_REDE,
-        )
-    except TempoEsgotadoError as erro:
-        raise AssertionError(f"{erro}; {diagnostico(api, cenario)}") from erro
+    ordem = _esperar_e_descrever(
+        api, cenario, condicao, f"{cenario.resumo} com status {status}", prazo
+    )
     cenario.orcamento_id = (ordem["orcamento"] or {}).get(
         "orcamento_id", cenario.orcamento_id
     )
@@ -149,20 +153,9 @@ def esperar_saga(
         saga = api.os.saga(cenario.ordem_id)
         return saga if saga["etapa"] == etapa else None
 
-    try:
-        return esperar(
-            condicao,
-            prazo=prazo,
-            intervalo=0.5,
-            descricao=f"saga da {cenario.resumo} na etapa {etapa}",
-            ignorar=ERROS_DE_REDE,
-        )
-    except TempoEsgotadoError as erro:
-        raise AssertionError(f"{erro}; {diagnostico(api, cenario)}") from erro
-
-
-def comandos_de_compensacao(saga: Json) -> list[str]:
-    return [p["comando"] for p in saga["passos"] if p["comando"] in COMPENSACOES]
+    return _esperar_e_descrever(
+        api, cenario, condicao, f"saga da {cenario.resumo} na etapa {etapa}", prazo
+    )
 
 
 def itens_do_diagnostico(cenario: Cenario, servicos: int, pecas: int) -> list[Json]:
@@ -206,6 +199,7 @@ def iniciar_diagnostico(api: Api, cenario: Cenario) -> None:
 
 
 def concluir_diagnostico(api: Api, cenario: Cenario, servicos: int, pecas: int) -> None:
+    """O mecanico conclui o diagnostico e a Execucao responde 200."""
     resposta = api.execucao.concluir_diagnostico(
         cenario.ordem_id, itens_do_diagnostico(cenario, servicos, pecas)
     )
@@ -269,6 +263,7 @@ def ate_o_orcamento(
 
 
 def ate_o_pagamento(api: Api, portas: Portas, cenario: Cenario, pecas: int) -> str:
+    """Da abertura ao checkout aberto; devolve o token do checkout do simulador."""
     ate_o_orcamento(api, portas, cenario, 1, pecas)
     api.billing.decidir_pelo_link(cenario.link_de_decisao, "aprovar")
     return esperar_pagamento_solicitado(api, cenario)
@@ -310,7 +305,7 @@ def esperar_circuito(
 # --- contexto -------------------------------------------------------------------
 
 
-@given("que os três serviços respondem pela borda")
+@given("que os três microsserviços respondem pela borda")
 def _servicos_respondem(api: Api, portas: Portas) -> None:
     for prefixo in ("/os", "/billing", "/execucao"):
 
@@ -320,7 +315,7 @@ def _servicos_respondem(api: Api, portas: Portas) -> None:
 
         esperar(
             saudavel,
-            prazo=60,
+            prazo=PRAZO_DA_SAUDE,
             intervalo=2.0,
             descricao=f"{prefixo}/api/v1/saude pela borda",
             ignorar=ERROS_DE_REDE,
@@ -331,15 +326,16 @@ def _servicos_respondem(api: Api, portas: Portas) -> None:
         portas,
         lambda valor: valor < CIRCUITO_ABERTO,
         "circuito do Billing barrando",
-        45,
+        PRAZO_DO_CIRCUITO_BARRANDO,
     )
 
 
 @given("que há um atendente e um mecânico autenticados")
 def _usuarios_autenticados(api: Api) -> None:
-    # A fixture da sessao ja fez o login; aqui o cenario prova que os tokens valem
-    # (fila da Execucao: o mecanico; estoque: o admin escreveu no passo anterior).
+    # A fixture da sessao ja fez o login; aqui o cenario prova que os tokens do
+    # mecanico (fila da Execucao) e do atendente (fila de ordens do OS) valem.
     api.execucao.fila()
+    api.os.listar_ordens()
 
 
 @given(
@@ -402,6 +398,8 @@ def _os_aguardando_pagamento(
 ) -> None:
     ate_o_pagamento(api, portas, cenario, pecas)
     assert api.execucao.estoque(cenario.peca)["quantidade_reservada"] == pecas
+    # RN-027: so entra na fila com o pagamento confirmado.
+    assert all(i["ordem_id"] != cenario.ordem_id for i in api.execucao.fila())
 
 
 @given("uma OS paga e na fila de execução")
@@ -555,7 +553,7 @@ def _circuito_meia_abertura(portas: Portas) -> None:
         portas,
         lambda valor: valor < CIRCUITO_ABERTO,
         "circuito do Billing em meia-abertura",
-        60,
+        PRAZO_DA_MEIA_ABERTURA,
     )
     narrar(
         f"      . circuito liberou a prova depois de {time.monotonic() - inicio:.0f} s"
@@ -648,6 +646,27 @@ def _estoque_da_peca(api: Api, cenario: Cenario, saldo: int, reservadas: int) ->
 @then("a OS aparece na fila de execução")
 def _na_fila(api: Api, cenario: Cenario) -> None:
     esperar_na_fila(api, cenario)
+
+
+@then("a OS ainda não está na fila de execução")
+def _ainda_fora_da_fila(api: Api, cenario: Cenario) -> None:
+    # RN-027: a OS so entra na fila com orcamento aprovado, pecas reservadas e
+    # pagamento confirmado; antes do pagamento ela nao esta nela.
+    assert all(i["ordem_id"] != cenario.ordem_id for i in api.execucao.fila())
+
+
+@then("o cliente recebe o e-mail de cancelamento")
+def _email_de_cancelamento(portas: Portas, cenario: Cenario) -> None:
+    esperar(
+        lambda: any(
+            "cancelada" in assunto.lower()
+            for assunto in portas.mailpit.assuntos(cenario.contato)
+        ),
+        prazo=PRAZO_DO_SALTO,
+        intervalo=1.0,
+        descricao=f"e-mail de cancelamento da {cenario.resumo}",
+        ignorar=ERROS_DE_REDE,
+    )
 
 
 @then("a OS não está mais na fila de execução")
@@ -746,13 +765,13 @@ def _cancelamento_aceito(cenario: Cenario, etapa: str) -> None:
 
 @then(
     parsers.parse(
-        'a API responde {codigo:d} com o código "{erro}" e a mensagem "{mensagem}"'
+        'a API responde {status:d} com o código "{erro}" e a mensagem "{mensagem}"'
     )
 )
-def _erro_da_api(cenario: Cenario, codigo: int, erro: str, mensagem: str) -> None:
+def _erro_da_api(cenario: Cenario, status: int, erro: str, mensagem: str) -> None:
     resposta = cenario.ultima_resposta
     assert resposta is not None
-    assert resposta.status_code == codigo, f"HTTP {resposta.status_code}"
+    assert resposta.status_code == status, f"HTTP {resposta.status_code}"
     corpo = resposta.json()["erro"]
     assert corpo["codigo"] == erro
     # A mensagem e texto de produto (acentuado); o que o cenario fixa e o sentido.
@@ -769,38 +788,30 @@ def _historico(api: Api, cenario: Cenario) -> None:
 # --- entao: rastreio ------------------------------------------------------------------
 
 
-def log_da_abertura(kubectl: Kubectl, request_id: str) -> Json | None:
-    """A linha de acesso da api do OS com este ``X-Request-ID``, ou ``None``."""
-    saida = kubectl.logs(NAMESPACE_OS, "os-service-api", container="api", desde="15m")
-    for linha in saida.splitlines():
-        if request_id not in linha:
-            continue
-        try:
-            registro = json.loads(linha)
-        except json.JSONDecodeError:
-            continue
-        if (
-            registro.get("request_id") == request_id
-            and registro.get("event") == "http_request"
-        ):
-            achado: Json = registro
-            return achado
-    return None
-
-
 @then("o X-Request-ID devolvido pelo Kong aparece no log da API do OS")
-def _request_id_no_log(kubectl: Kubectl, cenario: Cenario) -> None:
+def _request_id_no_log(kubectl: Kubectl, portas: Portas, cenario: Cenario) -> None:
+    def linha_de_acesso() -> Json | None:
+        saida = kubectl.logs(NAMESPACE_OS, "os-service-api", container="api")
+        return achar_acesso(saida, cenario.request_id_da_abertura)
+
     registro = esperar(
-        lambda: log_da_abertura(kubectl, cenario.request_id_da_abertura),
-        prazo=30,
+        linha_de_acesso,
+        prazo=PRAZO_DO_LOG,
         intervalo=2.0,
         descricao="X-Request-ID da abertura no log da api do OS",
     )
     assert registro["path"].endswith("/ordens-de-servico")
-    # O span do POST e a raiz do trace da saga: o trace_id do log e o do Jaeger.
-    assert registro["trace_id"] == cenario.trace_id, (
-        "o trace_id do log difere do trace da saga"
+    # O span do POST e a raiz do trace da saga: o trace_id do log e o de um dos
+    # traces da OS no Jaeger (independe do passo que baixa o JSON do trace).
+    traces = esperar(
+        lambda: portas.jaeger.traces_da_ordem(cenario.ordem_id),
+        prazo=PRAZO_DO_TRACE,
+        intervalo=3.0,
+        descricao=f"traces da {cenario.resumo} no Jaeger",
+        ignorar=ERROS_DE_REDE,
     )
+    do_jaeger = {trace["traceID"] for trace in traces}
+    assert registro["trace_id"] in do_jaeger, "o trace_id do log nao esta no Jaeger"
 
 
 @then(
@@ -878,7 +889,10 @@ def _duas_respostas_503(cenario: Cenario) -> None:
 @then("o circuito do Billing está aberto na Execução")
 def _circuito_aberto(portas: Portas) -> None:
     esperar_circuito(
-        portas, lambda valor: valor == CIRCUITO_ABERTO, "circuito do Billing aberto", 15
+        portas,
+        lambda valor: valor == CIRCUITO_ABERTO,
+        "circuito do Billing aberto",
+        PRAZO_DA_LEITURA_DO_CIRCUITO,
     )
 
 
@@ -888,7 +902,7 @@ def _circuito_fechado(portas: Portas) -> None:
         portas,
         lambda valor: valor == CIRCUITO_FECHADO,
         "circuito do Billing fechado",
-        15,
+        PRAZO_DA_LEITURA_DO_CIRCUITO,
     )
 
 
@@ -902,18 +916,18 @@ def _cadastrar_cpf_invalido(api: Api, cenario: Cenario) -> None:
     )
 
 
-@then(parsers.parse("a API responde {codigo:d}"))
-def _api_responde(cenario: Cenario, codigo: int) -> None:
+@then(parsers.parse("a API responde {status:d}"))
+def _api_responde(cenario: Cenario, status: int) -> None:
     resposta = cenario.ultima_resposta
     assert resposta is not None
-    assert resposta.status_code == codigo, f"HTTP {resposta.status_code}"
+    assert resposta.status_code == status, f"HTTP {resposta.status_code}"
 
 
-def sem_id_da_requisicao(resposta: httpx.Response) -> Any:
-    """Corpo do erro sem o ``id_requisicao``, que muda a cada pedido."""
-    corpo = resposta.json()
-    corpo.get("erro", {}).pop("id_requisicao", None)
-    return corpo
+@then(parsers.parse('o erro tem o código "{codigo}"'))
+def _erro_tem_o_codigo(cenario: Cenario, codigo: str) -> None:
+    resposta = cenario.ultima_resposta
+    assert resposta is not None
+    assert resposta.json()["erro"]["codigo"] == codigo
 
 
 @then(
@@ -924,7 +938,9 @@ def _acompanhamento_igual(api: Api, cenario: Cenario) -> None:
     invalido = api.os.acompanhar(cenario.placa, cpf_invalido())
     inexistente = api.os.acompanhar(cenario.placa, cpf_valido())
     assert invalido.status_code == inexistente.status_code == httpx.codes.NOT_FOUND
-    assert sem_id_da_requisicao(invalido) == sem_id_da_requisicao(inexistente)
+    assert sem_id_da_requisicao(invalido.json()) == sem_id_da_requisicao(
+        inexistente.json()
+    )
     # O CPF valido do dono, com a placa dele, ainda nao tem OS: tambem 404, igual.
     assert (
         api.os.acompanhar(cenario.placa, cenario.documento).status_code
@@ -933,7 +949,7 @@ def _acompanhamento_igual(api: Api, cenario: Cenario) -> None:
 
 
 @then(parsers.parse('o Swagger de "{prefixo}" abre pelo Kong sob o próprio prefixo'))
-def _swagger(borda: Cliente, prefixo: str) -> None:
+def _swagger(borda: ClienteHttp, prefixo: str) -> None:
     docs = borda.pedir("GET", f"{prefixo}/docs", esperado=[200])
     assert f"{prefixo}/openapi.json" in docs.text
     especificacao = borda.pedir("GET", f"{prefixo}/openapi.json", esperado=[200]).json()

@@ -29,7 +29,7 @@ from e2e.ambiente import (
 from e2e.apoio import dados
 from e2e.apoio.contexto import conferir_borda_local, conferir_contexto
 from e2e.apoio.credenciais import Credenciais
-from e2e.apoio.http import Cliente
+from e2e.apoio.http import ClienteHttp
 from e2e.apoio.kube import Escalas, Kubectl
 from e2e.apoio.relatorio import Registro
 from e2e.servicos import Api, Cenario
@@ -85,14 +85,14 @@ def portas(kubectl: Kubectl) -> Iterator[Portas]:
 
 
 @pytest.fixture(scope="session")
-def borda() -> Iterator[Cliente]:
-    cliente = Cliente(URL_DA_BORDA)
+def borda() -> Iterator[ClienteHttp]:
+    cliente = ClienteHttp(URL_DA_BORDA)
     yield cliente
     cliente.fechar()
 
 
 @pytest.fixture(scope="session")
-def api(borda: Cliente, kubectl: Kubectl, execucao: str) -> Api:
+def api(borda: ClienteHttp, kubectl: Kubectl, execucao: str) -> Api:
     """Login do admin (Secret ``os-admin``) e registro do atendente e do mecanico."""
     senha = kubectl.segredo("pytstop-os", "os-admin", "ADMIN_PASSWORD")
     email = (

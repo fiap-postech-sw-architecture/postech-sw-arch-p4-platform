@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from e2e.apoio.credenciais import VIDA_DO_TOKEN, Credenciais
-from e2e.apoio.http import Cliente
+from e2e.apoio.http import ClienteHttp
 from e2e.apoio.segredos import mascarar
 
 if TYPE_CHECKING:
@@ -41,7 +41,7 @@ class OsFalso:
 
 
 def _credenciais(os_falso: OsFalso, relogio: Relogio) -> Credenciais:
-    http = Cliente(
+    http = ClienteHttp(
         "http://os.local",
         transporte=httpx.MockTransport(os_falso),
         relogio=relogio,
@@ -145,7 +145,7 @@ def test_login_recusado_reprova_com_a_resposta_mascarada(relogio: Relogio) -> No
     def recusa(_: httpx.Request) -> httpx.Response:
         return httpx.Response(401, json={"erro": {"codigo": "NAO_AUTENTICADO"}})
 
-    http = Cliente("http://os.local", transporte=httpx.MockTransport(recusa))
+    http = ClienteHttp("http://os.local", transporte=httpx.MockTransport(recusa))
     credenciais = Credenciais(
         http,
         admin_email="admin@pytstop.dev",

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Final
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from e2e.apoio.http import Cliente
+    from e2e.apoio.http import ClienteHttp
 
 SERVICOS: Final = ("os-service", "billing-service", "execution-service")
 # Vira nome de arquivo e caminho de URL: so hexadecimal, nunca "../".
@@ -48,7 +48,7 @@ def melhor_trace(
 class Jaeger:
     """API de consulta do Jaeger, por um port-forward do Service ``jaeger`` (16686)."""
 
-    def __init__(self, http: Cliente) -> None:
+    def __init__(self, http: ClienteHttp) -> None:
         self._http = http
 
     def traces_da_ordem(self, ordem_id: str) -> list[Trace]:

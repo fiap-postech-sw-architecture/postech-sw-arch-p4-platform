@@ -42,7 +42,7 @@ def test_cpf_valido_sorteia_de_novo_quando_a_base_tem_digitos_iguais() -> None:
         def randrange(self, _: int) -> int:
             return next(sorteios)
 
-    assert dados.cpf_valido(Falso()) == "52998224725"  # type: ignore[arg-type]
+    assert dados.cpf_valido(Falso()) == "52998224725"  # type: ignore[arg-type]  # falso de randrange
 
 
 def test_cpf_conhecido_confere_com_o_verificador() -> None:

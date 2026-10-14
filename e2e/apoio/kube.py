@@ -148,6 +148,7 @@ class Kubectl:
     def aguardar_pronto(
         self, namespace: str, deployment: str, prazo: float = 120.0
     ) -> None:
+        """Espera o Deployment ficar pronto (``kubectl rollout status``)."""
         self.executar(
             "-n",
             namespace,

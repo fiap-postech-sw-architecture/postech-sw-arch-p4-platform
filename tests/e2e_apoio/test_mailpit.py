@@ -7,11 +7,10 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from e2e.apoio.http import (
-    Cliente,
+    ClienteHttp,
 )
 from e2e.apoio.mailpit import (
     Mailpit,
-    extrair_checkout,
     extrair_link_de_decisao,
 )
 
@@ -47,13 +46,6 @@ def test_extrair_link_de_decisao_sem_link_devolve_none() -> None:
     assert extrair_link_de_decisao(_CORPO_PAGAMENTO) is None
 
 
-def test_extrair_checkout_do_corpo_do_email() -> None:
-    assert extrair_checkout(_CORPO_PAGAMENTO) == (
-        "https://localhost/billing/simulador/checkout/84ea5cc1?token=abc.def"
-    )
-    assert extrair_checkout(_CORPO_ORCAMENTO) is None
-
-
 def _mailpit(
     relogio: Relogio, mensagens: list[dict[str, Any]], textos: dict[str, str]
 ) -> Mailpit:
@@ -68,7 +60,7 @@ def _mailpit(
         return httpx.Response(200, json={"Text": textos[id_da_mensagem]})
 
     return Mailpit(
-        Cliente(
+        ClienteHttp(
             "http://mailpit.local",
             transporte=httpx.MockTransport(tratador),
             relogio=relogio,

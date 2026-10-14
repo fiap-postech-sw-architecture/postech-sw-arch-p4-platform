@@ -1,4 +1,4 @@
-"""Cliente HTTP do E2E: TLS so para localhost, 429 com espera e erro sem segredo.
+"""ClienteHttp do E2E: TLS so para localhost, 429 com espera e erro sem segredo.
 
 Atras do Kong todo cliente do kind tem o mesmo IP, e o OS limita login e
 registro a 5 por minuto por processo: duas sessoes seguidas podem receber 429.
@@ -34,7 +34,7 @@ def verificar_tls(url_base: str) -> bool:
     return urlsplit(url_base).hostname not in HOSTS_SEM_VERIFICACAO
 
 
-class Cliente:
+class ClienteHttp:
     """``httpx.Client`` com prazo, espera de 429 e erros que nao vazam credencial."""
 
     def __init__(
@@ -68,7 +68,7 @@ class Cliente:
         caminho: str,
         *,
         token: str | None = None,
-        json: Any = None,
+        json: Any = None,  # corpo JSON qualquer: o servico o valida
         params: dict[str, Any] | None = None,
         esperado: Iterable[int] | None = None,
     ) -> httpx.Response:

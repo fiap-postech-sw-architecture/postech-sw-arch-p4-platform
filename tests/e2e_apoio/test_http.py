@@ -10,7 +10,7 @@ import pytest
 
 from e2e.apoio.http import (
     PISO_DA_ESPERA_429,
-    Cliente,
+    ClienteHttp,
     RespostaInesperadaError,
     verificar_tls,
 )
@@ -25,8 +25,8 @@ def _cliente(
     tratador: Callable[[httpx.Request], httpx.Response],
     relogio: Relogio,
     **opcoes: Any,
-) -> Cliente:
-    return Cliente(
+) -> ClienteHttp:
+    return ClienteHttp(
         "http://servico.local",
         transporte=httpx.MockTransport(tratador),
         relogio=relogio,

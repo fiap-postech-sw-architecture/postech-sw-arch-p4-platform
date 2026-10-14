@@ -20,7 +20,7 @@ if TYPE_CHECKING:
     import httpx
 
     from e2e.apoio.credenciais import Credenciais, Papel
-    from e2e.apoio.http import Cliente
+    from e2e.apoio.http import ClienteHttp
 
 # Corpo JSON de uma resposta: o formato varia por endpoint e o servico o valida.
 type Json = dict[str, Any]
@@ -68,7 +68,7 @@ class Cenario:
 class _Servico:
     """Base das APIs: o pedido com o papel certo e o corpo JSON."""
 
-    def __init__(self, http: Cliente, credenciais: Credenciais) -> None:
+    def __init__(self, http: ClienteHttp, credenciais: Credenciais) -> None:
         self._http = http
         self._credenciais = credenciais
 
@@ -81,7 +81,7 @@ class _Servico:
         esperado: Iterable[int] | None = (200,),
         **opcoes: Any,
     ) -> httpx.Response:
-        """O pedido; ``**opcoes`` e o que o ``Cliente.pedir`` aceita (json, params)."""
+        """O pedido; ``**opcoes`` vai para ``ClienteHttp.pedir`` (json, params)."""
         token = self._credenciais.token(papel) if papel else None
         return self._http.pedir(
             metodo, caminho, token=token, esperado=esperado, **opcoes
@@ -167,6 +167,10 @@ class ApiOs(_Servico):
                 "descricao_problema": problema,
             },
         )
+
+    def listar_ordens(self) -> Json:
+        """A fila de ordens do atendente (``GET /api/v1/ordens-de-servico``)."""
+        return self._json("atendente", "GET", f"{OS}/ordens-de-servico")
 
     def ordem(self, ordem_id: str) -> Json:
         return self._json("atendente", "GET", f"{OS}/ordens-de-servico/{ordem_id}")
@@ -315,7 +319,7 @@ class ApiExecucao(_Servico):
 class Api:
     """As tres APIs, cada uma com o papel certo em cada chamada."""
 
-    def __init__(self, http: Cliente, credenciais: Credenciais) -> None:
+    def __init__(self, http: ClienteHttp, credenciais: Credenciais) -> None:
         self.http = http
         self.os = ApiOs(http, credenciais)
         self.billing = ApiBilling(http, credenciais)

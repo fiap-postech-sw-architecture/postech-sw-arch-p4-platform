@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from e2e.apoio.http import (
-    Cliente,
+    ClienteHttp,
 )
 from e2e.apoio.jaeger import (
     Jaeger,
@@ -71,7 +71,7 @@ def test_jaeger_traces_da_ordem_consulta_cada_servico_e_junta_sem_repetir(
         return httpx.Response(200, json={"data": [_trace("t1", ["os-service"], 1)]})
 
     jaeger = Jaeger(
-        Cliente(
+        ClienteHttp(
             "http://jaeger.local",
             transporte=httpx.MockTransport(tratador),
             relogio=relogio,
@@ -93,7 +93,7 @@ def test_jaeger_traces_da_ordem_consulta_cada_servico_e_junta_sem_repetir(
 
 def test_jaeger_resposta_sem_data_vira_lista_vazia(relogio: Relogio) -> None:
     jaeger = Jaeger(
-        Cliente(
+        ClienteHttp(
             "http://jaeger.local",
             transporte=httpx.MockTransport(
                 lambda _: httpx.Response(200, json={"data": None})

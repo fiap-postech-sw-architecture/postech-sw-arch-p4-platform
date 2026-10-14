@@ -11,7 +11,7 @@ from e2e.apoio.segredos import registrar
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from e2e.apoio.http import Cliente
+    from e2e.apoio.http import ClienteHttp
 
 type Papel = Literal["admin", "atendente", "mecanico"]
 
@@ -30,7 +30,7 @@ class Credenciais:
 
     def __init__(
         self,
-        http: Cliente,
+        http: ClienteHttp,
         *,
         admin_email: str,
         admin_senha: str,

@@ -11,12 +11,11 @@ import re
 from typing import TYPE_CHECKING, Any, Final
 
 if TYPE_CHECKING:
-    from e2e.apoio.http import Cliente
+    from e2e.apoio.http import ClienteHttp
 
 _LINK_DE_DECISAO: Final = re.compile(
     r"https?://[^\s\"'<>]+/api/v1/publico/orcamentos/[A-Za-z0-9_.~-]+"
 )
-_CHECKOUT: Final = re.compile(r"https?://[^\s\"'<>]+/simulador/checkout/[^\s\"'<>]+")
 
 
 def extrair_link_de_decisao(corpo: str) -> str | None:
@@ -24,15 +23,10 @@ def extrair_link_de_decisao(corpo: str) -> str | None:
     return achado.group() if achado else None
 
 
-def extrair_checkout(corpo: str) -> str | None:
-    achado = _CHECKOUT.search(corpo)
-    return achado.group() if achado else None
-
-
 class Mailpit:
     """API v1 do Mailpit, por um port-forward do Service ``mailpit`` (8025)."""
 
-    def __init__(self, http: Cliente) -> None:
+    def __init__(self, http: ClienteHttp) -> None:
         self._http = http
 
     def mensagens_para(self, destinatario: str) -> list[dict[str, Any]]:
