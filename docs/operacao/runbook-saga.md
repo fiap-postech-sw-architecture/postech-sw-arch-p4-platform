@@ -287,7 +287,7 @@ Chame quem mantém o serviço afetado (repositórios na [tabela do README](../..
 - a retomada volta a `falha_na_compensacao` com a mesma falha, depois de corrigida a causa;
 - o painel do Mercado Pago também recusa o estorno: não retome, porque o pagamento continua `CONFIRMADO` e a retomada voltaria à mesma falha (Billing Service);
 - a DLQ volta a encher depois do redrive;
-- `outbox_dead` está acima de zero: a linha desistiu no relay depois de cinco falhas da própria mensagem ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)), e o reprocessamento é pela rota administrativa do serviço, fora da borda ([ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md));
+- `outbox_dead` está acima de zero: a linha desistiu no relay depois de cinco falhas da própria mensagem ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)), e não há rota administrativa para reprocessá-la nesta fase ([ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)): o reprocessamento é uma atualização no banco do serviço, feita por quem o mantém;
 - há mensagem com `user_id` que o consumidor não aceita, que pode ser forjada: trate como incidente de segurança.
 
 ---

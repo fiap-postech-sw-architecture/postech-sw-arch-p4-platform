@@ -47,14 +47,14 @@ Esta é a matriz única de autorização; a [RFC-004](../../rfc/fase4/rfc-004-mi
 | Serviço | Rota | Papel mínimo |
 |---|---|---|
 | todos | `GET /api/v1/saude`, `GET /api/v1/saude/pronto`, `GET /metrics` | sem token; `/metrics` fica fora da borda |
-| todos | `/api/v1/admin/*` (linhas `dead` da outbox) | `admin`; fora da borda |
+| todos | `/api/v1/admin/*` | nenhum serviço tem rota administrativa nesta fase (o p3 tinha a do reprocessamento das linhas `dead` da outbox); se vier, será `admin`, e a borda já responde 404 a todo esse caminho (Ingress `fora-da-borda`, [ADR-038](038-borda-e-comunicacao-sincrona.md)) |
 | OS Service | `POST /api/v1/autenticacao/login`, `GET /.well-known/jwks.json`, `POST /api/v1/publico/acompanhamento` | público |
 | OS Service | `POST /api/v1/autenticacao/refresh` e `/logout` | portador do token |
 | OS Service | `POST /api/v1/autenticacao/registrar` (cadastro de usuário interno) | `admin` |
 | OS Service | clientes e veículos (`/api/v1/clientes`), com acesso e portabilidade dos dados pessoais | `atendente` |
 | OS Service | exclusão dos dados pessoais pela LGPD (Lei Geral de Proteção de Dados) | `admin` |
 | OS Service | `/api/v1/ordens-de-servico`: abrir, listar, consultar, histórico, cancelamento e entrega | `atendente` |
-| OS Service | `GET /api/v1/ordens-de-servico/metricas` | `admin` |
+| OS Service | `GET /api/v1/ordens-de-servico/metricas` | `admin`; a rota entra com a observabilidade do OS Service e ainda não existe |
 | OS Service | `GET /api/v1/sagas/{ordem_id}` e `POST /api/v1/sagas/{ordem_id}/compensacao` | `admin` |
 | Billing | leitura de `/api/v1/precos/servicos` e `/api/v1/precos/pecas` | `atendente` ou `mecanico` |
 | Billing | escrita nas tabelas de preço | `admin` |
@@ -75,7 +75,7 @@ O token do link é `orcamento_id` e `exp` assinados com HMAC-SHA256 por uma chav
 
 ### Auditoria e propagação
 
-Decisão em nome do cliente e ação privilegiada deixam o `sub` de quem agiu. `OrcamentoAprovado` e `OrcamentoRecusado` levam `decidido_por` quando `canal=atendente`, o histórico da OS guarda o `ator` de cada transição, e cancelamento, ajuste de estoque, mudança de preço, ação do `admin` em nome do mecânico, reprocessamento de linha `dead` da outbox e retomada de compensação geram log de auditoria com `sub`, ação e alvo, como a API administrativa do p3 já fazia (`src/compartilhado/interfaces/router_admin.py:82-86`).
+Decisão em nome do cliente e ação privilegiada deixam o `sub` de quem agiu. `OrcamentoAprovado` e `OrcamentoRecusado` levam `decidido_por` quando `canal=atendente`, o histórico da OS guarda o `ator` de cada transição, e cancelamento, ajuste de estoque, mudança de preço, ação do `admin` em nome do mecânico e retomada de compensação geram log de auditoria com `sub`, ação e alvo, como a API administrativa do p3 já fazia (`src/compartilhado/interfaces/router_admin.py:82-86`).
 
 Na chamada síncrona de negócio, a Execução repassa ao Billing o `Authorization` do mecânico ([ADR-038](038-borda-e-comunicacao-sincrona.md)). Não existe identidade de serviço.
 

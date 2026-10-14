@@ -58,7 +58,7 @@ A evidência de RF-034 depende das credenciais de teste. A execução na sandbox
 
 ### Resiliência
 
-O envelope do [ADR-038](038-borda-e-comunicacao-sincrona.md), com timeout, circuit breaker para o Mercado Pago e retry com jitter só em operação idempotente: as consultas e o estorno com chave. A criação da preferência não tem chave de idempotência documentada e não é repetida pelo cliente HTTP; se falhar, o comando volta pelas filas de retry ([ADR-036](036-mensageria-rabbitmq.md)). As chamadas alimentam `pytstop_mercadopago_requisicoes_total{operacao,resultado}` e `pytstop_circuit_breaker_aberto{dependencia}` ([ADR-043](043-observabilidade-distribuida.md)).
+O envelope do [ADR-038](038-borda-e-comunicacao-sincrona.md), com timeout, circuit breaker para o Mercado Pago e retry com jitter só em operação idempotente: as consultas e o estorno com chave. A criação da preferência não tem chave de idempotência documentada e não é repetida pelo cliente HTTP. Se falhar de forma transitória (timeout, erro de conexão, 429, 5xx, resposta fora do contrato ou circuito aberto), o comando volta pelas filas de retry ([ADR-036](036-mensageria-rabbitmq.md)). Se o provedor a recusar (4xx), a falha é permanente e não tem evento no contrato: o comando vai para a DLQ, que dispara o alerta, e a saga compensa pelo prazo técnico. As chamadas alimentam `pytstop_mercadopago_requisicoes_total{operacao,resultado}` e `pytstop_circuit_breaker_aberto{dependencia}` ([ADR-043](043-observabilidade-distribuida.md)).
 
 ## Alternativas Consideradas
 
