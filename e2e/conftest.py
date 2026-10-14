@@ -3,7 +3,7 @@
 Tudo o que e de sessao (login, port-forwards, o que o cenario derruba) nasce uma
 vez e e desfeito no fim; tudo o que e de cenario (cliente, veiculo, precos,
 estoque, OS) nasce no cenario com codigos unicos, para nenhum depender de outro.
-``E2E_NARRAR=1`` (make demo) imprime o status da OS depois de cada passo.
+``E2E_NARRAR=1`` (make demo) imprime o status da OS depois de cada Entao.
 """
 
 from __future__ import annotations
@@ -194,8 +194,12 @@ def pytest_bdd_after_step(
     step_func: Any,
     step_func_args: dict[str, Any],
 ) -> None:
-    """Com ``E2E_NARRAR=1``: o status e a etapa da OS logo depois do passo."""
-    if not NARRAR or do_contexto(feature, step):
+    """Com ``E2E_NARRAR=1``: o status e a etapa da OS depois de cada ``Entao``.
+
+    So o ``Entao`` espera o estado que afirma; depois de um ``Quando`` assincrono
+    o status ainda e o de antes e a narracao do video sairia incoerente.
+    """
+    if not NARRAR or step.type != "then" or do_contexto(feature, step):
         return
     atual: Cenario = request.getfixturevalue("cenario")
     if atual.ordem_id:

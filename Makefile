@@ -235,8 +235,8 @@ e2e: ## E2E BDD da saga contra o kind com os tres servicos (relatorios em report
 	exit $$status
 
 # Roteiro do video: bloco 1 (fluxo completo) e bloco 2 (falhas), com o status da
-# OS impresso a cada passo. Reusa os cenarios marcados @demo do E2E.
-demo: ## roda os blocos 1 e 2 do video (cenarios @demo) imprimindo o status da OS a cada passo
+# OS impresso depois de cada Entao. Reusa os cenarios marcados @demo do E2E.
+demo: ## roda os blocos 1 e 2 do video (cenarios @demo) imprimindo o status da OS depois de cada Entao
 	$(GUARDA_DE_CONTEXTO)
 	rm -rf reports/demo && mkdir -p reports/demo
 	set -uo pipefail; \

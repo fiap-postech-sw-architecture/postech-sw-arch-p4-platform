@@ -27,7 +27,7 @@ O único commit da `main` fora de pull request é o `Initial commit` que o GitHu
 | Ferramentas de monitoramento e observabilidade da fase 3 (l. 102) | Prometheus, Grafana, Loki, Promtail e Jaeger em [`k8s/base/observabilidade/`](k8s/base/observabilidade); dashboards e alertas documentados em [`observabilidade/`](observabilidade/README.md) ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) |
 | `main` com PR obrigatório e checagens automáticas (l. 95) | Ruleset da `main` com os checks `manifests`, `contratos` e `gitleaks` do CI e `deploy-kind` do CD |
 | Pelo menos um fluxo completo testado com BDD (l. 82) | `make e2e`: a feature em português com a saga inteira e cada compensação, contra os três serviços no kind ([E2E da saga](#e2e-da-saga), [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)) |
-| Vídeo: fluxo completo de uma OS e saga com falhas (l. 119 e 120) | `make demo`: as demonstrações 1 e 2, com o status da OS a cada passo ([E2E da saga](#e2e-da-saga)) |
+| Vídeo: fluxo completo de uma OS e saga com falhas (l. 119 e 120) | `make demo`: as demonstrações 1 e 2, com o status da OS depois de cada `Então` ([E2E da saga](#e2e-da-saga)) |
 | Diagrama geral, estratégia da saga e justificativa da divisão (l. 131 a 133) | [RFC-004](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) e ADRs em [`docs/arquitetura/`](docs/arquitetura) |
 
 O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md). Cobertura dos testes deste repositório: acima de 99% de linhas e ramos do código de teste (gate de 90%), que é só um indicador aqui; o que protege os contratos é a bateria de negativos gerados (seção [Contratos de mensageria](#contratos-de-mensageria)).
@@ -720,7 +720,7 @@ Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e es
 | `E2E_URL` | borda do Kong | `https://localhost` |
 | `E2E_ADMIN_EMAIL` | e-mail do admin semeado | o `ADMIN_EMAIL` do ConfigMap do OS |
 | `E2E_RELATORIOS` | pasta dos relatórios | `reports/e2e` |
-| `E2E_NARRAR` | `1` imprime cada passo e o status da OS (o `make demo` liga) | desligado |
+| `E2E_NARRAR` | `1` imprime cada passo e, depois de cada `Então`, o status da OS (o `make demo` liga) | desligado |
 | `E2E_CONTEXTO_NAO_DESCARTAVEL` | escape do guarda de contexto | ausente |
 
 ### Como o E2E enxerga o cluster
@@ -772,11 +772,12 @@ As mensagens de erro de negócio se afirmam pelo código (`TRANSICAO_STATUS_INVA
 
 ### Demonstrações 1 e 2 do vídeo (`make demo`)
 
-O `make demo` reaproveita os cenários marcados `@demo` e as mesmas fixtures. A **demonstração 1** é o fluxo completo (`@bloco-1`, até 4 min). A **demonstração 2** são as falhas (`@bloco-2`, até 4 min): reserva sem saldo, cancelamento com estorno, 409 depois do início, consumidor parado e API do Billing parada. A cada passo, imprime o passo e o status e a etapa da OS, e no fim o tempo de cada bloco:
+O `make demo` reaproveita os cenários marcados `@demo` e as mesmas fixtures. A **demonstração 1** é o fluxo completo (`@bloco-1`, até 4 min). A **demonstração 2** são as falhas (`@bloco-2`, até 4 min): reserva sem saldo, cancelamento com estorno, 409 depois do início, consumidor parado e API do Billing parada. Imprime cada passo e, depois de cada `Então`, o status e a etapa da OS (depois de um `Quando` assíncrono o status ainda seria o de antes), e no fim o tempo de cada bloco:
 
 ```text
 === A OS percorre os três serviços da abertura à entrega (@bloco-1 @caminho-feliz @demo)
   Quando o atendente abre uma OS para o veículo do cliente
+  Então a OS fica com status "recebida"
       -> OS 64db2c4d: status=recebida etapa=aguardando_diagnostico
 ```
 
