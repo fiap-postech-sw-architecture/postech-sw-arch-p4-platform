@@ -38,6 +38,14 @@ def _duracao(cenario: dict[str, Any]) -> float:
     return nanos / NS_POR_S
 
 
+def _exemplo(cenario: dict[str, Any]) -> str:
+    """`` [/os]`` de um cenario de esquema: o id do pytest-bdd leva o exemplo."""
+    identificador = str(cenario.get("id", ""))
+    return (
+        f" {identificador[identificador.index('[') :]}" if "[" in identificador else ""
+    )
+
+
 def _resultado(cenario: dict[str, Any]) -> str:
     estados = {
         passo.get("result", {}).get("status") for passo in cenario.get("steps", [])
@@ -61,6 +69,7 @@ def gerar_resumo(
     for funcionalidade in cucumber:
         for cenario in funcionalidade.get("elements", []):
             nome = str(cenario.get("name", ""))
+            exibido = nome + _exemplo(cenario)
             tags = " ".join(f"`@{t['name']}`" for t in cenario.get("tags", []))
             resultado = _resultado(cenario)
             duracao = _duracao(cenario)
@@ -68,7 +77,7 @@ def gerar_resumo(
             falhas += resultado != "passou"
             achados = registros.get(nome, {})
             linhas.append(
-                f"| {nome} | {tags} | {resultado} | {duracao:.1f} | "
+                f"| {exibido} | {tags} | {resultado} | {duracao:.1f} | "
                 f"`{achados.get('ordem_id', '-')}` | `{achados.get('trace_id', '-')}` |"
             )
     cabecalho = [

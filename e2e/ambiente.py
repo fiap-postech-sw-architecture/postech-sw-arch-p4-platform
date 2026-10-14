@@ -19,6 +19,9 @@ CONTEXTO: Final = os.environ.get("KUBE_CONTEXT", "kind-pytstop-p4")
 URL_DA_BORDA: Final = os.environ.get("E2E_URL", "https://localhost")
 RELATORIOS: Final = Path(os.environ.get("E2E_RELATORIOS", "reports/e2e"))
 NARRAR: Final = os.environ.get("E2E_NARRAR") == "1"
+# Cada bloco do video dura ate 4 min; o make demo imprime o tempo dos dois.
+LIMITE_DO_BLOCO: Final = 240.0
+DURACAO_DOS_BLOCOS: dict[str, float] = {}
 NAMESPACE_BILLING: Final = "pytstop-billing"
 NAMESPACE_EXECUCAO: Final = "pytstop-execucao"
 NAMESPACE_OS: Final = "pytstop-os"

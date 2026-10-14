@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import itertools
 import os
+import time
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -17,6 +18,8 @@ import pytest
 from e2e.ambiente import (
     ALVOS_DE_FALHA,
     CONTEXTO,
+    DURACAO_DOS_BLOCOS,
+    LIMITE_DO_BLOCO,
     NARRAR,
     RELATORIOS,
     URL_DA_BORDA,
@@ -127,9 +130,42 @@ def pytest_bdd_before_scenario(
     atual = request.getfixturevalue("cenario")
     atual.nome = scenario.name
     atual.tags = frozenset(scenario.tags)
-    narrar(
-        f"\n=== {scenario.name} ({' '.join(f'@{t}' for t in sorted(scenario.tags))})"
-    )
+    atual.inicio = time.monotonic()
+    marcas = " ".join(f"@{tag}" for tag in sorted(scenario.tags))
+    narrar(f"\n=== {scenario.name} ({marcas})")
+    narrar("  (contexto: servicos no ar, usuarios, precos, estoque e cliente prontos)")
+
+
+def do_contexto(feature: Feature, step: Step) -> bool:
+    """O passo e do Contexto (Background) da feature: o video o resume numa linha."""
+    contexto = feature.background
+    return contexto is not None and step.line_number in {
+        passo.line_number for passo in contexto.steps
+    }
+
+
+def pytest_bdd_after_scenario(
+    request: FixtureRequest, feature: Feature, scenario: Scenario
+) -> None:
+    """Soma a duracao do cenario no bloco do video a que ele pertence."""
+    atual: Cenario = request.getfixturevalue("cenario")
+    duracao = time.monotonic() - atual.inicio
+    for bloco in ("bloco-1", "bloco-2"):
+        if bloco in atual.tags:
+            DURACAO_DOS_BLOCOS[bloco] = DURACAO_DOS_BLOCOS.get(bloco, 0.0) + duracao
+    narrar(f"  (cenario concluido em {duracao:.0f} s)")
+
+
+def pytest_bdd_before_step(
+    request: FixtureRequest,
+    feature: Feature,
+    scenario: Scenario,
+    step: Step,
+    step_func: Any,
+) -> None:
+    """Com ``E2E_NARRAR=1``: o passo do cenario (o contexto fica numa linha so)."""
+    if NARRAR and not do_contexto(feature, step):
+        narrar(f"  {step.keyword} {step.name}")
 
 
 def pytest_bdd_after_step(
@@ -140,13 +176,20 @@ def pytest_bdd_after_step(
     step_func: Any,
     step_func_args: dict[str, Any],
 ) -> None:
-    """Com ``E2E_NARRAR=1``: o passo e o status da OS logo depois dele."""
-    if not NARRAR:
+    """Com ``E2E_NARRAR=1``: o status e a etapa da OS logo depois do passo."""
+    if not NARRAR or do_contexto(feature, step):
         return
     atual: Cenario = request.getfixturevalue("cenario")
-    linha = f"  {step.keyword} {step.name}"
     if atual.ordem_id:
         ordem = request.getfixturevalue("api").ordem(atual.ordem_id)
         estado = f"status={ordem['status']} etapa={ordem['etapa']}"
-        linha += f"\n      -> {atual.resumo}: {estado}"
-    narrar(linha)
+        narrar(f"      -> {atual.resumo}: {estado}")
+
+
+def pytest_sessionfinish(session: pytest.Session) -> None:
+    """Com ``E2E_NARRAR=1``: o tempo de cada bloco do video contra o limite de 4 min."""
+    del session
+    for bloco, duracao in sorted(DURACAO_DOS_BLOCOS.items()):
+        narrar(
+            f"[e2e] {bloco}: {duracao:.0f} s (limite do video: {LIMITE_DO_BLOCO:.0f} s)"
+        )

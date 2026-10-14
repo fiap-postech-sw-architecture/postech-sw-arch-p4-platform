@@ -120,7 +120,7 @@ class Cenario:
     ultima_resposta: httpx.Response | None = None
     respostas: list[httpx.Response] = field(default_factory=list)
     filas_mortas_antes: dict[str, int] = field(default_factory=dict)
-    circuito_aberto_visto_em: float = 0.0
+    inicio: float = 0.0
 
     @property
     def resumo(self) -> str:

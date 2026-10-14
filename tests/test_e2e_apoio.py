@@ -1389,6 +1389,36 @@ def test_gerar_resumo_lista_cada_cenario_com_resultado_duracao_e_rastreio() -> N
     assert "| Pulado |  | nao executado | 0.0 | `-` | `-` |" in linhas
 
 
+def test_gerar_resumo_cenario_de_esquema_leva_o_exemplo_no_nome() -> None:
+    cucumber = [
+        {
+            "elements": [
+                {
+                    "id": "test_swagger[/os]",
+                    "name": "Swagger de cada servico",
+                    "tags": [{"name": "borda"}],
+                    "steps": [{"result": {"status": "passed", "duration": 0}}],
+                },
+                {
+                    "id": "test_swagger[/billing]",
+                    "name": "Swagger de cada servico",
+                    "tags": [{"name": "borda"}],
+                    "steps": [{"result": {"status": "passed", "duration": 0}}],
+                },
+            ]
+        }
+    ]
+
+    linhas = gerar_resumo(cucumber, {}, "T").splitlines()
+
+    assert any(
+        linha.startswith("| Swagger de cada servico [/os] |") for linha in linhas
+    )
+    assert any(
+        linha.startswith("| Swagger de cada servico [/billing] |") for linha in linhas
+    )
+
+
 def test_gerar_resumo_sem_cenarios() -> None:
     texto = gerar_resumo([{"elements": []}], {}, "Vazio")
 
