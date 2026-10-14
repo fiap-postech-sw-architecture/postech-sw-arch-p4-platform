@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 # Prova a regra "Saga parada" (observabilidade/grafana/alertas.yaml, ADR-043)
 # no promtool, com a consulta tirada do proprio arquivo: o prazo vencido
-# dispara sem a serie de falha_na_compensacao, a falha dispara sem a serie do
-# prazo, e atraso abaixo de 60 s, outra etapa ou nenhuma serie da saga (OS
-# Service ainda sem as metricas) nao disparam. Cada replica da API repete o
-# gauge: duas replicas a 40 s somam 80 s e nao disparam, o que reprova a troca
-# de max por sum. O threshold do Grafana (A > 0) e a janela de 5 min viram uma
-# regra do Prometheus com a mesma consulta.
+# dispara sem as outras series, a falha dispara sem a serie do prazo, o coletor
+# das sagas em 0 (em uma das replicas) dispara, a serie do coletor ausente
+# dispara se a API do OS Service esta de pe, e nao disparam atraso abaixo de
+# 60 s, outra etapa, coletor sadio, queda do coletor mais curta que a janela e
+# nenhum alvo da API (OS Service fora do ar: quem acusa e o alerta de alvo
+# fora). Cada replica da API repete o gauge: duas replicas a 40 s somam 80 s e
+# nao disparam, o que reprova a troca de max por sum, e uma replica com o
+# coletor em 0 e outra em 1 reprova a troca de min por max. O threshold do
+# Grafana (A > 0) e a janela de 5 min viram uma regra do Prometheus com a mesma
+# consulta.
 set -euo pipefail
 : "${PROMETHEUS_IMAGE:?}" "${YQ_IMAGE:?}"
 
@@ -28,7 +32,7 @@ docker run --rm -i -e EXPR="$expr" --entrypoint sh "$PROMETHEUS_IMAGE" -c '
 rule_files: [regras.yml]
 evaluation_interval: 1m
 tests:
-  - name: prazo vencido ha 90 s, sem a serie de falha_na_compensacao
+  - name: prazo vencido ha 90 s, sem as series de falha_na_compensacao e do coletor
     interval: 1m
     input_series:
       # Cada replica da API repete o valor do coletor.
@@ -54,9 +58,53 @@ tests:
         alertname: SagaParada
         exp_alerts:
           - exp_labels: {}
-  - name: atraso de 45 s e instancias so em outras etapas
+  - name: coletor das sagas em 0 numa das duas replicas, com as outras series sadias
     interval: 1m
     input_series:
+      - series: pytstop_saga_coletor_disponivel{pod="os-api-1"}
+        values: 1x10
+      - series: pytstop_saga_coletor_disponivel{pod="os-api-2"}
+        values: 0x10
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: SagaParada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: SagaParada
+        exp_alerts:
+          - exp_labels: {}
+  - name: serie do coletor ausente com a API do OS Service de pe
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: SagaParada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: SagaParada
+        exp_alerts:
+          - exp_labels: {}
+  - name: serie do coletor ausente no compose, onde o job da API e os-service
+    interval: 1m
+    input_series:
+      - series: up{job="os-service"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: SagaParada
+        exp_alerts:
+          - exp_labels: {}
+  - name: coletor sadio, atraso de 45 s e instancias so em outras etapas
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+      - series: pytstop_saga_coletor_disponivel{pod="os-api-1"}
+        values: 1x10
       - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-1"}
         values: 45x10
       - series: pytstop_saga_ativas{pod="os-api-1", etapa="compensando"}
@@ -78,10 +126,27 @@ tests:
       - eval_time: 6m
         alertname: SagaParada
         exp_alerts: []
-  - name: nenhuma serie da saga
+  - name: coletor fora por 3 minutos e de volta, menos que a janela de 5 min
     interval: 1m
     input_series:
-      - series: up{job="os-service-api"}
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+      - series: pytstop_saga_coletor_disponivel{pod="os-api-1"}
+        values: 1 1 0 0 0 1 1 1 1 1 1
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: SagaParada
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: SagaParada
+        exp_alerts: []
+  - name: nenhuma serie da saga e nenhum alvo da API (OS Service fora do ar)
+    interval: 1m
+    input_series:
+      # Relay e consumidor de pe nao contam: so a API exporta o coletor.
+      - series: up{job="os-service-relay"}
+        values: 1x10
+      - series: up{job="rabbitmq"}
         values: 1x10
     alert_rule_test:
       - eval_time: 6m
