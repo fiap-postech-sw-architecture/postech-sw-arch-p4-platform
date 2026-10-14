@@ -28,6 +28,21 @@ def test_executar_processo_devolve_a_saida() -> None:
     )
 
 
+def test_executar_processo_entrada_vai_so_pelo_stdin_e_nao_pelo_argv() -> None:
+    programa = "import sys; sys.stdout.write(sys.stdin.read().upper())"
+
+    saida = executar_processo([sys.executable, "-c", programa], 10, "token-secreto")
+
+    assert saida == "TOKEN-SECRETO"
+    assert "token-secreto" not in programa
+
+
+def test_executar_processo_sem_entrada_o_stdin_e_vazio() -> None:
+    programa = "import sys; print(repr(sys.stdin.read()))"
+
+    assert executar_processo([sys.executable, "-c", programa], 10).strip() == "''"
+
+
 def test_executar_processo_codigo_de_saida_diferente_de_zero_reprova_sem_segredo() -> (
     None
 ):

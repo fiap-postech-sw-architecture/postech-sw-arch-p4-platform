@@ -252,3 +252,52 @@ def test_manter_reprova_assim_que_a_condicao_deixa_de_valer(relogio: Relogio) ->
         )
 
     assert relogio.agora == 110.0
+
+
+def test_esperar_avisa_o_progresso_antes_de_cada_pausa(relogio: Relogio) -> None:
+    visto: list[tuple[float, object]] = []
+    respostas = iter([None, "", 0, "pronto"])
+
+    resultado = esperar(
+        lambda: next(respostas),
+        prazo=10,
+        intervalo=2,
+        descricao="x",
+        progresso=lambda restante, ultimo: visto.append((restante, ultimo)),
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    assert resultado == "pronto"
+    assert visto == [(10.0, None), (8.0, ""), (6.0, 0)]
+    assert relogio.dormidas == [2, 2, 2]
+
+
+def test_esperar_sem_progresso_nem_ve_o_gancho(relogio: Relogio) -> None:
+    resultado = esperar(
+        lambda: "pronto",
+        prazo=10,
+        descricao="x",
+        progresso=lambda *_: pytest.fail("nao devia avisar"),  # pragma: no cover
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    assert resultado == "pronto"
+
+
+def test_esperar_nao_avisa_progresso_quando_o_prazo_acabou(relogio: Relogio) -> None:
+    visto: list[float] = []
+
+    with pytest.raises(TempoEsgotadoError):
+        esperar(
+            lambda: None,
+            prazo=4,
+            intervalo=2,
+            descricao="x",
+            progresso=lambda restante, _: visto.append(restante),
+            relogio=relogio,
+            dormir=relogio.dormir,
+        )
+
+    assert visto == [4.0, 2.0]

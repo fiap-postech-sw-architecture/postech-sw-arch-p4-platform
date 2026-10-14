@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -206,3 +207,37 @@ def criar_cluster_falso(pasta: Path) -> Path:
         script.write_text(_CLUSTER_FALSO.replace("{python}", sys.executable))
         script.chmod(script.stat().st_mode | stat.S_IXUSR)
     return estado
+
+
+# kubectl falso que grava cada chamada (argv e o stdin, se o comando le `-f -`) em
+# `chamadas.jsonl`, ao lado do script. Os Deployments do namespace respondem como
+# os do Billing; o resto sai com 0. Serve a provar o que passa por argv e o que so
+# passa pelo stdin.
+_KUBECTL_GRAVADOR = """\
+#!{python}
+import json, sys
+from pathlib import Path
+args = sys.argv[1:]
+entrada = ""
+if "-f" in args and args[args.index("-f") + 1] == "-":
+    entrada = sys.stdin.read()
+with Path(__file__).with_name("chamadas.jsonl").open("a") as arquivo:
+    arquivo.write(json.dumps({{"argv": args, "stdin": entrada}}) + "\\n")
+if "get" in args and "deployment" in args and "name" in args:
+    print("deployment.apps/billing-service-api")
+    print("deployment.apps/billing-service-consumidor")
+"""
+
+
+def criar_kubectl_gravador(pasta: Path) -> Path:
+    """Escreve o kubectl gravador em ``pasta`` e devolve o caminho dele."""
+    caminho = pasta / "kubectl"
+    caminho.write_text(_KUBECTL_GRAVADOR.format(python=sys.executable))
+    caminho.chmod(caminho.stat().st_mode | stat.S_IXUSR)
+    return caminho
+
+
+def chamadas_do_gravador(kubectl: Path) -> list[dict[str, Any]]:
+    """As chamadas que o kubectl gravador recebeu, na ordem."""
+    arquivo = kubectl.with_name("chamadas.jsonl")
+    return [json.loads(linha) for linha in arquivo.read_text().splitlines()]

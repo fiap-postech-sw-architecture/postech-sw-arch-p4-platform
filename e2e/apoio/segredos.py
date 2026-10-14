@@ -25,6 +25,9 @@ _PADROES: Final = (
     (re.compile(r"(Bearer\s+)[A-Za-z0-9._~+/=-]+", re.IGNORECASE), r"\1***"),
     # JWT: tres segmentos base64url, o primeiro sempre comeca por eyJ ({"...).
     (re.compile(r"eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]*"), MASCARA),
+    # Access Token do Mercado Pago (TEST-<numeros>-<hex>, APP_USR-<...>): vale em
+    # qualquer saida, mesmo que o valor nao tenha sido registrado.
+    (re.compile(r"(?<![A-Za-z0-9_-])(?:TEST|APP_USR)-[A-Za-z0-9_-]{8,}"), MASCARA),
 )
 
 _registrados: set[str] = set()
@@ -55,6 +58,11 @@ def mascarar(texto: str) -> str:
     for padrao, troca in _PADROES:
         texto = padrao.sub(troca, texto)
     return texto
+
+
+def registrados() -> frozenset[str]:
+    """Os valores registrados, para a varredura da evidencia achar um que sobrou."""
+    return frozenset(_registrados)
 
 
 def esquecer_todos() -> None:
