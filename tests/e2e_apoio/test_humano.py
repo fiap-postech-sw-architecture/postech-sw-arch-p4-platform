@@ -87,8 +87,26 @@ def test_instrucoes_dizem_janela_anonima_comprador_link_cartao_e_prazo() -> None
     assert "nome do titular APRO" in quadro
     assert "até 30 s" in quadro
     assert f"Você tem {int(PRAZO_DO_PAGAMENTO // 60)} min" in quadro
-    assert "Ctrl-C" in quadro
     assert quadro.splitlines()[0] == quadro.splitlines()[-1]
+
+
+def test_instrucoes_dizem_o_site_do_link_e_o_que_fazer_se_a_pagina_der_erro() -> None:
+    quadro = instrucoes_de_pagamento(
+        link=LINK, valor="210.00", moeda="BRL", numero=1, total=2
+    )
+
+    assert "Abra este link de pagamento (site: www.mercadopago.com.br):" in quadro
+    assert "Se a página do link mostrar erro de conta, dê Ctrl-C" in quadro
+    assert "(uma vez): o script desfaz o modo real" in quadro
+    assert f"você não espera os {int(PRAZO_DO_PAGAMENTO // 60)} min." in quadro
+
+
+def test_link_sem_endereco_aparece_como_tal_no_quadro() -> None:
+    quadro = instrucoes_de_pagamento(
+        link="sem-endereco", valor="1.00", moeda="BRL", numero=1, total=2
+    )
+
+    assert "(site: (sem endereço))" in quadro
 
 
 def _leitor(*estados: Mapping[str, Any] | Exception) -> Callable[[], Mapping[str, Any]]:

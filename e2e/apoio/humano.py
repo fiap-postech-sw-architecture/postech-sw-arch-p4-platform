@@ -12,6 +12,7 @@ from __future__ import annotations
 import contextlib
 import time
 from typing import TYPE_CHECKING, Any, Final
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -59,8 +60,13 @@ def formatar_restante(segundos: float) -> str:
 def instrucoes_de_pagamento(
     *, link: str, valor: str, moeda: str, numero: int, total: int
 ) -> str:
-    """O quadro que o dono do projeto segue para pagar a cobranca no navegador."""
+    """O quadro que o dono do projeto segue para pagar a cobranca no navegador.
+
+    Diz o site do link antes de a espera comecar: um link que abre outro endereco, ou
+    uma pagina de erro de conta, se descobre no navegador, e nao nos 15 min de espera.
+    """
     barra = "=" * 72
+    site = urlsplit(link).hostname or "(sem endereço)"
     return "\n".join(
         [
             barra,
@@ -79,7 +85,7 @@ def instrucoes_de_pagamento(
                 '     (coluna "Código de verificação") ou os 6 últimos dígitos do '
                 "User ID da conta."
             ),
-            "  3. Abra este link de pagamento:",
+            f"  3. Abra este link de pagamento (site: {site}):",
             f"     {link}",
             f"  4. Pague com o cartão de teste: {CARTAO_DE_TESTE}.",
             (
@@ -87,8 +93,12 @@ def instrucoes_de_pagamento(
                 "pagamento em até 30 s."
             ),
             (
-                f"  Você tem {int(PRAZO_DO_PAGAMENTO // 60)} min. Ctrl-C cancela e o "
-                "script desfaz o modo real."
+                f"  Você tem {int(PRAZO_DO_PAGAMENTO // 60)} min. Se a página do link "
+                "mostrar erro de conta, dê Ctrl-C"
+            ),
+            (
+                "  (uma vez): o script desfaz o modo real e você não espera os "
+                f"{int(PRAZO_DO_PAGAMENTO // 60)} min."
             ),
             barra,
         ]
