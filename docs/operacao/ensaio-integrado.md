@@ -86,6 +86,8 @@ Segunda execução, o caminho de quem desenvolve: overlay `kind` (com Loki, Prom
 
 ```bash
 export MEDICAO=$(mktemp -d)
+( while true; do kubectl --context kind-pytstop-p4 top pod -A --no-headers 2>/dev/null | awk -v d=$(date +%s) '{print d, $1 "/" $2, $3 + 0, $4 + 0}' >> $MEDICAO/amostras.txt; sleep 5; done ) &
+amostrador=$!
 scripts/medir-kind.sh etapa kind-up
 make kind-up
 scripts/medir-kind.sh etapa deploy
@@ -105,6 +107,8 @@ sleep 90
 kubectl --context kind-pytstop-p4 top pod -A --containers
 kubectl --context kind-pytstop-p4 top node
 scripts/medir-kind.sh resumo
+kill $amostrador
+awk '{ if ($3 > cpu[$2]) cpu[$2] = $3; if ($4 > mem[$2]) mem[$2] = $4 } END { for (p in cpu) printf "%s %d %d\n", p, cpu[p], mem[p] }' $MEDICAO/amostras.txt | sort -k2,2nr
 ```
 
 O `make smoke` roda antes dos serviços porque recusa um cluster que já tem Ingress de serviço (`pytstop-os already has Ingresses: the smoke would reuse its paths`; confirmado no ensaio com os serviços de pé).
@@ -117,18 +121,11 @@ O `medir-kind.sh` guarda só a memória de cada pod. A CPU de pico, a divisão p
 |---|---|
 | Duração das etapas, working set do nó (amostra a cada 5 s), `memory.peak` do cgroup do nó e maior memória por pod | `medir-kind.sh resumo`, nas duas execuções |
 | Memória e CPU em repouso, por pod e por container (como `postgres 37` e `exporter 6`) | `kubectl top pod -A --containers` e `kubectl top node`, lidos 90 s depois do smoke dos serviços; a divisão por container é da primeira execução |
-| Pico de CPU por pod, e a memória da mesma amostra | O laço de amostragem abaixo, na segunda execução, de `kind-up` ao resumo; o `kubectl top` dá a média de uma janela de cerca de 15 s, então picos mais curtos não aparecem |
+| Pico de CPU por pod, e a memória da mesma amostra | O laço de amostragem do bloco da segunda execução (em segundo plano, de `kind-up` ao resumo) e o `awk` que guarda o maior valor de cada pod; o `kubectl top` dá a média de uma janela de cerca de 15 s, então picos mais curtos não aparecem |
 | Composição do working set do nó | O `docker exec` da `memory.stat` abaixo, na primeira execução |
 | Requests e limits | `kubectl get pods -A -o custom-columns=...`, abaixo |
 | Duração dos Jobs | `status.completionTime` menos `status.startTime` de `kubectl get job -A -o json`, na segunda execução; saída colada do terminal |
 | Tempos dentro do `implantar-servicos.sh` | Carimbo de hora em cada linha da saída do script |
-
-O laço de amostragem do pico de CPU, rodando em segundo plano durante a segunda execução, e a conta do maior valor por pod:
-
-```bash
-while true; do kubectl --context kind-pytstop-p4 top pod -A --no-headers | awk -v d=$(date +%s) '{print d, $1 "/" $2, $3 + 0, $4 + 0}' >> amostras.txt; sleep 5; done
-awk '{ if ($3 > cpu[$2]) cpu[$2] = $3; if ($4 > mem[$2]) mem[$2] = $4 } END { for (p in cpu) printf "%s %d %d\n", p, cpu[p], mem[p] }' amostras.txt | sort -k2,2nr
-```
 
 A composição do working set do nó e os requests e limits de cada container:
 
@@ -347,5 +344,5 @@ Linhas de log que parecem erro e são esperadas no kind: `payment_simulator_enab
 
 1. Confira que nenhum outro cluster usa a máquina: `kind get clusters`, `docker ps` e `lsof -nP -iTCP:443 -sTCP:LISTEN` (o kind publica o Kong em `127.0.0.1:443`).
 2. Clone os três serviços ao lado do `platform` e ponha cada um no commit que quer ensaiar. Para repetir o ensaio sobre as `main` de hoje, use o topo da `main` de cada repositório.
-3. Cole os comandos da primeira execução de [Comandos usados](#comandos-usados) num script único (o `export MEDICAO` já está no bloco), rode-o e termine com `make kind-down`. As imagens `pytstop-<serviço>:<commit>` ficam no Docker local: apague as suas com `docker rmi`.
+3. Cole os comandos da primeira execução de [Comandos usados](#comandos-usados) num script único (o `export MEDICAO` já está no bloco), rode-o e termine com `make kind-down`. Para repetir também a segunda execução (overlay `kind` e pico de CPU), troque pelo segundo bloco, que abre o laço de amostragem em segundo plano e termina com o `kill` dele e o `awk` do pico. As imagens `pytstop-<serviço>:<commit>` ficam no Docker local: apague as suas com `docker rmi`.
 4. No CD, o mesmo roteiro roda no job `deploy-kind` de cada serviço (`--tar` no lugar do `docker build` para o próprio serviço), e a coluna "Medido no runner" do ADR-042 se preenche com o primeiro run verde.
