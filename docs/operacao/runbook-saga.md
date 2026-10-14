@@ -10,6 +10,7 @@ Procedimento para os alertas "Saga parada" e "DLQ com mensagens" e para a ordem 
 |---|---|
 | Alerta "Saga parada", com instância em `falha_na_compensacao` | [1](#1-achar-a-saga-parada) e [2](#2-falha-na-compensação-e-retomada) |
 | Alerta "Saga parada", com prazo técnico vencido | [1](#1-achar-a-saga-parada) e [3](#3-prazo-técnico-vencido-sem-reenvio) |
+| Alerta "Saga parada", com o coletor das sagas indisponível (`pytstop_saga_coletor_disponivel` em 0) | [1](#1-achar-a-saga-parada) |
 | Alerta "DLQ com mensagens" (`pytstop-dlq-com-mensagens`) | [4](#4-mensagem-na-dlq-e-redrive) |
 | OS que não anda, relatada pelo atendente | [1](#1-achar-a-saga-parada) e [5](#5-o-trace-e-os-logs-pelo-correlation_id) |
 
@@ -61,7 +62,8 @@ O k3s da Azure é opcional ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy
 "Saga parada" ([ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md#alertas), regra `pytstop-saga-parada`) dispara quando uma destas condições dura 5 minutos, e cada uma vale sozinha:
 
 - prazo técnico vencido e não tratado há mais de 60 s, duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão (30 s, o intervalo do `prazos`; o 60 é literal em `alertas.yaml` e não acompanha a variável, então quem muda o intervalo muda também o limiar e a `summary` da regra), ou seja, `max(pytstop_saga_prazo_vencido_segundos) > 60` ([seção 3](#3-prazo-técnico-vencido-sem-reenvio));
-- alguma instância em `falha_na_compensacao`, ou seja, `max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0` ([seção 2](#2-falha-na-compensação-e-retomada)).
+- alguma instância em `falha_na_compensacao`, ou seja, `max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0` ([seção 2](#2-falha-na-compensação-e-retomada));
+- o coletor das sagas do OS Service indisponível, ou seja, `min(pytstop_saga_coletor_disponivel) == 0`, ou a série ausente com a API do OS Service de pé. Sem o coletor, as duas condições acima ficam sem dado e não disparariam: o alerta existe para que o coletor quebrado não deixe a saga parada sem aviso ([Coletor das sagas indisponível](#coletor-das-sagas-indisponível)).
 
 ### Métricas
 
@@ -70,6 +72,7 @@ No Prometheus (`http://localhost:9090`) ou no Explore do Grafana, entrando como 
 | Consulta | Leitura |
 |---|---|
 | `max(pytstop_saga_prazo_vencido_segundos)` | maior atraso de prazo técnico, em segundos; até cerca de 30 s é normal |
+| `min(pytstop_saga_coletor_disponivel)` | 1: o coletor leu as sagas na última raspagem; 0: a leitura falhou em alguma réplica, e os gauges de etapa e de idade somem ([abaixo](#coletor-das-sagas-indisponível)) |
 | `max by (etapa) (pytstop_saga_ativas)` | instâncias em cada etapa |
 | `max by (etapa) (pytstop_saga_etapa_mais_antiga_segundos)` | idade da instância mais antiga em cada etapa; nas esperas humanas ela cresce sem problema |
 | `sum by (comando) (increase(pytstop_saga_reenvios_total[1h]))` | comandos que precisaram de reenvio: participante lento |
@@ -77,7 +80,17 @@ No Prometheus (`http://localhost:9090`) ou no Explore do Grafana, entrando como 
 | `sum by (motivo) (increase(pytstop_saga_compensacoes_total[1h]))` | por que as sagas compensam; `prazo_tecnico` subindo é participante sem responder |
 | `rabbitmq_queue_consumers{queue="os.eventos"}` | zero: o consumidor do OS Service está fora, e o `prazos` fica em pausa |
 | `sum by (queue) (rabbitmq_queue_messages{queue=~".+[.]dlq"})` | mensagem em alguma DLQ ([seção 4](#4-mensagem-na-dlq-e-redrive)) |
-| `outbox_pendentes`, `outbox_dead` | comando ou evento que não saiu da outbox ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)) |
+| `pytstop_outbox_mais_antiga_segundos`, `outbox_pendentes`, `outbox_dead` | comando ou evento que não saiu da outbox: a idade da pendente mais antiga e quantas esperam, e as que desistiram ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)) |
+
+### Coletor das sagas indisponível
+
+O coletor lê a tabela `sagas` na hora de cada raspagem, numa conexão própria, com prazo de 2 s para a consulta e de 1 s para esperar um lock. Se a leitura falha, ele omite `pytstop_saga_ativas` e `pytstop_saga_etapa_mais_antiga_segundos`, que ficam ausentes e nunca em zero, soma uma falha em `pytstop_saga_coletor_falhas_total` e publica `pytstop_saga_coletor_disponivel` em 0. Para achar a causa:
+
+1. `sum(increase(pytstop_saga_coletor_falhas_total[10m]))` acima de zero confirma que a falha se repete.
+2. O log da API do OS Service, no Loki (`{namespace="pytstop-os"} |= "saga gauges unavailable"`), traz a linha `saga gauges unavailable` com o tipo do erro: banco fora, tabela travada por um lock, que a leitura espera por 1 s, ou consulta acima de 2 s.
+3. Corrija a causa no banco. Enquanto o coletor estiver fora, as consultas de gauge desta seção não valem; a consulta ao banco do passo 3 de "O `ordem_id`" (abaixo) não depende dele.
+
+Resultado esperado: `min(pytstop_saga_coletor_disponivel)` volta a 1 na raspagem seguinte, e o alerta resolve na avaliação seguinte.
 
 ### O `ordem_id`
 
@@ -102,7 +115,7 @@ As métricas não levam o `ordem_id`, porque os labels são fechados. Para chega
    SQL
    ```
 
-   O comando que o relay ainda não entregou não entra na lista, porque o prazo dele não começou: o sinal é `outbox_pendentes` ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)). `entregue_em` e `venceu_em` vazios são de instância sem comando em voo, como a que está em `falha_na_compensacao`. O significado das colunas está na [RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16).
+   O comando que o relay ainda não entregou não entra na lista, porque o prazo dele não começou: o sinal é a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, e `outbox_pendentes` mostra quantas linhas esperam ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)). `entregue_em` e `venceu_em` vazios são de instância sem comando em voo, como a que está em `falha_na_compensacao`. O significado das colunas está na [RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16).
 
 Guarde o `ordem_id` achado, no lugar do UUID de exemplo:
 
@@ -117,7 +130,7 @@ curl -s "$OS/api/v1/sagas/$ORDEM_ID" -H "Authorization: Bearer $TOKEN" | jq
 curl -s "$OS/api/v1/ordens-de-servico/$ORDEM_ID" -H "Authorization: Bearer $TOKEN" | jq
 ```
 
-A primeira resposta mostra a etapa, o motivo da compensação, a falha, o plano restante (a primeira compensação da lista é a pendente), o comando em voo com a hora do envio, os reenvios, o prazo e os passos ([RFC-004, seção 6.1](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#61-rotas-por-serviço)). A segunda traz a etapa junto do status e o resumo do orçamento e do pagamento, com o `pagamento_id`. `GET $OS/api/v1/ordens-de-servico/$ORDEM_ID/historico` junta os passos da saga às mudanças de status, com o ator de cada uma.
+A primeira resposta mostra a etapa, o motivo da compensação, a falha, o plano restante (a primeira compensação da lista é a pendente), o comando em voo com a hora do envio, os reenvios, o prazo e os passos ([RFC-004, seção 6.1](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#61-rotas-por-serviço)). A segunda traz a etapa junto do status e o resumo do orçamento e do pagamento, com o `pagamento_id`. `GET $OS/api/v1/ordens-de-servico/$ORDEM_ID/historico` devolve duas listas: `mudancas`, as transições de status, e `passos`, os registros da saga, com o ator de cada uma.
 
 Resultado esperado: você tem o `ordem_id`, a etapa e, em `falha_na_compensacao`, a `falha`. Siga a seção que a tabela do início indica.
 
@@ -161,7 +174,7 @@ A sequência parou na compensação pendente. O que já foi compensado continua 
 
    A resposta é 202 com a etapa `compensando`: a compensação pendente sai de novo, com `id` novo, prazo novo e contador de reenvios zerado, e o plano segue até `compensada`. Fora de `falha_na_compensacao`, a resposta é 409 `TRANSICAO_STATUS_INVALIDA` ([RFC-004, seção 6.1](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#61-rotas-por-serviço)). O participante que já tinha feito a compensação responde com o desfecho registrado, sem repetir o efeito.
 
-Resultado esperado: `GET $OS/api/v1/sagas/$ORDEM_ID` chega a `compensada`, com a OS `cancelada`; `falha_na_compensacao` some de `max by (etapa) (pytstop_saga_ativas)`, e o alerta resolve na avaliação seguinte, em cerca de 1 minuto. Na corrida do pivot, a saga fica em `em_execucao`, e o histórico registra "cancelamento recusado: execução já iniciada". Se a saga voltar a `falha_na_compensacao` com a mesma falha, a causa continua: veja [Quando pedir ajuda](#quando-pedir-ajuda).
+Resultado esperado: `GET $OS/api/v1/sagas/$ORDEM_ID` chega a `compensada`, com a OS `cancelada`; `falha_na_compensacao` some de `max by (etapa) (pytstop_saga_ativas)`, e o alerta resolve na avaliação seguinte, em cerca de 1 minuto. Na corrida do pivot, a saga fica em `em_execucao`, e o registro dela para a volta leva o gatilho `cancelamento_recusado`, que se vê em `passos` no histórico da OS. Se a saga voltar a `falha_na_compensacao` com a mesma falha, a causa continua: veja [Quando pedir ajuda](#quando-pedir-ajuda).
 
 ## 3. Prazo técnico vencido sem reenvio
 
@@ -175,7 +188,7 @@ Com tudo de pé, o `prazos` reenvia o comando a cada prazo vencido, e o atraso n
 
 Sem consumidor em `os.eventos` ou com o broker fora, o `prazos` não reenvia nem esgota prazo, porque a resposta pode estar esperando na fila, e a saga segue de onde estava, sem gastar reenvio ([RFC-004, seção 4.6](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#46-prazos)).
 
-Comando preso na outbox não dispara "Saga parada": o prazo só começa quando o relay entrega o comando. O sinal é `outbox_pendentes` acima de zero, que o ADR-043 alerta como "Outbox parada" (regra que entra em `alertas.yaml` com as métricas dos serviços). Suba o relay ou o broker; `outbox_dead` acima de zero não se resolve aqui (veja [Quando pedir ajuda](#quando-pedir-ajuda)).
+Comando preso na outbox não dispara "Saga parada": o prazo só começa quando o relay entrega o comando. O sinal é a idade da linha pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, que o ADR-043 alerta como "Outbox parada" quando passa de 300 s por 5 minutos (regra que entra em `alertas.yaml` com as métricas dos serviços); `outbox_pendentes` acima de zero só diz que há linhas esperando o relay, o que é normal com tráfego. Suba o relay ou o broker; `outbox_dead` acima de zero não se resolve aqui (veja [Quando pedir ajuda](#quando-pedir-ajuda)).
 
 Participante lento, com o resto de pé, não para a saga: aparece em `pytstop_saga_reenvios_total` e, esgotados os reenvios, a saga compensa com `motivo=prazo_tecnico` ou, se já estava compensando, vai a `falha_na_compensacao` ([seção 2](#2-falha-na-compensação-e-retomada)).
 
@@ -201,13 +214,23 @@ Resultado esperado: no ciclo seguinte do `prazos`, em até 30 s, o que venceu é
 | `os.eventos.dlq` | evento que nenhum comando pede de novo: ações do mecânico, decisão ou expiração do orçamento, confirmação, recusa ou expiração do pagamento | nada o reenvia: a saga espera o redrive |
 | `os.eventos.dlq` | evento adiantado que esgotou as tentativas | o evento anterior da mesma OS não chegou; muitas vezes está na mesma DLQ |
 
+### Motivos de recusa no consumidor do OS Service
+
+O motivo de cada recusa sai em código no log `message rejected to dlq` do consumidor e no status de erro do span do consumo. Três pedem uma decisão antes do redrive, porque ele devolve a fila inteira e a mensagem que o consumidor recusar de novo volta à DLQ:
+
+| Motivo | O que é | O que fazer |
+|---|---|---|
+| `sem_tratador_nesta_versao` | falha de negócio (por exemplo `OrcamentoRecusado` ou `ReservaDePecasFalhou`) ou resposta de compensação (por exemplo `ExecucaoCancelada`) que uma réplica de versão anterior à das compensações recebeu: consumi-la sem tratador perderia o evento, e por isso ela foi para a DLQ | implante a versão com as compensações em todas as réplicas e só então faça o redrive de `os.eventos`; antes disso a versão antiga a recusa de novo e os 7 dias da DLQ recomeçam |
+| `ordem_encerrada` | evento do fluxo para uma OS `cancelada` ou `entregue` com a saga ainda viva, estado que o cancelamento pela API não produz (alguém alterou a OS por fora do serviço) | o redrive não resolve, a mensagem volta à DLQ: corrija o estado da OS ou chame quem mantém o OS Service ([Quando pedir ajuda](#quando-pedir-ajuda)) |
+| `transicao_invalida` | a OS ou a saga recusam o fato, por exemplo `PagamentoSolicitado` com a OS fora de `aguardando_pagamento` | estado e evento não combinam: chame quem mantém o OS Service com o `ordem_id` e o `message_id`; o redrive só adianta se o estado mudar |
+
 ### Comando recusado pelo participante
 
 O domínio do participante recusa um comando de três jeitos, e só o último chega à DLQ ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md#entrega-retry-e-dlq)):
 
 1. Descompasso de estado, como o `CancelarExecucao` de execução já iniciada: o participante dá `ack` e ignora o comando, sem resposta. Aparece no log dele como `command_ignored`, com o código do motivo, e em `pytstop_mensagens_consumidas_total{resultado="ignorada"}`; a saga resolve pelo evento que já recebeu ou pelo prazo técnico. A compensação repetida não entra aqui: o participante republica o desfecho registrado, e a saga o recebe como resposta.
 2. Falha de negócio com evento no contrato (`GeracaoDeOrcamentoFalhou`, `ReservaDePecasFalhou`, `EstornoDePagamentoFalhou`): o evento chega ao OS Service, e a saga compensa ou, no estorno, vai a `falha_na_compensacao`. Aparece nos passos da instância e em `pytstop_saga_compensacoes_total`.
-3. Falha permanente sem evento no contrato, como o provedor recusar a criação da cobrança: a mensagem vai para a DLQ e dispara "DLQ com mensagens", e o prazo técnico compensa a saga, com `motivo=prazo_tecnico`.
+3. Falha permanente sem evento no contrato, como o provedor recusar a criação da cobrança: a mensagem vai para a DLQ e dispara "DLQ com mensagens", e o prazo técnico compensa a saga, com `motivo=prazo_tecnico`. Provedor fora do ar não é recusa: o comando volta pelas filas de retry ([ADR-040](../arquitetura/adr/fase4/040-integracao-mercado-pago.md)).
 
 ### Quando fazer o redrive
 
@@ -216,7 +239,9 @@ O redrive move a DLQ inteira, não uma mensagem. Faça-o depois de corrigida a c
 - consumidor com defeito: depois da correção implantada;
 - dependência fora (banco, broker, provedor): depois que ela voltou;
 - `versao` nova de mensagem: depois de implantar o consumidor que a conhece;
+- `sem_tratador_nesta_versao` na `os.eventos.dlq`: depois de implantar a versão do OS Service com as compensações, em todas as réplicas. O comando `make redrive FILA=os.eventos` não filtra por motivo: as mensagens dos outros motivos voltam juntas e, se falharem de novo, caem outra vez na DLQ. Se a implantação conviveu com réplicas antigas, repita o redrive no fim dela. A `os.eventos.dlq` expira em 7 dias, e sem o redrive o evento se perde;
 - evento adiantado com o anterior na mesma DLQ: o redrive devolve os dois. Se o adiantado for processado antes, volta à DLQ, porque chega com as tentativas esgotadas; um segundo redrive, depois que o anterior passar, resolve;
+- `execucao.comandos.dlq` depois de uma eliminação de dados do cliente (`AnonimizarVeiculo`): não faça o redrive. A cópia do `SolicitarDiagnostico` que ficou na DLQ (7 dias) ainda tem a placa e a descrição do problema, e o redrive a recriaria na Execução depois da anonimização; deixe a mensagem expirar;
 - mensagem com `user_id` que o consumidor não aceita: pode ser forjada ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md#usuários-e-permissões)). Anote `type`, `message_id`, `user_id` e `correlation_id` antes do redrive e antes de a DLQ a descartar, e veja [Quando pedir ajuda](#quando-pedir-ajuda).
 
 A mensagem que o consumidor recusa de novo volta à DLQ, e o alerta continua: a inválida para o schema, a de `versao` desconhecida e a de `user_id` que ele não aceita (nem o do produtor do tipo nem, numa cópia de retry, o do próprio consumidor).
