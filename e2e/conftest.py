@@ -41,8 +41,7 @@ from e2e.apoio.preflight import conferir_dlqs_vazias, conferir_overlay_kind_ci
 from e2e.apoio.preflight_mp import (
     PreflightDoSandboxError,
     Sandbox,
-    ambiente_do_sandbox,
-    preparar_sandbox,
+    preflight_do_sandbox,
 )
 from e2e.apoio.relatorio import Registro
 from e2e.apoio.segredos import mascarar
@@ -95,7 +94,7 @@ def preflight(kubectl: Kubectl, borda: ClienteHttp) -> Sandbox | None:
     """
     if MP_MODO:
         try:
-            return preparar_sandbox(kubectl, borda, ambiente_do_sandbox(os.environ))
+            return preflight_do_sandbox(kubectl, borda, os.environ)
         except PreflightDoSandboxError as erro:
             _recusar_o_sandbox(erro)
     conferir_overlay_kind_ci(kubectl)

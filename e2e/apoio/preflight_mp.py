@@ -9,7 +9,7 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 import httpx
 
@@ -32,7 +32,7 @@ from e2e.apoio.preflight import numero
 from e2e.apoio.segredos import registrar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Mapping, MutableMapping
 
     from e2e.apoio.http import ClienteHttp
     from e2e.apoio.kube import Kubectl
@@ -74,12 +74,12 @@ class Sandbox:
 # O que o sandbox le do ambiente. O pytest mostra os argumentos de cada frame no
 # traceback, entao o ambiente inteiro (que tem credenciais de outras coisas) nunca
 # pode ser argumento de quem pode falhar: o corte vem antes, como no guarda do contexto.
+CHAVES_SECRETAS: Final = ("MP_ACCESS_TOKEN", "MP_WEBHOOK_SECRET")
 CHAVES_DO_SANDBOX: Final = (
     "E2E_MP_MODO",
     "E2E_MP_MANTER",
     "E2E_MP_NOTIFICATION_URL",
-    "MP_ACCESS_TOKEN",
-    "MP_WEBHOOK_SECRET",
+    *CHAVES_SECRETAS,
 )
 
 
@@ -90,7 +90,7 @@ def ambiente_do_sandbox(ambiente: Mapping[str, str]) -> dict[str, str]:
     reprovar: um traceback com o valor, mesmo de uma variavel mal lida, sai ``***``.
     """
     recorte = {c: ambiente[c] for c in CHAVES_DO_SANDBOX if c in ambiente}
-    for chave in ("MP_ACCESS_TOKEN", "MP_WEBHOOK_SECRET"):
+    for chave in CHAVES_SECRETAS:
         valor = recorte.get(chave, "")
         # Tambem sem o espaco que sobra de uma leitura ruim: e o valor que o
         # Mercado Pago reconheceria, e o que outro trecho do log repetiria.
@@ -106,12 +106,12 @@ def credenciais_do_ambiente(ambiente: Mapping[str, str]) -> tuple[str, str]:
     sem ``-r`` e a colagem deixam um ``\\n`` que o Mercado Pago le como token errado).
     """
     problemas = []
-    for nome in ("MP_ACCESS_TOKEN", "MP_WEBHOOK_SECRET"):
+    for nome in CHAVES_SECRETAS:
         valor = ambiente.get(nome, "")
         if not valor:
             problemas.append(
-                f"{nome} não está no ambiente (leia com `read -rs {nome} && "
-                f"export {nome}`, sem colar o valor no comando)"
+                f"{nome} não está no ambiente (leia com `read -rs {nome}` e passe "
+                f'só ao make: {nome}="${nome}" make mp-sandbox; nunca na linha do make)'
             )
         elif any(caractere.isspace() for caractere in valor):
             problemas.append(
@@ -123,6 +123,17 @@ def credenciais_do_ambiente(ambiente: Mapping[str, str]) -> tuple[str, str]:
     registrar(token)
     registrar(assinatura)
     return token, assinatura
+
+
+def retirar_credenciais(ambiente: MutableMapping[str, str]) -> None:
+    """Tira as credenciais do ambiente deste processo.
+
+    Os filhos (``kubectl``, ``port-forward``) herdariam as duas variaveis sem
+    precisar delas. Quem as le do shell depois e outro processo (``e2e.varredura``,
+    que o ``make`` roda a parte).
+    """
+    for chave in CHAVES_SECRETAS:
+        ambiente.pop(chave, None)
 
 
 def conferir_kind(contexto: str) -> None:
@@ -292,6 +303,22 @@ def preparar_sandbox(
         max_recusas=max_recusas,
         mercadopago=mercadopago,
     )
+
+
+def preflight_do_sandbox(
+    kubectl: Kubectl,
+    borda: ClienteHttp,
+    ambiente: MutableMapping[str, str],
+    **opcoes: Any,  # cliente, avisar, relogio e dormir: as injecoes dos testes
+) -> Sandbox:
+    """O preflight a partir do ambiente do processo, que fica sem as credenciais.
+
+    So as chaves do sandbox seguem adiante (o ambiente inteiro nunca e argumento de
+    quem pode falhar), ja na mascara; depois delas lidas, o processo as esquece.
+    """
+    recorte = ambiente_do_sandbox(ambiente)
+    retirar_credenciais(ambiente)
+    return preparar_sandbox(kubectl, borda, recorte, **opcoes)
 
 
 def _url_de_notificacao(ambiente: Mapping[str, str]) -> str:

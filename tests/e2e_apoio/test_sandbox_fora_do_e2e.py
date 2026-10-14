@@ -149,12 +149,55 @@ def test_o_real_guarda_a_evidencia_anterior_e_o_ensaio_nao_toca_nela() -> None:
     assert "reports/mp-sandbox.anterior" not in ensaio
 
 
-def test_nenhuma_credencial_vai_na_linha_de_comando_do_make() -> None:
-    for alvo in ("mp-sandbox", "mp-sandbox-ensaio"):
-        comandos = _make(alvo, f"MP_ACCESS_TOKEN={CHAVE_DO_MP}")
+def _make_com(*argumentos: str, **ambiente: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # noqa: S603  # nosec B603
+        [shutil.which("make") or "make", "-C", str(RAIZ), *argumentos],
+        env=_ambiente(**ambiente),
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+        stdin=subprocess.DEVNULL,
+    )
 
-        assert CHAVE_DO_MP not in comandos
-        assert "MP_ACCESS_TOKEN" not in comandos.replace("MP_ACCESS_TOKEN=", "", 0)
+
+@pytest.mark.parametrize("variavel", ["MP_ACCESS_TOKEN", "MP_WEBHOOK_SECRET"])
+@pytest.mark.parametrize("alvo", ["mp-sandbox", "mp-sandbox-ensaio"])
+def test_credencial_na_linha_do_make_e_recusada_sem_repetir_o_valor(
+    alvo: str, variavel: str
+) -> None:
+    # Na linha do make o valor ficaria no argv (ps) e no historico do shell.
+    resultado = _make_com("-n", alvo, f"{variavel}={CHAVE_DO_MP}")
+
+    saida = resultado.stdout + resultado.stderr
+    assert resultado.returncode == 2, saida
+    assert "nao vao na linha do make" in saida
+    assert 'MP_ACCESS_TOKEN="$MP_ACCESS_TOKEN"' in saida, (
+        "a forma certa vem na mensagem"
+    )
+    assert CHAVE_DO_MP not in saida
+    assert CHAVE_DO_MP[:12] not in saida
+    assert "uv run" not in saida, "nada foi executado"
+
+
+def test_credencial_so_no_ambiente_o_make_aceita_e_nao_a_repete() -> None:
+    for alvo in ("mp-sandbox", "mp-sandbox-ensaio"):
+        resultado = _make_com(
+            "-n",
+            alvo,
+            MP_ACCESS_TOKEN=CHAVE_DO_MP,
+            MP_WEBHOOK_SECRET=ASSINATURA_DO_TESTE,
+        )
+
+        assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+        assert CHAVE_DO_MP not in resultado.stdout
+        assert ASSINATURA_DO_TESTE not in resultado.stdout
+
+
+def test_a_recusa_da_credencial_vale_so_para_os_alvos_do_sandbox() -> None:
+    resultado = _make_com("-n", "e2e", f"MP_ACCESS_TOKEN={CHAVE_DO_MP}")
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
 
 
 def test_nenhum_workflow_cita_o_sandbox() -> None:

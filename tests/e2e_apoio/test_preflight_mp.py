@@ -3,14 +3,16 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Any
+import os
+import sys
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import pytest
 
-from e2e.apoio import segredos
+from e2e.apoio import preflight_mp, segredos
 from e2e.apoio.http import ClienteHttp
-from e2e.apoio.kube import ErroDeComandoError, Kubectl
+from e2e.apoio.kube import ErroDeComandoError, Kubectl, executar_processo
 from e2e.apoio.mercadopago import ErroDoMercadoPagoError, TokenRecusadoError
 from e2e.apoio.preflight_mp import (
     CHAVES_DO_SANDBOX,
@@ -22,7 +24,9 @@ from e2e.apoio.preflight_mp import (
     conferir_servicos,
     configmap_do_billing,
     credenciais_do_ambiente,
+    preflight_do_sandbox,
     preparar_sandbox,
+    retirar_credenciais,
 )
 from e2e_apoio.falsos import ExecutorFalso, Relogio
 
@@ -180,8 +184,13 @@ def test_credenciais_ausentes_ou_vazias_dizem_o_nome_e_como_ler_sem_expor_valor(
     texto = str(erro.value)
     assert "MP_ACCESS_TOKEN não está no ambiente" in texto
     assert "MP_WEBHOOK_SECRET não está no ambiente" in texto
-    assert "read -rs MP_ACCESS_TOKEN" in texto
     assert "valor-qualquer" not in texto
+    # Sem export: a atribuicao no prefixo do comando leva o valor so ao make.
+    assert "leia com `read -rs MP_ACCESS_TOKEN` e passe só ao make" in texto
+    assert 'MP_ACCESS_TOKEN="$MP_ACCESS_TOKEN" make mp-sandbox' in texto
+    assert 'MP_WEBHOOK_SECRET="$MP_WEBHOOK_SECRET" make mp-sandbox' in texto
+    assert "nunca na linha do make" in texto
+    assert "export" not in texto
 
 
 @pytest.mark.parametrize(
@@ -218,6 +227,100 @@ def test_credenciais_recusadas_nao_entram_na_mascara() -> None:
         credenciais_do_ambiente({**AMBIENTE, "MP_ACCESS_TOKEN": CHAVE_DO_MP + "\n"})
 
     assert segredos.mascarar(ASSINATURA) == ASSINATURA
+
+
+# --- as credenciais saem do ambiente do processo ----------------------------
+
+
+def test_retirar_credenciais_tira_so_as_duas_chaves() -> None:
+    ambiente = {**AMBIENTE, "PATH": "/usr/bin"}
+
+    retirar_credenciais(ambiente)
+
+    assert ambiente == {"E2E_MP_MODO": "real", "PATH": "/usr/bin"}
+    retirar_credenciais(ambiente)  # sem as chaves, nao quebra
+
+
+def test_preflight_do_sandbox_devolve_as_credenciais_e_o_processo_as_esquece(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for chave, valor in AMBIENTE.items():
+        monkeypatch.setenv(chave, valor)
+    relogio = Relogio()
+
+    sandbox = preflight_do_sandbox(
+        _kubectl(),
+        _borda(relogio),
+        os.environ,
+        cliente=_fabrica(MercadoPagoFalso()),
+        avisar=lambda _: None,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    assert (sandbox.token, sandbox.assinatura) == (CHAVE_DO_MP, ASSINATURA)
+    assert "MP_ACCESS_TOKEN" not in os.environ
+    assert "MP_WEBHOOK_SECRET" not in os.environ
+    assert os.environ["E2E_MP_MODO"] == "real"
+
+
+def test_o_kubectl_filho_nao_herda_as_credenciais_depois_do_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for chave, valor in AMBIENTE.items():
+        monkeypatch.setenv(chave, valor)
+    relogio = Relogio()
+    preflight_do_sandbox(
+        _kubectl(),
+        _borda(relogio),
+        os.environ,
+        cliente=_fabrica(MercadoPagoFalso()),
+        avisar=lambda _: None,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+    programa = (
+        "import os; print(os.environ.get('MP_ACCESS_TOKEN'), "
+        "os.environ.get('MP_WEBHOOK_SECRET'), os.environ.get('E2E_MP_MODO'))"
+    )
+
+    # O processo real, com o ambiente que o kubectl herdaria.
+    saida = executar_processo([sys.executable, "-c", programa], 30)
+
+    assert saida.strip() == "None None real"
+
+
+def test_preflight_do_sandbox_so_passa_o_recorte_ao_preflight(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    recebidos: list[Mapping[str, str]] = []
+    preparado = Sandbox(modo="real")
+
+    def espiar(
+        kubectl: Kubectl, borda: ClienteHttp, ambiente: Mapping[str, str]
+    ) -> Sandbox:
+        del kubectl, borda
+        recebidos.append(dict(ambiente))
+        return preparado
+
+    monkeypatch.setattr(preflight_mp, "preparar_sandbox", espiar)
+    ambiente = {**AMBIENTE, "CREDENCIAL_DE_OUTRA_COISA": "valor-secreto-9999"}
+
+    resultado = preflight_do_sandbox(
+        _kubectl(),
+        cast("ClienteHttp", None),  # a borda nao e usada pelo espiao
+        ambiente,
+    )
+
+    assert resultado is preparado
+    assert recebidos == [
+        {
+            "E2E_MP_MODO": "real",
+            "MP_ACCESS_TOKEN": CHAVE_DO_MP,
+            "MP_WEBHOOK_SECRET": ASSINATURA,
+        }
+    ]
+    assert "CREDENCIAL_DE_OUTRA_COISA" in ambiente  # so as duas chaves saem dele
 
 
 # --- kind e overlay -----------------------------------------------------------------
