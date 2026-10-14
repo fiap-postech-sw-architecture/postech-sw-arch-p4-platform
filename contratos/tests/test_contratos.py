@@ -1430,14 +1430,44 @@ def test_todo_pattern_termina_em_fim_de_texto_e_nao_em_dolar() -> None:
     assert [p for p in todos if not p.endswith(r"(?![\s\S])")] == []
 
 
-def test_sku_do_comando_de_reserva_e_o_formato_do_billing() -> None:
-    # Billing (preco.py) e Execucao (codigo.py) validam o SKU com este formato;
-    # o contrato do comando de reserva o repete, com o fim de texto do teste acima.
-    schema = ler_json(SCHEMAS / "ReservarPecas.schema.json")
-    sku = schema["$defs"]["sku"]
+# O formato de codigo do Billing, dono dos codigos: _FORMATO_CODIGO e
+# TAMANHO_MAXIMO_CODIGO de src/precos/dominio/preco.py, usados com fullmatch (a
+# Execucao tem a mesma regra em src/compartilhado/dominio/codigo.py).
+FORMATO_DE_CODIGO_DO_BILLING = re.compile(r"[A-Z0-9]+(?:-[A-Z0-9]+)*")
+TAMANHO_MAXIMO_DE_CODIGO_DO_BILLING = 50
+SKUS_PARA_COMPARAR = [
+    *["", "A", "9", "0A", "A-B", "A-B-C-D", "PEC-OLEO-5W30", "00-00", "A" * 50],
+    *["A" * 51, "-", "-A", "A-", "A--B", "a", "pec-1", "PEC-oleo", "A_B", "A.B"],
+    *["ÁB", "A B", " A", "A ", "A\n", "\nA", "A\nB", "A/B", "A\x00"],
+]
 
-    assert sku["pattern"] == r"^[A-Z0-9]+(?:-[A-Z0-9]+)*(?![\s\S])"
-    assert sku["maxLength"] == 50
+
+def sku_valido_no_billing(sku: str) -> bool:
+    return (
+        len(sku) <= TAMANHO_MAXIMO_DE_CODIGO_DO_BILLING
+        and FORMATO_DE_CODIGO_DO_BILLING.fullmatch(sku) is not None
+    )
+
+
+@pytest.mark.parametrize("sku", SKUS_PARA_COMPARAR)
+def test_sku_do_comando_de_reserva_aceita_o_que_o_billing_aceita(
+    asyncapi: dict[str, Any], sku: str
+) -> None:
+    # Diferencial: o schema e o fullmatch do Billing decidem igual, inclusive o
+    # \n final que o $ do re.search deixaria passar.
+    exemplo = ler_json(EXEMPLOS / "ReservarPecas.json")
+    schema = validador(
+        asyncapi["components"]["messages"]["ReservarPecas"]["payload"]["schema"]
+    )
+
+    assert schema.is_valid(_mudar(exemplo, "dados/pecas/0/sku", sku)) is (
+        sku_valido_no_billing(sku)
+    )
+
+
+def test_sku_do_comando_de_reserva_vem_da_definicao_propria() -> None:
+    schema = ler_json(SCHEMAS / "ReservarPecas.schema.json")
+
     assert schema["$defs"]["peca_a_reservar"]["properties"]["sku"] == {
         "$ref": "#/$defs/sku"
     }
