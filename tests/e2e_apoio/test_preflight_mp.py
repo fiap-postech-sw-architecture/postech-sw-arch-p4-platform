@@ -687,8 +687,10 @@ def test_o_repr_do_sandbox_tambem_nao_mostra_o_cliente_do_mercado_pago() -> None
         def __repr__(self) -> str:
             return "cliente com SEGREDO-NO-REPR"
 
-    sandbox = Sandbox(modo="real", mercadopago=cast("Any", ClienteComSegredoNoRepr()))
+    cliente = ClienteComSegredoNoRepr()
+    sandbox = Sandbox(modo="real", mercadopago=cast("Any", cliente))
 
+    assert "SEGREDO-NO-REPR" in repr(cliente), "o controle: o repr do cliente o mostra"
     assert "SEGREDO-NO-REPR" not in repr(sandbox)
 
 

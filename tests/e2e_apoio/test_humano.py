@@ -36,9 +36,6 @@ class TerminalQueSumiu:
     def write(self, texto: str) -> int:
         raise OSError(errno.EIO, "Input/output error", texto)
 
-    def flush(self) -> None:
-        raise OSError(errno.EIO, "Input/output error")
-
 
 def test_falar_escreve_para_quem_roda_o_script(
     capsys: pytest.CaptureFixture[str],
