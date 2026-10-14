@@ -138,7 +138,7 @@ Estado depois do `smoke-servicos.sh`, na primeira execução (`kind-ci`):
 
 HPA da API: 1 a 1 no `kind-ci` e 1 a 2 no `kind`, como no [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). No RabbitMQ, as filas `os.eventos`, `billing.comandos` e `execucao.comandos` tinham um consumidor cada, e as três DLQs estavam vazias.
 
-Saída do `smoke-servicos.sh` na primeira execução (as linhas `Defaulted container "api" out of: ...`, que o `kubectl exec` escrevia antes da correção deste PR, foram retiradas):
+Saída do `smoke-servicos.sh` na primeira execução, na versão de `aaca05c`. O bloco omite as três linhas `Defaulted container "api" out of: ...` que o `kubectl exec` escrevia então (a saída completa está em [Medidas cruas](ensaio-integrado-medidas.md)). Desde o `platform` #11, as linhas de `/metrics` e de `/api/v1/admin/outbox` saem `ok: 404 (Kong, not published)` e `ok: 404 (Kong fora-da-borda)`, porque o smoke passou a conferir também o corpo da resposta; as demais linhas não mudaram.
 
 ```text
 os-service         initialization Job         ok: os-migracao=true
@@ -183,6 +183,8 @@ A segunda execução (overlay `kind`) produziu a mesma tabela, com os mesmos 35 
 
 ### Provas além do smoke
 
+Feitas com comandos avulsos depois do smoke; as saídas estão em [Medidas cruas](ensaio-integrado-medidas.md#provas-avulsas).
+
 | Prova | Resultado |
 |---|---|
 | Swagger sob o prefixo | `/os/docs`, `/billing/docs` e `/execucao/docs` apontam para `/<prefixo>/openapi.json`, e o `openapi.json` de cada um declara `servers: [{url: "/<prefixo>"}]` (o `--root-path` chegou ao uvicorn) |
@@ -192,7 +194,7 @@ A segunda execução (overlay `kind`) produziu a mesma tabela, com os mesmos 35 
 | Segundo `implantar-servicos.sh` (mesmo commit) | 13 s: os Jobs são apagados e recriados, as migrações e a semente repetem sem erro, os Deployments seguem como estavam (mesma tag, mesmo template); o smoke dos serviços passa em 11 s |
 | Broker reiniciado com os serviços de pé | `kubectl delete pod rabbitmq-0`: o broker volta em 13 s, os três consumidores voltam em 30 s, o relay do Billing registra `broker_unavailable` e depois `broker_connected`, e nenhum pod de serviço reinicia |
 | Alvos do Prometheus | nenhum alvo ativo fora de `up` (a consulta por `health != up` voltou vazia); 4 pods no OS, 5 no Billing e 4 na Execução em `up = 1`, na primeira execução |
-| Traces | depois de chamadas pela borda, o Jaeger lista `os-service`; Billing e Execução não aparecem, porque as APIs deles ainda não exportam spans e nenhuma mensagem circulou pelos relays e consumidores (o teste de ponta a ponta da saga cobre isso) |
+| Traces | depois de chamadas pela borda, o Jaeger listou `os-service`; Billing e Execução não apareceram, porque as APIs deles não exportam spans (ver [Observações do ensaio](#observações-do-ensaio-situação-em-1410)) e nenhuma mensagem circulou pelos relays e consumidores. O teste de ponta a ponta da saga (ADR-041), que exercitaria os três traces, ainda não existe na `main`: está no `platform` #13, aberto |
 
 ## Tempos
 
