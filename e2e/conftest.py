@@ -27,10 +27,12 @@ from e2e.ambiente import (
     narrar,
 )
 from e2e.apoio import dados
+from e2e.apoio.contexto import conferir_borda_local, conferir_contexto
+from e2e.apoio.credenciais import Credenciais
 from e2e.apoio.http import Cliente
 from e2e.apoio.kube import Escalas, Kubectl
 from e2e.apoio.relatorio import Registro
-from e2e.servicos import Api, Cenario, Credenciais
+from e2e.servicos import Api, Cenario
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -38,10 +40,17 @@ if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
     from pytest_bdd.parser import Feature, Scenario, Step
 
+# Mascara no relatorio, SIGTERM e log do httpx: e2e/apoio/plugin.py.
+pytest_plugins = ["e2e.apoio.plugin"]
+
 
 @pytest.fixture(scope="session")
 def kubectl() -> Kubectl:
-    return Kubectl(CONTEXTO)
+    """kubectl no contexto escolhido, depois de provado que e um kind descartavel."""
+    conferir_contexto(CONTEXTO, os.environ)
+    kubectl = Kubectl(CONTEXTO)
+    conferir_borda_local(kubectl, os.environ)
+    return kubectl
 
 
 @pytest.fixture(scope="session")
@@ -181,7 +190,7 @@ def pytest_bdd_after_step(
         return
     atual: Cenario = request.getfixturevalue("cenario")
     if atual.ordem_id:
-        ordem = request.getfixturevalue("api").ordem(atual.ordem_id)
+        ordem = request.getfixturevalue("api").os.ordem(atual.ordem_id)
         estado = f"status={ordem['status']} etapa={ordem['etapa']}"
         narrar(f"      -> {atual.resumo}: {estado}")
 

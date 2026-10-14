@@ -42,7 +42,9 @@ def registrar(valor: str) -> None:
         if len(linha) >= _TAMANHO_MINIMO:
             _registrados.add(linha)
             if os.environ.get("GITHUB_ACTIONS") == "true":
-                print(f"::add-mask::{linha}", file=sys.__stdout__, flush=True)
+                # Na linha propria: o runner so reconhece o comando no inicio da linha,
+                # e o pytest deixa o nome do arquivo e os pontos de progresso abertos.
+                print(f"\n::add-mask::{linha}", file=sys.__stdout__, flush=True)
 
 
 def mascarar(texto: str) -> str:

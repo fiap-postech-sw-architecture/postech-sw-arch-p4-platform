@@ -16,7 +16,13 @@ from urllib.parse import parse_qs, urlsplit
 import httpx
 from pytest_bdd import given, parsers, scenarios, then, when
 
-from e2e.ambiente import NAMESPACE_BILLING, NAMESPACE_OS, RELATORIOS, narrar
+from e2e.ambiente import (
+    NAMESPACE_BILLING,
+    NAMESPACE_OS,
+    RELATORIOS,
+    URL_DA_BORDA,
+    narrar,
+)
 from e2e.apoio.dados import (
     codigo,
     cpf_invalido,
@@ -83,8 +89,8 @@ class OsCanceladaError(AssertionError):
 def diagnostico(api: Api, cenario: Cenario) -> str:
     """Onde a OS e a saga estao, para a mensagem de um cenario que nao chegou la."""
     try:
-        ordem = api.ordem(cenario.ordem_id)
-        saga = api.saga(cenario.ordem_id)
+        ordem = api.os.ordem(cenario.ordem_id)
+        saga = api.os.saga(cenario.ordem_id)
     except AssertionError as erro:
         return f"({erro})"
     passos = [f"{p['gatilho']}->{p['para']}" for p in saga["passos"][-4:]]
@@ -100,7 +106,7 @@ def esperar_status(
     """Espera a OS chegar a ``status``; cancelada pelo caminho, reprova na hora."""
 
     def condicao() -> Json | None:
-        ordem = api.ordem(cenario.ordem_id)
+        ordem = api.os.ordem(cenario.ordem_id)
         if ordem["status"] == status:
             return ordem
         if ordem["status"] == "cancelada":
@@ -134,7 +140,7 @@ def esperar_saga(
     """Espera a saga chegar a ``etapa`` (``compensada``, ``concluida``...)."""
 
     def condicao() -> Json | None:
-        saga = api.saga(cenario.ordem_id)
+        saga = api.os.saga(cenario.ordem_id)
         return saga if saga["etapa"] == etapa else None
 
     try:
@@ -161,7 +167,7 @@ def itens_do_diagnostico(cenario: Cenario, servicos: int, pecas: int) -> list[Js
 
 
 def abrir_ordem(api: Api, cenario: Cenario) -> None:
-    resposta = api.abrir_ordem(
+    resposta = api.os.abrir_ordem(
         cenario.cliente_id, cenario.veiculo_id, "Barulho ao frear"
     )
     corpo = resposta.json()
@@ -175,7 +181,8 @@ def abrir_ordem(api: Api, cenario: Cenario) -> None:
 def esperar_pedido_de_diagnostico(api: Api, cenario: Cenario) -> None:
     esperar(
         lambda: any(
-            d["ordem_id"] == cenario.ordem_id for d in api.diagnosticos("AGUARDANDO")
+            d["ordem_id"] == cenario.ordem_id
+            for d in api.execucao.diagnosticos("AGUARDANDO")
         ),
         prazo=PRAZO_DO_SALTO,
         intervalo=0.5,
@@ -186,12 +193,14 @@ def esperar_pedido_de_diagnostico(api: Api, cenario: Cenario) -> None:
 
 def iniciar_diagnostico(api: Api, cenario: Cenario) -> None:
     esperar_pedido_de_diagnostico(api, cenario)
-    assert api.iniciar_diagnostico(cenario.ordem_id)["status"] == "EM_ANDAMENTO"
+    assert (
+        api.execucao.iniciar_diagnostico(cenario.ordem_id)["status"] == "EM_ANDAMENTO"
+    )
     esperar_status(api, cenario, "em_diagnostico")
 
 
 def concluir_diagnostico(api: Api, cenario: Cenario, servicos: int, pecas: int) -> None:
-    resposta = api.concluir_diagnostico(
+    resposta = api.execucao.concluir_diagnostico(
         cenario.ordem_id, itens_do_diagnostico(cenario, servicos, pecas)
     )
     assert resposta.status_code == httpx.codes.OK, (
@@ -212,7 +221,7 @@ def ler_email_de_decisao(api: Api, portas: Portas, cenario: Cenario) -> None:
     registrar(link.rsplit("/", 1)[1])
     cenario.link_de_decisao = link
     # Em variavel: o pytest mostraria os dois links (credenciais) na falha.
-    mesmo_link = link == api.ordem(cenario.ordem_id)["orcamento"]["link_decisao"]
+    mesmo_link = link == api.os.ordem(cenario.ordem_id)["orcamento"]["link_decisao"]
     assert mesmo_link, "o link do e-mail difere do link do orcamento da OS"
 
 
@@ -227,7 +236,7 @@ def esperar_pagamento_solicitado(api: Api, cenario: Cenario) -> str:
     esperar_status(api, cenario, "aguardando_pagamento")
 
     def solicitado() -> Json | None:
-        resumo = api.ordem(cenario.ordem_id)["pagamento"]
+        resumo = api.os.ordem(cenario.ordem_id)["pagamento"]
         return resumo if resumo and resumo["status"] == "solicitado" else None
 
     resumo = esperar(
@@ -238,7 +247,7 @@ def esperar_pagamento_solicitado(api: Api, cenario: Cenario) -> str:
         ignorar=ERROS_DE_REDE,
     )
     cenario.pagamento_id = resumo["pagamento_id"]
-    checkout = api.pagamento(cenario.pagamento_id)["checkout_url"]
+    checkout = api.billing.pagamento(cenario.pagamento_id)["checkout_url"]
     token = parse_qs(urlsplit(checkout).query)["token"][0]
     registrar(token)
     return str(token)
@@ -255,13 +264,13 @@ def ate_o_orcamento(
 
 def ate_o_pagamento(api: Api, portas: Portas, cenario: Cenario, pecas: int) -> str:
     ate_o_orcamento(api, portas, cenario, 1, pecas)
-    api.decidir_pelo_link(cenario.link_de_decisao, "aprovar")
+    api.billing.decidir_pelo_link(cenario.link_de_decisao, "aprovar")
     return esperar_pagamento_solicitado(api, cenario)
 
 
 def esperar_na_fila(api: Api, cenario: Cenario) -> None:
     esperar(
-        lambda: any(i["ordem_id"] == cenario.ordem_id for i in api.fila()),
+        lambda: any(i["ordem_id"] == cenario.ordem_id for i in api.execucao.fila()),
         prazo=PRAZO_DO_SALTO,
         intervalo=0.5,
         descricao=f"{cenario.resumo} na fila de execucao",
@@ -324,7 +333,7 @@ def _servicos_respondem(api: Api, portas: Portas) -> None:
 def _usuarios_autenticados(api: Api) -> None:
     # A fixture da sessao ja fez o login; aqui o cenario prova que os tokens valem
     # (fila da Execucao: o mecanico; estoque: o admin escreveu no passo anterior).
-    api.fila()
+    api.execucao.fila()
 
 
 @given(
@@ -336,15 +345,13 @@ def _usuarios_autenticados(api: Api) -> None:
 def _precos(api: Api, cenario: Cenario, servico: str, peca: str) -> None:
     cenario.servico = codigo("SRV", cenario.execucao, cenario.numero)
     cenario.peca = codigo("PEC", cenario.execucao, cenario.numero)
-    cenario.preco_servico, cenario.preco_peca = servico, peca
-    api.cadastrar_preco_do_servico(cenario.servico, servico)
-    api.cadastrar_preco_da_peca(cenario.peca, peca)
+    api.billing.cadastrar_preco_do_servico(cenario.servico, servico)
+    api.billing.cadastrar_preco_da_peca(cenario.peca, peca)
 
 
 @given(parsers.parse("que o estoque tem {quantidade:d} unidades da peça"))
 def _estoque(api: Api, cenario: Cenario, quantidade: int) -> None:
-    cenario.estoque_inicial = quantidade
-    api.cadastrar_estoque(cenario.peca, quantidade)
+    api.execucao.cadastrar_estoque(cenario.peca, quantidade)
 
 
 @given("que o cliente tem um veículo cadastrado")
@@ -352,11 +359,11 @@ def _cliente_com_veiculo(api: Api, cenario: Cenario) -> None:
     cenario.documento = cpf_valido()
     cenario.contato = email_de_cliente(cenario.execucao, cenario.numero)
     cenario.placa = placa_mercosul()
-    cliente = api.cadastrar_cliente(
+    cliente = api.os.cadastrar_cliente(
         "Cliente de teste E2E", cenario.documento, cenario.contato
     )
     cenario.cliente_id = cliente["id"]
-    cenario.veiculo_id = api.cadastrar_veiculo(cliente["id"], cenario.placa)["id"]
+    cenario.veiculo_id = api.os.cadastrar_veiculo(cliente["id"], cenario.placa)["id"]
 
 
 # --- dados do cenario -----------------------------------------------------------
@@ -364,7 +371,7 @@ def _cliente_com_veiculo(api: Api, cenario: Cenario) -> None:
 
 @given(parsers.parse("que o estoque da peça passa a ter {quantidade:d} unidade"))
 def _estoque_ajustado(api: Api, cenario: Cenario, quantidade: int) -> None:
-    api.ajustar_estoque(cenario.peca, quantidade)
+    api.execucao.ajustar_estoque(cenario.peca, quantidade)
 
 
 @given(
@@ -388,13 +395,13 @@ def _os_aguardando_pagamento(
     api: Api, portas: Portas, cenario: Cenario, pecas: int
 ) -> None:
     ate_o_pagamento(api, portas, cenario, pecas)
-    assert api.estoque(cenario.peca)["quantidade_reservada"] == pecas
+    assert api.execucao.estoque(cenario.peca)["quantidade_reservada"] == pecas
 
 
 @given("uma OS paga e na fila de execução")
 def _os_paga(api: Api, portas: Portas, cenario: Cenario) -> None:
     token = ate_o_pagamento(api, portas, cenario, 2)
-    api.simular_pagamento(cenario.pagamento_id, token, "aprovar")
+    api.billing.simular_pagamento(cenario.pagamento_id, token, "aprovar")
     esperar_status(api, cenario, "aguardando_execucao")
     esperar_na_fila(api, cenario)
 
@@ -431,20 +438,20 @@ def _concluir(api: Api, cenario: Cenario, servicos: int, pecas: int) -> None:
 
 @when("o cliente aprova o orçamento pelo link do e-mail")
 def _aprovar_pelo_link(api: Api, cenario: Cenario) -> None:
-    decisao = api.decidir_pelo_link(cenario.link_de_decisao, "aprovar")
+    decisao = api.billing.decidir_pelo_link(cenario.link_de_decisao, "aprovar")
     assert decisao["status"] == "APROVADO"
 
 
 @when("o cliente recusa o orçamento pelo link do e-mail")
 def _recusar_pelo_link(api: Api, cenario: Cenario) -> None:
-    decisao = api.decidir_pelo_link(cenario.link_de_decisao, "recusar")
+    decisao = api.billing.decidir_pelo_link(cenario.link_de_decisao, "recusar")
     assert decisao["status"] == "RECUSADO"
 
 
 def pagar(api: Api, cenario: Cenario, acao: Literal["aprovar", "recusar"]) -> None:
     """O cliente clica no botao do checkout simulado."""
     token = esperar_pagamento_solicitado(api, cenario)
-    api.simular_pagamento(cenario.pagamento_id, token, acao)
+    api.billing.simular_pagamento(cenario.pagamento_id, token, acao)
 
 
 @when("o pagamento é aprovado no simulador do Mercado Pago")
@@ -459,27 +466,27 @@ def _pagamento_recusado(api: Api, cenario: Cenario) -> None:
 
 @when("o mecânico inicia a execução")
 def _iniciar_execucao(api: Api, cenario: Cenario) -> None:
-    assert api.iniciar_execucao(cenario.ordem_id)["status"] == "EM_EXECUCAO"
+    assert api.execucao.iniciar_execucao(cenario.ordem_id)["status"] == "EM_EXECUCAO"
 
 
 @when("o mecânico finaliza a execução")
 def _finalizar_execucao(api: Api, cenario: Cenario) -> None:
-    assert api.finalizar_execucao(cenario.ordem_id)["status"] == "FINALIZADA"
+    assert api.execucao.finalizar_execucao(cenario.ordem_id)["status"] == "FINALIZADA"
 
 
 @when("o atendente registra a entrega do veículo")
 def _entregar(api: Api, cenario: Cenario) -> None:
-    assert api.entregar(cenario.ordem_id)["status"] == "entregue"
+    assert api.os.entregar(cenario.ordem_id)["status"] == "entregue"
 
 
 @when(parsers.parse('o atendente cancela a OS com o motivo "{motivo}"'))
 def _cancelar(api: Api, cenario: Cenario, motivo: str) -> None:
-    cenario.ultima_resposta = api.cancelar(cenario.ordem_id, motivo)
+    cenario.ultima_resposta = api.os.cancelar(cenario.ordem_id, motivo)
 
 
 @when("o atendente tenta cancelar a OS")
 def _tentar_cancelar(api: Api, cenario: Cenario) -> None:
-    cenario.ultima_resposta = api.cancelar(
+    cenario.ultima_resposta = api.os.cancelar(
         cenario.ordem_id, "Cliente desistiu tarde demais"
     )
 
@@ -488,7 +495,7 @@ def _tentar_cancelar(api: Api, cenario: Cenario) -> None:
 def _prazo_sem_decisao(api: Api, cenario: Cenario) -> None:
     # Nada a fazer: o Billing vence o orcamento sozinho (72 s no kind-ci). O passo
     # prova que ate aqui ninguem decidiu, e o Entao espera o vencimento.
-    assert api.ordem(cenario.ordem_id)["status"] == "aguardando_aprovacao"
+    assert api.os.ordem(cenario.ordem_id)["status"] == "aguardando_aprovacao"
     narrar("      . esperando o orçamento vencer (72 s no kind-ci)")
 
 
@@ -524,7 +531,9 @@ def _api_volta(escalas: Escalas) -> None:
 def _concluir_duas_vezes(api: Api, cenario: Cenario) -> None:
     # O circuito abre com 5 falhas e cada conclusao tenta ate 3 vezes: duas bastam.
     cenario.respostas = [
-        api.concluir_diagnostico(cenario.ordem_id, itens_do_diagnostico(cenario, 1, 2))
+        api.execucao.concluir_diagnostico(
+            cenario.ordem_id, itens_do_diagnostico(cenario, 1, 2)
+        )
         for _ in range(2)
     ]
 
@@ -558,7 +567,7 @@ def _status(api: Api, cenario: Cenario, status: str) -> None:
 
 @then(parsers.parse('a OS continua com status "{status}"'))
 def _status_imediato(api: Api, cenario: Cenario, status: str) -> None:
-    assert api.ordem(cenario.ordem_id)["status"] == status
+    assert api.os.ordem(cenario.ordem_id)["status"] == status
 
 
 @then(
@@ -576,8 +585,8 @@ def _segue_parada(
 
     def parada() -> bool:
         return bool(
-            api.ordem(cenario.ordem_id)["status"] == status
-            and api.saga(cenario.ordem_id)["etapa"] == etapa
+            api.os.ordem(cenario.ordem_id)["status"] == status
+            and api.os.saga(cenario.ordem_id)["etapa"] == etapa
         )
 
     manter(
@@ -595,15 +604,17 @@ def _execucao_recebe(api: Api, cenario: Cenario) -> None:
 
 @then(parsers.parse('o orçamento da OS soma "{total}"'))
 def _total(cenario: Cenario, api: Api, total: str) -> None:
-    assert api.ordem(cenario.ordem_id)["orcamento"]["total"] == total
+    assert api.os.ordem(cenario.ordem_id)["orcamento"]["total"] == total
 
 
 @then("o cliente recebe o e-mail com o link de decisão do orçamento")
 def _email_com_link(api: Api, portas: Portas, cenario: Cenario) -> None:
     ler_email_de_decisao(api, portas, cenario)
-    assert cenario.link_de_decisao.startswith(
-        "https://localhost/billing/api/v1/publico/"
+    # Em variavel: o pytest mostraria o link (uma credencial) na falha do assert.
+    na_borda = cenario.link_de_decisao.startswith(
+        f"{URL_DA_BORDA}/billing/api/v1/publico/"
     )
+    assert na_borda, "o link do e-mail nao aponta para a borda do E2E"
 
 
 @then(
@@ -613,7 +624,7 @@ def _email_com_link(api: Api, portas: Portas, cenario: Cenario) -> None:
 )
 def _estoque_da_peca(api: Api, cenario: Cenario, saldo: int, reservadas: int) -> None:
     def condicao() -> bool:
-        item = api.estoque(cenario.peca)
+        item = api.execucao.estoque(cenario.peca)
         return bool(
             item["quantidade_disponivel"] == saldo
             and item["quantidade_reservada"] == reservadas
@@ -635,7 +646,7 @@ def _na_fila(api: Api, cenario: Cenario) -> None:
 
 @then("a OS não está mais na fila de execução")
 def _fora_da_fila(api: Api, cenario: Cenario) -> None:
-    assert all(i["ordem_id"] != cenario.ordem_id for i in api.fila())
+    assert all(i["ordem_id"] != cenario.ordem_id for i in api.execucao.fila())
 
 
 @then(parsers.parse('a saga terminou como "{etapa}"'))
@@ -656,27 +667,27 @@ def _saga_terminou_pelo_motivo(
 
 @then(parsers.parse('a saga registrou o evento "{evento}"'))
 def _saga_registrou(api: Api, cenario: Cenario, evento: str) -> None:
-    gatilhos = [p["gatilho"] for p in api.saga(cenario.ordem_id)["passos"]]
+    gatilhos = [p["gatilho"] for p in api.os.saga(cenario.ordem_id)["passos"]]
     assert evento in gatilhos, f"{evento} nao esta nos passos da saga: {gatilhos}"
 
 
 @then(parsers.parse('as compensações enviadas foram, nesta ordem: "{lista}"'))
 def _ordem_das_compensacoes(api: Api, cenario: Cenario, lista: str) -> None:
     esperadas = [nome.strip() for nome in lista.split(",")]
-    assert comandos_de_compensacao(api.saga(cenario.ordem_id)) == esperadas
+    assert comandos_de_compensacao(api.os.saga(cenario.ordem_id)) == esperadas
 
 
 @then("nenhum pagamento foi solicitado para a OS")
 def _sem_pagamento(api: Api, cenario: Cenario) -> None:
-    assert api.ordem(cenario.ordem_id)["pagamento"] is None
-    comandos = [p["comando"] for p in api.saga(cenario.ordem_id)["passos"]]
+    assert api.os.ordem(cenario.ordem_id)["pagamento"] is None
+    comandos = [p["comando"] for p in api.os.saga(cenario.ordem_id)["passos"]]
     assert "SolicitarPagamento" not in comandos
 
 
 @then(parsers.parse('o orçamento no Billing está "{status}"'))
 def _orcamento_no_billing(api: Api, cenario: Cenario, status: str) -> None:
     esperar(
-        lambda: api.orcamento(cenario.orcamento_id)["status"] == status,
+        lambda: api.billing.orcamento(cenario.orcamento_id)["status"] == status,
         prazo=PRAZO_DO_SALTO,
         intervalo=0.5,
         descricao=f"orcamento do Billing em {status}",
@@ -686,9 +697,9 @@ def _orcamento_no_billing(api: Api, cenario: Cenario, status: str) -> None:
 
 @then(parsers.parse('o pagamento no Billing está "{status}"'))
 def _pagamento_no_billing(api: Api, cenario: Cenario, status: str) -> None:
-    pagamento_id = api.ordem(cenario.ordem_id)["pagamento"]["pagamento_id"]
+    pagamento_id = api.os.ordem(cenario.ordem_id)["pagamento"]["pagamento_id"]
     esperar(
-        lambda: api.pagamento(pagamento_id)["status"] == status,
+        lambda: api.billing.pagamento(pagamento_id)["status"] == status,
         prazo=PRAZO_DO_SALTO,
         intervalo=0.5,
         descricao=f"pagamento do Billing em {status}",
@@ -699,7 +710,9 @@ def _pagamento_no_billing(api: Api, cenario: Cenario, status: str) -> None:
 @then(parsers.parse('o pagamento no Billing está "{status}" e não registra estorno'))
 def _pagamento_sem_estorno(api: Api, cenario: Cenario, status: str) -> None:
     _pagamento_no_billing(api, cenario, status)
-    pagamento = api.pagamento(api.ordem(cenario.ordem_id)["pagamento"]["pagamento_id"])
+    pagamento = api.billing.pagamento(
+        api.os.ordem(cenario.ordem_id)["pagamento"]["pagamento_id"]
+    )
     assert pagamento["estornado_em"] is None
     assert pagamento["motivo_estorno"] is None
 
@@ -708,7 +721,7 @@ def _pagamento_sem_estorno(api: Api, cenario: Cenario, status: str) -> None:
 def _diagnostico_da_os(api: Api, cenario: Cenario, status: str) -> None:
     esperar(
         lambda: any(
-            d["ordem_id"] == cenario.ordem_id for d in api.diagnosticos(status)
+            d["ordem_id"] == cenario.ordem_id for d in api.execucao.diagnosticos(status)
         ),
         prazo=PRAZO_DO_SALTO,
         intervalo=0.5,
@@ -742,7 +755,7 @@ def _erro_da_api(cenario: Cenario, codigo: int, erro: str, mensagem: str) -> Non
 
 @then('o histórico da OS mostra os oito status em ordem, de "recebida" a "entregue"')
 def _historico(api: Api, cenario: Cenario) -> None:
-    mudancas = api.historico(cenario.ordem_id)["mudancas"]
+    mudancas = api.os.historico(cenario.ordem_id)["mudancas"]
     assert [m["para"] for m in mudancas] == list(STATUS_EM_ORDEM)
     assert mudancas[0]["de"] is None
 
@@ -850,7 +863,7 @@ def _circuito_fechado(portas: Portas) -> None:
 
 @when("o atendente cadastra um cliente com um CPF de dígito verificador errado")
 def _cadastrar_cpf_invalido(api: Api, cenario: Cenario) -> None:
-    cenario.ultima_resposta = api.cadastrar_cliente_bruto(
+    cenario.ultima_resposta = api.os.cadastrar_cliente_bruto(
         "Cliente com CPF invalido", cpf_invalido(), "cpf-invalido@clientes.pytstop.dev"
     )
 
@@ -874,13 +887,13 @@ def sem_id_da_requisicao(resposta: httpx.Response) -> Any:
     "e para um CPF inexistente"
 )
 def _acompanhamento_igual(api: Api, cenario: Cenario) -> None:
-    invalido = api.acompanhar(cenario.placa, cpf_invalido())
-    inexistente = api.acompanhar(cenario.placa, cpf_valido())
+    invalido = api.os.acompanhar(cenario.placa, cpf_invalido())
+    inexistente = api.os.acompanhar(cenario.placa, cpf_valido())
     assert invalido.status_code == inexistente.status_code == httpx.codes.NOT_FOUND
     assert sem_id_da_requisicao(invalido) == sem_id_da_requisicao(inexistente)
     # O CPF valido do dono, com a placa dele, ainda nao tem OS: tambem 404, igual.
     assert (
-        api.acompanhar(cenario.placa, cenario.documento).status_code
+        api.os.acompanhar(cenario.placa, cenario.documento).status_code
         == httpx.codes.NOT_FOUND
     )
 

@@ -203,10 +203,18 @@ manifests: ## kubeconform, trivy, configs de Prometheus/Loki/Promtail, regra de 
 
 check: lint test prova-retry manifests ## o mesmo que o CI roda
 
+# O E2E derruba o Billing, cria usuarios e nao limpa: so num kind descartavel.
+# O mesmo guarda roda no inicio da sessao (e2e/apoio/contexto.py); aqui ele
+# falha antes de o uv subir. Escape: E2E_CONTEXTO_NAO_DESCARTAVEL=<o contexto>.
+GUARDA_DE_CONTEXTO := case "$(KUBE_CONTEXT)" in kind-*) ;; *) \
+	[ "$${E2E_CONTEXTO_NAO_DESCARTAVEL:-}" = "$(KUBE_CONTEXT)" ] || { \
+	echo "contexto $(KUBE_CONTEXT) nao e um kind descartavel: o E2E derruba o Billing e nao limpa; para rodar assim mesmo exporte E2E_CONTEXTO_NAO_DESCARTAVEL=$(KUBE_CONTEXT)" >&2; exit 2; };; esac
+
 # E2E BDD da saga contra o kind com a plataforma e os tres servicos de pe
 # (README, "E2E da saga"). Os relatorios ficam em reports/e2e; o resumo.md sai
 # mesmo com cenario reprovado, e o status do make e o do pytest.
 e2e: ## E2E BDD da saga contra o kind com os tres servicos (relatorios em reports/e2e)
+	$(GUARDA_DE_CONTEXTO)
 	rm -rf reports/e2e && mkdir -p reports/e2e
 	set -uo pipefail; \
 	KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e pytest -c e2e/pytest.ini e2e \
@@ -218,6 +226,7 @@ e2e: ## E2E BDD da saga contra o kind com os tres servicos (relatorios em report
 # Roteiro do video: bloco 1 (fluxo completo) e bloco 2 (falhas), com o status da
 # OS impresso a cada passo. Reusa os cenarios marcados @demo do E2E.
 demo: ## roda os blocos 1 e 2 do video (cenarios @demo) imprimindo o status da OS a cada passo
+	$(GUARDA_DE_CONTEXTO)
 	rm -rf reports/demo && mkdir -p reports/demo
 	set -uo pipefail; \
 	E2E_NARRAR=1 E2E_RELATORIOS=reports/demo KUBE_CONTEXT=$(KUBE_CONTEXT) \

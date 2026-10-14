@@ -374,7 +374,7 @@ def test_registrar_no_actions_pede_ao_runner_que_mascare(
 
     segredos.registrar("senha-do-admin-123")
 
-    assert capsys.readouterr().out == "::add-mask::senha-do-admin-123\n"
+    assert capsys.readouterr().out == "\n::add-mask::senha-do-admin-123\n"
 
 
 def test_registrar_fora_do_actions_nao_imprime_o_segredo(
