@@ -63,7 +63,11 @@ O OWASP ZAP baseline contra o Kong e a collection do fluxo completo, executada c
 
 ### Cobertura (RNF-040, RNF-050)
 
-`.coveragerc` com `fail_under = 90`, `branch = True`, `source = src` e `relative_files = True`, mais `diff-cover --fail-under=90` no job `test`, para que um PR sem teste não passe só porque o total absorveu o código novo. O job `test` escreve no summary a tabela por contexto e camada (`scripts/cobertura_resumo.py`) e publica `coverage.xml`, `htmlcov/` e `reports/` no artefato `relatorios-de-teste`, com retenção de 90 dias. O README de cada serviço repete a tabela, com print do relatório e link para a execução do CI, e os prints do quality gate e do relatório do E2E ficam versionados em `docs/entrega/fase4/evidencias/`.
+`.coveragerc` com `fail_under = 95`, `branch = True`, `source = src` e `relative_files = True`, mais `diff-cover --fail-under=90` no job `test`, para que um PR sem teste não passe só porque o total absorveu o código novo. Os serviços entram com `fail_under = 90`; o PR de endurecimento de cada um sobe o gate para 95 e liga o `diff-cover` no CI, e até lá o PR mede e cola a cobertura do código novo (`uvx diff-cover coverage.xml --compare-branch origin/main`). O job `test` escreve no summary a tabela por contexto e camada (`scripts/cobertura_resumo.py`) e publica `coverage.xml`, `htmlcov/` e `reports/` no artefato `relatorios-de-teste`, com retenção de 90 dias. O README de cada serviço repete a tabela, com print do relatório e link para a execução do CI, e os prints do quality gate e do relatório do E2E ficam versionados em `docs/entrega/fase4/evidencias/`.
+
+### Teste de mutação
+
+Não é gate de CI nem tem pontuação mínima. Os módulos críticos de cada serviço (a máquina de status, as transições da saga, a idempotência, o objeto de valor do CPF e a validação do JWT) são mutados à mão, e o PR lista cada mutante: o que foi alterado e o teste que falhou. Além deles, o `mutmut` roda nos módulos críticos de cada serviço (consumidor, relay e orquestrador ou saga) quando a execução do módulo couber em 15 minutos; o que passar disso fica só com os mutantes manuais. O resultado vai no corpo do PR e a pontuação, no README do serviço.
 
 ### SonarQube efêmero no CI (RNF-041)
 
@@ -73,7 +77,7 @@ Na validação local de 06/10/2026, sem `relative_files = True` o SonarQube não
 
 A imagem do SonarQube pede `vm.max_map_count` de pelo menos 524288 no host. A primeira execução em runner real mede o tempo de subida e confirma esse valor, e o job só se reexecuta sozinho quando o servidor não fica `UP` no prazo, falha de infraestrutura sem relação com a qualidade do código.
 
-O gate do coverage.py fica em 90%, e o do SonarQube, no mínimo do enunciado, porque recalcula a cobertura com fórmula própria (94,6% contra 96,4% do gate na fase 3).
+O gate do coverage.py fica em 95%, como no p3, e o do SonarQube, no mínimo do enunciado, porque recalcula a cobertura com fórmula própria (94,6% contra 96,4% do gate na fase 3).
 
 ### Versões fixadas
 
@@ -81,7 +85,7 @@ As versões de que os testes e o CI dependem ficam fixadas: `pytest-bdd>=8.0` no
 
 ## Alternativas Consideradas
 
-* Pirâmide por serviço, BDD em dois níveis, gate de 90% e SonarQube efêmero
+* Pirâmide por serviço, BDD em dois níveis, gate de 95% e SonarQube efêmero
 * behave no lugar do pytest-bdd
 * BDD só no ponta a ponta
 * Pact para os contratos
@@ -90,7 +94,7 @@ As versões de que os testes e o CI dependem ficam fixadas: `pytest-bdd>=8.0` no
 * SonarQube manual de fechamento, como na fase 3
 * Gate de cobertura em 80%
 
-### Pirâmide por serviço, BDD em dois níveis, gate de 90% e SonarQube efêmero
+### Pirâmide por serviço, BDD em dois níveis, gate de 95% e SonarQube efêmero
 
 * Bom, porque cada repositório prova sozinho unitários, cobertura, BDD de componente e SonarQube, e o fluxo completo roda com os três serviços no E2E
 * Bom, porque a compensação é testada no PR do serviço que a implementa, antes do merge
@@ -154,7 +158,7 @@ As versões de que os testes e o CI dependem ficam fixadas: `pytest-bdd>=8.0` no
 
 ### Neutras
 
-* A cobertura mede linhas e ramos executados, não a força das asserções; teste de mutação continua fora, como nas fases anteriores
+* A cobertura mede linhas e ramos executados, não a força das asserções; a mutação (manual e com `mutmut` nos módulos críticos) cobre parte do que ela não vê, sem entrar no CI
 
 ## Decisões Relacionadas
 

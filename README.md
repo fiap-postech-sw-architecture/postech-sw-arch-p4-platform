@@ -13,7 +13,7 @@ O PytStop é o sistema de gestão de oficina mecânica das fases anteriores do T
 | [postech-sw-arch-p4-execution-service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service) | Execution Service, do contexto Execução (no texto, "Execução"): fila de diagnóstico e de execução e estoque de peças |
 | [postech-sw-arch-p4-platform](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform) | Este: infraestrutura compartilhada, contratos, testes ponta a ponta (E2E), arquitetura global e documentos da entrega ([ADR-034](docs/arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md)) |
 
-O único commit da `main` fora de pull request é o `Initial commit` que o GitHub cria com o repositório. Desde então tudo entra por PR com squash, e o [ruleset da `main`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837) exige os checks `manifests` e `contratos` do [CI](.github/workflows/ci.yml) ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)).
+O único commit da `main` fora de pull request é o `Initial commit` que o GitHub cria com o repositório. Desde então tudo entra por PR com squash, e o [ruleset da `main`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837) exige os checks `manifests`, `contratos` e `gitleaks` do [CI](.github/workflows/ci.yml) e `deploy-kind` do [CD](.github/workflows/cd.yml) ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)).
 
 ## Papel deste repositório
 
@@ -25,7 +25,7 @@ O único commit da `main` fora de pull request é o `Initial commit` que o GitHu
 | Nenhum serviço acessa o banco de outro (l. 67) | Os serviços trocam só mensagens e chamadas REST pela borda; as permissões do broker limitam o que cada usuário publica e lê |
 | Deploy automatizado em Kubernetes (l. 94 e 100) | `make kind-up deploy` com o overlay `kind-ci`, que o CD de cada serviço chama pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh) (`make -C platform kind-up deploy OVERLAY=kind-ci`), e o mesmo `make deploy` com o overlay `k3s` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)); o job `deploy-kind` do [CD](.github/workflows/cd.yml) implanta a plataforma no kind do runner, com o overlay `kind-ci`, em todo PR e push na `main`; os serviços entram em seguida pelo [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) (no CD de cada serviço, ou pelo `make kind-deploy` que cada serviço traz), conferidos pelo [`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh) ([Contrato com os serviços](#contrato-com-os-serviços)) |
 | Ferramentas de monitoramento e observabilidade da fase 3 (l. 102) | Prometheus, Grafana, Loki, Promtail e Jaeger em [`k8s/base/observabilidade/`](k8s/base/observabilidade); dashboards e alertas documentados em [`observabilidade/`](observabilidade/README.md) ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) |
-| `main` com PR obrigatório e checagens automáticas (l. 95) | Ruleset da `main` com os checks `manifests` e `contratos` do CI, que roda também o `gitleaks` |
+| `main` com PR obrigatório e checagens automáticas (l. 95) | Ruleset da `main` com os checks `manifests`, `contratos` e `gitleaks` do CI e `deploy-kind` do CD |
 | Diagrama geral, estratégia da saga e justificativa da divisão (l. 131 a 133) | [RFC-004](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) e ADRs em [`docs/arquitetura/`](docs/arquitetura) |
 
 O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md). Cobertura dos testes deste repositório: 100% de linhas e ramos do código de teste (gate de 90%), que é só um indicador aqui; o que protege os contratos é a bateria de negativos gerados (seção [Contratos de mensageria](#contratos-de-mensageria)).
@@ -66,13 +66,22 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 ### Kubernetes local (kind)
 
 ```bash
-make kind-up        # cria o cluster pytstop-p4 (contexto kind-pytstop-p4)
-make deploy         # segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check
-make smoke          # borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos; sai com status 1 se uma prova não valer
-make status         # pods, serviços, volumes e filas do RabbitMQ
-make port-forward   # Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025
-make kind-down      # apaga o cluster
+make kind-up
+make deploy
+make smoke
+make status
+make port-forward
+make kind-down
 ```
+
+| Alvo | O que faz |
+|---|---|
+| `make kind-up` | cria o cluster `pytstop-p4` (contexto `kind-pytstop-p4`) |
+| `make deploy` | segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check |
+| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos; sai com status 1 se uma prova não valer |
+| `make status` | pods, serviços, volumes e filas do RabbitMQ |
+| `make port-forward` | Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025 |
+| `make kind-down` | apaga o cluster |
 
 O `make smoke` pede um cluster só com a plataforma: ele recusa um namespace de serviço com Ingress. Para implantar os serviços no mesmo cluster, depois do `make deploy`, veja o [Contrato com os serviços](#contrato-com-os-serviços) (o `make kind-deploy` de cada serviço); para voltar ao cluster só da plataforma, apague os namespaces `pytstop-os`, `pytstop-billing` e `pytstop-execucao`.
 
@@ -89,7 +98,7 @@ Senhas dos admins do Grafana e do RabbitMQ: o `make deploy` as gera no primeiro 
 
 ### Kind no CI (overlay `kind-ci`)
 
-O job `deploy-kind` do [`cd.yml`](.github/workflows/cd.yml) roda em todo pull request para a `main`, a cada push na `main` e sob demanda, sem filtro de caminhos, para poder virar check obrigatório. No runner `ubuntu-24.04` (16 GB de memória, o padrão do GitHub para repositório público, como os quatro da fase 4), ele instala o kind 0.31.0 e o kubectl 1.35.9, com versão e sha256 fixados em [`instalar-ferramentas.sh`](scripts/ci/instalar-ferramentas.sh), e roda os mesmos alvos do kind local com `OVERLAY=kind-ci`: `make kind-up` e `make deploy` pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh), o mesmo ponto de entrada do CD dos serviços, o [`gerar-segredos.sh`](scripts/gerar-segredos.sh) uma segunda vez, que tem de deixar cada Secret como estava ([Segredos gerados](#segredos-gerados)), e `make smoke`. O kind é a versão que publicou o `kindest/node:v1.35.0` pinado em [`kind/cluster.yaml`](kind/cluster.yaml), e o kubectl, a mesma minor do nó; os que vêm no runner mudam com a imagem dele (hoje, kind 0.33 e kubectl 1.37, duas minors acima do nó).
+O job `deploy-kind` do [`cd.yml`](.github/workflows/cd.yml) roda em todo pull request para a `main`, a cada push na `main` e sob demanda, sem filtro de caminhos, porque é check obrigatório do ruleset da `main` e tem de rodar em todo pull request. No runner `ubuntu-24.04` (16 GB de memória, o padrão do GitHub para repositório público, como os quatro da fase 4), ele instala o kind 0.31.0 e o kubectl 1.35.9, com versão e sha256 fixados em [`instalar-ferramentas.sh`](scripts/ci/instalar-ferramentas.sh), e roda os mesmos alvos do kind local com `OVERLAY=kind-ci`: `make kind-up` e `make deploy` pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh), o mesmo ponto de entrada do CD dos serviços, o [`gerar-segredos.sh`](scripts/gerar-segredos.sh) uma segunda vez, que tem de deixar cada Secret como estava ([Segredos gerados](#segredos-gerados)), e `make smoke`. O kind é a versão que publicou o `kindest/node:v1.35.0` pinado em [`kind/cluster.yaml`](kind/cluster.yaml), e o kubectl, a mesma minor do nó; os que vêm no runner mudam com a imagem dele (hoje, kind 0.33 e kubectl 1.37, duas minors acima do nó).
 
 O [`kind-ci`](k8s/overlays/kind-ci/kustomization.yaml) é o overlay `kind` sem Loki, Promtail e Grafana: o mesmo metrics-server, o Kong em NodePort, os limites de rate limit ×10 e uma réplica por Deployment, como no base. A plataforma fica com 1.088 Mi de requests e 3 Gi de limits de memória, mais os 200 Mi que o metrics-server reserva; o orçamento com os três serviços e os valores medidos estão no [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). Com `OVERLAY=kind-ci`, o `make smoke` pula, com aviso, as provas que dependem de Loki, Promtail e Grafana (token mascarado no Loki e regras de alerta carregadas) e roda as demais como no kind local, e a linha final diz quantos grupos de provas pulou; nos outros overlays, componente ausente ou quebrado continua reprovando. Trocar de overlay no mesmo cluster exige recriá-lo (`make kind-down kind-up`): o apply não apaga o que saiu do overlay, e um cluster que passou do `kind` para o `kind-ci` mantém Loki, Promtail e Grafana de pé, com as provas deles puladas.
 
@@ -124,7 +133,7 @@ Nenhuma senha ou chave fica nos manifests. O `make deploy` roda o [`gerar-segred
 | `os-jwt` (fonte) | `pytstop-os` | `JWT_PRIVATE_KEY` (RSA de 2048 bits em PEM PKCS#8) e `JWT_PREVIOUS_PUBLIC_KEY` (vazia; durante a rotação, recebe a chave pública que entra, na etapa 1, ou a que sai, na etapa 2, só publicada no JWKS) | API do OS Service | Só se ainda não existe | Sem derrubar sessão, pelas etapas da [rotação da chave](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#rotação-da-chave) do OS Service ([ADR-039](docs/arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)): as chaves de cada etapa no Secret e o `rollout restart` da API do OS. Apagar o Secret, rodar o `make deploy` e reiniciar a API é a troca de emergência, que derruba as sessões |
 | `os-cripto` (fonte) | `pytstop-os` | `ENCRYPTION_KEY` (chave Fernet: 32 bytes em base64 url-safe, 44 caracteres) | API e relay do OS Service | Só se ainda não existe; nunca é regenerada | Não gira sem migração: a chave nova exige recifrar os dados pessoais e recalcular o hash do documento ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)) |
 | `os-admin` (fonte) | `pytstop-os` | `ADMIN_PASSWORD` (48 hexadecimais), a senha do admin | Job de migração do OS Service (semente) e E2E | Só se ainda não existe | Não gira pelo Secret: a semente só cria o admin que ainda não existe, e o OS Service não tem troca de senha; o Secret guarda a senha da primeira semente |
-| `billing-mongo` (fonte) | `pytstop-billing` | `MONGO_INITDB_ROOT_PASSWORD` (root), `MONGO_BILLING_PASSWORD` (`billing`) e `MONGO_EXPORTER_PASSWORD` (`exporter`), 48 hexadecimais cada, e `MONGO_KEYFILE` (756 bytes em base64, 1.008 caracteres numa linha) | mongod (o root, no primeiro boot, e o keyfile), Job de inicialização, processos do serviço e exporter | Só se ainda não existe | Senhas, com janela, pelos passos de [Troca de senha do banco](#troca-de-senha-do-banco): a senha nova no Secret, o `db.changeUserPassword`, como root, sem a senha em argumento, e o restart de quem usa o usuário: `billing`, os Deployments do Billing; `exporter`, o StatefulSet do banco; o root, o Job, que a relê no deploy seguinte do serviço, e o StatefulSet do banco, que lê a senha dele só no start (sem o restart, a próxima troca não autentica). Keyfile, com o banco fora durante o restart: o valor novo no Secret e `rollout restart statefulset/billing-mongo`; o replica set tem um membro só, e nenhum outro precisa da chave antiga |
+| `billing-mongo` (fonte) | `pytstop-billing` | `MONGO_INITDB_ROOT_PASSWORD` (root), `MONGO_BILLING_PASSWORD` (`billing`) e `MONGO_EXPORTER_PASSWORD` (`exporter`), 48 hexadecimais cada, e `MONGO_KEYFILE` (756 bytes em base64, 1.008 caracteres numa linha) | mongod (o root, no primeiro boot, e o keyfile), Job de inicialização, processos do serviço e exporter | Só se ainda não existe | Senhas, com janela, pelos passos de [Troca de senha do banco](#troca-de-senha-do-banco): a senha nova no Secret, o `changeUserPassword` no banco do usuário (`billing` no banco `billing`, o `exporter` e o root em `admin`), como root, sem a senha em argumento, e o restart de quem usa o usuário: `billing`, os Deployments do Billing; `exporter`, o StatefulSet do banco; o root, o Job, que a relê no deploy seguinte do serviço, e o StatefulSet do banco, para a variável `MONGO_INITDB_ROOT_PASSWORD` do contêiner voltar a ser a do Secret (a troca seguinte autentica o root pela senha do Secret, e não pela variável). Keyfile, com o banco fora durante o restart: o valor novo no Secret e `rollout restart statefulset/billing-mongo`; o replica set tem um membro só, e nenhum outro precisa da chave antiga |
 | `billing-link` (fonte) | `pytstop-billing` | `ORCAMENTO_LINK_SECRET` (64 hexadecimais), a chave HMAC do link de decisão e do checkout do simulador | API e consumidor do Billing | Só se ainda não existe | Apagar o Secret, `make deploy` e o `rollout restart` dos Deployments do Billing, a API e o consumidor juntos: os links e checkouts já enviados deixam de valer (o orçamento que aguarda decisão fica sem link até vencer, e o atendente ainda decide por ele), e até o fim do restart um link pode abrir numa réplica e dar 404 em outra |
 
 Os valores saem do `openssl`: as senhas são 24 bytes do `openssl rand` em hexadecimal (48 caracteres, que entram em URL, JSON e YAML sem escape), e a chave RSA vem do `openssl genpkey`. O restart que cada troca pede é o `rollout restart` do Deployment ou do StatefulSet no namespace do serviço (`kubectl --context kind-pytstop-p4 -n pytstop-billing rollout restart deployment` reinicia todos os Deployments do Billing), porque o pod lê o Secret só no start.
@@ -206,36 +215,61 @@ SQL
 
 O `psql` troca `:'senha'` pelo valor antes de enviar o comando (o `psql -c` do 16 não faz essa troca), então o servidor recebe a senha em claro. Os cinco `SET`, que valem só para a sessão, a tiram do log do servidor: sem eles, um `log_statement` em `all` ou `ddl` registra o comando, um comando que falha registra a linha `STATEMENT` com a senha, e `log_min_duration_statement`, `log_min_duration_sample` ou `log_transaction_sample_rate` ligados registram o texto do comando pela duração ou por amostragem. A regra é desligar todo parâmetro que grava o texto do comando. Por fim, reinicie quem usa o papel, como diz a coluna "Como girar" da tabela; para o `os_app`, `kubectl --context kind-pytstop-p4 -n pytstop-os rollout restart deployment`.
 
-MongoDB (o exemplo troca a do `billing` e supõe o usuário no banco `admin`; se o init o criou em outro, troque o `admin` da segunda linha do script. O root autentica com as variáveis do próprio contêiner). Grave a senha nova na chave `MONGO_BILLING_PASSWORD` do `billing-mongo`, no `pytstop-billing`, com o mesmo `jq` acima, e aplique:
+MongoDB. O `replica-set.js` do Billing cria o `billing` no banco `billing` (`authSource=billing`), e o `exporter` e o root ficam em `admin`: a troca vai no banco do usuário, e no banco errado o `mongosh` responde `User billing@admin not found`. Os três seguem os mesmos passos, e a tabela diz o que muda; o exemplo é o do `billing`:
+
+| Credencial | Chave do Secret `billing-mongo` | Usuário | Banco | O que reiniciar depois |
+|---|---|---|---|---|
+| `billing` | `MONGO_BILLING_PASSWORD` | `billing` | `billing` | os Deployments do Billing |
+| `exporter` | `MONGO_EXPORTER_PASSWORD` | `exporter` | `admin` | o StatefulSet do banco, porque o exporter é sidecar dele |
+| root | `MONGO_INITDB_ROOT_PASSWORD` | `root` | `admin` | o StatefulSet do banco; o Job relê a senha no deploy seguinte |
+
+Leia primeiro a senha do root que o banco tem agora, a do Secret, e só então gere a senha nova e grave-a. O root autentica com a senha do Secret, e não com a variável do contêiner, que só acompanha o Secret no restart: se o restart de uma troca anterior do root foi pulado, a variável guarda uma senha que o banco já não aceita.
 
 ```bash
-{ printf '%s\n' "$senha"; cat <<'JS'
-db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.MONGO_INITDB_ROOT_PASSWORD)
-db.getSiblingDB("admin").changeUserPassword("billing", process.env.SENHA_NOVA)
-JS
-} | kubectl --context kind-pytstop-p4 -n pytstop-billing exec -i statefulset/billing-mongo -c mongo -- \
-    sh -c 'read -r SENHA_NOVA && [ -n "$SENHA_NOVA" ] && export SENHA_NOVA && exec mongosh --quiet --norc'
+chave=MONGO_BILLING_PASSWORD usuario=billing banco=billing
+senha_root=$(kubectl --context kind-pytstop-p4 -n pytstop-billing get secret billing-mongo -o json \
+  | jq -r '.data.MONGO_INITDB_ROOT_PASSWORD | @base64d')
+senha=$(openssl rand -hex 24)
+kubectl --context kind-pytstop-p4 -n pytstop-billing get secret billing-mongo -o json \
+  | VALOR="$senha" jq --arg chave "$chave" '.data[$chave] = (env.VALOR | @base64)' \
+  | kubectl --context kind-pytstop-p4 replace -f -
 ```
 
-A saída esperada é `{ ok: 1 }` duas vezes, e o `mongod` registra o `updateUser` com `"pwd":"xxx"`. O restart de quem usa o usuário vem da coluna "Como girar".
+Aplique no banco, como root. As duas senhas vão nas duas primeiras linhas da entrada, e o `sh` do contêiner as lê para `SENHA_NOVA` e `SENHA_ROOT`:
+
+```bash
+{ printf '%s\n%s\n' "$senha" "$senha_root"; cat <<JS
+db.getSiblingDB("admin").auth(process.env.MONGO_INITDB_ROOT_USERNAME, process.env.SENHA_ROOT)
+db.getSiblingDB("$banco").changeUserPassword("$usuario", process.env.SENHA_NOVA)
+print("senha de $usuario trocada")
+JS
+} | kubectl --context kind-pytstop-p4 -n pytstop-billing exec -i statefulset/billing-mongo -c mongo -- \
+    sh -c 'read -r SENHA_NOVA && read -r SENHA_ROOT && [ -n "$SENHA_NOVA" ] && [ -n "$SENHA_ROOT" ] && export SENHA_NOVA SENHA_ROOT && exec mongosh --quiet --norc --file /dev/stdin'
+```
+
+O `mongosh` lê o script como arquivo (`--file /dev/stdin`) e não da entrada interativa, que sai com 0 mesmo quando a autenticação falha. Deu certo quando o comando sai com 0 e imprime `senha de billing trocada`; se a autenticação ou a troca falhar, ele imprime o erro do MongoDB (`MongoServerError: Authentication failed.` ou `User billing@admin not found`) e sai com código diferente de zero. Se o passo falhar, repita-o com a mesma senha: o Secret já tem a nova, e reiniciar os pods com o Secret diferente do banco os deixa sem acesso. Se a sessão do shell acabou entre o Secret e o banco, leia a senha nova do Secret em vez de gerar outra (`senha=$(kubectl --context kind-pytstop-p4 -n pytstop-billing get secret billing-mongo -o json | jq -r --arg chave "$chave" '.data[$chave] | @base64d')`). Na troca do root, `$senha_root` é a única cópia da senha anterior depois de gravar o Secret, então não feche a sessão antes de o passo dar certo; se já a perdeu, a variável `MONGO_INITDB_ROOT_PASSWORD` do contêiner do banco ainda guarda a anterior, enquanto o banco não reiniciou. Quando der certo, limpe as senhas do shell com `unset senha senha_root`. O restart de quem usa o usuário vem da coluna da tabela e da coluna "Como girar" dos segredos. O [README do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service#troca-de-senhas-e-chaves) traz o procedimento de cada credencial do serviço.
 
 ### k3s (VM na Azure)
 
 O overlay `k3s` assume o k3s instalado com `--disable traefik`: o Service `kong-proxy` continua `LoadBalancer` e o ServiceLB do k3s publica as portas 80/443 da VM no Kong. O k3s já traz metrics-server. O mesmo alvo do kind aplica o overlay, espera os rollouts e confere o Kong:
 
 ```bash
-make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto do k3s>
+make deploy OVERLAY=k3s KUBE_CONTEXT=k3s-pytstop
 ```
+
+No lugar de `k3s-pytstop`, use o nome do contexto do k3s no seu kubeconfig (`kubectl config get-contexts` lista os nomes).
 
 A diferença para o kind está no próprio [`kustomization.yaml`](k8s/overlays/k3s/kustomization.yaml): StorageClass `local-path`, volume de 5Gi e mais memória reservada (request) para o RabbitMQ, e sete dias de retenção no Prometheus.
 
 ### docker compose
 
 ```bash
-make up                    # infraestrutura
-make up PROFILE=servicos   # infraestrutura + os três serviços, construídos dos repositórios irmãos
-make down                  # derruba tudo; os volumes ficam (docker compose -f compose/docker-compose.yml down -v apaga)
+make up
+make up PROFILE=servicos
+make down
 ```
+
+`make up` sobe a infraestrutura; com `PROFILE=servicos`, sobe também os três serviços, construídos dos repositórios irmãos. `make down` derruba tudo e deixa os volumes (`docker compose -f compose/docker-compose.yml down -v` os apaga).
 
 O compose serve para desenvolver um serviço, não reproduz o cluster: RabbitMQ (mesmas definitions, policies e usuários), Loki (mesma configuração), Grafana (mesmo provisioning), Prometheus, Promtail, Jaeger e Mailpit, mais os bancos. Não tem o Kong, então não há `/os`, `/billing` e `/execucao`, nem `X-Request-ID` ou rate limit da borda (os serviços respondem direto nas portas abaixo, e os painéis 10 e 11 e o alerta de 5xx do gateway ficam sem dado). A regra `pytstop-kong-fora`, que trata ausência de dado como alerta, só é carregada no cluster ([`alertas-cluster.yaml`](observabilidade/grafana/alertas-cluster.yaml)): no compose ela ficaria disparada para sempre. Também não tem kube-state-metrics nem metrics-server: sem o alerta de CPU e sem HPA (*Horizontal Pod Autoscaler*, o autoescalonamento horizontal).
 
@@ -333,7 +367,7 @@ São as variáveis que o profile `servicos` do compose passa aos serviços; nos 
 | `BILLING_URL` | Execução | `http://<svc>.pytstop-billing.svc.cluster.local:8000` | `http://billing-service:8000` |
 | `MP_MODE` | Billing | `simulado` | `simulado` |
 
-Métricas, o contrato do [ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md): cada processo do serviço (`api`, `relay`, `consumidor`, `prazos`) roda no seu Deployment e serve `/metrics` numa porta declarada em `ports` do container, com o nome `metrics` (a API serve na própria porta HTTP). O Prometheus raspa sozinho, por pod, todo pod dos namespaces `pytstop-*` com as anotações abaixo no template; a porta anotada precisa estar em `ports`. O label `app` do pod vira o `job` nos painéis, e o label `processo` vai para a série como `processo`.
+Métricas, o contrato do [ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md): cada processo do serviço (`api`, `relay`, `consumidor`, `notificador` e `prazos`) roda no seu Deployment e serve `/metrics` numa porta declarada em `ports` do container, com o nome `metrics` (a API serve na própria porta HTTP). O Prometheus raspa sozinho, por pod, todo pod dos namespaces `pytstop-*` com as anotações abaixo no template; a porta anotada precisa estar em `ports`. O label `app` do pod vira o `job` nos painéis, e o label `processo` vai para a série como `processo`.
 
 ```yaml
 metadata:
@@ -449,10 +483,15 @@ A importação do boot não apaga fila, e fila que já existe fica com os argume
 
 1. Pare os consumidores dos serviços (réplicas em zero no cluster), para nenhuma cópia nova entrar na `<fila>.retry`, e espere as três esvaziarem: em até 300 s, o maior `expiration` que as cópias levavam, todas voltam para a fila de trabalho pela policy que ainda vale. Confira na coluna `messages`:
 
+   No kind (no k3s, troque o contexto em `--context`):
+
    ```bash
-   # kind; no k3s, o contexto dele no --context
    kubectl --context kind-pytstop-p4 -n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl -q list_queues name messages
-   # compose
+   ```
+
+   No compose:
+
+   ```bash
    docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl -q list_queues name messages
    ```
 
@@ -460,10 +499,19 @@ A importação do boot não apaga fila, e fila que já existe fica com os argume
 
 3. Apague as três filas antigas, que até lá aparecem como fila de trabalho sem consumidor nos painéis 2, 4 e 5 do dashboard:
 
+   No kind:
+
    ```bash
    for fila in billing.comandos.retry execucao.comandos.retry os.eventos.retry; do
      kubectl --context kind-pytstop-p4 -n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl delete_queue "$fila"
-     # compose: docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl delete_queue "$fila"
+   done
+   ```
+
+   No compose:
+
+   ```bash
+   for fila in billing.comandos.retry execucao.comandos.retry os.eventos.retry; do
+     docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl delete_queue "$fila"
    done
    ```
 
@@ -607,7 +655,7 @@ Para escrever os manifests de um serviço novo, nesta ordem:
 O smoke confere, por namespace e nesta ordem:
 
 - o Job de inicialização completo e cada Deployment e StatefulSet com todas as réplicas prontas e atualizadas, na geração atual do objeto;
-- a borda: a saúde em 200 (o Kong recebe a rota de um Service novo antes do alvo e responde 503 até lá, então o smoke espera até 1 min), o Swagger em 200, e o `/metrics` e o `/api/v1/admin/outbox` em 404 (o 404 do Kong sem rota é igual, mas o serviço de verdade responderia 401 ou 403 ao `admin/outbox`, então o 404 prova o Ingress `fora-da-borda`);
+- a borda: a saúde em 200 (o Kong recebe a rota de um Service novo antes do alvo e responde 503 até lá, então o smoke espera até 1 min), o Swagger em 200, e o `/metrics` e o `/api/v1/admin/outbox` em 404 com o corpo `no Route matched with those values`. Para o `/metrics`, que nenhum Ingress publica, a prova é que não é servido: o Kong sem rota responde o mesmo 404 e a mesma mensagem (a do plugin `request-termination` copia a do Kong de propósito). O corte pelo Ingress `fora-da-borda` só se distingue no `admin/outbox`: ele não existe em nenhum dos três serviços, e sem o Ingress a requisição chegaria ao serviço, que também responderia 404, com o corpo dele (conferido no Kong do kind: com o Ingress, o corpo é `{"message":"no Route matched with those values"}`; sem ele, a requisição segue para o serviço);
 - cada pod anotado em `up = 1` no Prometheus (o pod do Job e o que está saindo de um rollout não contam) e o exporter do banco com `pg_up` (PostgreSQL) ou `mongodb_up` (MongoDB) em 1, as duas esperas juntas por até 45 s. O `up` diz só que o exporter responde ao Prometheus: o `postgres_exporter` serve o `/metrics` mesmo sem entrar no banco (papel inexistente, senha errada ou banco fora: `pg_up 0`), e o `mongodb_exporter`, quando o MongoDB recusa o usuário (`mongodb_up 0`; com o servidor inalcançável na partida do exporter, ele nem serve o `/metrics`, e o `up` cai);
 - no PostgreSQL, o `psql` como `postgres`, sem senha, no `127.0.0.1` do pod do banco, recusado por falta de senha (sem `trust`);
 - a NetworkPolicy do banco: um controle, em que o pod da API (do próprio namespace) conecta à porta do banco, e a prova, em que o `rabbitmq-0` da plataforma não conecta. A conexão do `rabbitmq-0` tem de esgotar o prazo de 3 s, porque o kindnet (a rede do kind) descarta o pacote barrado; conexão aceita, recusada ou nome que não resolve reprovam, e o prazo esgotado só vale se o controle conectou.
@@ -744,7 +792,8 @@ Regras que os schemas impõem:
 - Valor monetário em string decimal com duas casas e até 10 dígitos inteiros (`"820.00"`, no máximo `"9999999999.99"`) e `moeda: "BRL"`; número em ponto flutuante é rejeitado.
 - Data e hora em RFC 3339 e em UTC (`Z` ou `+00:00`).
 - Ids (`ordem_id`, `veiculo_id`, `orcamento_id`, `pagamento_id`, `reserva_id`, `mecanico_id`, `decidido_por`) são UUID; placa normalizada sem hífen (`ABC1234` ou `ABC1D23`).
-- `codigo` de serviço e `sku` de peça: até 50 caracteres entre letras, dígitos, `.`, `_` e `-`, começando por letra ou dígito. `quantidade` de 1 a 1000, e cada lista com no máximo 50 itens.
+- `codigo` de serviço e `sku` de peça nos orçamentos e nos eventos: até 50 caracteres entre letras, dígitos, `.`, `_` e `-`, começando por letra ou dígito. O `sku` do comando `ReservarPecas` é mais estrito, o formato do Billing e da Execução: letras maiúsculas e dígitos separados por hífens, até 50 caracteres (`PEC-OLEO-5W30`). `quantidade` de 1 a 1000, e cada lista com no máximo 50 itens.
+- Todo `pattern` termina em `(?![\s\S])`, e não em `$`: o `$` do `re.search` do Python casa também antes de um `\n` final, e o validador dos serviços aceitaria `"2026-10-06T12:00:00Z\n"`. O `format: date-time` do FormatChecker tem o mesmo defeito, então só o fim de texto do `pattern` rejeita.
 - Diagnóstico concluído, pedido de orçamento e orçamento gerado têm ao menos um item; `ReservarPecas` e `ExecucaoFinalizada` aceitam lista vazia (orçamento só de serviços).
 - `prioridade` do `AgendarExecucao`: `normal` (padrão) ou `alta`; a fila de execução atende `alta` antes e, dentro da mesma prioridade, por ordem de agendamento.
 - `motivo` dos cinco comandos de compensação é um código da enumeração de `pytstop_saga_compensacoes_total` (`orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento`, `prazo_tecnico`); o texto que o atendente escreve fica só na OS. Texto livre (até 500 caracteres) só nos eventos de falha, e nunca vai para log.
@@ -758,15 +807,17 @@ Regras que os schemas impõem:
 Mudança de contrato começa por um PR aqui. Campo novo opcional mantém a `versao`: atualiza o schema, o exemplo e a tabela da RFC copiada no teste, e o produtor pode enviá-lo antes de os consumidores o conhecerem. Mudança incompatível vira `versao: 2` do tipo, com o consumidor implantado antes do produtor. Cada serviço copia os schemas que produz e consome, e o `asyncapi.yaml`, que traz o usuário AMQP que publica cada tipo (`userId`, de onde o consumidor tira o produtor esperado); e os valida no próprio teste de contrato.
 
 ```bash
-make test   # exemplos e negativos gerados contra os schemas, campos da RFC, AsyncAPI, routing key e topologia
-make lint   # ruff, mypy strict e bandit, mais shellcheck nos scripts e actionlint nos workflows
+make test
+make lint
 ```
+
+O `make test` roda os exemplos e os negativos gerados contra os schemas, os campos da RFC, o AsyncAPI, a routing key e a topologia. O `make lint` roda ruff, mypy strict e bandit, mais shellcheck nos scripts e actionlint nos workflows.
 
 A cobertura de linha do `make test` mede só o arquivo de teste. O que protege os schemas é a bateria de negativos gerados de cada exemplo (campo removido, tipo errado, valor fora do domínio, texto gigante, lista vazia), que precisa ser toda rejeitada, mais os testes de fronteira: toda lista vai de 1 a 50 itens (vazia só onde a RFC deixa), cada limite de tamanho, quantidade, valor e formato tem o valor no limite aceito e o seguinte rejeitado, e a regra do `decidido_por` vale nos dois sentidos em `OrcamentoAprovado` e `OrcamentoRecusado`.
 
 ## CI
 
-O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `main`, sob demanda e quando o CD o chama (`workflow_call`). `manifests` e `contratos` são checks obrigatórios do [ruleset da `main`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837); o checkout não guarda a credencial do GitHub (`persist-credentials: false`).
+O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `main`, sob demanda e quando o CD o chama (`workflow_call`). `manifests`, `contratos` e `gitleaks` são checks obrigatórios do [ruleset da `main`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837), junto do `deploy-kind` do `cd.yml`; o checkout não guarda a credencial do GitHub (`persist-credentials: false`).
 
 - `manifests`: `make lint-scripts` (shellcheck nos scripts e actionlint nos workflows, inclusive nos `run:`) e `make manifests`, ou seja, os três overlays (`kind`, `kind-ci` e `k3s`) e os três exemplos de borda validados pelo kubeconform (schemas do Kubernetes 1.35, a versão do nó do kind, e o do `KongClusterPlugin` gerado das CRDs do chart; `Secret` reprova, porque senha não entra nos manifests) e pelo `trivy config` (nenhum achado HIGH ou CRITICAL); `docker compose config` com o profile `servicos`; `promtool`, `loki -verify-config` e `promtail -check-syntax` nas configs do cluster e do compose, mais a máscara de token do Promtail (`promtail -dry-run`); a regra de alerta "Saga parada" no `promtool test rules`, com cada condição disparando sozinha; o `k8s/base/kong` igual ao que o `make kong-render` gera; a mesma tag de cada imagem em `k8s/`, no compose e na tabela de versões; e todo dashboard JSON no configMapGenerator.
 - `contratos`: `uv lock --check`, `make lint` (ruff, mypy strict e bandit, mais o `lint-scripts`), `make test` (testes de contrato, de observabilidade, dos scripts de segredos, de medição do kind e de implantação e smoke dos serviços e do código auxiliar do E2E, e o `asyncapi.yaml` validado pelo `@asyncapi/cli`) e `make prova-retry` (um RabbitMQ 4.3.6 avulso no Docker do runner, com o `definitions.json`, o `permissoes.json` e o `criar-usuarios.sh` do commit, e a prova do retry como o `billing`: definitions que derrubam o boot ou permissão frouxa reprovam aqui, sem cluster).
@@ -790,4 +841,4 @@ O workflow [`cd.yml`](.github/workflows/cd.yml) tem o job `deploy-kind` ([Kind n
 - Uma fila de retry por atraso, `<fila>.retry.1s` a `.300s` ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): são 21 filas no broker, e mudar um atraso é criar outra fila.
 - Versões de Prometheus, Grafana e Loki iguais às da fase 3. Jaeger na última 1.x: a 2.x troca a configuração pelo formato do OpenTelemetry Collector.
 - CVEs conhecidas nas imagens (trivy, HIGH e CRITICAL com correção publicada, out/2026): Prometheus v2.54.1 (96 e 6), Loki 2.9.8 (53 e 3) e kube-state-metrics v2.13.0 (44 e 1) não têm versão de correção na própria linha (o Loki 2.9.17 tem mais achados, e o Prometheus 2.55.1 tira só quatro) e ficam como estão: rodam só dentro do cluster, sem Ingress, e o acesso de fora é por port-forward ou túnel. Sair delas é trocar de linha (Prometheus 3, Loki 3, kube-state-metrics 2.17), com mudança de configuração. O Mailpit subiu para v1.31.4, sem achado HIGH. Os exporters dos bancos, nas últimas versões publicadas, têm só achados HIGH com correção fora deles (postgres_exporter v0.20.1: 12; mongodb_exporter 0.53.0: 21), todos na biblioteca padrão do Go, em `golang.org/x` e no gRPC compilados no binário, que só um release novo do exporter troca: rodam como sidecar do banco, e a NetworkPolicy de cada serviço deixa só o Prometheus chegar à porta de métricas.
-- Sem persistência em Prometheus, Loki e Grafana (o estado do Grafana vem todo do provisioning; o TSDB do Prometheus fica num emptyDir). Só o RabbitMQ tem volume. Cada emptyDir tem teto (`sizeLimit`) para não encher o disco do nó, que no k3s guarda também os volumes do broker e dos bancos: o Prometheus guarda 2 dias (7 no k3s) e no máximo 1 GB, e o Loki apaga os logs com mais de 7 dias (compactor com retenção).
+- Sem persistência em Prometheus, Loki e Grafana (o estado do Grafana vem todo do provisioning; o TSDB do Prometheus fica num emptyDir). Só o RabbitMQ tem volume. Cada emptyDir tem teto (`sizeLimit`) para não encher o disco do nó, que no k3s guarda também os volumes do broker e dos bancos: o Prometheus guarda 2 dias (7 no k3s) e no máximo 1 GB (o [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) decide passar a 15 dias num PVC, o que ainda não está nos manifests), e o Loki apaga os logs com mais de 7 dias (compactor com retenção).
