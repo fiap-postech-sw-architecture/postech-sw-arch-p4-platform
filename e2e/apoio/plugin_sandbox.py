@@ -42,12 +42,36 @@ def _modo() -> str:
     return os.environ.get("E2E_MP_MODO", "")
 
 
+def _ignorar_os_sinais() -> None:
+    for sinal in SINAIS_DE_INTERRUPCAO:
+        signal.signal(sinal, signal.SIG_IGN)
+
+
+def _interromper(numero: int, quadro: object) -> None:
+    """O primeiro sinal interrompe como o Ctrl-C; nenhum outro interrompe mais.
+
+    Fechar a janela (SIGHUP) ou dar Ctrl-C manda o sinal ao shell, ao ``make``, ao
+    ``uv`` e ao pytest quase juntos, e o ``uv`` ainda o repassa ao filho: sem isto o
+    segundo chega antes de o ``pytest_keyboard_interrupt`` trocar os tratadores e
+    levanta outro ``KeyboardInterrupt`` no comeco do desmonte, que sai sem rodar os
+    finalizers (o desfazer do modo real entre eles). Aqui o tratador se desfaz antes
+    de levantar.
+    """
+    del numero, quadro
+    _ignorar_os_sinais()
+    _ESTADO["interrompida"] = True
+    raise KeyboardInterrupt
+
+
+# Depois do plugin.py, que poe o SIGTERM no tratador padrao do Python.
+@pytest.hookimpl(trylast=True)
 def pytest_configure(config: pytest.Config) -> None:
-    """No sandbox, fechar a janela (SIGHUP) interrompe como o Ctrl-C."""
+    """No sandbox, Ctrl-C, kill e fechar a janela (SIGHUP) interrompem igual."""
     del config
     _ESTADO["interrompida"] = False
     if _modo():
-        signal.signal(signal.SIGHUP, signal.default_int_handler)
+        for sinal in SINAIS_DE_INTERRUPCAO:
+            signal.signal(sinal, _interromper)
 
 
 def pytest_keyboard_interrupt(excinfo: object) -> None:
@@ -55,13 +79,14 @@ def pytest_keyboard_interrupt(excinfo: object) -> None:
 
     O pytest desmonta as fixtures em ordem inversa; um segundo Ctrl-C no teardown de
     uma delas pularia as que faltam, o desfazer do modo real entre elas. O
-    ``KeyboardInterrupt`` dentro de um finalizer nao e capturado pelo pytest.
+    ``KeyboardInterrupt`` dentro de um finalizer nao e capturado pelo pytest. O
+    tratador ``_interromper`` ja fez isto para um sinal; aqui entra o
+    ``KeyboardInterrupt`` que nao veio de sinal.
     """
     del excinfo
     _ESTADO["interrompida"] = True
     if _modo():
-        for sinal in SINAIS_DE_INTERRUPCAO:
-            signal.signal(sinal, signal.SIG_IGN)
+        _ignorar_os_sinais()
 
 
 @pytest.hookimpl(wrapper=True)

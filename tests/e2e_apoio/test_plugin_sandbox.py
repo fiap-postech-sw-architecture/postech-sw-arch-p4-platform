@@ -27,14 +27,30 @@ def sinais(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, object]]:
 # --- sinais -------------------------------------------------------------------------
 
 
-def test_no_sandbox_sighup_interrompe_como_o_ctrl_c(
+def test_no_sandbox_ctrl_c_kill_e_sighup_interrompem_pelo_mesmo_tratador(
     sinais: list[tuple[int, object]], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("E2E_MP_MODO", "real")
 
     plugin_sandbox.pytest_configure(None)  # type: ignore[arg-type]  # o gancho descarta a config
 
-    assert sinais == [(signal.SIGHUP, signal.default_int_handler)]
+    assert sorted(sinais) == sorted(
+        (sinal, plugin_sandbox._interromper) for sinal in SINAIS_DE_INTERRUPCAO
+    )
+
+
+def test_o_primeiro_sinal_interrompe_e_ja_deixa_os_outros_ignorados(
+    sinais: list[tuple[int, object]],
+) -> None:
+    plugin_sandbox._ESTADO["interrompida"] = False
+
+    with pytest.raises(KeyboardInterrupt):
+        plugin_sandbox._interromper(signal.SIGHUP, None)
+
+    assert sorted(sinais) == sorted(
+        (sinal, signal.SIG_IGN) for sinal in SINAIS_DE_INTERRUPCAO
+    )
+    assert plugin_sandbox._ESTADO["interrompida"] is True
 
 
 def test_fora_do_sandbox_nenhum_sinal_muda(

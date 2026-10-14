@@ -18,6 +18,7 @@ from pytest_bdd import given, parsers, scenarios, then, when
 
 from e2e import test_saga as saga
 from e2e.ambiente import RELATORIOS
+from e2e.apoio.humano import falar
 from e2e.apoio.plugin_sandbox import desfecho_da_chamada
 from e2e.apoio.prova import Prova, gravar_evidencia_da_sessao
 
@@ -63,18 +64,13 @@ then(parsers.parse('o pagamento no Billing está "{status}"'))(
 _NUMEROS_DO_PAGAMENTO = itertools.count(1)
 
 
-def anunciar(texto: str) -> None:
-    """Fala com quem roda o script, com ou sem ``E2E_NARRAR``."""
-    print(texto, flush=True)
-
-
 @pytest.fixture(scope="session")
 def modo_billing(
     preflight: Sandbox | None, kubectl: Kubectl, borda: ClienteHttp
 ) -> Iterator[ModoDoBilling]:
     """O modo do Billing da sessao: real (e desfeito no fim) ou o simulador."""
     assert preflight is not None, "E2E_MP_MODO sem o preflight do sandbox"
-    with preflight.sessao_do_billing(kubectl, borda, anunciar) as modo:
+    with preflight.sessao_do_billing(kubectl, borda, falar) as modo:
         yield modo
 
 
@@ -87,7 +83,7 @@ def evidencia(
     registros: list[RegistroDoCenario] = []
     yield registros
     gravar_evidencia_da_sessao(
-        RELATORIOS, registros, preflight, contexto=kubectl.contexto, avisar=anunciar
+        RELATORIOS, registros, preflight, contexto=kubectl.contexto, avisar=falar
     )
 
 
@@ -110,7 +106,7 @@ def prova(
         cenario=cenario,
         esperar_status=saga.esperar_status,
         descrever_estado=saga.descrever_estado,
-        avisar=anunciar,
+        avisar=falar,
         numeros=_NUMEROS_DO_PAGAMENTO,
     )
     yield atual

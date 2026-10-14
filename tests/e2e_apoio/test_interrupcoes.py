@@ -41,7 +41,11 @@ def _esperar_arquivo(arquivo: Path, motivo: str) -> None:
 def _pytest(
     pasta: Path, *, plugin: bool = True, **ambiente: str
 ) -> subprocess.CompletedProcess[str]:
-    carregar = ["-p", "e2e.apoio.plugin_sandbox"] if plugin else []
+    # Os dois plugins, na ordem do conftest: o geral poe o SIGTERM no padrao do Python
+    # e o do sandbox tem de ter a ultima palavra.
+    carregar = (
+        ["-p", "e2e.apoio.plugin", "-p", "e2e.apoio.plugin_sandbox"] if plugin else []
+    )
     return subprocess.run(  # noqa: S603  # nosec B603
         [sys.executable, "-m", "pytest", "-c", str(INI), "--rootdir", str(pasta),
          str(pasta / "test_x.py"), *carregar, "-p", "no:randomly",
@@ -65,7 +69,8 @@ def _suite_com_segundo_ctrl_c(pasta: Path) -> Path:
         "import os\nimport signal\nfrom pathlib import Path\n\nimport pytest\n\n"
         # Um job em segundo plano herda o SIGINT ignorado, e entao o os.kill abaixo
         # nao levanta nada: o teste mede o pytest, e nao o shell que o lancou.
-        "signal.signal(signal.SIGINT, signal.default_int_handler)\n"
+        "if signal.getsignal(signal.SIGINT) == signal.SIG_IGN:\n"
+        "    signal.signal(signal.SIGINT, signal.default_int_handler)\n"
         f"REGISTRO = Path({str(registro)!r})\n\n\n"
         "def anotar(texto):\n"
         "    with REGISTRO.open('a') as arquivo:\n"
@@ -104,6 +109,59 @@ def test_controle_sem_o_plugin_o_segundo_ctrl_c_pula_o_desfazer(
     _pytest(tmp_path, plugin=False)
 
     assert not registro.exists()
+
+
+# --- o primeiro sinal ja desarma os outros --------------------------------------
+
+
+def _suite_que_confere_os_tratadores(pasta: Path, sinal: str) -> Path:
+    registro = pasta / "registro"
+    (pasta / "test_x.py").write_text(
+        "import os\nimport signal\nimport time\nfrom pathlib import Path\n\n"
+        "import pytest\n\n"
+        f"REGISTRO = Path({str(registro)!r})\n\n\n"
+        "def anotar(texto):\n"
+        "    with REGISTRO.open('a') as arquivo:\n"
+        "        arquivo.write(texto + '\\n')\n\n\n"
+        '@pytest.fixture(scope="session")\ndef desfazer():\n    yield\n'
+        "    anotar('desfazer rodou')\n\n\n"
+        "@pytest.mark.mp_sandbox\n"
+        "def test_x(desfazer):\n"
+        "    try:\n"
+        f"        os.kill(os.getpid(), signal.{sinal})\n"
+        "        time.sleep(10)\n"
+        "    except KeyboardInterrupt:\n"
+        # No instante da interrupcao, antes de qualquer gancho do pytest: o terminal, o
+        # make e o uv mandam o sinal quase juntos, e o segundo nao pode chegar a tempo.
+        "        for s in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):\n"
+        "            anotar(f'{s.name}={signal.getsignal(s)!r}')\n"
+        "        raise\n"
+    )
+    return registro
+
+
+@pytest.mark.parametrize(
+    "sinal",
+    [
+        pytest.param("SIGINT", id="ctrl-c"),
+        pytest.param("SIGTERM", id="kill"),
+        pytest.param("SIGHUP", id="terminal-fechado"),
+    ],
+)
+def test_no_instante_da_interrupcao_os_tres_sinais_ja_estao_ignorados(
+    sinal: str, tmp_path: Path
+) -> None:
+    registro = _suite_que_confere_os_tratadores(tmp_path, sinal)
+
+    resultado = _pytest(tmp_path, E2E_MP_MODO="real")
+
+    assert resultado.returncode == 2, resultado.stdout
+    assert registro.read_text().splitlines() == [
+        "SIGINT=<Handlers.SIG_IGN: 1>",
+        "SIGTERM=<Handlers.SIG_IGN: 1>",
+        "SIGHUP=<Handlers.SIG_IGN: 1>",
+        "desfazer rodou",
+    ]
 
 
 # --- o kubectl do desfazer, com o sinal que o terminal manda ---------------------

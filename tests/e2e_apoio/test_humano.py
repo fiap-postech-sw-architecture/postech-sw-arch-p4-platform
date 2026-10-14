@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import errno
+import sys
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -15,6 +17,7 @@ from e2e.apoio.humano import (
     PRAZO_DO_PAGAMENTO,
     CobrancaEncerradaError,
     esperar_pagamento,
+    falar,
     formatar_restante,
     instrucoes_de_pagamento,
 )
@@ -25,6 +28,32 @@ if TYPE_CHECKING:
     from e2e_apoio.falsos import Relogio
 
 LINK = "https://www.mercadopago.com.br/checkout/v1/redirect?pref_id=123-abc"
+
+
+class TerminalQueSumiu:
+    """O stdout depois de a janela fechar: toda escrita falha com EIO."""
+
+    def write(self, texto: str) -> int:
+        raise OSError(errno.EIO, "Input/output error", texto)
+
+    def flush(self) -> None:
+        raise OSError(errno.EIO, "Input/output error")
+
+
+def test_falar_escreve_para_quem_roda_o_script(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    falar("pague o link")
+
+    assert capsys.readouterr().out == "pague o link\n"
+
+
+def test_falar_sem_terminal_nao_levanta_para_nao_tomar_o_lugar_da_interrupcao(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "stdout", TerminalQueSumiu())
+
+    falar("ninguem ouve")
 
 
 @pytest.mark.parametrize(

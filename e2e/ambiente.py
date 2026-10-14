@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Final
 
 from e2e.apoio.http import ClienteHttp
+from e2e.apoio.humano import falar
 from e2e.apoio.jaeger import Jaeger, validar_trace_id
 from e2e.apoio.kube import NAMESPACE_DA_PLATAFORMA, Kubectl, PortForward
 from e2e.apoio.mailpit import Mailpit
@@ -41,7 +42,7 @@ ALVOS_DE_FALHA: Final = (
 def narrar(texto: str) -> None:
     """Linha do roteiro do video (so com ``E2E_NARRAR=1``)."""
     if NARRAR:
-        print(texto, flush=True)
+        falar(texto)
 
 
 class Portas:

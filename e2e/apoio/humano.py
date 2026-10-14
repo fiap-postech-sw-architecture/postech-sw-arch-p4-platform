@@ -9,6 +9,7 @@ paga no lugar dele e a espera e curta.
 
 from __future__ import annotations
 
+import contextlib
 import time
 from typing import TYPE_CHECKING, Any, Final
 
@@ -35,6 +36,17 @@ CARTAO_DE_TESTE: Final = (
 
 class CobrancaEncerradaError(AssertionError):
     """A cobranca terminou sem pagamento; esperar nao adianta."""
+
+
+def falar(texto: str) -> None:
+    """Diz ``texto`` a quem roda o script; sem terminal (a janela fechou), a ninguem.
+
+    Um ``print`` para o terminal que sumiu levanta ``OSError``, e no desmonte de um
+    cenario interrompido essa excecao tomaria o lugar da interrupcao: o cenario
+    constaria como falho.
+    """
+    with contextlib.suppress(OSError):
+        print(texto, flush=True)
 
 
 def formatar_restante(segundos: float) -> str:
@@ -113,7 +125,7 @@ def esperar_pagamento(  # Any: o JSON do Billing; so status, recusas e motivo sa
     prazo: float,
     intervalo: float,
     max_recusas: int,
-    avisar: Callable[[str], None] = print,
+    avisar: Callable[[str], None] = falar,
     relogio: Callable[[], float] = time.monotonic,
     dormir: Callable[[float], None] = time.sleep,
 ) -> Mapping[str, Any]:
