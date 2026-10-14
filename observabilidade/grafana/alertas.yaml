@@ -195,12 +195,16 @@ groups:
       # e na summary: quem muda a variavel muda os dois), alguma instancia em
       # falha_na_compensacao, ou o coletor das sagas do OS Service
       # indisponivel: pytstop_saga_coletor_disponivel em 0 em alguma replica, ou
-      # a serie ausente com a API do OS Service de pe (up = 1). Sem o coletor os
-      # gauges das duas primeiras condicoes somem, e a regra ficaria muda. Uma
-      # consulta so: com o or, a serie que falta numa condicao nao esconde a
-      # outra, e o vector(0) deixa a regra com valor quando nenhuma vale. O
-      # job da API e os-service-api no cluster e os-service no compose. O make
-      # manifests prova cada condicao no promtool (scripts/alerta-saga-parada.sh).
+      # a serie ausente com a API do OS Service de pe (o max do up da API vale 1
+      # com ao menos uma replica de pe). Sem o coletor os gauges das duas
+      # primeiras condicoes somem, e a regra ficaria muda. Com todas as replicas
+      # em up = 0 o valor e 0 e quem acusa e o pytstop-alvo-fora; com o pod fora
+      # da descoberta, sem serie up, a regra fica em OK. Uma consulta so: com o
+      # or, a serie que falta numa condicao nao esconde a outra, e o vector(0)
+      # deixa a regra com valor quando nenhuma vale. O job da API e
+      # os-service-api no cluster e os-service no compose. O make manifests
+      # prova cada condicao, o limiar e a janela no promtool
+      # (scripts/alerta-saga-parada.sh).
       - uid: pytstop-saga-parada
         title: Saga parada
         condition: C
@@ -210,7 +214,7 @@ groups:
         labels:
           severity: critical
         annotations:
-          summary: Alguma saga está com o prazo técnico vencido e não tratado há mais de 60 s, ou parada em falha_na_compensacao, ou o coletor das sagas do OS Service não consegue ler o banco; siga o runbook da saga.
+          summary: Alguma saga está com o prazo técnico vencido e não tratado há mais de 60 s, ou parada em falha_na_compensacao, ou o coletor das sagas do OS Service está indisponível (leitura do banco falhando ou série ausente); siga o runbook da saga.
           runbook_url: https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/blob/main/docs/operacao/runbook-saga.md
         data:
           - refId: A
@@ -219,7 +223,7 @@ groups:
             model:
               refId: A
               instant: true
-              expr: max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or (1 - min(pytstop_saga_coletor_disponivel)) > 0 or (max(up{job=~"os-service(-api)?"}) == 1 unless on() pytstop_saga_coletor_disponivel) or vector(0)
+              expr: max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or (1 - min(pytstop_saga_coletor_disponivel)) > 0 or (max(up{job=~"os-service(-api)?"}) unless on() pytstop_saga_coletor_disponivel) or vector(0)
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__
