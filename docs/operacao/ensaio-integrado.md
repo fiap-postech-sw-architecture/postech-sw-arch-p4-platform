@@ -1,0 +1,233 @@
+# Ensaio integrado no kind: plataforma e os três serviços
+
+> [↑ Raiz do projeto](../../README.md)
+
+Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a `main` de cada repositório) no mesmo cluster kind, com os scripts de implantação e de smoke do [Contrato com os serviços](../../README.md#contrato-com-os-serviços), e a memória e a CPU de cada pod medidas contra o orçamento do [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). Vale para o estado em que o OS Service ainda não tem os processos `prazos` e `notificador` na `main`; a medida deles, feita a partir das branches abertas, está em [Medida adicional](#medida-adicional-prazos-e-notificador-do-os-service).
+
+## Resultado
+
+- Os três serviços subiram na primeira tentativa, nos dois overlays (`kind-ci` e `kind`): 13 pods prontos (10 processos e 3 bancos), 3 Jobs de inicialização completos, nenhum reinício de container.
+- O `make smoke` da plataforma passou antes dos serviços (nos dois overlays) e o [`smoke-servicos.sh`](../../scripts/ci/smoke-servicos.sh) passou nos três namespaces: 35 etapas `ok`, nenhuma `FAILED`, incluindo `pg_up` e `mongodb_up` em 1 lidos do Prometheus, o Swagger sob o prefixo de cada serviço e a NetworkPolicy barrando o `rabbitmq-0` em cada banco.
+- Memória e CPU ficaram bem abaixo do orçamento: os 13 pods usam 0,84 GiB em repouso, contra 2,2 GiB de requests; o nó do kind inteiro (control plane, plataforma e serviços) fica em cerca de 3,1 GiB de working set, contra os 3,4 GiB de requests do orçamento.
+- O que falhou no ensaio foi só ruído de saída do smoke (uma linha `Defaulted container` do `kubectl exec`), corrigido neste PR. As observações que ficam nos repositórios dos serviços estão em [Observações](#observações-que-ficam-nos-repositórios-dos-serviços).
+
+## Ambiente e versões
+
+| Item | Valor |
+|---|---|
+| Máquina | macOS em Apple Silicon (arm64), Docker 29.2.1 no Colima com 8 CPU e 13,6 GiB de memória, dividido com outros containers |
+| kind e kubectl | kind 0.32.0 (o CD fixa a 0.31.0) e kubectl 1.36.2 (o CD fixa a 1.35.9); nó `kindest/node:v1.35.0` do [`kind/cluster.yaml`](../../kind/cluster.yaml), Kubernetes 1.35.0 |
+| Plataforma | `main` do `platform` em `aaca05c` |
+| OS Service | `main` em `fda0672` |
+| Billing Service | `main` em `0fed78b` |
+| Execution Service | `main` em `0c34ed7` |
+| Imagens de terceiros | as da [tabela de versões](../../README.md#componentes-e-versões): `postgres:16.15`, `mongo:7.0.43`, `prometheuscommunity/postgres-exporter:v0.20.1`, `percona/mongodb_exporter:0.53.0`, `rabbitmq:4.3.6-management`, `kong:3.9.3`, entre outras |
+| Imagens dos serviços | `docker build` do checkout de cada `main`, com o commit como tag (`pytstop-<serviço>:<commit>`), 357 a 437 MB cada |
+
+Os números abaixo vêm de uma máquina arm64 com as imagens de terceiros e as camadas do `docker build` já em cache. O runner do CD é amd64, com 4 vCPU e 16 GB, e puxa as imagens a cada job: os tempos daqui são um piso, e os números do runner são os do primeiro `deploy-kind` completo dos serviços (a medição que o ADR-042 pede). A memória não depende do cache de imagens e deve ficar próxima.
+
+## Comandos usados
+
+Cada execução foi um script único, para que o amostrador do `medir-kind.sh` (que para quando o shell que marcou a primeira etapa termina) vivesse até o resumo. Os serviços saem da `main` de cada repositório, num checkout limpo ao lado dos outros:
+
+```bash
+# Primeira execução: o overlay do CD (kind-ci), com os três serviços de uma vez
+scripts/medir-kind.sh etapa kind-up           && make kind-up
+scripts/medir-kind.sh etapa deploy            && make deploy OVERLAY=kind-ci
+scripts/medir-kind.sh etapa smoke-plataforma  && make smoke OVERLAY=kind-ci
+scripts/medir-kind.sh etapa servicos          && scripts/ci/implantar-servicos.sh --overlay kind-ci \
+  os-service=<checkout> billing-service=<checkout> execution-service=<checkout>
+scripts/medir-kind.sh etapa smoke-servicos    && scripts/ci/smoke-servicos.sh
+scripts/medir-kind.sh etapa estavel           && sleep 90 && kubectl --context kind-pytstop-p4 top pod -A
+scripts/medir-kind.sh resumo
+
+# Segunda execução: o caminho de quem desenvolve (overlay kind, com Loki, Promtail e Grafana),
+# e o `make kind-deploy` de cada serviço, um por vez
+make kind-up && make deploy && make smoke
+make -C <os-service> kind-deploy PLATFORM=<platform>
+make -C <billing-service> kind-deploy PLATFORM_DIR=<platform>
+make -C <execution-service> kind-deploy PLATFORM_DIR=<platform>
+scripts/ci/smoke-servicos.sh
+```
+
+O `make smoke` roda antes dos serviços porque recusa um cluster que já tem Ingress de serviço (`pytstop-os already has Ingresses: the smoke would reuse its paths`; confirmado no ensaio com os serviços de pé).
+
+## O que subiu
+
+Estado depois do `smoke-servicos.sh`, na primeira execução (`kind-ci`):
+
+| Namespace | Pods prontos | Job de inicialização |
+|---|---|---|
+| `pytstop-os` | `os-service-api`, `os-service-relay`, `os-service-consumidor`, `os-postgres-0` (postgres e exporter) | `os-migracao` completo |
+| `pytstop-billing` | `billing-service-api`, `-relay`, `-consumidor`, `-prazos`, `billing-mongo-0` (mongo e exporter) | `billing-inicializacao` completo |
+| `pytstop-execucao` | `execution-service-api`, `-relay`, `-consumidor`, `execucao-postgres-0` (postgres e exporter) | `execucao-migracao` completo |
+| `pytstop-plataforma` | Kong, RabbitMQ, Prometheus, Jaeger, Mailpit, kube-state-metrics (mais Loki, Promtail e Grafana no overlay `kind`) | `rabbitmq-usuarios` completo |
+
+HPA da API: 1 a 1 no `kind-ci` e 1 a 2 no `kind`, como no [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). No RabbitMQ, as filas `os.eventos`, `billing.comandos` e `execucao.comandos` tinham um consumidor cada, e as três DLQs estavam vazias.
+
+Saída do `smoke-servicos.sh` na primeira execução (as linhas `Defaulted container "api" out of: ...`, que o `kubectl exec` escrevia antes da correção deste PR, foram retiradas):
+
+```text
+os-service         initialization Job         ok: os-migracao=true
+os-service         rollouts                   ok: 4 ready
+os-service         GET /os/api/v1/saude       ok: 200
+os-service         GET /os/metrics            ok: 404
+os-service         GET /os/api/v1/admin/outbox ok: 404
+os-service         GET /os/docs               ok: 200
+os-service         GET /os/openapi.json       ok: 200
+os-service         up = 1 in Prometheus       ok: 4 pods
+os-service         pg_up = 1 in Prometheus    ok: os-postgres-0
+os-service         os-postgres-0 127.0.0.1 asks for a password ok: postgres on 127.0.0.1 without a password was refused
+os-service         os-service-api pod -> os-postgres.pytstop-os.svc.cluster.local:5432 ok: connected (the namespace itself reaches the database)
+os-service         rabbitmq-0 -> os-postgres.pytstop-os.svc.cluster.local:5432 ok: blocked (connection timed out)
+billing-service    initialization Job         ok: billing-inicializacao=true
+billing-service    rollouts                   ok: 5 ready
+billing-service    GET /billing/api/v1/saude  ok: 200
+billing-service    GET /billing/metrics       ok: 404
+billing-service    GET /billing/api/v1/admin/outbox ok: 404
+billing-service    GET /billing/docs          ok: 200
+billing-service    GET /billing/openapi.json  ok: 200
+billing-service    up = 1 in Prometheus       ok: 5 pods
+billing-service    mongodb_up = 1 in Prometheus ok: billing-mongo-0
+billing-service    billing-service-api pod -> billing-mongo.pytstop-billing.svc.cluster.local:27017 ok: connected (the namespace itself reaches the database)
+billing-service    rabbitmq-0 -> billing-mongo.pytstop-billing.svc.cluster.local:27017 ok: blocked (connection timed out)
+execution-service  initialization Job         ok: execucao-migracao=true
+execution-service  rollouts                   ok: 4 ready
+execution-service  GET /execucao/api/v1/saude ok: 200
+execution-service  GET /execucao/metrics      ok: 404
+execution-service  GET /execucao/api/v1/admin/outbox ok: 404
+execution-service  GET /execucao/docs         ok: 200
+execution-service  GET /execucao/openapi.json ok: 200
+execution-service  up = 1 in Prometheus       ok: 4 pods
+execution-service  pg_up = 1 in Prometheus    ok: execucao-postgres-0
+execution-service  execucao-postgres-0 127.0.0.1 asks for a password ok: postgres on 127.0.0.1 without a password was refused
+execution-service  execution-service-api pod -> execucao-postgres.pytstop-execucao.svc.cluster.local:5432 ok: connected (the namespace itself reaches the database)
+execution-service  rabbitmq-0 -> execucao-postgres.pytstop-execucao.svc.cluster.local:5432 ok: blocked (connection timed out)
+services smoke OK: os-service billing-service execution-service
+```
+
+A segunda execução (overlay `kind`) produziu a mesma tabela, com os mesmos 35 `ok`. O `make smoke` da plataforma terminou com `smoke OK: every check held` nos dois overlays (no `kind-ci`, com duas famílias de provas puladas por design: Loki e Promtail, e Grafana). No overlay `kind`, as oito regras de alerta do Grafana ficaram `inactive` e `ok` com os serviços de pé, e o Loki recebeu os logs dos três namespaces.
+
+### Provas além do smoke
+
+| Prova | Resultado |
+|---|---|
+| Swagger sob o prefixo | `/os/docs`, `/billing/docs` e `/execucao/docs` apontam para `/<prefixo>/openapi.json`, e o `openapi.json` de cada um declara `servers: [{url: "/<prefixo>"}]` (o `--root-path` chegou ao uvicorn) |
+| Login e JWKS entre namespaces | `POST /os/api/v1/autenticacao/login` do admin semeado devolve 200; o token é aceito pela listagem de clientes do OS, de preços do Billing e de estoque da Execução (200 nas três), e a chamada ao Billing sem token dá 401. O Billing e a Execução validam o token contra o JWKS do OS pela NetworkPolicy |
+| NetworkPolicy entre serviços | da Execução para o Billing (validação de preços) e para o OS (JWKS): conecta; do Billing para a Execução, do OS para o Billing e do OS para o banco da Execução: esgota o prazo de 3 s |
+| Segundo `make deploy` com os serviços de pé | 17 s; os 12 Secrets `Opaque` dos quatro namespaces ficam com o mesmo conteúdo (comparação por hash, sem imprimir valor); `kong-check` limpo |
+| Segundo `implantar-servicos.sh` (mesmo commit) | 13 s: os Jobs são apagados e recriados, as migrações e a semente repetem sem erro, os Deployments seguem como estavam (mesma tag, mesmo template); o smoke dos serviços passa em 11 s |
+| Broker reiniciado com os serviços de pé | `kubectl delete pod rabbitmq-0`: o broker volta em 13 s, os três consumidores voltam em 30 s, o relay do Billing registra `broker_unavailable` e depois `broker_connected`, e nenhum pod de serviço reinicia |
+| Alvos do Prometheus | nenhum alvo ativo fora de `up` (a consulta por `health != up` voltou vazia); 4 pods no OS, 5 no Billing e 4 na Execução em `up = 1`, na primeira execução |
+| Traces | depois de chamadas pela borda, o Jaeger lista `os-service`; Billing e Execução não aparecem, porque as APIs deles ainda não exportam spans e nenhuma mensagem circulou pelos relays e consumidores (o teste de ponta a ponta da saga cobre isso) |
+
+## Tempos
+
+Medidos pelo [`medir-kind.sh`](../../scripts/medir-kind.sh) e pelo carimbo de hora de cada saída.
+
+| Etapa | `kind-ci`, os três de uma vez | `kind`, um `make kind-deploy` por serviço |
+|---|---|---|
+| `make kind-up` | 26 s | 26 s |
+| `make deploy` da plataforma | 1 min 34 s | 1 min 45 s |
+| `make smoke` da plataforma | 1 min 46 s | 2 min 14 s |
+| Serviços | 1 min 27 s | OS 34 s, Billing 46 s, Execução 17 s (sequenciais) |
+| `smoke-servicos.sh` | 21 s | 21 s |
+| Espera de 90 s e fotografia do estado estável | 1 min 32 s | 1 min 31 s |
+| Total | 7 min 06 s | 7 min 54 s |
+
+Dentro do `implantar-servicos.sh` da primeira execução (1 min 27 s): os três `docker build` em paralelo levaram 13 s (camadas em cache), o `kind load` das três imagens, 8 s, e do `apply` ao último Deployment pronto passaram 65 s. O StatefulSet do banco ficou pronto 47 s (Execução), 50 s (Billing) e 52 s (OS) depois do `apply`; os Jobs (medidos na segunda execução) duraram 12 s (`execucao-migracao`), 28 s (`os-migracao`) e 36 s (`billing-inicializacao`, que também inicia o replica set); os Deployments seguem o Job pela espera do `aguarda-migracao` e do `aguarda-banco`. Para comparar, o [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) mediu, no runner e só com a plataforma, 39 a 46 s de `kind-up`, 50 a 54 s de deploy e 1 min 40 s a 1 min 47 s de smoke; aqui, 26 s, 1 min 34 s (o deploy local ficou mais lento que o do runner, com a máquina dividida com outros containers) e 1 min 46 s.
+
+## Memória e CPU
+
+### O nó
+
+| | `kind-ci` | `kind` |
+|---|---|---|
+| Working set do nó, maior valor amostrado a cada 5 s | 3.164 MiB | 3.447 MiB |
+| `kubectl top node` em repouso | 3.147 MiB (22%), 299 m | 3.362 MiB (24%), 351 m |
+| `memory.peak` do cgroup do nó (conta o cache de arquivos, que o kernel devolve sob pressão) | 5.476 MiB | 6.738 MiB |
+
+O ADR-042 media, só com a plataforma, working set de até 1,5 GiB e pico de 3,5 GiB no cgroup. Com os três serviços, o working set sobe cerca de 1,6 GiB (os 13 pods somam 0,84 GiB; o resto é o que o nó gasta fora dos pods, como o containerd, o kubelet e o cache de arquivos ainda ativo, e não foi detalhado) e o pico no cgroup, cerca de 2 GiB (provavelmente o cache das imagens e dos dados dos bancos). Em ambos os overlays o nó cabe com folga nos 16 GB do `ubuntu-24.04`, mas a comparação com o ADR mistura arm64 local e amd64 do runner.
+
+### Por pod
+
+Memória: o maior valor do `kubectl top` entre as amostras das duas execuções (`kind-ci` e `kind`), mais o valor em repouso 90 s depois do último rollout. CPU: o valor em repouso da primeira execução e o pico das amostras de 5 s da segunda (o `kubectl top` usa a média de uma janela de 15 s, então picos mais curtos não aparecem). Requests e limits são os dos manifests.
+
+| Pod | CPU req/lim | Memória req/lim | CPU repouso | CPU pico | Memória repouso | Memória pico |
+|---|---|---|---|---|---|---|
+| `os-service-api` | 100m/500m | 256/512 Mi | 5m | 67m | 101 MiB | 101 MiB |
+| `os-service-relay` | 50m/250m | 128/256 Mi | 6m | 34m | 74 MiB | 74 MiB |
+| `os-service-consumidor` | 50m/250m | 128/256 Mi | 4m | 40m | 74 MiB | 74 MiB |
+| `os-postgres-0` (postgres 37 + exporter 6) | 110m/600m | 160/576 Mi | 12m | 15m | 44 MiB | 45 MiB |
+| `billing-service-api` | 100m/500m | 256/512 Mi | 4m | 41m | 66 MiB | 66 MiB |
+| `billing-service-relay` | 50m/250m | 128/256 Mi | 5m | 30m | 48 MiB | 52 MiB |
+| `billing-service-consumidor` | 50m/250m | 128/256 Mi | 4m | 31m | 53 MiB | 53 MiB |
+| `billing-service-prazos` | 50m/250m | 128/256 Mi | 4m | 30m | 49 MiB | 49 MiB |
+| `billing-mongo-0` (mongo 96 + exporter 12) | 110m/600m | 288/1088 Mi | 46m | 71m | 108 MiB | 194 MiB |
+| `execution-service-api` | 100m/500m | 256/512 Mi | 3m | 35m | 82 MiB | 82 MiB |
+| `execution-service-relay` | 50m/250m | 128/256 Mi | 4m | 8m | 60 MiB | 66 MiB |
+| `execution-service-consumidor` | 50m/250m | 128/256 Mi | 4m | 31m | 62 MiB | 62 MiB |
+| `execucao-postgres-0` (postgres 36 + exporter 7) | 110m/600m | 160/576 Mi | 8m | 44m | 43 MiB | 44 MiB |
+| Kong (proxy e controlador) | | 384/768 Mi no ADR | 5m | 26m | 306 MiB | 306 MiB |
+| RabbitMQ | | 256/1024 Mi no ADR | 30m | 237m | 129 MiB | 201 MiB |
+| Prometheus | | 192/512 Mi no ADR | 5m | 12m | 83 MiB | 87 MiB |
+| Jaeger | | 128/512 Mi no ADR | 2m | 2m | 9 MiB | 9 MiB |
+| Mailpit | | 64/128 Mi no ADR | 1m | 3m | 5 MiB | 6 MiB |
+| kube-state-metrics | | 64/128 Mi no ADR | 1m | 5m | 11 MiB | 12 MiB |
+| Loki, Promtail e Grafana (só no `kind`) | | | 5m, 11m, 2m | 11m, 23m, 91m | 57, 37 e 48 MiB | 57, 37 e 51 MiB |
+| Control plane do kind (apiserver, etcd, controller-manager, scheduler, coredns, kube-proxy, kindnet, metrics-server) | | | 95m no pico do apiserver | | cerca de 500 MiB, 279 MiB só no apiserver | |
+
+O pico de CPU do RabbitMQ (237m) é do `make smoke` da plataforma, que apaga o pod do broker e o vê subir de novo; o pico do MongoDB (71m) e dos Jobs vem do arranque. Nenhuma API passou de 67m e nenhum processo de 40m, contra limits de 500m e 250m; o MongoDB chegou a 71m e o PostgreSQL a 44m (limits de 500m).
+
+### Contra o orçamento do ADR-042
+
+| Componente | Orçamento (requests/limits) | Medido (maior valor) | Fica no orçamento |
+|---|---|---|---|
+| API de cada serviço (3) | 256/512 Mi | 66 a 101 MiB | sim, com 61% a 74% de folga nos requests |
+| relay, consumidor e `prazos` (7 processos na `main`) | 128/256 Mi cada | 48 a 74 MiB | sim |
+| PostgreSQL (2), com o exporter | 128/512 Mi (+ 32/64 Mi do exporter) | 44 a 45 MiB | sim |
+| MongoDB, com o exporter | 256/1024 Mi (+ 32/64 Mi do exporter) | 108 MiB em repouso, 194 MiB no pico | sim |
+| exporters de banco (3) | 32/64 Mi cada | 6 a 12 MiB | sim |
+| Serviços, soma dos requests e dos limits | 2.272 Mi / 5.568 Mi (os 7 processos da `main`) | 864 MiB em repouso | sim |
+| Plataforma no `kind-ci`, soma dos requests e dos limits | 1.088 Mi / 3.072 Mi (+ 200 Mi do metrics-server) | 543 MiB em repouso (Kong 306, RabbitMQ 129 a 201, Prometheus 83) | sim |
+| Serviços e plataforma | cerca de 3,3 GiB de requests e 8,4 GiB de limits (o ADR estima 3,4/8,7 GiB e conta 8 processos; a `main` tem 7) | nó em 3,1 GiB de working set | sim |
+
+CPU: os requests somados dos serviços são 980m, e os da plataforma no `kind-ci`, 395m (1,4 CPU com os dois, mais cerca de 1 CPU do control plane); o nó usou 0,3 CPU em repouso no total. O orçamento de CPU do ADR (50m a 250m por processo, 100m a 500m por API e banco) se mostrou folgado: em repouso o uso é de 3% a 12% dos requests, e nos picos de arranque, de 30% a 80% deles, longe dos limits.
+
+## Medida adicional: `prazos` e `notificador` do OS Service
+
+Os dois processos ainda não estão na `main` do OS Service: o `prazos` está na branch `feat/saga-prazos` e o `notificador`, na `feat/notificacao-e-lgpd`, cada uma com o seu `k8s/`. Cada branch foi implantada, sozinha, sobre o cluster `kind-ci` do ensaio (a de e-mail sobre o banco da `main`; a dos prazos sobre um namespace `pytstop-os` recriado, para não misturar as migrações das duas branches, que partem da mesma `main`), com a imagem construída do commit dela (`8eec08f` e `84f89cd`) e o `smoke-servicos.sh os-service` verde nas duas.
+
+| Processo | Branch | Memória | CPU | Requests/limits | Nó (working set) |
+|---|---|---|---|---|---|
+| `os-service-notificador` | `feat/notificacao-e-lgpd` | 63 MiB | 4m | 50m/250m, 128/256 Mi | 3.242 MiB (era 3.147) |
+| `os-service-prazos` | `feat/saga-prazos` | 72 MiB | 5m | 50m/250m, 128/256 Mi | 3.377 MiB (namespace recriado) |
+
+Os dois cabem nos 128/256 Mi do orçamento: juntos acrescentam cerca de 135 MiB e 9m ao nó. O `prazos` do OS logou, uma vez, `os.eventos has no consumer` e `saga deadlines paused` no arranque (o consumidor do OS ainda não tinha conectado, porque o namespace acabava de ser recriado) e não repetiu depois: o consumidor passou a ter 1 e os ciclos seguintes seguiram sem aviso.
+
+## O que falhou e como foi resolvido
+
+| Item | Onde | Situação |
+|---|---|---|
+| `smoke-servicos.sh` escrevia `Defaulted container "api" out of: api, aguarda-migracao (init)` (ou `aguarda-banco`, no Billing) na saída e no log do CD a cada serviço: a sonda de controle da NetworkPolicy não nomeava o container | `platform` | corrigido: `kubectl exec -c api`, o teste e o contrato do README (o container da API se chama `api`) |
+
+Nada mais falhou: nenhum script, manifesto da plataforma ou documento precisou de correção para os serviços subirem.
+
+## Observações que ficam nos repositórios dos serviços
+
+Nenhuma impede o deploy nem o smoke. Estão aqui com a evidência para quem abrir a correção.
+
+| Serviço | Observação | Evidência |
+|---|---|---|
+| Billing e Execução (API) | O FastAPI 0.142.2 tenta configurar telemetria sozinho, porque o ConfigMap define `OTEL_EXPORTER_OTLP_ENDPOINT`, e avisa na partida de cada API que falta o extra: `level: warning`, `logger: fastapi`, `FastAPI automatic telemetry configuration failed: Automatic OpenTelemetry export requires fastapi[opentelemetry] or fastapi[standard]. Install the extra, configure providers yourself, or pass telemetry={'auto_configure': False} to FastAPI().` O OS (FastAPI 0.141.1) não escreve o aviso | `kubectl -n pytstop-billing logs deploy/billing-service-api` e o mesmo em `pytstop-execucao` |
+| Billing (MongoDB) | O `mongod` escreve, a cada coleta de 15 s do exporter, linhas de conexão e autenticação, e o exporter tenta `find` em `admin.system.version` (`{_id: "shardIdentity"}`) com o papel `clusterMonitor`, que não lê essa coleção: `Checking authorization failed ... not authorized on admin to execute command { find: "system.version" ...`, `s: I`. O exporter segue com `mongodb_up 1`. Efeito: o `billing-mongo-0` gerou 1.393 linhas em 10 min, contra cerca de 160 a 210 por namespace nos outros dois serviços (o Loki guardou 1.428 linhas do namespace do Billing) | `kubectl -n pytstop-billing logs billing-mongo-0 -c mongo --since=10m \| wc -l`; `--quiet` no `mongod` corta as linhas de conexão, e o `read` em `admin.system.version` no papel do exporter corta as de autorização (decidir se vale o papel a mais) |
+| OS, Billing e Execução (Makefile) | O `make kind-deploy` de cada serviço usa um nome diferente para o diretório do `platform` (`PLATFORM` no OS, `PLATFORM_DIR` no Billing e na Execução) e para o overlay (`OVERLAY` no Billing, `KIND_OVERLAY` na Execução, fixo `kind` no OS). Funciona, só não é igual | `grep -n kind-deploy -A3 Makefile` nos três |
+
+Linhas de log que parecem erro e são esperadas no kind: `payment_simulator_enabled_in_production` (warning do Billing, porque o overlay liga o simulador de pagamento de propósito), `Error loading config ... postgres_exporter.yml: no such file or directory` (o `postgres_exporter` procura um arquivo opcional; o `pg_up` fica em 1) e `waiting for mongod ... (MongoNetworkError)` no initContainer do Job do Billing, enquanto o `mongod` sobe.
+
+## Como repetir
+
+1. Confira que nenhum outro cluster usa a máquina: `kind get clusters`, `docker ps` e `lsof -nP -iTCP:443 -sTCP:LISTEN` (o kind publica o Kong em `127.0.0.1:443`).
+2. Clone os três serviços ao lado do `platform` e ponha cada um no commit que quer ensaiar.
+3. Rode a sequência da primeira execução acima, com `MEDICAO=$(mktemp -d)` exportado e tudo no mesmo shell (um script), e `make kind-down` no fim. As imagens `pytstop-<serviço>:<commit>` ficam no Docker local: apague as suas com `docker rmi`.
+4. No CD, o mesmo roteiro roda no job `deploy-kind` de cada serviço (`--tar` no lugar do `docker build` para o próprio serviço), e a coluna "Medido no runner" do ADR-042 se preenche com o primeiro run verde.
