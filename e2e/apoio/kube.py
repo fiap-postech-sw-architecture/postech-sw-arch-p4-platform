@@ -62,6 +62,9 @@ def executar_processo(
             input=entrada,
             # input e stdin nao convivem: sem entrada, o stdin e vazio.
             stdin=subprocess.DEVNULL if entrada is None else None,
+            # Sessao propria: o Ctrl-C do terminal vai ao grupo de processos inteiro e
+            # mataria o kubectl em voo do desfazer, que ignora o sinal so no Python.
+            start_new_session=True,
         )
     except subprocess.TimeoutExpired as erro:
         raise ErroDeComandoError(
@@ -129,41 +132,6 @@ class Kubectl:
             prazo=prazo,
             entrada=json.dumps(manifesto),
         )
-
-    def apagar_segredo(self, namespace: str, nome: str) -> None:
-        self.executar("-n", namespace, "delete", "secret", nome, "--ignore-not-found")
-
-    def deployments(self, namespace: str) -> list[str]:
-        """Nome de cada Deployment do namespace."""
-        saida = self.executar("-n", namespace, "get", "deployment", "-o", "name")
-        return [linha.split("/", 1)[-1] for linha in saida.split()]
-
-    def definir_variaveis(self, namespace: str, variaveis: Mapping[str, str]) -> None:
-        """``kubectl set env`` em todos os Deployments do namespace."""
-        self.executar(
-            "-n",
-            namespace,
-            "set",
-            "env",
-            "deployment",
-            "--all",
-            *(f"{nome}={valor}" for nome, valor in variaveis.items()),
-        )
-
-    def remover_variaveis(self, namespace: str, nomes: Sequence[str]) -> None:
-        """Tira a variavel do Deployment: o valor do ConfigMap volta a valer."""
-        self.executar(
-            "-n",
-            namespace,
-            "set",
-            "env",
-            "deployment",
-            "--all",
-            *(f"{nome}-" for nome in nomes),
-        )
-
-    def reiniciar(self, namespace: str) -> None:
-        self.executar("-n", namespace, "rollout", "restart", "deployment")
 
     def segredo(self, namespace: str, nome: str, chave: str) -> str:
         """Valor decodificado de uma chave de Secret (quem chama o registra)."""

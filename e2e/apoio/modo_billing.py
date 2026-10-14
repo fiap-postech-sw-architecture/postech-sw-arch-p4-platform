@@ -5,11 +5,12 @@ assinatura do webhook, trocar ``MP_MODE`` e ``SIMULADOR_PERMITIDO`` nos Deployme
 e reiniciar. O token so passa pelo stdin do ``kubectl apply`` (o manifesto em JSON
 nasce em memoria): nunca em argv, nunca em arquivo, nunca no log.
 
-Desfazer e a metade que importa. Ele apaga o Secret, tira as duas variaveis dos
-Deployments (o ``MP_MODE=simulado`` e o ``SIMULADOR_PERMITIDO=true`` do ConfigMap
-voltam a valer; deixar ``simulado`` escrito no Deployment sobreviveria ao proximo
-``make kind-deploy``), reinicia e espera. Roda sempre que algo foi mexido, com
-falha, Ctrl-C ou SIGTERM no meio, e nenhum passo falho impede os seguintes.
+Desfazer e a metade que importa. Ele apaga o Secret, tira as variaveis dos
+Deployments (valem de novo ``MP_MODE=simulado`` e ``SIMULADOR_PERMITIDO=true`` do
+ConfigMap do overlay), reinicia e espera. Roda sempre que algo foi mexido, com
+falha, Ctrl-C, SIGTERM ou SIGHUP no meio, e nenhum passo falho impede os seguintes.
+Nao cobre ``kill -9``, queda de energia nem terminal sem sinal: ai o ensaio
+(``make mp-sandbox-ensaio``) acha o que sobrou e devolve o Billing ao simulador.
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from e2e.apoio.http import RespostaInesperadaError
 from e2e.apoio.segredos import mascarar, registrar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterator, Mapping
 
     from e2e.apoio.kube import Kubectl
 
@@ -42,14 +43,27 @@ VARIAVEIS_DO_MODO_REAL: Final = {"MP_MODE": MODO_REAL, "SIMULADOR_PERMITIDO": "f
 # O que o desfazer tira dos Deployments: com elas fora, valem o ConfigMap do
 # overlay (MP_MODE=simulado, SIMULADOR_PERMITIDO=true) e o endereco padrao do webhook.
 VARIAVEIS_A_REMOVER: Final = ("MP_MODE", "SIMULADOR_PERMITIDO", "MP_NOTIFICATION_URL")
+# Os nomes das variaveis de ambiente de cada container de cada Deployment, um por linha.
+NOMES_DAS_VARIAVEIS: Final = (
+    "jsonpath={range .items[*]}{range .spec.template.spec.containers[*]}"
+    '{range .env[*]}{.name}{"\\n"}{end}{end}{end}'
+)
 PRAZO_DO_ROLLOUT: Final = 300.0
 PRAZO_DA_CONFERENCIA: Final = 90.0
+INTERVALO_DA_CONFERENCIA: Final = 2.0
 HOSTS_LOCAIS: Final = frozenset({"localhost", "127.0.0.1", "::1"})
 SUFIXOS_LOCAIS: Final = (".localhost", ".local", ".internal", ".test", ".lan")
+# Os sinais que o terminal, o kill e o fechamento da janela mandam ao script.
+SINAIS_DE_INTERRUPCAO: Final = (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
+NAO_FECHE: Final = "Não feche o terminal e não use kill -9."
 
 
 class DesfazerFalhouError(AssertionError):
     """O Billing nao voltou ao simulador sozinho: o texto traz o que rodar a mao."""
+
+
+class RolloutDoBillingError(AssertionError):
+    """Um Deployment do Billing nao ficou pronto, ou a API nao disse o modo esperado."""
 
 
 class UrlDeNotificacaoInvalidaError(ValueError):
@@ -103,15 +117,17 @@ def manifesto_do_segredo(token: str, assinatura: str) -> dict[str, Any]:
 
 @contextlib.contextmanager
 def sem_interrupcao() -> Iterator[None]:
-    """Ctrl-C e SIGTERM nao interrompem o que roda aqui dentro.
+    """Ctrl-C, SIGTERM e SIGHUP nao interrompem o que roda aqui dentro.
 
     O desfazer leva um minuto ou dois (reinicia e espera os Deployments), e quem
-    aperta Ctrl-C duas vezes nao pode deixar o Billing em modo real. Cada comando
-    tem prazo, entao o pior caso e esperar esse prazo, e nao ficar preso.
+    aperta Ctrl-C duas vezes ou fecha a janela nao pode deixar o Billing em modo
+    real. Isto protege so este processo: o ``kubectl`` filho roda em sessao propria
+    (``kube.executar_processo``), e por isso o Ctrl-C do terminal, que vai ao grupo
+    de processos, tambem nao o alcanca. Cada comando tem prazo, entao o pior caso e
+    esperar esse prazo, e nao ficar preso.
     """
     anteriores = {
-        sinal: signal.signal(sinal, signal.SIG_IGN)
-        for sinal in (signal.SIGINT, signal.SIGTERM)
+        sinal: signal.signal(sinal, signal.SIG_IGN) for sinal in SINAIS_DE_INTERRUPCAO
     }
     try:
         yield
@@ -154,19 +170,81 @@ class ModoDoBilling:
         self._dormir = dormir
         self._mexeu = False
 
-    def _reiniciar_e_esperar(self, modo: str) -> None:
-        self._kubectl.reiniciar(NAMESPACE_BILLING)
-        for deployment in self._kubectl.deployments(NAMESPACE_BILLING):
-            self._kubectl.aguardar_pronto(
-                NAMESPACE_BILLING, deployment, prazo=PRAZO_DO_ROLLOUT
+    def _dizer(self, texto: str) -> None:
+        """O aviso e cortesia: pipe quebrado ou terminal fechado nao aborta tudo."""
+        with contextlib.suppress(OSError, ValueError):
+            self._avisar(texto)
+
+    def _executar(self, *argumentos: str) -> str:
+        return self._kubectl.executar("-n", NAMESPACE_BILLING, *argumentos)
+
+    def _deployments(self) -> list[str]:
+        saida = self._executar("get", "deployment", "-o", "name")
+        return [linha.split("/", 1)[-1] for linha in saida.split()]
+
+    def _definir_variaveis(self, variaveis: Mapping[str, str]) -> None:
+        self._executar(
+            "set",
+            "env",
+            "deployment",
+            "--all",
+            *(f"{nome}={valor}" for nome, valor in variaveis.items()),
+        )
+
+    def _remover_variaveis(self) -> None:
+        self._executar(
+            "set",
+            "env",
+            "deployment",
+            "--all",
+            *(f"{nome}-" for nome in VARIAVEIS_A_REMOVER),
+        )
+
+    def _apagar_segredo(self) -> None:
+        self._executar("delete", "secret", SEGREDO, "--ignore-not-found")
+
+    def _sobras(self) -> list[str]:
+        """O que o modo real deixa no cluster: o Secret e as variaveis."""
+        sobras = []
+        if self._executar("get", "secret", SEGREDO, "-o", "name", "--ignore-not-found"):
+            sobras.append(f"o Secret {SEGREDO}")
+        nomes = self._executar("get", "deployment", "-o", NOMES_DAS_VARIAVEIS).split()
+        presentes = sorted(set(nomes) & set(VARIAVEIS_A_REMOVER))
+        if presentes:
+            sobras.append(f"as variáveis {', '.join(presentes)} nos Deployments")
+        return sobras
+
+    def _reiniciar_e_esperar(self, modo: str, *, etapa: str = "") -> None:
+        """Reinicia e espera CADA Deployment e o modo da API, mesmo que um falhe.
+
+        Junta as falhas e levanta no fim: abandonar na primeira deixaria o resto sem
+        conferir, e o rollout segue no servidor de qualquer jeito.
+        """
+        self._executar("rollout", "restart", "deployment")
+        falhas: list[str] = []
+        for deployment in self._deployments():
+            self._dizer(
+                f"[mp-sandbox] {etapa}esperando o rollout de {deployment} "
+                f"(até {PRAZO_DO_ROLLOUT / 60:g} min)"
             )
-        self._conferir_modo(modo)
+            try:
+                self._kubectl.aguardar_pronto(
+                    NAMESPACE_BILLING, deployment, prazo=PRAZO_DO_ROLLOUT
+                )
+            except AssertionError as erro:
+                falhas.append(f"rollout de {deployment}: {mascarar(str(erro))}")
+        try:
+            self._conferir_modo(modo)
+        except (AssertionError, httpx.HTTPError, LookupError, ValueError) as erro:
+            falhas.append(f"/billing/api/v1/saude: {mascarar(str(erro))}")
+        if falhas:
+            raise RolloutDoBillingError("; ".join(falhas))
 
     def _conferir_modo(self, esperado: str) -> None:
         esperar(
             lambda: self._saude() == esperado,
             prazo=PRAZO_DA_CONFERENCIA,
-            intervalo=2.0,
+            intervalo=INTERVALO_DA_CONFERENCIA,
             descricao=f"/billing/api/v1/saude com modo {esperado}",
             ignorar=(
                 httpx.TransportError,
@@ -181,48 +259,65 @@ class ModoDoBilling:
     def ligar_real(self, token: str, assinatura: str) -> None:
         """Secret, variaveis e reinicio; so volta com a API dizendo ``mercadopago``."""
         self._mexeu = True
-        self._avisar("[mp-sandbox] Billing: criando o Secret e ligando o modo real")
+        self._dizer("[mp-sandbox] Billing: criando o Secret e ligando o modo real")
         self._kubectl.aplicar_json(manifesto_do_segredo(token, assinatura))
         variaveis = dict(VARIAVEIS_DO_MODO_REAL)
         if self._url_de_notificacao:
             variaveis["MP_NOTIFICATION_URL"] = self._url_de_notificacao
-        self._kubectl.definir_variaveis(NAMESPACE_BILLING, variaveis)
+        self._definir_variaveis(variaveis)
         self._reiniciar_e_esperar(MODO_REAL)
 
     def garantir_simulado(self) -> None:
-        """No ensaio: o Billing tem de estar no simulador, e so isso.
+        """No ensaio: o Billing tem de estar no simulador, sem Secret e sem variavel.
 
-        Um modo real que sobrou (``E2E_MP_MANTER=1`` numa execucao anterior) e
-        desfeito; no simulador nao se mexe em nada.
+        Decide pelo cluster, e nao so pelo ``/saude``: um ``kill -9`` entre o
+        ``apply`` do Secret e o fim do rollout deixa o Billing dizendo ``simulado``
+        com o Secret e as variaveis la. Um ``E2E_MP_MANTER=1`` anterior tambem e
+        desfeito. Sem sobra nenhuma, nao reinicia nada: o ensaio nao mexe na geracao
+        dos Deployments a toa.
         """
-        if self._saude() != MODO_SIMULADO:
-            self._avisar(
-                "[mp-sandbox] o Billing estava em modo real: voltando ao simulador"
-            )
-            self.desfazer()
+        modo = self._saude()
+        achados = self._sobras()
+        if modo != MODO_SIMULADO:
+            achados.insert(0, f"o Billing em modo {modo}")
+        if not achados:
+            return
+        self._dizer(
+            f"[mp-sandbox] o ensaio achou {'; '.join(achados)}: "
+            "voltando o Billing ao simulador"
+        )
+        self.desfazer()
 
     def desfazer(self) -> None:
         """Apaga o Secret, tira as variaveis, reinicia e espera; junta as falhas."""
-        self._avisar("[mp-sandbox] Billing: desfazendo (Secret, variáveis e reinício)")
         falhas: list[str] = []
         with sem_interrupcao():
-            passos: tuple[tuple[str, Callable[[], None]], ...] = (
+            self._dizer(
+                "[mp-sandbox] Billing: desfazendo o modo real em 3 passos "
+                f"(Secret, variáveis e reinício). {NAO_FECHE}"
+            )
+            passos: tuple[tuple[str, str, Callable[[], None]], ...] = (
                 (
+                    "1/3 apagando o Secret",
                     "apagar o Secret",
-                    lambda: self._kubectl.apagar_segredo(NAMESPACE_BILLING, SEGREDO),
+                    self._apagar_segredo,
                 ),
                 (
-                    "tirar MP_MODE e SIMULADOR_PERMITIDO dos Deployments",
-                    lambda: self._kubectl.remover_variaveis(
-                        NAMESPACE_BILLING, VARIAVEIS_A_REMOVER
+                    (
+                        "2/3 tirando MP_MODE, SIMULADOR_PERMITIDO e "
+                        "MP_NOTIFICATION_URL dos Deployments"
                     ),
+                    "tirar as variáveis dos Deployments",
+                    self._remover_variaveis,
                 ),
                 (
+                    "3/3 reiniciando os Deployments",
                     "reiniciar e esperar o Billing",
-                    lambda: self._reiniciar_e_esperar(MODO_SIMULADO),
+                    lambda: self._reiniciar_e_esperar(MODO_SIMULADO, etapa="3/3 "),
                 ),
             )
-            for descricao, passo in passos:
+            for progresso, descricao, passo in passos:
+                self._dizer(f"[mp-sandbox] {progresso}")
                 try:
                     passo()
                 except (
@@ -240,7 +335,7 @@ class ModoDoBilling:
             )
             raise DesfazerFalhouError(msg)
         self._mexeu = False
-        self._avisar("[mp-sandbox] Billing de volta ao simulador")
+        self._dizer("[mp-sandbox] Billing de volta ao simulador")
 
     @contextlib.contextmanager
     def sessao(
@@ -261,7 +356,7 @@ class ModoDoBilling:
             yield
         finally:
             if self._mexeu and manter and ligado:
-                self._avisar(
+                self._dizer(
                     "[mp-sandbox] E2E_MP_MANTER=1: o Billing segue em modo real. "
                     "Para voltar ao simulador: make mp-sandbox-ensaio"
                 )

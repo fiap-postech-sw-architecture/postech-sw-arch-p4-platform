@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import signal
 import subprocess  # nosec B404
 import sys
-from typing import TYPE_CHECKING
+import time
+from pathlib import Path
 
 import pytest
 
@@ -18,8 +21,7 @@ from e2e.apoio.kube import (
 )
 from e2e_apoio.falsos import pids_do_kubectl_falso, processo_vivo
 
-if TYPE_CHECKING:
-    from pathlib import Path
+RAIZ = Path(__file__).resolve().parents[2]
 
 
 def test_executar_processo_devolve_a_saida() -> None:
@@ -206,3 +208,51 @@ def test_port_forward_sem_iniciar_nao_tem_stderr_para_mostrar() -> None:
     ponte = PortForward(Kubectl("kind-x"), "ns", "svc/x", 1)
 
     assert ponte._ultimas_linhas_do_erro() == ""
+
+
+def test_executar_processo_roda_em_sessao_propria_e_o_ctrl_c_do_terminal_nao_o_alcanca(
+    tmp_path: Path,
+) -> None:
+    # O Ctrl-C do terminal vai ao grupo de processos inteiro (os.killpg). O Python do
+    # desfazer o ignora, mas o kubectl em voo morreria junto sem a sessao propria.
+    filho = tmp_path / "filho.py"
+    filho.write_text(
+        "import signal, time\n"
+        "from pathlib import Path\n"
+        f"pasta = Path({str(tmp_path)!r})\n"
+        "signal.signal(signal.SIGINT, lambda *_: (pasta / 'sigint').write_text('1'))\n"
+        "(pasta / 'inicio').write_text('1')\n"
+        "time.sleep(1.5)\n"
+        "(pasta / 'fim').write_text('1')\n"
+    )
+    lider = tmp_path / "lider.py"
+    lider.write_text(
+        "import signal, sys\n"
+        "from e2e.apoio.kube import executar_processo\n"
+        "signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+        f"executar_processo([sys.executable, {str(filho)!r}], 30)\n"
+    )
+    # start_new_session: o killpg do teste so alcanca o lider e o filho dele.
+    processo = subprocess.Popen(  # noqa: S603  # nosec B603
+        [sys.executable, str(lider)],
+        env={**os.environ, "PYTHONPATH": str(RAIZ)},
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        limite = time.monotonic() + 30
+        while not (tmp_path / "inicio").exists():
+            assert time.monotonic() < limite, "o filho nao chegou a rodar"
+            time.sleep(0.05)
+        os.killpg(processo.pid, signal.SIGINT)
+        processo.wait(timeout=30)
+    finally:
+        if processo.poll() is None:  # pragma: no cover - so se o teste falhar
+            os.killpg(processo.pid, signal.SIGKILL)
+            processo.wait()
+
+    assert processo.returncode == 0
+    assert (tmp_path / "fim").exists()
+    assert not (tmp_path / "sigint").exists(), "o kubectl recebeu o Ctrl-C do terminal"

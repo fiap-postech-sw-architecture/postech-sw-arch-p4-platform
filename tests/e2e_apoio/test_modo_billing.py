@@ -11,15 +11,16 @@ import httpx
 import pytest
 
 from e2e.apoio import segredos
-from e2e.apoio.espera import TempoEsgotadoError
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
 from e2e.apoio.modo_billing import (
     MODO_REAL,
     MODO_SIMULADO,
     NAMESPACE_BILLING,
     SEGREDO,
+    SINAIS_DE_INTERRUPCAO,
     DesfazerFalhouError,
     ModoDoBilling,
+    RolloutDoBillingError,
     UrlDeNotificacaoInvalidaError,
     comandos_a_mao,
     manifesto_do_segredo,
@@ -47,13 +48,20 @@ class Cluster:
     """O kubectl do Billing: grava as chamadas e muda o modo como o rollout muda."""
 
     def __init__(
-        self, *, falhas: Sequence[str] = (), modo_real_pega: bool = True
+        self,
+        *,
+        falhas: Sequence[str] = (),
+        modo_real_pega: bool = True,
+        segredo_orfao: bool = False,
+        variaveis_orfas: Sequence[str] = (),
     ) -> None:
         self.chamadas: list[tuple[str, str | None]] = []
-        self.sinais_durante: list[object] = []
+        self.sinais_durante: list[tuple[object, ...]] = []
         self.modo = MODO_SIMULADO
         self._falhas = falhas
         self._modo_real_pega = modo_real_pega
+        self._segredo_orfao = segredo_orfao
+        self._variaveis_orfas = variaveis_orfas
 
     def __call__(
         self, argumentos: Sequence[str], prazo: float, entrada: str | None = None
@@ -61,7 +69,9 @@ class Cluster:
         del prazo
         juntos = " ".join(argumentos)
         self.chamadas.append((juntos, entrada))
-        self.sinais_durante.append(signal.getsignal(signal.SIGINT))
+        self.sinais_durante.append(
+            tuple(signal.getsignal(sinal) for sinal in SINAIS_DE_INTERRUPCAO)
+        )
         for trecho in self._falhas:
             if trecho in juntos:
                 msg = f"{trecho}: saiu com 1: erro do kubectl com {CHAVE_DO_MP}"
@@ -79,6 +89,10 @@ class Cluster:
                 "deployment.apps/billing-service-api\n"
                 "deployment.apps/billing-service-relay\n"
             )
+        if "get secret" in juntos:
+            return f"secret/{SEGREDO}\n" if self._segredo_orfao else ""
+        if "get deployment -o jsonpath" in juntos:
+            return "".join(f"{nome}\n" for nome in ("PORTA", *self._variaveis_orfas))
         return ""
 
     def comandos(self) -> list[str]:
@@ -173,12 +187,12 @@ def test_manifesto_do_segredo_registra_os_valores_e_o_base64_na_mascara() -> Non
 # --- Ctrl-C --------------------------------------------------------------------
 
 
-def test_sem_interrupcao_ignora_ctrl_c_e_sigterm_e_restaura_no_fim() -> None:
-    antes = {s: signal.getsignal(s) for s in (signal.SIGINT, signal.SIGTERM)}
+def test_sem_interrupcao_ignora_ctrl_c_sigterm_e_sighup_e_restaura_no_fim() -> None:
+    antes = {s: signal.getsignal(s) for s in SINAIS_DE_INTERRUPCAO}
 
     with sem_interrupcao():
-        assert signal.getsignal(signal.SIGINT) == signal.SIG_IGN
-        assert signal.getsignal(signal.SIGTERM) == signal.SIG_IGN
+        for sinal in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP):
+            assert signal.getsignal(sinal) == signal.SIG_IGN
 
     assert {s: signal.getsignal(s) for s in antes} == antes
 
@@ -249,7 +263,7 @@ def test_ligar_real_so_volta_com_a_api_dizendo_mercadopago(relogio: Relogio) -> 
     cluster = Cluster(modo_real_pega=False)
     modo, _ = _modo(cluster, relogio)
 
-    with pytest.raises(TempoEsgotadoError, match="modo mercadopago"):
+    with pytest.raises(RolloutDoBillingError, match="modo mercadopago"):
         modo.ligar_real(CHAVE_DO_MP, ASSINATURA)
 
 
@@ -364,7 +378,7 @@ def test_desfazer_roda_sem_interrupcao_e_devolve_os_sinais(relogio: Relogio) -> 
 
     modo.desfazer()
 
-    assert set(cluster.sinais_durante) == {signal.SIG_IGN}
+    assert set(cluster.sinais_durante) == {(signal.SIG_IGN,) * 3}
     assert signal.getsignal(signal.SIGINT) == antes
 
 
@@ -373,7 +387,7 @@ def test_desfazer_roda_sem_interrupcao_e_devolve_os_sinais(relogio: Relogio) -> 
     [
         pytest.param("delete secret", "apagar o Secret", id="apagar-o-secret"),
         pytest.param(
-            "set env", "tirar MP_MODE e SIMULADOR_PERMITIDO", id="tirar-as-variaveis"
+            "set env", "tirar as variáveis dos Deployments", id="tirar-as-variaveis"
         ),
         pytest.param(
             "rollout restart", "reiniciar e esperar o Billing", id="reiniciar"
@@ -504,7 +518,10 @@ def test_sessao_ensaio_com_o_billing_no_simulador_nao_mexe_em_nada(
     with modo.sessao(real=False):
         pass
 
-    assert cluster.chamadas == []
+    # So leituras: nada de apply, set env, delete nem rollout (a geracao dos
+    # Deployments nao muda a toa).
+    assert cluster.comandos()
+    assert all(" get " in comando for comando in cluster.comandos())
 
 
 def test_sessao_ensaio_com_modo_real_que_sobrou_volta_ao_simulador(
@@ -518,7 +535,7 @@ def test_sessao_ensaio_com_modo_real_que_sobrou_volta_ao_simulador(
         assert cluster.modo == MODO_SIMULADO
         chamadas_no_inicio = len(cluster.chamadas)
 
-    assert any("estava em modo real" in aviso for aviso in avisos)
+    assert any("o Billing em modo mercadopago" in aviso for aviso in avisos)
     # Nada mais no fim: o ensaio so garantiu o simulador.
     assert len(cluster.chamadas) == chamadas_no_inicio
 
@@ -593,3 +610,215 @@ def test_saude_ilegivel_uma_vez_conta_como_ainda_nao(relogio: Relogio) -> None:
     modo.ligar_real(CHAVE_DO_MP, ASSINATURA)
 
     assert relogio.dormidas == [2.0]
+
+
+# --- o ensaio acha o que o modo real deixou -----------------------------------------
+
+
+def test_ensaio_apaga_o_secret_orfao_mesmo_com_o_billing_em_simulado(
+    relogio: Relogio,
+) -> None:
+    # Um kill -9 entre o apply do Secret e o set env: o /saude ainda diz simulado.
+    cluster = Cluster(segredo_orfao=True)
+    modo, avisos = _modo(cluster, relogio)
+
+    modo.garantir_simulado()
+
+    comandos = cluster.comandos()
+    assert any("delete secret" in c for c in comandos)
+    assert any("set env" in c and "MP_MODE-" in c for c in comandos)
+    assert any("rollout restart" in c for c in comandos)
+    assert any(f"o Secret {SEGREDO}" in aviso for aviso in avisos)
+
+
+def test_ensaio_tira_a_variavel_orfa_mesmo_com_o_billing_em_simulado(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster(variaveis_orfas=("MP_NOTIFICATION_URL", "SIMULADOR_PERMITIDO"))
+    modo, avisos = _modo(cluster, relogio)
+
+    modo.garantir_simulado()
+
+    assert any("set env" in c and "MP_MODE-" in c for c in cluster.comandos())
+    assert any(
+        "as variáveis MP_NOTIFICATION_URL, SIMULADOR_PERMITIDO nos Deployments" in aviso
+        for aviso in avisos
+    )
+
+
+def test_ensaio_diz_o_modo_e_a_sobra_quando_acha_as_duas_coisas(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster(segredo_orfao=True)
+    cluster.modo = MODO_REAL
+    modo, avisos = _modo(cluster, relogio)
+
+    modo.garantir_simulado()
+
+    achado = next(aviso for aviso in avisos if "o ensaio achou" in aviso)
+    assert achado.index("o Billing em modo mercadopago") < achado.index("o Secret")
+
+
+def test_ensaio_sem_sobra_nao_reinicia_nem_apaga_nada(relogio: Relogio) -> None:
+    # Nome de variavel que nao e do modo real nao conta como sobra.
+    cluster = Cluster(variaveis_orfas=("OUTRA_VARIAVEL",))
+    modo, avisos = _modo(cluster, relogio)
+
+    modo.garantir_simulado()
+
+    assert avisos == []
+    assert all(" get " in comando for comando in cluster.comandos())
+
+
+# --- um rollout que falha nao esconde os outros --------------------------------------
+
+
+def test_um_rollout_que_falha_nao_impede_a_espera_dos_outros_nem_o_modo(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster(falhas=("rollout status deployment/billing-service-api",))
+    cluster.modo = MODO_REAL
+    leituras: list[str] = []
+
+    def saude() -> str:
+        leituras.append(cluster.modo)
+        return cluster.modo
+
+    modo = ModoDoBilling(
+        cluster.kubectl(),
+        saude,
+        avisar=lambda _: None,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    with pytest.raises(DesfazerFalhouError) as erro:
+        modo.desfazer()
+
+    esperas = [c for c in cluster.comandos() if "rollout status" in c]
+    assert [c.split("deployment/")[1].split()[0] for c in esperas] == [
+        "billing-service-api",
+        "billing-service-relay",
+    ]
+    assert leituras, "a API do Billing nao foi conferida"
+    assert "rollout de billing-service-api" in str(erro.value)
+    assert "rollout de billing-service-relay" not in str(erro.value)
+
+
+def test_rollout_e_modo_que_falham_juntos_aparecem_juntos(relogio: Relogio) -> None:
+    cluster = Cluster(falhas=("rollout status",))
+    cluster.modo = MODO_REAL
+    modo = ModoDoBilling(
+        cluster.kubectl(),
+        lambda: MODO_REAL,
+        avisar=lambda _: None,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    with pytest.raises(RolloutDoBillingError) as erro:
+        modo._reiniciar_e_esperar(MODO_SIMULADO)
+
+    texto = str(erro.value)
+    assert "rollout de billing-service-api" in texto
+    assert "rollout de billing-service-relay" in texto
+    assert "/billing/api/v1/saude" in texto
+
+
+# --- o aviso e cortesia ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "erro",
+    [
+        pytest.param(BrokenPipeError(32, "Broken pipe"), id="pipe-quebrado"),
+        pytest.param(OSError(5, "Input/output error"), id="terminal-fechado"),
+        pytest.param(ValueError("I/O operation on closed file"), id="saida-fechada"),
+    ],
+)
+def test_aviso_que_nao_chega_ao_terminal_nao_aborta_o_desfazer(
+    erro: Exception, relogio: Relogio
+) -> None:
+    cluster = Cluster()
+    cluster.modo = MODO_REAL
+
+    def avisar(_: str) -> None:
+        raise erro
+
+    modo = ModoDoBilling(
+        cluster.kubectl(),
+        cluster.saude,
+        avisar=avisar,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    modo.desfazer()
+
+    comandos = cluster.comandos()
+    for esperado in ("delete secret", "set env", "rollout restart"):
+        assert any(esperado in c for c in comandos), f"{esperado} nao rodou"
+    assert cluster.modo == MODO_SIMULADO
+
+
+def test_aviso_que_nao_chega_ao_terminal_nao_aborta_o_ligar_nem_o_manter(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster()
+
+    def avisar(_: str) -> None:
+        raise BrokenPipeError
+
+    modo = ModoDoBilling(
+        cluster.kubectl(),
+        cluster.saude,
+        avisar=avisar,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    with modo.sessao(real=True, token=CHAVE_DO_MP, assinatura=ASSINATURA, manter=True):
+        pass
+
+    assert cluster.modo == MODO_REAL
+
+
+def test_o_primeiro_aviso_do_desfazer_ja_sai_sem_interrupcao(relogio: Relogio) -> None:
+    cluster = Cluster()
+    cluster.modo = MODO_REAL
+    sinais_no_aviso: list[object] = []
+
+    def avisar(_: str) -> None:
+        sinais_no_aviso.append(signal.getsignal(signal.SIGINT))
+
+    modo = ModoDoBilling(
+        cluster.kubectl(),
+        cluster.saude,
+        avisar=avisar,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+    modo.desfazer()
+
+    assert sinais_no_aviso[0] == signal.SIG_IGN
+
+
+def test_desfazer_imprime_cada_passo_e_manda_nao_fechar_o_terminal(
+    relogio: Relogio,
+) -> None:
+    cluster = Cluster()
+    cluster.modo = MODO_REAL
+    modo, avisos = _modo(cluster, relogio)
+
+    modo.desfazer()
+
+    assert "Não feche o terminal e não use kill -9." in avisos[0]
+    for trecho in (
+        "1/3 apagando o Secret",
+        "2/3 tirando MP_MODE, SIMULADOR_PERMITIDO e MP_NOTIFICATION_URL",
+        "3/3 reiniciando os Deployments",
+        "3/3 esperando o rollout de billing-service-api (até 5 min)",
+        "3/3 esperando o rollout de billing-service-relay (até 5 min)",
+    ):
+        assert any(trecho in aviso for aviso in avisos), trecho

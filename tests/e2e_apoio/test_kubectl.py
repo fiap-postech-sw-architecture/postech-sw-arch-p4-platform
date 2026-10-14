@@ -230,69 +230,6 @@ def test_kubectl_aplicar_json_manda_o_manifesto_so_pelo_stdin() -> None:
     assert "segredo-123" not in " ".join(comando)
 
 
-def test_kubectl_apagar_segredo_ignora_o_que_nao_existe() -> None:
-    executor = ExecutorFalso()
-
-    Kubectl("c", executor=executor).apagar_segredo(
-        "pytstop-billing", "billing-mercadopago"
-    )
-
-    assert executor.comandos[0][3:] == [
-        "-n",
-        "pytstop-billing",
-        "delete",
-        "secret",
-        "billing-mercadopago",
-        "--ignore-not-found",
-    ]
-
-
-def test_kubectl_deployments_devolve_so_o_nome() -> None:
-    executor = ExecutorFalso(
-        {
-            "get deployment": (
-                "deployment.apps/billing-service-api\n"
-                "deployment.apps/billing-service-relay\n"
-            )
-        }
-    )
-
-    assert Kubectl("c", executor=executor).deployments("pytstop-billing") == [
-        "billing-service-api",
-        "billing-service-relay",
-    ]
-    assert Kubectl("c", executor=ExecutorFalso()).deployments("vazio") == []
-
-
-def test_kubectl_variaveis_do_deployment_entram_e_saem_com_set_env() -> None:
-    executor = ExecutorFalso()
-    kubectl = Kubectl("c", executor=executor)
-
-    kubectl.definir_variaveis(
-        "ns", {"MP_MODE": "mercadopago", "SIMULADOR_PERMITIDO": "false"}
-    )
-    kubectl.remover_variaveis("ns", ["MP_MODE", "SIMULADOR_PERMITIDO"])
-
-    assert executor.comandos[0][3:] == [
-        "-n", "ns", "set", "env", "deployment", "--all",
-        "MP_MODE=mercadopago", "SIMULADOR_PERMITIDO=false",
-    ]  # fmt: skip
-    assert executor.comandos[1][3:] == [
-        "-n", "ns", "set", "env", "deployment", "--all",
-        "MP_MODE-", "SIMULADOR_PERMITIDO-",
-    ]  # fmt: skip
-
-
-def test_kubectl_reiniciar_pede_o_rollout_restart_de_todos() -> None:
-    executor = ExecutorFalso()
-
-    Kubectl("c", executor=executor).reiniciar("pytstop-billing")
-
-    assert executor.comandos[0][3:] == [
-        "-n", "pytstop-billing", "rollout", "restart", "deployment"
-    ]  # fmt: skip
-
-
 def test_kubectl_ultimas_linhas_pede_o_corte_explicito() -> None:
     # Com seletor de label o kubectl corta em 10 linhas se --tail nao vier.
     executor = ExecutorFalso({"logs": "linha"})
