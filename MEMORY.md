@@ -10,6 +10,7 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Recent decisions
 
+- 2026-10-14 - E2E da saga em `e2e/` (pytest-bdd 8, Gherkin em portugues): o grupo `e2e` e padrao no `uv` (o mypy do `make lint` confere `e2e/` e os testes do codigo auxiliar importam o httpx); o que nao precisa de cluster mora em `e2e/apoio/` e e testado em `tests/test_e2e_apoio.py` (conta na cobertura), e o conftest, os steps e `servicos.py` so rodam no kind. O resumo (`python -m e2e.resumo`) le o `cucumber.json` e o `cenarios.json` que o runner escreve. O `make demo` nao tem feature propria: roda os cenarios `@demo` com `E2E_NARRAR=1` - README, E2E da saga
 - 2026-10-07 - O CD de cada servico sobe os tres no kind por `scripts/ci/implantar-servicos.sh` e confere com `scripts/ci/smoke-servicos.sh`; o `deploy-kind.sh` segue sem argumentos (a divida LOW de 06/10 sobre os argumentos dele deixa de valer) - README, Contrato com os servicos; ADR-042
 - 2026-10-07 - Exemplo de borda da Execucao em `k8s/exemplos/borda-execution-service.yaml` (o do OS sem JWKS nem rotas publicas), aplicado pelo `make smoke` com os do OS e do Billing - ADR-038
 - 2026-10-07 - Exporters dos bancos na tabela de versoes: postgres_exporter v0.20.1 e mongodb_exporter 0.53.0, as ultimas publicadas; os achados HIGH do trivy estao todos em dependencias Go compiladas no binario e ficam aceitos (sidecar, porta de metricas so para o Prometheus) - README, Decisoes e limites
