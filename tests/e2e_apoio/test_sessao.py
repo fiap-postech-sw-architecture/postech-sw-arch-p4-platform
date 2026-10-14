@@ -48,7 +48,14 @@ def _reprova() -> None:
 
 
 def _ambiente(**extra: str) -> dict[str, str]:
-    base = {k: v for k, v in os.environ.items() if not k.startswith(("E2E_", "KUBE_"))}
+    # Sem as variaveis do E2E e sem GITHUB_ACTIONS: no CI ele vale "true" e o
+    # ::add-mask:: (que e para o runner ler) entraria na saida que os testes de
+    # vazamento examinam. Os testes que querem o comando passam GITHUB_ACTIONS.
+    base = {
+        k: v
+        for k, v in os.environ.items()
+        if not k.startswith(("E2E_", "KUBE_")) and k != "GITHUB_ACTIONS"
+    }
     return {**base, "PYTHONPATH": str(RAIZ), **extra}
 
 
