@@ -39,7 +39,7 @@ def _duracao(cenario: dict[str, Any]) -> float:
 
 
 def _virgula(segundos: float) -> str:
-    """``8,3``: a vírgula decimal do README e do corpo do PR."""
+    """``8,3``: a virgula decimal do README e do corpo do PR."""
     return f"{segundos:.1f}".replace(".", ",")
 
 
