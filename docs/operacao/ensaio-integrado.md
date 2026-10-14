@@ -346,6 +346,6 @@ Linhas de log que parecem erro e são esperadas no kind: `payment_simulator_enab
 ## Como repetir
 
 1. Confira que nenhum outro cluster usa a máquina: `kind get clusters`, `docker ps` e `lsof -nP -iTCP:443 -sTCP:LISTEN` (o kind publica o Kong em `127.0.0.1:443`).
-2. Clone os três serviços ao lado do `platform` e ponha cada um no commit que quer ensaiar.
-3. Rode a sequência da primeira execução acima, com `MEDICAO=$(mktemp -d)` exportado e tudo no mesmo shell (um script), e `make kind-down` no fim. As imagens `pytstop-<serviço>:<commit>` ficam no Docker local: apague as suas com `docker rmi`.
+2. Clone os três serviços ao lado do `platform` e ponha cada um no commit que quer ensaiar. Para repetir o ensaio sobre as `main` de hoje, use o topo da `main` de cada repositório.
+3. Cole os comandos da primeira execução de [Comandos usados](#comandos-usados) num script único (o `export MEDICAO` já está no bloco), rode-o e termine com `make kind-down`. As imagens `pytstop-<serviço>:<commit>` ficam no Docker local: apague as suas com `docker rmi`.
 4. No CD, o mesmo roteiro roda no job `deploy-kind` de cada serviço (`--tar` no lugar do `docker build` para o próprio serviço), e a coluna "Medido no runner" do ADR-042 se preenche com o primeiro run verde.
