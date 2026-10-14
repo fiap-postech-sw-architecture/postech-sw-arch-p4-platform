@@ -64,13 +64,22 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 ### Kubernetes local (kind)
 
 ```bash
-make kind-up        # cria o cluster pytstop-p4 (contexto kind-pytstop-p4)
-make deploy         # segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check
-make smoke          # borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos; sai com status 1 se uma prova não valer
-make status         # pods, serviços, volumes e filas do RabbitMQ
-make port-forward   # Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025
-make kind-down      # apaga o cluster
+make kind-up
+make deploy
+make smoke
+make status
+make port-forward
+make kind-down
 ```
+
+| Alvo | O que faz |
+|---|---|
+| `make kind-up` | cria o cluster `pytstop-p4` (contexto `kind-pytstop-p4`) |
+| `make deploy` | segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check |
+| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos; sai com status 1 se uma prova não valer |
+| `make status` | pods, serviços, volumes e filas do RabbitMQ |
+| `make port-forward` | Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025 |
+| `make kind-down` | apaga o cluster |
 
 O `make smoke` pede um cluster só com a plataforma: ele recusa um namespace de serviço com Ingress. Para implantar os serviços no mesmo cluster, depois do `make deploy`, veja o [Contrato com os serviços](#contrato-com-os-serviços) (o `make kind-deploy` de cada serviço); para voltar ao cluster só da plataforma, apague os namespaces `pytstop-os`, `pytstop-billing` e `pytstop-execucao`.
 
@@ -222,18 +231,22 @@ A saída esperada é `{ ok: 1 }` duas vezes, e o `mongod` registra o `updateUser
 O overlay `k3s` assume o k3s instalado com `--disable traefik`: o Service `kong-proxy` continua `LoadBalancer` e o ServiceLB do k3s publica as portas 80/443 da VM no Kong. O k3s já traz metrics-server. O mesmo alvo do kind aplica o overlay, espera os rollouts e confere o Kong:
 
 ```bash
-make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto do k3s>
+make deploy OVERLAY=k3s KUBE_CONTEXT=k3s-pytstop
 ```
+
+No lugar de `k3s-pytstop`, use o nome do contexto do k3s no seu kubeconfig (`kubectl config get-contexts` lista os nomes).
 
 A diferença para o kind está no próprio [`kustomization.yaml`](k8s/overlays/k3s/kustomization.yaml): StorageClass `local-path`, volume de 5Gi e mais memória reservada (request) para o RabbitMQ, e sete dias de retenção no Prometheus.
 
 ### docker compose
 
 ```bash
-make up                    # infraestrutura
-make up PROFILE=servicos   # infraestrutura + os três serviços, construídos dos repositórios irmãos
-make down                  # derruba tudo; os volumes ficam (docker compose -f compose/docker-compose.yml down -v apaga)
+make up
+make up PROFILE=servicos
+make down
 ```
+
+`make up` sobe a infraestrutura; com `PROFILE=servicos`, sobe também os três serviços, construídos dos repositórios irmãos. `make down` derruba tudo e deixa os volumes (`docker compose -f compose/docker-compose.yml down -v` os apaga).
 
 O compose serve para desenvolver um serviço, não reproduz o cluster: RabbitMQ (mesmas definitions, policies e usuários), Loki (mesma configuração), Grafana (mesmo provisioning), Prometheus, Promtail, Jaeger e Mailpit, mais os bancos. Não tem o Kong, então não há `/os`, `/billing` e `/execucao`, nem `X-Request-ID` ou rate limit da borda (os serviços respondem direto nas portas abaixo, e os painéis 10 e 11 e o alerta de 5xx do gateway ficam sem dado). A regra `pytstop-kong-fora`, que trata ausência de dado como alerta, só é carregada no cluster ([`alertas-cluster.yaml`](observabilidade/grafana/alertas-cluster.yaml)): no compose ela ficaria disparada para sempre. Também não tem kube-state-metrics nem metrics-server: sem o alerta de CPU e sem HPA (*Horizontal Pod Autoscaler*, o autoescalonamento horizontal).
 
@@ -447,10 +460,15 @@ A importação do boot não apaga fila, e fila que já existe fica com os argume
 
 1. Pare os consumidores dos serviços (réplicas em zero no cluster), para nenhuma cópia nova entrar na `<fila>.retry`, e espere as três esvaziarem: em até 300 s, o maior `expiration` que as cópias levavam, todas voltam para a fila de trabalho pela policy que ainda vale. Confira na coluna `messages`:
 
+   No kind (no k3s, troque o contexto em `--context`):
+
    ```bash
-   # kind; no k3s, o contexto dele no --context
    kubectl --context kind-pytstop-p4 -n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl -q list_queues name messages
-   # compose
+   ```
+
+   No compose:
+
+   ```bash
    docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl -q list_queues name messages
    ```
 
@@ -458,10 +476,19 @@ A importação do boot não apaga fila, e fila que já existe fica com os argume
 
 3. Apague as três filas antigas, que até lá aparecem como fila de trabalho sem consumidor nos painéis 2, 4 e 5 do dashboard:
 
+   No kind:
+
    ```bash
    for fila in billing.comandos.retry execucao.comandos.retry os.eventos.retry; do
      kubectl --context kind-pytstop-p4 -n pytstop-plataforma exec rabbitmq-0 -c rabbitmq -- rabbitmqctl delete_queue "$fila"
-     # compose: docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl delete_queue "$fila"
+   done
+   ```
+
+   No compose:
+
+   ```bash
+   for fila in billing.comandos.retry execucao.comandos.retry os.eventos.retry; do
+     docker compose -f compose/docker-compose.yml exec rabbitmq rabbitmqctl delete_queue "$fila"
    done
    ```
 
@@ -679,9 +706,11 @@ Regras que os schemas impõem:
 Mudança de contrato começa por um PR aqui. Campo novo opcional mantém a `versao`: atualiza o schema, o exemplo e a tabela da RFC copiada no teste, e o produtor pode enviá-lo antes de os consumidores o conhecerem. Mudança incompatível vira `versao: 2` do tipo, com o consumidor implantado antes do produtor. Cada serviço copia os schemas que produz e consome, e o `asyncapi.yaml`, que traz o usuário AMQP que publica cada tipo (`userId`, de onde o consumidor tira o produtor esperado); e os valida no próprio teste de contrato.
 
 ```bash
-make test   # exemplos e negativos gerados contra os schemas, campos da RFC, AsyncAPI, routing key e topologia
-make lint   # ruff, mypy strict e bandit, mais shellcheck nos scripts e actionlint nos workflows
+make test
+make lint
 ```
+
+O `make test` roda os exemplos e os negativos gerados contra os schemas, os campos da RFC, o AsyncAPI, a routing key e a topologia. O `make lint` roda ruff, mypy strict e bandit, mais shellcheck nos scripts e actionlint nos workflows.
 
 A cobertura de linha do `make test` mede só o arquivo de teste. O que protege os schemas é a bateria de negativos gerados de cada exemplo (campo removido, tipo errado, valor fora do domínio, texto gigante, lista vazia), que precisa ser toda rejeitada, mais os testes de fronteira: toda lista vai de 1 a 50 itens (vazia só onde a RFC deixa), cada limite de tamanho, quantidade, valor e formato tem o valor no limite aceito e o seguinte rejeitado, e a regra do `decidido_por` vale nos dois sentidos em `OrcamentoAprovado` e `OrcamentoRecusado`.
 
