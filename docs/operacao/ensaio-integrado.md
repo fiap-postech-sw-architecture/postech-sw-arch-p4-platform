@@ -208,7 +208,16 @@ Medidos pelo [`medir-kind.sh`](../../scripts/medir-kind.sh) e pelo carimbo de ho
 | Espera de 90 s e fotografia do estado estável | 1 min 32 s | 1 min 31 s |
 | Total | 7 min 06 s | 7 min 54 s |
 
-Dentro do `implantar-servicos.sh` da primeira execução (1 min 27 s): os três `docker build` em paralelo levaram 13 s (camadas em cache), o `kind load` das três imagens, 8 s, e do `apply` ao último Deployment pronto passaram 65 s. O StatefulSet do banco ficou pronto 47 s (Execução), 50 s (Billing) e 52 s (OS) depois do `apply`; os Jobs (medidos na segunda execução) duraram 12 s (`execucao-migracao`), 28 s (`os-migracao`) e 36 s (`billing-inicializacao`, que também inicia o replica set); os Deployments seguem o Job pela espera do `aguarda-migracao` e do `aguarda-banco`. Para comparar, o [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) mediu, no runner e só com a plataforma, 39 a 46 s de `kind-up`, 50 a 54 s de deploy e 1 min 40 s a 1 min 47 s de smoke; aqui, 26 s, 1 min 34 s (o deploy local ficou mais lento que o do runner, com a máquina dividida com outros containers) e 1 min 46 s.
+Dentro do `implantar-servicos.sh` da primeira execução (1 min 27 s):
+
+- os três `docker build`, em paralelo: 13 s, com as camadas em cache;
+- o `kind load` das três imagens: 8 s;
+- do `apply` ao último Deployment pronto: 65 s;
+- o StatefulSet do banco ficou pronto 47 s (Execução), 50 s (Billing) e 52 s (OS) depois do `apply`;
+- os Jobs, medidos na segunda execução, duraram 12 s (`execucao-migracao`), 28 s (`os-migracao`) e 36 s (`billing-inicializacao`, que também inicia o replica set);
+- os Deployments esperam o Job pelo `aguarda-migracao` (OS e Execução) e pelo `aguarda-banco` (Billing).
+
+Para comparar, o [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) mediu no runner, só com a plataforma, 39 a 46 s de `kind-up`, 50 a 54 s de deploy e 1 min 40 s a 1 min 47 s de smoke; aqui foram 26 s, 1 min 34 s e 1 min 46 s. O deploy local ficou mais lento que o do runner porque a máquina dividia o Docker com outros containers.
 
 ## Memória e CPU
 
