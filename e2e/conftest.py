@@ -27,11 +27,15 @@ from e2e.ambiente import (
     narrar,
 )
 from e2e.apoio import dados
-from e2e.apoio.contexto import conferir_borda_local, conferir_contexto
+from e2e.apoio.contexto import (
+    conferir_borda_local,
+    conferir_contexto,
+    escape_do_ambiente,
+)
 from e2e.apoio.credenciais import Credenciais
 from e2e.apoio.http import ClienteHttp
 from e2e.apoio.kube import Escalas, Kubectl
-from e2e.apoio.preflight import conferir_overlay_kind_ci
+from e2e.apoio.preflight import conferir_dlqs_vazias, conferir_overlay_kind_ci
 from e2e.apoio.relatorio import Registro
 from e2e.servicos import Api, Cenario
 
@@ -48,10 +52,13 @@ pytest_plugins = ["e2e.apoio.plugin"]
 @pytest.fixture(scope="session")
 def kubectl() -> Kubectl:
     """kubectl no contexto escolhido, depois de provado: kind descartavel no kind-ci."""
-    conferir_contexto(CONTEXTO, os.environ)
+    # So o escape entra no guarda: o ambiente inteiro apareceria no traceback.
+    escape = escape_do_ambiente(os.environ)
+    conferir_contexto(CONTEXTO, escape)
     kubectl = Kubectl(CONTEXTO)
-    conferir_borda_local(kubectl, os.environ)
+    conferir_borda_local(kubectl, escape, url_da_borda=URL_DA_BORDA)
     conferir_overlay_kind_ci(kubectl)
+    conferir_dlqs_vazias(kubectl)
     return kubectl
 
 

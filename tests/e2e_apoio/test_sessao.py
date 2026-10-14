@@ -212,13 +212,13 @@ def _kubectl_falso(pasta: Path, saida_dos_nos: str) -> Path:
 
 
 def _sessao_do_e2e(
-    pasta: Path, contexto: str, **extra: str
+    pasta: Path, contexto: str, *argumentos: str, **extra: str
 ) -> subprocess.CompletedProcess[str]:
     ambiente = _ambiente(KUBE_CONTEXT=contexto, **extra)
     ambiente["PATH"] = f"{pasta / 'bin'}{os.pathsep}{ambiente['PATH']}"
     return subprocess.run(  # noqa: S603  # nosec B603
         [sys.executable, "-m", "pytest", "-c", str(INI), str(RAIZ / "e2e"),
-         "-m", "borda", "-p", "no:randomly"],
+         "-m", "borda", "-p", "no:randomly", *argumentos],
         cwd=RAIZ,
         env=ambiente,
         capture_output=True,
@@ -256,3 +256,35 @@ def test_sessao_de_kind_que_nao_e_o_da_borda_para_antes_do_scale(
     assert len(chamadas) == 1
     assert "get nodes" in chamadas[0]
     assert "scale" not in registro.read_text()
+
+
+def test_guarda_que_recusa_nao_imprime_o_ambiente_no_traceback(tmp_path: Path) -> None:
+    _kubectl_falso(tmp_path, "node/ip-10-0-0-5")
+    junit = tmp_path / "junit.xml"
+
+    resultado = _sessao_do_e2e(
+        tmp_path,
+        "arn:aws:eks:us-east-1:111122223333:cluster/producao",
+        f"--junitxml={junit}",
+        **{"CREDENCIAL_DO_AMBIENTE": "valor-secreto-do-ambiente-9999"},
+    )
+
+    assert "nao e um kind descartavel" in resultado.stdout
+    escrito = resultado.stdout + junit.read_text()
+    assert "valor-secreto-do-ambiente-9999" not in escrito
+    assert "CREDENCIAL_DO_AMBIENTE" not in escrito
+
+
+def test_sessao_com_borda_em_outro_host_nao_chega_a_chamar_o_kubectl(
+    tmp_path: Path,
+) -> None:
+    registro = _kubectl_falso(tmp_path, "node/pytstop-p4-control-plane")
+
+    resultado = _sessao_do_e2e(
+        tmp_path, "kind-pytstop-p4", E2E_URL="https://outro-host"
+    )
+
+    assert resultado.returncode != 0
+    assert "outro-host" in resultado.stdout
+    assert "senha do admin" in resultado.stdout
+    assert not registro.exists(), "o kubectl foi chamado com a borda em outro host"

@@ -10,6 +10,7 @@ outro, a senha de admin de um seria enviada ao outro.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final
+from urllib.parse import urlsplit
 
 from e2e.apoio.kube import ErroDeComandoError, executar_processo
 
@@ -22,13 +23,41 @@ PREFIXO_DO_KIND: Final = "kind-"
 # O unico escape: o valor tem de ser o proprio contexto, para nao virar um "=1"
 # esquecido no ambiente do shell.
 ESCAPE: Final = "E2E_CONTEXTO_NAO_DESCARTAVEL"
-# Porta do NodePort do Kong que o kind/cluster.yaml publica em 127.0.0.1:443.
-NODEPORT_DA_BORDA: Final = "30443/tcp"
-PUBLICACAO_DA_BORDA: Final = "127.0.0.1:443"
+# Os NodePorts do Kong que o kind/cluster.yaml publica no loopback (443 e 80 do host).
+NODEPORT_HTTPS: Final = "30443/tcp"
+NODEPORT_HTTP: Final = "30080/tcp"
+# Hosts da borda que o kind publica: o loopback do proprio host.
+HOSTS_DA_BORDA_LOCAL: Final = frozenset({"localhost", "127.0.0.1"})
 
 
 class ContextoNaoDescartavelError(AssertionError):
     """O contexto escolhido nao e um kind descartavel (ou nao e o da borda local)."""
+
+
+def escape_do_ambiente(ambiente: Mapping[str, str]) -> dict[str, str]:
+    """So o escape do ambiente: o resto pode ter credencial, e o guarda que recusa
+    mostra os argumentos no traceback."""
+    return {ESCAPE: ambiente.get(ESCAPE, "")}
+
+
+def publicacao_esperada(url_da_borda: str) -> tuple[str, str]:
+    """NodePort e ``host:porta`` que o no do kind tem de publicar para ``url_da_borda``.
+
+    ``https://localhost`` e a 443 do loopback (NodePort 30443); com ``E2E_URL`` em
+    outra porta (``https://localhost:18443``) e essa porta do host. Um host fora do
+    loopback nao e de um kind local: o guarda o recusa.
+    """
+    partes = urlsplit(url_da_borda)
+    if partes.hostname not in HOSTS_DA_BORDA_LOCAL:
+        msg = (
+            f"a borda {url_da_borda!r} nao e o loopback do kind "
+            f"({sorted(HOSTS_DA_BORDA_LOCAL)}): a senha do admin iria para outro "
+            f"host. Para rodar assim mesmo, exporte {ESCAPE}=<o contexto>."
+        )
+        raise ContextoNaoDescartavelError(msg)
+    https = partes.scheme == "https"
+    porta = partes.port or (443 if https else 80)
+    return (NODEPORT_HTTPS if https else NODEPORT_HTTP), f"127.0.0.1:{porta}"
 
 
 def escapou(contexto: str, ambiente: Mapping[str, str]) -> bool:
@@ -52,17 +81,20 @@ def conferir_borda_local(
     kubectl: Kubectl,
     ambiente: Mapping[str, str],
     executor: Executor = executar_processo,
+    url_da_borda: str = "https://localhost",
 ) -> None:
-    """O contexto e o kind que publica a 443 do loopback, a borda que o E2E usa.
+    """O contexto e o kind que publica a borda que o E2E usa (``E2E_URL``).
 
     O no de um kind ``kind-<cluster>`` chama-se ``<cluster>-control-plane`` e e um
-    container do Docker; ``docker port`` diz se ele publica o NodePort do Kong em
-    ``127.0.0.1:443``. Com o escape, a conferencia nao se aplica (cluster que nao
-    e kind): quem escapou sabe qual borda esta usando.
+    container do Docker; ``docker port`` diz se ele publica o NodePort do Kong na
+    porta do loopback de ``url_da_borda`` (a 443, por padrao). Com o escape, a
+    conferencia nao se aplica (cluster que nao e kind): quem escapou sabe qual
+    borda esta usando.
     """
     contexto = kubectl.contexto
     if escapou(contexto, ambiente):
         return
+    nodeport, publicacao_do_loopback = publicacao_esperada(url_da_borda)
     cluster = contexto.removeprefix(PREFIXO_DO_KIND)
     no = f"{cluster}-control-plane"
     nos = kubectl.executar("get", "nodes", "-o", "name", prazo=30).split()
@@ -73,14 +105,14 @@ def conferir_borda_local(
         )
         raise ContextoNaoDescartavelError(msg)
     try:
-        publicacao = executor(["docker", "port", no, NODEPORT_DA_BORDA], 20)
+        publicacao = executor(["docker", "port", no, nodeport], 20)
     except ErroDeComandoError as erro:
-        msg = f"nao consegui conferir a porta 443 do no {no}: {erro}"
+        msg = f"nao consegui conferir a borda do no {no}: {erro}"
         raise ContextoNaoDescartavelError(msg) from erro
-    if PUBLICACAO_DA_BORDA not in publicacao.split():
+    if publicacao_do_loopback not in publicacao.split():
         msg = (
-            f"o no {no} nao publica a borda em {PUBLICACAO_DA_BORDA} "
-            f"(docker port: {publicacao.strip() or 'vazio'}): o https://localhost "
+            f"o no {no} nao publica a borda em {publicacao_do_loopback} "
+            f"(docker port: {publicacao.strip() or 'vazio'}): o {url_da_borda} "
             "do E2E nao seria deste cluster."
         )
         raise ContextoNaoDescartavelError(msg)

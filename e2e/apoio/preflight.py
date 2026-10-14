@@ -69,3 +69,25 @@ def conferir_overlay_kind_ci(kubectl: Kubectl) -> None:
             "(trocar de overlay no mesmo cluster nao desfaz o anterior)."
         )
         raise OverlayErradoError(msg)
+
+
+class DlqNaoVaziaError(AssertionError):
+    """Alguma DLQ ja tem mensagem antes do primeiro cenario."""
+
+
+def conferir_dlqs_vazias(kubectl: Kubectl) -> None:
+    """Recusa iniciar com mensagem numa das tres DLQs.
+
+    O cenario do consumidor parado afirma que nenhuma mensagem nova chegou as
+    DLQs (o delta desde o inicio dele). Com as tres vazias no inicio da sessao,
+    isso vale em absoluto: ao fim do cenario elas continuam vazias. Mensagem de uma
+    execucao ou de um defeito anterior e dessa conta, nao do cenario.
+    """
+    cheias = {fila: n for fila, n in kubectl.filas_mortas().items() if n}
+    if cheias:
+        msg = (
+            f"DLQs com mensagem antes do primeiro cenario: {cheias}. Veja a causa no "
+            "runbook da saga (docs/operacao/runbook-saga.md), devolva a fila com "
+            "`make redrive FILA=<fila>` depois de corrigi-la, ou recrie o cluster."
+        )
+        raise DlqNaoVaziaError(msg)
