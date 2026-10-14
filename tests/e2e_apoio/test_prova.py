@@ -17,8 +17,14 @@ from e2e.apoio.espera import TempoEsgotadoError
 from e2e.apoio.evidencia import RegistroDoCenario
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
 from e2e.apoio.mercadopago import ClienteMercadoPago, ErroDoMercadoPagoError
+from e2e.apoio.modo_billing import URL_DE_NOTIFICACAO_PADRAO
 from e2e.apoio.preflight_mp import Sandbox
-from e2e.apoio.prova import PRAZO_DO_ESTORNO, SEM_CONSULTA, Prova
+from e2e.apoio.prova import (
+    PRAZO_DO_ESTORNO,
+    SEM_CONSULTA,
+    DlqDoBillingCresceuError,
+    Prova,
+)
 from e2e.servicos import Cenario
 from e2e_apoio.falsos import ExecutorFalso
 
@@ -151,6 +157,7 @@ def _prova(
         modo="real" if real else "ensaio",
         max_recusas=3,
         mercadopago=mundo.mercado_pago() if real else None,
+        url_de_notificacao=URL_DE_NOTIFICACAO_PADRAO if real else "",
     )
 
     def esperar_status(api: Api, cenario: Cenario, status: str) -> Json:
@@ -424,19 +431,24 @@ def test_conferir_estornado_que_nunca_aparece_diz_o_que_o_mp_mostra(
     assert sum(relogio.dormidas) == PRAZO_DO_ESTORNO
 
 
-def test_conferir_estornado_que_aparece_so_na_ultima_leitura_ainda_reprova_pelo_prazo(
+def test_estorno_que_aparece_so_na_leitura_final_passa_em_vez_de_reprovar_pelo_prazo(
     relogio: Relogio,
 ) -> None:
     mundo = Mundo()
     # 21 leituras na espera (0 s a 60 s, de 3 em 3); a 22a, a de conferencia, ja
-    # vem estornada.
+    # vem estornada: o estorno apareceu no ultimo instante.
     mundo.mp_pagamento = lambda n: _pagamento_mp(
         status="refunded" if n > 21 else "approved"
     )
     prova, _, _ = _prova(mundo, relogio, real=True)
 
-    with pytest.raises(TempoEsgotadoError, match="estorno visível no Mercado Pago"):
-        prova.conferir_estornado(_pagamento_billing(referencia_pagamento=999))
+    prova.conferir_estornado(_pagamento_billing(referencia_pagamento=999))
+
+    assert prova.registro.mercadopago["status"] == "refunded"
+    assert (
+        prova.registro.transicoes[-1][1]
+        == "script: Mercado Pago mostra o pagamento estornado (na leitura final)"
+    )
 
 
 def test_conferir_preferencia_expirada_no_ensaio_nao_fala_com_o_mercado_pago(
@@ -559,6 +571,200 @@ def test_billing_sem_o_id_do_mp_reprova_antes_de_consultar(
     assert mundo.chamadas_ao_mp == []
 
 
+# --- live_mode ausente, link invalido e a DLQ -----------------------------------
+
+
+def test_live_mode_ausente_vira_observacao_aviso_e_nota_sem_reprovar(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.mp_pagamento = lambda _: {
+        campo: valor for campo, valor in _pagamento_mp().items() if campo != "live_mode"
+    }
+    prova, avisos, _ = _prova(mundo, relogio, real=True)
+
+    prova.conferir_aprovado(_pagamento_billing(referencia_pagamento=999))
+
+    assert "NÃO foi provada pela consulta" in prova.registro.observacoes[0]
+    assert avisos[0].startswith("[mp-sandbox] atenção: a resposta do Mercado Pago")
+    assert (
+        prova.registro.transicoes[-1][1]
+        == "script: Mercado Pago: approved, live_mode=ausente"
+    )
+
+
+def test_live_mode_falso_nao_deixa_ressalva(relogio: Relogio) -> None:
+    prova, avisos, _ = _prova(Mundo(), relogio, real=True)
+
+    prova.conferir_aprovado(_pagamento_billing(referencia_pagamento=999))
+
+    assert prova.registro.observacoes == []
+    assert avisos == []
+
+
+@pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])
+@pytest.mark.parametrize(
+    "link",
+    [
+        pytest.param(None, id="nulo"),
+        pytest.param("", id="vazio"),
+        pytest.param(123, id="nao-texto"),
+        pytest.param("http://www.mercadopago.com.br/checkout", id="http"),
+        pytest.param("https://", id="sem-host"),
+        pytest.param("www.mercadopago.com.br/checkout", id="sem-esquema"),
+    ],
+)
+def test_pagar_com_link_invalido_recusa_antes_de_imprimir(
+    link: object, real: bool, relogio: Relogio
+) -> None:
+    mundo = Mundo()
+    prova, avisos, _ = _prova(mundo, relogio, real=real)
+
+    with pytest.raises(AssertionError, match="não devolveu o link do checkout"):
+        prova.pagar(_pagamento_billing(checkout_url=link))
+
+    assert avisos == []
+    assert mundo.simulados == []
+
+
+def test_pagar_sem_a_chave_do_link_recusa_do_mesmo_jeito(relogio: Relogio) -> None:
+    pagamento = _pagamento_billing()
+    del pagamento["checkout_url"]
+    prova, avisos, _ = _prova(Mundo(), relogio, real=True)
+
+    with pytest.raises(AssertionError, match="não devolveu o link do checkout"):
+        prova.pagar(pagamento)
+
+    assert avisos == []
+
+
+FILAS_ZERADAS = {
+    "billing.comandos.dlq": 0,
+    "execucao.comandos.dlq": 0,
+    "os.eventos.dlq": 0,
+}
+
+
+def _executor_com_dlq(billing: int) -> ExecutorFalso:
+    return ExecutorFalso(
+        {
+            "rabbitmqctl": (
+                f"billing.comandos.dlq\t{billing}\n"
+                "execucao.comandos.dlq\t0\nos.eventos.dlq\t0\n"
+            )
+        }
+    )
+
+
+def _leituras_da_dlq(executor: ExecutorFalso) -> int:
+    return sum("rabbitmqctl" in " ".join(comando) for comando in executor.comandos)
+
+
+def test_cobranca_que_nao_abre_falha_na_hora_se_a_dlq_do_billing_cresceu(
+    relogio: Relogio,
+) -> None:
+    executor = _executor_com_dlq(1)
+    prova, _, _ = _prova(
+        Mundo(), relogio, real=True, executor=executor, filas_mortas_antes=FILAS_ZERADAS
+    )
+
+    with pytest.raises(
+        DlqDoBillingCresceuError,
+        match=r"1 comando\(s\) do Billing foram para a billing.comandos.dlq",
+    ):
+        prova.cobranca_aberta()
+
+    assert relogio.dormidas == [], "nao esperou os 120 s"
+
+
+def test_dlq_que_ja_tinha_mensagem_antes_do_cenario_nao_conta(
+    relogio: Relogio,
+) -> None:
+    executor = _executor_com_dlq(2)
+    prova, _, _ = _prova(
+        Mundo(),
+        relogio,
+        real=False,
+        executor=executor,
+        filas_mortas_antes={**FILAS_ZERADAS, "billing.comandos.dlq": 2},
+    )
+
+    with pytest.raises(TempoEsgotadoError, match=r"nao ocorreu em 30 s"):
+        prova.cobranca_aberta()
+
+
+def test_a_dlq_e_lida_de_dez_em_dez_segundos_e_nao_a_cada_leitura(
+    relogio: Relogio,
+) -> None:
+    executor = _executor_com_dlq(0)
+    prova, _, _ = _prova(
+        Mundo(),
+        relogio,
+        real=False,
+        executor=executor,
+        filas_mortas_antes=FILAS_ZERADAS,
+    )
+
+    with pytest.raises(TempoEsgotadoError):
+        prova.cobranca_aberta()
+
+    # 31 leituras da OS em 30 s, e a DLQ em 0 s, 10 s, 20 s e 30 s.
+    assert _leituras_da_dlq(executor) == 4
+
+
+def test_sem_a_foto_do_inicio_do_cenario_a_dlq_nem_e_lida(relogio: Relogio) -> None:
+    executor = _executor_com_dlq(9)
+    prova, _, _ = _prova(Mundo(), relogio, real=False, executor=executor)
+
+    with pytest.raises(TempoEsgotadoError):
+        prova.cobranca_aberta()
+
+    assert _leituras_da_dlq(executor) == 0
+
+
+def test_leitura_da_dlq_que_falha_nao_reprova_a_espera(relogio: Relogio) -> None:
+    # O kubectl falso sem resposta para o rabbitmqctl: a leitura levanta.
+    prova, _, _ = _prova(Mundo(), relogio, real=False, filas_mortas_antes=FILAS_ZERADAS)
+
+    with pytest.raises(TempoEsgotadoError, match=r"nao ocorreu em 30 s"):
+        prova.cobranca_aberta()
+
+
+def test_confirmacao_que_nao_vem_falha_na_hora_se_a_dlq_cresceu(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.billing = _pagamento_billing(status="SOLICITADO")
+    prova, _, _ = _prova(
+        mundo,
+        relogio,
+        real=True,
+        executor=_executor_com_dlq(1),
+        filas_mortas_antes=FILAS_ZERADAS,
+    )
+    prova.cenario.pagamento_id = "p-1"
+
+    with pytest.raises(DlqDoBillingCresceuError):
+        prova.esperar_confirmacao()
+
+    assert relogio.dormidas == []
+
+
+def test_pagamento_ja_confirmado_nao_olha_a_dlq(relogio: Relogio) -> None:
+    mundo = Mundo()
+    mundo.billing = _pagamento_billing(status="CONFIRMADO", referencia_pagamento=999)
+    executor = _executor_com_dlq(1)
+    prova, _, _ = _prova(
+        Mundo(), relogio, real=True, executor=executor, filas_mortas_antes=FILAS_ZERADAS
+    )
+    prova.api = mundo.api()
+    prova.cenario.pagamento_id = "p-1"
+
+    prova.esperar_confirmacao()
+
+    assert _leituras_da_dlq(executor) == 0
+
+
 # --- o diagnostico -------------------------------------------------------------------
 
 
@@ -647,7 +853,8 @@ def test_falha_no_passo_imprime_o_diagnostico_e_marca_a_falha(relogio: Relogio) 
     assert "Filas mortas: {'billing.comandos.dlq': 1" in texto
     assert "Log do consumidor" in texto
     assert "Mercado Pago: POST /checkout/preferences respondeu 400" in texto
-    assert "notification_url local" in texto
+    assert f"A notification_url usada foi {URL_DE_NOTIFICACAO_PADRAO}" in texto
+    assert "--context kind-x -n pytstop-billing logs" in texto
     assert "comprador@" not in texto
     pedidos = [" ".join(c) for c in executor.comandos if "logs" in c]
     assert [

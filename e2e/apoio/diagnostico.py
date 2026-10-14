@@ -17,6 +17,7 @@ import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Final
 
+from e2e.apoio.kube import FILA_MORTA_DO_BILLING
 from e2e.apoio.segredos import mascarar
 
 if TYPE_CHECKING:
@@ -42,7 +43,13 @@ CAMPOS_DO_LOG: Final = (
     "referencia",
     "message",
     "cause",
+    "status_http",
+    "causas",
 )
+# Os eventos do Billing que sempre ajudam, qualquer que seja o nivel. O de rejeicao e o
+# contrato com o Billing: operacao, status_http, erro e causas (codigos curtos).
+EVENTO_DE_REJEICAO: Final = "mercadopago_request_rejected"
+EVENTOS_QUE_INTERESSAM: Final = frozenset({EVENTO_DE_REJEICAO})
 _TAMANHO_DO_CAMPO: Final = 160
 _NIVEIS_QUE_INTERESSAM: Final = frozenset({"warning", "error", "critical"})
 # O httpx do Billing loga cada chamada ao Mercado Pago em INFO, com o status.
@@ -50,7 +57,6 @@ _CHAMADA_AO_MP: Final = re.compile(
     r"HTTP Request: (?P<metodo>[A-Z]+) https://api\.mercadopago\.com(?P<caminho>/[^\s?\"]*)"
     r'[^"]*"HTTP/[\d.]+ (?P<status>\d{3})'
 )
-NOTIFICATION_URL_PUBLICA: Final = "https://example.com/api/v1/webhooks/mercadopago"
 HTTP_ERRO: Final = 400
 HTTP_ERRO_DO_SERVIDOR: Final = 500
 HTTP_MUITAS_REQUISICOES: Final = 429
@@ -116,6 +122,7 @@ def _linha(bruta: str) -> LinhaDeLog | None:
     rotina = registro.get("resultado") in {"processada", "sucesso"}
     interessa = (
         nivel in _NIVEIS_QUE_INTERESSAM
+        or evento in EVENTOS_QUE_INTERESSAM
         or requisicao_com_erro
         or ("erro" in registro)
         or (registro.get("resultado") is not None and not rotina)
@@ -149,6 +156,7 @@ class Sinais:
     esperado: str
     real: bool
     contexto: str  # o kubectl que a dica manda rodar leva o --context do script
+    url_de_notificacao: str = ""  # a que o Billing usou na preferencia, se se sabe
     estado_da_os: str | None = None
     pagamento: Mapping[str, Any] | None = None
     mercadopago: list[PagamentoMp] | None = None
@@ -209,32 +217,75 @@ def _provedor_indisponivel(
     )
 
 
-def dicas(sinais: Sinais) -> list[str]:
-    """As causas provaveis, da mais especifica a mais geral; sempre ao menos uma."""
-    achadas: list[str] = []
-    chamadas = _linhas_do_mp(sinais)
+def _rejeicao_do_mp(sinais: Sinais) -> LinhaDeLog | None:
+    """A ultima linha ``mercadopago_request_rejected`` do log do Billing, se ha."""
+    achadas = [
+        linha
+        for linhas in sinais.logs.values()
+        for linha in linhas
+        if linha.evento == EVENTO_DE_REJEICAO
+    ]
+    return achadas[-1] if achadas else None
+
+
+def _campos_do_log(linha: LinhaDeLog) -> str:
+    return " ".join(f"{chave}={valor}" for chave, valor in linha.campos.items())
+
+
+def _dica_do_token(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str | None:
+    if not _token_recusado(sinais, chamadas):
+        return None
+    return (
+        "O Mercado Pago não aceitou o token (HTTP 401 ou 403): é de produção, de "
+        "outra aplicação, está revogado ou tem espaço no fim. Leia de novo com "
+        "`read -rs MP_ACCESS_TOKEN` e use o Access Token de teste da mesma conta "
+        "de teste da aplicação."
+    )
+
+
+def _dica_da_recusa(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str | None:
+    """O Mercado Pago recusou a criacao da cobranca (ou outra chamada do Billing)."""
     if _token_recusado(sinais, chamadas):
-        achadas.append(
-            "O Mercado Pago não aceitou o token (HTTP 401 ou 403): é de produção, de "
-            "outra aplicação, está revogado ou tem espaço no fim. Leia de novo com "
-            "`read -rs MP_ACCESS_TOKEN` e use o Access Token de teste da mesma conta "
-            "de teste da aplicação."
+        return None
+    rejeicao = _rejeicao_do_mp(sinais)
+    registrado = "" if rejeicao is None else _campos_do_log(rejeicao)
+    detalhe = f" O Billing registrou: {registrado}." if registrado else ""
+    if not _criacao_recusada(sinais, chamadas):
+        return (
+            f"O Mercado Pago recusou uma chamada do Billing.{detalhe}"
+            if rejeicao
+            else None
         )
-    elif _criacao_recusada(sinais, chamadas):
-        achadas.append(
-            "O Mercado Pago recusou criar a cobrança (POST /checkout/preferences "
-            "com resposta 4xx). Causa mais provável: a notification_url local "
-            "(https://localhost/billing/...), que a documentação do Mercado Pago "
-            "manda não usar. Aponte para uma URL pública: exporte "
-            f"E2E_MP_NOTIFICATION_URL={NOTIFICATION_URL_PUBLICA} e rode de novo, ou "
-            f"com o modo real mantido, `{_kubectl(sinais)} set env deployment "
-            f"--all MP_NOTIFICATION_URL={NOTIFICATION_URL_PUBLICA}`."
-        )
-    if _provedor_indisponivel(sinais, chamadas):
-        achadas.append(
-            "O Mercado Pago estava indisponível ou limitou as chamadas (5xx ou 429): "
-            "o Billing repete sozinho. Espere um pouco e rode de novo."
-        )
+    url = (
+        f" A notification_url usada foi {sinais.url_de_notificacao} (pública: a "
+        "sandbox não envia webhook), então a causa é outra; se suspeitar dela, "
+        "troque-a com E2E_MP_NOTIFICATION_URL."
+        if sinais.url_de_notificacao
+        else ""
+    )
+    return (
+        "O Mercado Pago recusou criar a cobrança (POST /checkout/preferences com "
+        f"resposta 4xx).{detalhe}{url} O log do Billing ainda não traz a mensagem do "
+        f"Mercado Pago: veja o do consumidor com `{_kubectl(sinais)} logs "
+        "deploy/billing-service-consumidor --tail=50` e confira o valor, a moeda e "
+        "os itens da cobrança."
+    )
+
+
+def _dica_do_provedor(
+    sinais: Sinais, chamadas: list[tuple[str, str, int]]
+) -> str | None:
+    if not _provedor_indisponivel(sinais, chamadas):
+        return None
+    return (
+        "O Mercado Pago estava indisponível ou limitou as chamadas (5xx ou 429): "
+        "o Billing repete sozinho. Espere um pouco e rode de novo."
+    )
+
+
+def _dica_do_pagamento(sinais: Sinais) -> list[str]:
+    """O que o Mercado Pago e o Billing dizem do pagamento, quando nao batem."""
+    achadas: list[str] = []
     rejeitados = [p for p in sinais.mercadopago or [] if p.status == "rejected"]
     aprovados = [p for p in sinais.mercadopago or [] if p.status == "approved"]
     solicitado = (sinais.pagamento or {}).get("status") == "SOLICITADO"
@@ -259,19 +310,36 @@ def dicas(sinais: Sinais) -> list[str]:
             "o link numa janela anônima, entre só com o usuário Comprador de teste e "
             "pague com o cartão de teste (nome do titular APRO)."
         )
-    mortas = (sinais.filas_mortas or {}).get("billing.comandos.dlq", 0)
-    antes = (sinais.filas_mortas_antes or {}).get("billing.comandos.dlq", 0)
-    if mortas > antes:
-        # Mensagem de uma execucao anterior nao e causa desta falha.
-        a_mais = (
-            ""
-            if sinais.filas_mortas_antes is None
-            else f" ({mortas - antes} a mais que no início do cenário)"
-        )
-        achadas.append(
-            f"A fila billing.comandos.dlq tem {mortas} mensagem(ns){a_mais}: um "
-            "comando da saga foi recusado de vez. Veja o log do consumidor abaixo."
-        )
+    return achadas
+
+
+def _dica_da_dlq(sinais: Sinais) -> str | None:
+    mortas = (sinais.filas_mortas or {}).get(FILA_MORTA_DO_BILLING, 0)
+    antes = (sinais.filas_mortas_antes or {}).get(FILA_MORTA_DO_BILLING, 0)
+    if mortas <= antes:
+        return None  # mensagem de uma execucao anterior nao e causa desta falha
+    a_mais = (
+        ""
+        if sinais.filas_mortas_antes is None
+        else f" ({mortas - antes} a mais que no início do cenário)"
+    )
+    return (
+        f"A fila {FILA_MORTA_DO_BILLING} tem {mortas} mensagem(ns){a_mais}: um "
+        "comando da saga foi recusado de vez. Veja o log do consumidor abaixo."
+    )
+
+
+def dicas(sinais: Sinais) -> list[str]:
+    """As causas provaveis, da mais especifica a mais geral; sempre ao menos uma."""
+    chamadas = _linhas_do_mp(sinais)
+    candidatas = (
+        _dica_do_token(sinais, chamadas),
+        _dica_da_recusa(sinais, chamadas),
+        _dica_do_provedor(sinais, chamadas),
+        *_dica_do_pagamento(sinais),
+        _dica_da_dlq(sinais),
+    )
+    achadas = [dica for dica in candidatas if dica]
     if not achadas:
         achadas.append(
             "Sem causa óbvia nos logs. Veja o do consumidor: "

@@ -31,8 +31,9 @@ if TYPE_CHECKING:
 NAMESPACE_DA_PLATAFORMA: Final = "pytstop-plataforma"
 # As DLQs do broker (k8s/base/rabbitmq): uma ausente na leitura e nome que mudou, e
 # "nenhuma mensagem nova" nao vale se a fila nem aparece.
+FILA_MORTA_DO_BILLING: Final = "billing.comandos.dlq"
 FILAS_MORTAS: Final = (
-    "billing.comandos.dlq",
+    FILA_MORTA_DO_BILLING,
     "execucao.comandos.dlq",
     "os.eventos.dlq",
 )

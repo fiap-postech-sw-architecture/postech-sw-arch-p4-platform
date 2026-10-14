@@ -129,6 +129,21 @@ def test_espera_o_pagamento_com_contagem_regressiva_a_cada_30_segundos(
     assert AVISO_A_CADA == 30.0
 
 
+def test_recusa_ja_presente_na_primeira_leitura_e_avisada(relogio: Relogio) -> None:
+    # Voltando de uma espera anterior, a primeira leitura ja pode ter uma recusa.
+    avisos: list[str] = []
+    estados = [
+        {"status": "SOLICITADO", "recusas": 1},
+        {"status": "CONFIRMADO", "recusas": 1, "referencia_pagamento": "999"},
+    ]
+
+    _esperar(_leitor(*estados), relogio, avisos)
+
+    recusas = [aviso for aviso in avisos if "recusou a tentativa de pagamento" in aviso]
+    assert len(recusas) == 1
+    assert "(1 de 3)" in recusas[0]
+
+
 def test_cada_tentativa_recusada_e_avisada_quando_aparece(relogio: Relogio) -> None:
     avisos: list[str] = []
     estados = [

@@ -19,6 +19,7 @@ from e2e.apoio.mercadopago import (
     ClienteMercadoPago,
     ErroDoMercadoPagoError,
     PagamentoMp,
+    PreferenciaMp,
     TokenRecusadoError,
     sem_id_da_conta,
 )
@@ -580,3 +581,59 @@ def test_a_preferencia_na_evidencia_nao_leva_o_user_id_da_conta() -> None:
 
     assert preferencia.id == preferencia_id, "a consulta usa o id inteiro"
     assert preferencia.para_evidencia()["id"] == UUID
+
+
+# --- as fronteiras do estorno e da expiracao ----------------------------------
+
+
+def _pagamento_mp(**campos: Any) -> PagamentoMp:
+    base: dict[str, Any] = {
+        "id": "1",
+        "status": "approved",
+        "status_detail": None,
+        "valor": Decimal("100.00"),
+        "valor_estornado": Decimal(0),
+        "moeda": "BRL",
+        "date_approved": None,
+        "external_reference": None,
+        "live_mode": False,
+    }
+    return PagamentoMp(**{**base, **campos})
+
+
+@pytest.mark.parametrize(
+    ("campos", "estornado"),
+    [
+        pytest.param({"status": "refunded"}, True, id="status-refunded"),
+        pytest.param({"valor_estornado": Decimal("100.00")}, True, id="total"),
+        pytest.param({"valor_estornado": Decimal("100.01")}, True, id="acima-do-total"),
+        pytest.param(
+            {"valor_estornado": Decimal("99.99")}, False, id="um-centavo-faltando"
+        ),
+        pytest.param({"valor_estornado": Decimal(0)}, False, id="nada-estornado"),
+        pytest.param(
+            {"valor": None, "valor_estornado": Decimal(5)}, False, id="sem-valor"
+        ),
+    ],
+)
+def test_estornado_so_com_refunded_ou_com_o_valor_inteiro_devolvido(
+    campos: dict[str, Any], estornado: bool
+) -> None:
+    assert _pagamento_mp(**campos).estornado is estornado
+
+
+@pytest.mark.parametrize(
+    ("minutos_a_frente", "expirada"),
+    [(-1, True), (0, True), (5, True), (5.01, False), (60, False)],
+    ids=["passada", "agora", "na-margem", "um-instante-alem-da-margem", "uma-hora"],
+)
+def test_preferencia_expirada_tem_a_margem_de_cinco_minutos_de_relogio(
+    minutos_a_frente: float, expirada: bool
+) -> None:
+    preferencia = PreferenciaMp(
+        id="p",
+        expires=True,
+        expira_em=AGORA + timedelta(minutes=minutos_a_frente),
+    )
+
+    assert preferencia.expirada(AGORA) is expirada

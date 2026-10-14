@@ -251,29 +251,37 @@ def _com_logs(**processos: list[str]) -> Sinais:
     return _sinais(logs={nome: _linhas(*linhas) for nome, linhas in processos.items()})
 
 
-def test_preferencia_recusada_pelo_mercado_pago_aponta_a_notification_url_local() -> (
-    None
-):
+URL_PUBLICA = "https://example.com/api/v1/webhooks/mercadopago"
+
+
+def test_preferencia_recusada_com_url_publica_diz_que_a_causa_e_outra() -> None:
     sinais = _com_logs(consumidor=[_mp("POST", "/checkout/preferences", 400)])
+    sinais.url_de_notificacao = URL_PUBLICA
 
     achadas = dicas(sinais)
 
     assert len(achadas) == 1
     assert "POST /checkout/preferences" in achadas[0]
-    assert "notification_url local" in achadas[0]
+    assert f"A notification_url usada foi {URL_PUBLICA}" in achadas[0]
+    assert "a causa é outra" in achadas[0]
+    assert "troque-a com E2E_MP_NOTIFICATION_URL" in achadas[0]
+    assert "notification_url local" not in achadas[0]
     assert (
-        "E2E_MP_NOTIFICATION_URL=https://example.com/api/v1/webhooks/mercadopago"
-        in achadas[0]
-    )
-    assert (
-        "set env deployment --all MP_NOTIFICATION_URL=https://example.com/api/v1/webhooks/mercadopago"
-        in achadas[0]
+        "`kubectl --context kind-x -n pytstop-billing logs "
+        "deploy/billing-service-consumidor --tail=50`" in achadas[0]
     )
 
 
-def test_comando_morto_por_recusa_do_provedor_tambem_aponta_a_notification_url() -> (
-    None
-):
+def test_preferencia_recusada_sem_url_conhecida_nao_chuta_a_notification_url() -> None:
+    sinais = _com_logs(consumidor=[_mp("POST", "/checkout/preferences", 400)])
+
+    texto = dicas(sinais)[0]
+
+    assert "recusou criar a cobrança" in texto
+    assert "notification_url" not in texto
+
+
+def test_comando_morto_por_recusa_do_provedor_tambem_e_criacao_recusada() -> None:
     sinais = _com_logs(
         consumidor=[
             _log(
@@ -286,10 +294,10 @@ def test_comando_morto_por_recusa_do_provedor_tambem_aponta_a_notification_url()
         ]
     )
 
-    assert "notification_url local" in dicas(sinais)[0]
+    assert "recusou criar a cobrança" in dicas(sinais)[0]
 
 
-def test_comando_morto_por_outro_motivo_nao_acusa_a_notification_url() -> None:
+def test_comando_morto_por_outro_motivo_nao_acusa_a_criacao_da_cobranca() -> None:
     sinais = _com_logs(
         consumidor=[
             _log(
@@ -621,3 +629,125 @@ def test_todo_kubectl_sugerido_leva_o_contexto_do_cluster_do_script() -> None:
         assert comando.startswith(
             "kubectl --context kind-pytstop-mp -n pytstop-billing"
         )
+
+
+# --- o evento de rejeicao do Billing ------------------------------------------
+
+REJEICAO = {
+    "operacao": "criar_preferencia",
+    "status_http": 400,
+    "erro": "GatewayPagamentoRecusouError",
+    "causas": ["invalid_items"],
+}
+
+
+def test_evento_de_rejeicao_do_billing_entra_no_log_mesmo_em_nivel_info() -> None:
+    linhas = _linhas(_log("mercadopago_request_rejected", "info", **REJEICAO))
+
+    assert len(linhas) == 1
+    assert linhas[0].campos == {
+        "operacao": "criar_preferencia",
+        "erro": "GatewayPagamentoRecusouError",
+        "status_http": "400",
+        "causas": "['invalid_items']",
+    }
+    assert "status_http=400" in linhas[0].texto()
+    assert "causas=['invalid_items']" in linhas[0].texto()
+
+
+def test_rejeicao_registrada_pelo_billing_aparece_na_dica_da_criacao() -> None:
+    sinais = _com_logs(
+        consumidor=[
+            _mp("POST", "/checkout/preferences", 400),
+            _log("mercadopago_request_rejected", "warning", **REJEICAO),
+        ]
+    )
+
+    texto = dicas(sinais)[0]
+
+    assert "recusou criar a cobrança" in texto
+    assert "O Billing registrou: " in texto
+    for campo in (
+        "operacao=criar_preferencia",
+        "status_http=400",
+        "causas=['invalid_items']",
+    ):
+        assert campo in texto
+
+
+def test_rejeicao_de_outra_chamada_vira_dica_propria_sem_acusar_a_criacao() -> None:
+    sinais = _com_logs(
+        consumidor=[
+            _log(
+                "mercadopago_request_rejected",
+                "warning",
+                operacao="estornar",
+                status_http=400,
+                causas=["payment_already_refunded"],
+            )
+        ]
+    )
+
+    texto = dicas(sinais)[0]
+
+    assert texto.startswith("O Mercado Pago recusou uma chamada do Billing.")
+    assert "operacao=estornar" in texto
+    assert "causas=['payment_already_refunded']" in texto
+    assert "criar a cobrança" not in texto
+
+
+def test_rejeicao_sem_campos_nao_inventa_detalhe() -> None:
+    sinais = _com_logs(consumidor=[_log("mercadopago_request_rejected")])
+
+    assert dicas(sinais)[0] == "O Mercado Pago recusou uma chamada do Billing."
+
+
+def test_token_recusado_vence_a_rejeicao_registrada() -> None:
+    sinais = _com_logs(
+        consumidor=[
+            _mp("POST", "/checkout/preferences", 401, "Unauthorized"),
+            _log("mercadopago_request_rejected", "warning", **REJEICAO),
+        ]
+    )
+
+    achadas = dicas(sinais)
+
+    assert len(achadas) == 1
+    assert "não aceitou o token" in achadas[0]
+
+
+# --- as fronteiras do 4xx e do 5xx -----------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("status", "e_criacao_recusada", "e_provedor_indisponivel"),
+    [
+        pytest.param(399, False, False, id="399"),
+        pytest.param(400, True, False, id="400"),
+        pytest.param(499, True, False, id="499"),
+        pytest.param(500, False, True, id="500"),
+        pytest.param(429, True, True, id="429"),
+    ],
+)
+def test_o_status_da_criacao_decide_entre_recusa_e_provedor_fora(
+    status: int, e_criacao_recusada: bool, e_provedor_indisponivel: bool
+) -> None:
+    sinais = _com_logs(consumidor=[_mp("POST", "/checkout/preferences", status)])
+
+    textos = " ".join(dicas(sinais))
+
+    assert ("recusou criar a cobrança" in textos) is e_criacao_recusada
+    assert ("indisponível" in textos) is e_provedor_indisponivel
+
+
+@pytest.mark.parametrize(
+    ("status", "interessa"),
+    [(399, False), (400, True), (404, True)],
+    ids=["399", "400", "404"],
+)
+def test_requisicao_com_status_de_erro_entra_no_log_mesmo_em_info(
+    status: int, interessa: bool
+) -> None:
+    linhas = _linhas(_log("request", "info", status=status, path="/x"))
+
+    assert bool(linhas) is interessa

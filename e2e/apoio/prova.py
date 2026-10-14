@@ -34,6 +34,7 @@ from e2e.apoio.humano import (
     esperar_pagamento,
     instrucoes_de_pagamento,
 )
+from e2e.apoio.kube import FILA_MORTA_DO_BILLING
 from e2e.apoio.mercadopago import ErroDoMercadoPagoError
 from e2e.apoio.modo_billing import NAMESPACE_BILLING
 from e2e.apoio.segredos import mascarar, registrar
@@ -52,8 +53,13 @@ PAGAMENTOS_A_FAZER: Final = 2
 # pela fila de retry se ele estiver lento.
 PRAZO_DA_COBRANCA: Final = 120.0
 PRAZO_DA_COBRANCA_NO_ENSAIO: Final = 30.0
+INTERVALO_DA_COBRANCA: Final = 1.0
 # O estorno aparece na consulta ao Mercado Pago em segundos.
 PRAZO_DO_ESTORNO: Final = 60.0
+INTERVALO_DO_ESTORNO: Final = 3.0
+# De quanto em quanto tempo as esperas olham a DLQ do Billing: um comando que foi
+# para la nao se resolve esperando mais.
+INTERVALO_DA_DLQ: Final = 10.0
 PRINTS: Final = (
     (
         "O checkout do Mercado Pago aberto na janela anônima, com o valor da cobrança "
@@ -81,6 +87,23 @@ PRINTS_DO_ENSAIO: Final = (
     "Nenhum: o ensaio não fala com o Mercado Pago. Os prints são do `make mp-sandbox`.",
 )
 SEM_CONSULTA: Final = "[ensaio] sem consulta ao Mercado Pago neste passo"
+
+
+class DlqDoBillingCresceuError(AssertionError):
+    """Um comando do Billing foi recusado de vez no cenario; esperar nao ajuda."""
+
+
+def _link_do_checkout(pagamento: Json) -> str:
+    """O ``checkout_url`` do Billing: um link https, que a pessoa vai abrir."""
+    link = pagamento.get("checkout_url")
+    partes = urlsplit(link) if isinstance(link, str) else None
+    if partes is None or partes.scheme != "https" or not partes.netloc:
+        msg = (
+            "o Billing não devolveu o link do checkout (checkout_url vazio ou fora "
+            "de https): sem ele não há como pagar"
+        )
+        raise AssertionError(msg)
+    return str(link)
 
 
 def _referencia(pagamento: Json, campo: str, rotulo: str) -> str:
@@ -127,6 +150,7 @@ class Prova:
         self._esperar_status = esperar_status
         self._descrever_estado = descrever_estado
         self._mortas_antes = filas_mortas_antes
+        self._leitura_da_dlq = float("-inf")
         self._avisar = avisar
         self._numeros = numeros if numeros is not None else itertools.count(1)
         self._relogio = relogio
@@ -141,9 +165,9 @@ class Prova:
         """A OS espera o pagamento e o Billing criou a cobranca (``SOLICITADO``)."""
         self._esperar_status(self.api, self.cenario, "aguardando_pagamento")
         resumo = esperar(
-            lambda: self.api.os.ordem(self.cenario.ordem_id)["pagamento"] or None,
+            self._resumo_do_pagamento,
             prazo=PRAZO_DA_COBRANCA if self.real else PRAZO_DA_COBRANCA_NO_ENSAIO,
-            intervalo=1.0,
+            intervalo=INTERVALO_DA_COBRANCA,
             descricao=f"cobrança aberta da {self.cenario.resumo}",
             ignorar=(httpx.TransportError,),
             relogio=self._relogio,
@@ -163,12 +187,53 @@ class Prova:
         self.registro.anotar("cobrança criada no provedor; link do checkout pronto")
         return pagamento
 
+    def _resumo_do_pagamento(self) -> Json | None:
+        """O resumo do pagamento na OS; sem ele, falha na hora se a DLQ cresceu."""
+        resumo: Json | None = self.api.os.ordem(self.cenario.ordem_id)["pagamento"]
+        if not resumo:
+            self._conferir_dlq()
+        return resumo or None
+
+    def _conferir_dlq(self) -> None:
+        """Falha na hora se um comando do Billing foi para a DLQ no cenario.
+
+        Olha a fila de ``INTERVALO_DA_DLQ`` em ``INTERVALO_DA_DLQ`` segundos, contra a
+        foto do inicio do cenario. Leitura que falha nao reprova: o diagnostico a
+        repete.
+        """
+        if self._mortas_antes is None:
+            return
+        agora = self._relogio()
+        if agora - self._leitura_da_dlq < INTERVALO_DA_DLQ:
+            return
+        self._leitura_da_dlq = agora
+        atuais = diagnostico.coletar(self.kubectl.filas_mortas)
+        if atuais is None:
+            return
+        novas = atuais.get(FILA_MORTA_DO_BILLING, 0) - self._mortas_antes.get(
+            FILA_MORTA_DO_BILLING, 0
+        )
+        if novas > 0:
+            msg = (
+                f"{novas} comando(s) do Billing foram para a {FILA_MORTA_DO_BILLING} "
+                "depois do início do cenário: o Billing recusou de vez um comando "
+                "da saga, e esperar mais não resolve"
+            )
+            raise DlqDoBillingCresceuError(msg)
+
+    def _pagamento_ou_dlq(self) -> Json:
+        pagamento: Json = self.api.billing.pagamento(self.cenario.pagamento_id)
+        if pagamento["status"] != "CONFIRMADO":
+            self._conferir_dlq()
+        return pagamento
+
     def pagar(self, pagamento: Json) -> None:
         """Real: imprime o link e as instrucoes. Ensaio: o simulador aprova."""
+        link = _link_do_checkout(pagamento)
         if self.real:
             self._avisar(
                 instrucoes_de_pagamento(
-                    link=pagamento["checkout_url"],
+                    link=link,
                     valor=pagamento["valor"],
                     moeda=pagamento["moeda"],
                     numero=next(self._numeros),
@@ -177,7 +242,7 @@ class Prova:
             )
             self.registro.anotar("link impresso; esperando o comprador de teste")
             return
-        token = parse_qs(urlsplit(pagamento["checkout_url"]).query)["token"][0]
+        token = parse_qs(urlsplit(link).query)["token"][0]
         registrar(token)
         self._avisar(
             "[ensaio] o simulador do Billing aprova o pagamento no lugar do comprador"
@@ -188,7 +253,7 @@ class Prova:
     def esperar_confirmacao(self) -> Json:
         """Espera o Billing confirmar; no modo real, com contagem regressiva."""
         pagamento = esperar_pagamento(
-            lambda: self.api.billing.pagamento(self.cenario.pagamento_id),
+            self._pagamento_ou_dlq,
             prazo=PRAZO_DO_PAGAMENTO if self.real else PRAZO_NO_ENSAIO,
             intervalo=INTERVALO_DO_PAGAMENTO if self.real else INTERVALO_NO_ENSAIO,
             max_recusas=self.sandbox.max_recusas,
@@ -216,13 +281,17 @@ class Prova:
         # quando a conferencia reprova.
         self.registro.mercadopago = mp.para_evidencia()
         self.registro.pagamento_mp_id = mp.id
-        conferir_aprovado(
+        nao_provada = conferir_aprovado(
             mp,
             pagamento_id=pagamento["id"],
             valor=pagamento["valor"],
             moeda=pagamento["moeda"],
         )
-        self.registro.anotar(f"Mercado Pago: {mp.status}, live_mode={mp.live_mode}")
+        if nao_provada:
+            self.registro.observacoes.append(nao_provada)
+            self._avisar(f"[mp-sandbox] atenção: {nao_provada}")
+        live = "ausente" if mp.live_mode is None else mp.live_mode
+        self.registro.anotar(f"Mercado Pago: {mp.status}, live_mode={live}")
 
     def conferir_estornado(self, pagamento: Json) -> None:
         """Real: o estorno aparece no Mercado Pago em ate ``PRAZO_DO_ESTORNO``."""
@@ -242,7 +311,7 @@ class Prova:
             esperar(
                 estornado,
                 prazo=PRAZO_DO_ESTORNO,
-                intervalo=3.0,
+                intervalo=INTERVALO_DO_ESTORNO,
                 descricao="estorno visível no Mercado Pago",
                 # O cliente troca o erro de rede por este; o que persistir volta
                 # na leitura final, com a causa.
@@ -251,9 +320,16 @@ class Prova:
                 dormir=self._dormir,
             )
         except TempoEsgotadoError:
-            # A divergencia diz o que o Mercado Pago mostra, no lugar do "nao ocorreu".
-            conferir_estornado(mercadopago.pagamento(referencia))
-            raise
+            # A leitura final: se ainda nao estornou, a divergencia diz o que o Mercado
+            # Pago mostra (no lugar do "nao ocorreu"); se o estorno apareceu no ultimo
+            # instante, o cenario passa.
+            final = mercadopago.pagamento(referencia)
+            self.registro.mercadopago = final.para_evidencia()
+            conferir_estornado(final)
+            self.registro.anotar(
+                "Mercado Pago mostra o pagamento estornado (na leitura final)"
+            )
+            return
         self.registro.anotar("Mercado Pago mostra o pagamento estornado")
 
     def conferir_preferencia_expirada(self) -> None:
@@ -289,6 +365,7 @@ class Prova:
             esperado=passo,
             real=self.real,
             contexto=self.kubectl.contexto,
+            url_de_notificacao=self.sandbox.url_de_notificacao,
         )
         sinais.estado_da_os = diagnostico.coletar(
             lambda: self._descrever_estado(self.api, self.cenario)
