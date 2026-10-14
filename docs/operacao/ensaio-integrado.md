@@ -4,6 +4,18 @@
 
 Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a `main` de cada repositório) no mesmo cluster kind, com os scripts de implantação e de smoke do [Contrato com os serviços](../../README.md#contrato-com-os-serviços), e a memória e a CPU de cada pod medidas contra o orçamento do [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md). Na época do ensaio, o OS Service ainda não tinha os processos `prazos` e `notificador` na `main`; a medida deles, feita com as branches então abertas, está em [Medida adicional](#medida-adicional-prazos-e-notificador-do-os-service). Os dois já entraram na `main` do OS Service (b310889 e 593471d): o que mudou nos repositórios desde o ensaio está em [Depois do ensaio](#depois-do-ensaio).
 
+## Termos
+
+| Termo | Neste registro |
+|---|---|
+| `kind-ci` e `kind` | Os dois overlays da plataforma. O `kind-ci` é o do CD: sem Loki, Promtail e Grafana, com uma réplica por Deployment. O `kind` é o de quem desenvolve, com os três |
+| Working set | A memória que o kubelet conta para despejar um pod: o uso total menos o cache de arquivos inativo |
+| `memory.peak` | O maior uso do cgroup do nó desde que ele existe, com o cache de arquivos que o kernel devolve sob pressão |
+| HPA | O autoescalonamento horizontal da API (1 a 1 no `kind-ci` e 1 a 2 no `kind`) |
+| DLQ | A fila de mensagens mortas de cada fila de trabalho do RabbitMQ |
+| JWKS | As chaves públicas do OS Service, com que o Billing e a Execução validam o token |
+| Smoke | As provas rápidas depois do deploy: o `make smoke` da plataforma e o `smoke-servicos.sh` dos serviços |
+
 ## Resultado
 
 - Os três serviços subiram na primeira tentativa, nos dois overlays (`kind-ci` e `kind`): 13 pods prontos (10 processos e 3 bancos), 3 Jobs de inicialização completos, nenhum reinício de container.
@@ -308,13 +320,15 @@ Cada branch foi implantada, sozinha, sobre o cluster `kind-ci` do ensaio, com a 
 - O ADR-042 tem linha para o `prazos` e não tem para o `notificador`, que é o 9º processo (relay e consumidor de cada serviço, mais o `prazos` do OS e o do Billing): com ele, os requests e limits passam de 3.488/8.896 Mi para 3.616/9.152 Mi (3,5/8,9 GiB), ainda abaixo dos 10 GiB do ADR. A linha entra no PR que alinha o ADR-042 aos serviços (pendência registrada no `MEMORY.md`).
 - O `prazos` do OS logou, uma vez, `os.eventos has no consumer` e `saga deadlines paused` no arranque, porque o consumidor do OS ainda não tinha conectado (o namespace acabava de ser recriado). Não repetiu: o consumidor passou a ter 1 e os ciclos seguintes seguiram sem aviso.
 
-## O que falhou e como foi resolvido
+## O que precisou de correção
+
+Nada impediu os serviços de subir. O único ponto que pediu mudança no `platform` foi ruído, não falha:
 
 | Item | Onde | Situação |
 |---|---|---|
-| `smoke-servicos.sh` escrevia `Defaulted container "api" out of: api, aguarda-migracao (init)` (ou `aguarda-banco`, no Billing) na saída e no log do CD a cada serviço: a sonda de controle da NetworkPolicy não nomeava o container | `platform` | corrigido: `kubectl exec -c api`, o teste e o contrato do README (o container da API se chama `api`) |
+| O `smoke-servicos.sh` deixava o `kubectl exec` escrever `Defaulted container "api" out of: api, aguarda-migracao (init)` (ou `aguarda-banco`, no Billing) na saída e no log do CD a cada serviço, porque a sonda de controle da NetworkPolicy não nomeava o container | `platform` | Corrigido no PR #12: `kubectl exec -c api`, o teste lê cada `exec` pelas flags, e o README registra que o container da API se chama `api` |
 
-Nada mais falhou: nenhum script, manifesto da plataforma ou documento precisou de correção para os serviços subirem.
+Nenhum script, manifesto da plataforma ou documento precisou de outra correção para os serviços subirem.
 
 ## Observações do ensaio (situação em 14/10)
 
