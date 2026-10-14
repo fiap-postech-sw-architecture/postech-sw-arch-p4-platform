@@ -26,20 +26,32 @@ dev = [
     "types-jsonschema>=4.26",
     "types-pyyaml>=6.0.12",
 ]
+e2e = [
+    "httpx>=0.28,<1",
+    "pytest-bdd>=8.1,<9",
+]
 
 [tool.uv]
 package = false
+# O E2E (pytest-bdd, httpx) entra no ambiente padrao: o mypy do make lint
+# confere o e2e/ e os testes do codigo auxiliar dele importam o httpx. O
+# make e2e pede o grupo mesmo assim.
+default-groups = ["dev", "e2e"]
 
 [tool.pytest.ini_options]
 testpaths = ["contratos/tests", "tests"]
+# O codigo auxiliar do E2E (e2e/apoio) e testado daqui, sem cluster.
+pythonpath = ["."]
 addopts = ["--strict-markers", "--strict-config", "--cov", "--cov-report=term-missing"]
 
 # Mede so o codigo de teste: o repositorio nao tem Python de producao. Quem
 # protege os schemas sao os negativos gerados dos exemplos (test_contratos.py)
-# e a observabilidade, o teste de consistencia (tests/).
+# e a observabilidade, o teste de consistencia (tests/). Do E2E entra o codigo
+# auxiliar (e2e/apoio); o conftest, os steps e o cliente dos servicos so rodam
+# contra o cluster (make e2e).
 [tool.coverage.run]
 branch = true
-source = ["contratos", "tests"]
+source = ["contratos", "tests", "e2e/apoio"]
 
 [tool.coverage.report]
 fail_under = 90
@@ -60,11 +72,12 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 "contratos/tests/**" = ["S101"]
 "tests/**" = ["S101"]
+"e2e/**" = ["S101"]
 
 [tool.mypy]
 python_version = "3.14"
 strict = true
-files = ["contratos/tests", "tests", "scripts"]
+files = ["contratos/tests", "tests", "scripts", "e2e"]
 
 # pika nao publica tipos (sem py.typed nem stubs mantidos).
 [[tool.mypy.overrides]]

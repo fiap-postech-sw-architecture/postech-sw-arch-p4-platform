@@ -145,7 +145,7 @@ lint: ## ruff, mypy e bandit nos testes e na prova do retry, mais o lint-scripts
 	uv run ruff check .
 	uv run ruff format --check .
 	uv run mypy
-	uv run bandit -c pyproject.toml -r contratos tests scripts -q
+	uv run bandit -c pyproject.toml -r contratos tests scripts e2e -q
 
 # Pelas imagens pinadas, como no CI, onde rodam no job manifests. O actionlint
 # passa o shellcheck tambem nos run: dos workflows.
