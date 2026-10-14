@@ -183,7 +183,7 @@ def test_sigterm_roda_o_teardown_da_sessao(tmp_path: Path) -> None:
         processo.send_signal(signal.SIGTERM)
         processo.wait(timeout=30)
     finally:
-        if processo.poll() is None:
+        if processo.poll() is None:  # pragma: no cover - so se o SIGTERM falhar
             processo.kill()
             processo.wait()
 

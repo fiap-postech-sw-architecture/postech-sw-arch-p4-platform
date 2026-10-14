@@ -182,3 +182,9 @@ def test_port_forward_encerrar_fecha_o_arquivo_do_stderr(kubectl_falso: Path) ->
 
     assert erros.closed
     assert ponte._erros is None
+
+
+def test_port_forward_sem_iniciar_nao_tem_stderr_para_mostrar() -> None:
+    ponte = PortForward(Kubectl("kind-x"), "ns", "svc/x", 1)
+
+    assert ponte._ultimas_linhas_do_erro() == ""
