@@ -796,7 +796,7 @@ O `make test` também coleta o E2E sem cluster (`pytest --collect-only` e `--gen
 
 ## ZAP baseline na borda
 
-O OWASP ZAP em modo *baseline* (varredura passiva, sem atacar) roda no job `e2e` do [`cd.yml`](.github/workflows/cd.yml), depois do E2E e no mesmo kind, contra a borda como um cliente de fora a vê: `https://localhost/<prefixo>/openapi.json` de cada serviço, pelo certificado padrão do Kong. É a varredura do [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md) (RNF-049), que roda aqui e não no CD de cada serviço, para não somar minutos a cada deploy. O alvo é o `openapi.json` porque o `/docs` é o HTML do Swagger e não lista rota.
+O OWASP ZAP em modo *baseline* (alertas de varredura passiva, sem ataque) roda no job `e2e` do [`cd.yml`](.github/workflows/cd.yml), depois do E2E e no mesmo kind, contra a borda como um cliente de fora a vê: `https://localhost/<prefixo>/openapi.json` de cada serviço, pelo certificado padrão do Kong. É a varredura do [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md) (RNF-049), que roda aqui e não no CD de cada serviço, para não somar minutos a cada deploy. O alvo é o `openapi.json` porque o `/docs` é o HTML do Swagger e não lista rota.
 
 O [`scripts/ci/zap-baseline.sh`](scripts/ci/zap-baseline.sh) roda um container por serviço, na rede do host (no runner, o `localhost` é a porta 443 do kind), com a imagem da [tabela de versões](#componentes-e-versões) por digest e as regras de [`e2e/zap/regras.conf`](e2e/zap/regras.conf):
 
@@ -806,6 +806,7 @@ zap-baseline.py -t https://localhost/os/openapi.json -c regras.conf -m 1 -I -z "
 ```
 
 - `-I`: aviso não reprova, só regra em `FAIL`. `-m 1`: o spider para em 1 minuto.
+- O spider importa o `openapi.json` e chama cada operação dele uma vez, com dados de exemplo, `POST`, `PUT` e `DELETE` inclusive (no primeiro run, de 24 a 38 URLs por serviço, quase todas com resposta 4xx). Por isso o script só roda num kind descartável, depois do E2E, nunca num ambiente com dados.
 - `-z "-silent"`: sem ele, o `zap-baseline.py` da imagem atualiza e instala add-ons ao iniciar (`-addonupdate -addoninstall`), e o ZAP verifica atualização; com ele, nada disso. A varredura só pede páginas ao Kong do kind.
 - O ZAP aceita o certificado autoassinado do Kong. Como a varredura que não leu página nenhuma (certificado recusado, borda fora) poderia terminar com "nada a reportar", o script exige ao menos uma URL lida, a linha de resumo do ZAP e o status 0, e reprova nomeando o serviço se faltar qualquer um. Um serviço que reprova não impede a varredura dos outros.
 - A pasta `reports/zap` (ignorada pelo git) recebe `regras.conf`, `zap-<serviço>.html`, `.json`, `.md` e `.log`. O CI a publica como o artefato `zap-baseline` (90 dias), e a tabela por serviço (FAIL, WARN, URLs lidas) mais o `.md` de cada um vão para o summary do job.
