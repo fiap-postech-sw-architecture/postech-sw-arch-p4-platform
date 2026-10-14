@@ -999,6 +999,30 @@ def test_falha_no_passo_imprime_o_diagnostico_e_marca_a_falha(relogio: Relogio) 
     assert all("--tail=40" in pedido for pedido in pedidos)
 
 
+@pytest.mark.parametrize(
+    ("erro", "divergem"),
+    [
+        pytest.param(DivergenciaComOMercadoPagoError("live_mode=true"), True, id="sim"),
+        pytest.param(AssertionError("x"), False, id="outro-erro"),
+    ],
+)
+def test_so_a_divergencia_com_o_mercado_pago_ganha_a_dica_da_divergencia(
+    relogio: Relogio, erro: Exception, divergem: bool
+) -> None:
+    mundo = Mundo()
+    mundo.billing = _pagamento_billing()
+    mundo.mp_busca = [_pagamento_mp(live_mode=True)]
+    prova, _, _ = _prova(mundo, relogio, real=True, executor=_executor_do_cluster())
+    prova.cenario.pagamento_id = "p-1"
+
+    texto = prova.diagnostico("Então o Mercado Pago informa o pagamento", erro)
+
+    assert ("Mercado Pago e o Billing divergem" in texto) is divergem
+    if divergem:
+        assert "(id do pagamento: 999)" in texto
+    assert "live_mode=true" in texto, "a linha do Mercado Pago mostra o live_mode"
+
+
 def test_diagnostico_no_ensaio_nao_consulta_o_mercado_pago(relogio: Relogio) -> None:
     mundo = Mundo()
     prova, _, _ = _prova(mundo, relogio, real=False)

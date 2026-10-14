@@ -46,7 +46,9 @@ def _mp(metodo: str, caminho: str, status: int, motivo: str = "Bad Request") -> 
     return _log(f'HTTP Request: {metodo} {url} "HTTP/1.1 {status} {motivo}"')
 
 
-def _pagamento_mp(status: str, detalhe: str | None = None) -> PagamentoMp:
+def _pagamento_mp(
+    status: str, detalhe: str | None = None, *, live_mode: bool | None = False
+) -> PagamentoMp:
     return PagamentoMp(
         id="1",
         status=status,
@@ -56,7 +58,7 @@ def _pagamento_mp(status: str, detalhe: str | None = None) -> PagamentoMp:
         moeda="BRL",
         date_approved=None,
         external_reference="p-1",
-        live_mode=False,
+        live_mode=live_mode,
     )
 
 
@@ -556,7 +558,7 @@ def test_diagnostico_completo_no_modo_real() -> None:
     ) in texto
     assert (
         "Mercado Pago: pagamento 1 status=rejected "
-        "detalhe=cc_rejected_other_reason valor=210.00 BRL"
+        "detalhe=cc_rejected_other_reason valor=210.00 BRL live_mode=false"
     ) in texto
     assert "Filas mortas: {'billing.comandos.dlq': 0}" in texto
     assert "Log do api (últimas 40 linhas, filtradas):\n  (nada que interesse)" in texto
@@ -564,6 +566,22 @@ def test_diagnostico_completo_no_modo_real() -> None:
     assert "Mercado Pago: POST /checkout/preferences respondeu 400" in texto
     assert "Dica provável:" in texto
     assert "pref_id" not in texto, "o link do checkout nunca entra no diagnostico"
+
+
+@pytest.mark.parametrize(
+    ("live_mode", "texto"),
+    [
+        pytest.param(True, "live_mode=true", id="producao"),
+        pytest.param(False, "live_mode=false", id="teste"),
+        pytest.param(None, "live_mode=ausente", id="ausente"),
+    ],
+)
+def test_a_linha_do_mercado_pago_mostra_o_live_mode_do_pagamento(
+    live_mode: bool | None, texto: str
+) -> None:
+    sinais = _sinais(mercadopago=[_pagamento_mp("approved", live_mode=live_mode)])
+
+    assert f"valor=210.00 BRL {texto}" in montar(sinais)
 
 
 def test_diagnostico_mostra_as_filas_mortas_do_inicio_do_cenario() -> None:
@@ -825,6 +843,36 @@ def test_sem_url_conhecida_a_dica_nao_fala_da_notification_url_nem_com_a_causa()
     assert "causas invalid_notification_url" in texto
     assert "falam da notification_url" not in texto
     assert "E2E_MP_NOTIFICATION_URL" not in texto
+
+
+def test_divergencia_com_o_mercado_pago_nao_cai_na_dica_generica() -> None:
+    # Visto no kind: live_mode=true no Mercado Pago, e a "Dica provavel" dizia
+    # "Sem causa obvia nos logs" logo abaixo do "Falhou:" que explicava tudo.
+    sinais = _sinais(
+        divergencia=True, mercadopago=[_pagamento_mp("approved", live_mode=True)]
+    )
+
+    achadas = dicas(sinais)
+
+    assert len(achadas) == 1
+    assert "Mercado Pago e o Billing divergem" in achadas[0]
+    assert "no painel do Vendedor de teste" in achadas[0]
+    assert "(id do pagamento: 1)" in achadas[0]
+    assert "antes de trocar credenciais" in achadas[0]
+    assert "Sem causa óbvia" not in achadas[0]
+
+
+def test_divergencia_sem_leitura_do_mercado_pago_nao_inventa_id() -> None:
+    achadas = dicas(_sinais(divergencia=True, mercadopago=None))
+
+    assert "divergem" in achadas[0]
+    assert "id do pagamento" not in achadas[0]
+
+
+def test_sem_divergencia_a_dica_da_divergencia_nao_aparece() -> None:
+    achadas = dicas(_sinais(mercadopago=[_pagamento_mp("approved")]))
+
+    assert "divergem" not in " ".join(achadas)
 
 
 def test_outro_evento_com_a_operacao_de_criacao_nao_e_recusa_da_criacao() -> None:

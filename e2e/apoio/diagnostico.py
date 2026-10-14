@@ -182,6 +182,8 @@ class Sinais:
     real: bool
     contexto: str  # o kubectl que a dica manda rodar leva o --context do script
     url_de_notificacao: str = ""  # a que o Billing usou na preferencia, se se sabe
+    # O passo falhou porque o Mercado Pago e o Billing nao contam a mesma historia.
+    divergencia: bool = False
     estado_da_os: str | None = None
     # Any: o pagamento e o JSON do Billing; so alguns campos entram no texto.
     pagamento: Mapping[str, Any] | None = None
@@ -375,6 +377,19 @@ def _dica_do_provedor(
     )
 
 
+def _dica_da_divergencia(sinais: Sinais) -> str | None:
+    """O Mercado Pago e o Billing divergem (o ``Falhou:`` diz em que)."""
+    if not sinais.divergencia:
+        return None
+    ids = ", ".join(pagamento.id for pagamento in sinais.mercadopago or [])
+    registrado = f" (id do pagamento: {ids})" if ids else ""
+    return (
+        "O Mercado Pago e o Billing divergem (a linha `Falhou:` diz em quê). Confira "
+        "primeiro no painel do Vendedor de teste o que o Mercado Pago registrou"
+        f"{registrado}, antes de trocar credenciais ou mexer no código."
+    )
+
+
 def _dica_do_pagamento(sinais: Sinais) -> list[str]:
     """O que o Mercado Pago e o Billing dizem do pagamento, quando nao batem."""
     achadas: list[str] = []
@@ -428,6 +443,7 @@ def dicas(sinais: Sinais) -> list[str]:
         _dica_do_token(sinais, chamadas),
         _dica_da_recusa(sinais, chamadas),
         _dica_do_provedor(sinais, chamadas),
+        _dica_da_divergencia(sinais),
         *_dica_do_pagamento(sinais),
         _dica_da_dlq(sinais),
     )
@@ -438,6 +454,11 @@ def dicas(sinais: Sinais) -> list[str]:
             f"`{_kubectl(sinais)} logs deploy/billing-service-consumidor --tail=50`."
         )
     return achadas
+
+
+def _live_mode(valor: bool | None) -> str:
+    """``true``, ``false`` ou ``ausente`` (a resposta nao trouxe o campo)."""
+    return "ausente" if valor is None else str(valor).lower()
 
 
 def montar(sinais: Sinais) -> str:
@@ -464,7 +485,8 @@ def montar(sinais: Sinais) -> str:
         else:
             linhas += [
                 f"Mercado Pago: pagamento {p.id} status={p.status} "
-                f"detalhe={p.status_detail} valor={p.valor} {p.moeda}"
+                f"detalhe={p.status_detail} valor={p.valor} {p.moeda} "
+                f"live_mode={_live_mode(p.live_mode)}"
                 for p in sinais.mercadopago
             ]
     if sinais.filas_mortas is not None:

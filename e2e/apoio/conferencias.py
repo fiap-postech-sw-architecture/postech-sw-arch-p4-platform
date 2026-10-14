@@ -60,9 +60,11 @@ def conferir_aprovado(
         problemas.append(f"a moeda no Mercado Pago é {mp.moeda} e a esperada, {moeda}")
     if mp.live_mode is True:
         problemas.append(
-            "o pagamento é de PRODUÇÃO (live_mode=true): o token não é de teste e "
-            "o valor foi cobrado de verdade. Estorne pelo painel do Mercado Pago e "
-            "troque as credenciais"
+            f"o Mercado Pago marca o pagamento {mp.id} como de PRODUÇÃO "
+            "(live_mode=true). Confira primeiro no painel do Vendedor de teste (id do "
+            "pagamento: "
+            f"{mp.id}); se for mesmo de produção, o token não é de teste e o valor "
+            "foi cobrado de verdade: estorne pelo painel e troque as credenciais"
         )
     if problemas:
         raise DivergenciaComOMercadoPagoError("; ".join(problemas))

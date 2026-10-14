@@ -112,12 +112,21 @@ def test_varias_divergencias_aparecem_na_mesma_mensagem() -> None:
     assert "moeda no Mercado Pago" in str(erro.value)
 
 
-def test_pagamento_de_producao_manda_estornar_e_trocar_as_credenciais() -> None:
+def test_pagamento_de_producao_manda_conferir_no_painel_antes_de_trocar() -> None:
     with pytest.raises(DivergenciaComOMercadoPagoError) as erro:
         _confere(_mp(live_mode=True))
 
-    assert "valor foi cobrado de verdade" in str(erro.value)
-    assert "troque as credenciais" in str(erro.value)
+    texto = str(erro.value)
+    # Categorico seria perigoso: se o Mercado Pago marcar assim um pagamento de teste,
+    # o dono trocaria credenciais certas.
+    assert (
+        "Confira primeiro no painel do Vendedor de teste (id do pagamento: 999)"
+        in texto
+    )
+    assert texto.index("Confira primeiro") < texto.index("troque as credenciais")
+    assert "se for mesmo de produção" in texto
+    assert "valor foi cobrado de verdade" in texto
+    assert "estorne pelo painel e troque as credenciais" in texto
 
 
 def test_estornado_pelo_status_ou_pelo_valor_passa() -> None:

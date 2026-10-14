@@ -20,6 +20,7 @@ import httpx
 
 from e2e.apoio import diagnostico
 from e2e.apoio.conferencias import (
+    DivergenciaComOMercadoPagoError,
     conferir_aprovado,
     conferir_estornado,
     conferir_preferencia_expirada,
@@ -440,6 +441,7 @@ class Prova:
             real=self.real,
             contexto=self.kubectl.contexto,
             url_de_notificacao=self.sandbox.url_de_notificacao,
+            divergencia=isinstance(erro, DivergenciaComOMercadoPagoError),
         )
         sinais.estado_da_os = diagnostico.coletar(
             lambda: self._descrever_estado(self.api, self.cenario)
