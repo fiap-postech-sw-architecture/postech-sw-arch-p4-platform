@@ -5,3 +5,12 @@
 # e a varredura semanal enquanto essas branches existirem. O arquivo sai no
 # primeiro PR depois que elas forem mergeadas e apagadas.
 78ab307295e31d541213405a342e159f9cfda3f9:tests/test_gerar_segredos.py:private-key:79
+
+# O commit 53b3d0b, deste PR, trazia num teste o link de pagamento do simulador
+# do Billing, com um `?token=` de mentira que a regra generic-api-key acusa pela
+# entropia. Um commit posterior troca o valor por um curto, que a regra deixa
+# passar; a historia nao se reescreve. A entrada vale so para esse commit, que
+# o squash nao leva para a main: serve ao job gitleaks do PR e a varredura semanal
+# enquanto a branch existir. Sai no primeiro PR depois que ela for mergeada e
+# apagada.
+53b3d0b20cf43bb22c41fded9a8bacbacf3a627a:tests/e2e_apoio/test_prova.py:generic-api-key:37

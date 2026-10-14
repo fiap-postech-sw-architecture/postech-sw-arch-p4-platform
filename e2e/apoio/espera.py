@@ -29,6 +29,7 @@ def esperar[T](
     descricao: str,
     intervalo: float = 1.0,
     ignorar: tuple[type[Exception], ...] = (),
+    progresso: Callable[[float, object], None] | None = None,
     relogio: Callable[[], float] = time.monotonic,
     dormir: Callable[[float], None] = time.sleep,
 ) -> T:
@@ -37,7 +38,9 @@ def esperar[T](
     Devolve o primeiro valor verdadeiro. A condicao roda ao menos uma vez e uma
     ultima vez no fim do prazo; nunca se dorme alem dele. ``ignorar`` lista as
     excecoes que contam como "ainda nao" (rede, port-forward reiniciando); as
-    demais propagam, porque escondem defeito.
+    demais propagam, porque escondem defeito. ``progresso(restante, visto)`` roda
+    antes de cada pausa, com os segundos que faltam e o ultimo valor visto: e o
+    gancho da contagem regressiva de quem espera uma pessoa.
     """
     limite = relogio() + prazo
     visto: object = None
@@ -54,6 +57,8 @@ def esperar[T](
         if restante <= 0:
             msg = f"{descricao}: nao ocorreu em {prazo:g} s (ultimo valor: {visto!r})"
             raise TempoEsgotadoError(mascarar(msg))
+        if progresso is not None:
+            progresso(restante, visto)
         dormir(min(intervalo, restante))
 
 

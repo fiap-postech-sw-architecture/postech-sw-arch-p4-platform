@@ -62,10 +62,10 @@ TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
 KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE) YQ_IMAGE=$(YQ_IMAGE) \
 	NAMESPACE=$(NAMESPACE) scripts/kong-render.sh
 
-.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render e2e demo
+.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render e2e demo mp-sandbox mp-sandbox-ensaio
 
 help:
-	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-13s %s\n", $$1, $$2}'
+	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-17s %s\n", $$1, $$2}'
 
 kind-up: ## cria o cluster kind (nao faz nada se ja existir)
 	@kind get clusters | grep -qx '$(CLUSTER)' || kind create cluster --name $(CLUSTER) --config kind/cluster.yaml --wait 120s
@@ -228,7 +228,7 @@ e2e: ## E2E BDD da saga contra o kind com os tres servicos (relatorios em report
 	$(GUARDA_DE_CONTEXTO)
 	rm -rf reports/e2e && mkdir -p reports/e2e
 	set -uo pipefail; \
-	KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e pytest -c e2e/pytest.ini e2e \
+	KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e pytest -c e2e/pytest.ini e2e -m "not mp_sandbox" \
 		--junitxml=reports/e2e/junit.xml --cucumberjson=reports/e2e/cucumber.json; \
 	status=$$?; \
 	uv run --group e2e python -m e2e.resumo reports/e2e || true; \
@@ -245,6 +245,57 @@ demo: ## roda os blocos 1 e 2 do video (cenarios @demo) imprimindo o status da O
 		--junitxml=reports/demo/junit.xml --cucumberjson=reports/demo/cucumber.json; \
 	status=$$?; \
 	uv run --group e2e python -m e2e.resumo reports/demo || true; \
+	exit $$status
+
+# Sandbox do Mercado Pago (README, "Mercado Pago na sandbox"). O real grava o Access
+# Token num Secret do cluster: so kind, e sem o escape do E2E. As credenciais vem do
+# ambiente do shell (read -rs), nunca da linha de comando, e as duas pastas de
+# relatorios sao separadas para o ensaio nao apagar a evidencia do real. O -x
+# para no primeiro cenario que reprova: o seguinte pediria outro pagamento seu.
+# Na linha do make o token ficaria no argv (ps) e no historico do shell: so por
+# ambiente, sem export (MP_ACCESS_TOKEN="$MP_ACCESS_TOKEN" make mp-sandbox).
+ifneq ($(filter mp-sandbox mp-sandbox-ensaio,$(MAKECMDGOALS)),)
+ifneq ($(filter command line,$(origin MP_ACCESS_TOKEN) $(origin MP_WEBHOOK_SECRET)),)
+$(error MP_ACCESS_TOKEN e MP_WEBHOOK_SECRET não vão na linha do make: aparecem no ps e no histórico do shell. Leia com read -rs e passe só ao make: MP_ACCESS_TOKEN="$$MP_ACCESS_TOKEN" MP_WEBHOOK_SECRET="$$MP_WEBHOOK_SECRET" make mp-sandbox)
+endif
+endif
+
+GUARDA_DE_KIND := case "$(KUBE_CONTEXT)" in kind-*) ;; *) \
+	echo "contexto $(KUBE_CONTEXT) não é um kind: o sandbox grava o Access Token num Secret do cluster, e o escape do E2E não vale aqui" >&2; exit 2;; esac
+# A conferencia roda ANTES do pytest e da pasta de relatorios: se reprova (cluster fora do
+# ar, credencial esquecida), le-se so a mensagem, e a evidencia de uma execucao boa fica.
+CONFERIR_SANDBOX := KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e python -m e2e.conferir_sandbox
+# Uma execucao boa (com resumo.md) vai para uma pasta com data e hora, e nada anterior e
+# apagado. O que sobrou de uma execucao que nao chegou a escrever o resumo.md vai embora.
+GIRAR_EVIDENCIA := if [ -f reports/mp-sandbox/resumo.md ]; then \
+	mv reports/mp-sandbox "reports/mp-sandbox.$$(date +%Y%m%d-%H%M%S)"; \
+	else rm -rf reports/mp-sandbox; fi
+
+mp-sandbox: ## Mercado Pago na sandbox (modo real): cria a OS, imprime o link, espera voce pagar, estorna e desfaz (reports/mp-sandbox)
+	$(GUARDA_DE_KIND)
+	$(CONFERIR_SANDBOX) real
+	$(GIRAR_EVIDENCIA)
+	mkdir -p reports/mp-sandbox
+	set -uo pipefail; \
+	E2E_MP_MODO=real E2E_NARRAR=1 E2E_RELATORIOS=reports/mp-sandbox KUBE_CONTEXT=$(KUBE_CONTEXT) \
+		uv run --group e2e pytest -c e2e/pytest.ini e2e -m mp_sandbox -s -q -x \
+		--junitxml=reports/mp-sandbox/junit.xml --cucumberjson=reports/mp-sandbox/cucumber.json; \
+	status=$$?; \
+	uv run --group e2e python -m e2e.resumo reports/mp-sandbox relatorio-e2e.md "Relatório do E2E do Mercado Pago" || true; \
+	uv run --group e2e python -m e2e.varredura reports/mp-sandbox || status=1; \
+	exit $$status
+
+mp-sandbox-ensaio: ## ensaio do mp-sandbox sem credencial: o simulador do Billing paga no seu lugar (reports/mp-sandbox-ensaio)
+	$(GUARDA_DE_KIND)
+	$(CONFERIR_SANDBOX) ensaio
+	rm -rf reports/mp-sandbox-ensaio && mkdir -p reports/mp-sandbox-ensaio
+	set -uo pipefail; \
+	E2E_MP_MODO=ensaio E2E_NARRAR=1 E2E_RELATORIOS=reports/mp-sandbox-ensaio KUBE_CONTEXT=$(KUBE_CONTEXT) \
+		uv run --group e2e pytest -c e2e/pytest.ini e2e -m mp_sandbox -s -q -x \
+		--junitxml=reports/mp-sandbox-ensaio/junit.xml --cucumberjson=reports/mp-sandbox-ensaio/cucumber.json; \
+	status=$$?; \
+	uv run --group e2e python -m e2e.resumo reports/mp-sandbox-ensaio relatorio-e2e.md "Relatório do E2E do Mercado Pago (ensaio)" || true; \
+	uv run --group e2e python -m e2e.varredura reports/mp-sandbox-ensaio || status=1; \
 	exit $$status
 
 kong-render: ## regenera k8s/base/kong (kong.yaml, crds.yaml e o schema do plugin) do chart pinado

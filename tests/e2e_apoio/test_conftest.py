@@ -178,6 +178,43 @@ def test_dlq_com_mensagem_reprova_antes_do_primeiro_scale(
     assert _escalas(estado) == []
 
 
+def test_o_conftest_guarda_o_desfecho_da_chamada_de_cada_cenario(
+    tmp_path: Path, estado: Path
+) -> None:
+    # O resultado de cada cenario do sandbox no resumo.md vem daqui: passed, failed
+    # e, no Ctrl-C, ausente. O terceiro teste interrompe a sessao.
+    saida = tmp_path / "desfechos"
+    conftest = f"""\
+from pathlib import Path
+
+import pytest
+
+from e2e.apoio.plugin_sandbox import desfecho_da_chamada
+
+
+@pytest.fixture(autouse=True)
+def registrar(request):
+    yield
+    desfecho = desfecho_da_chamada(request.node)
+    with Path({str(saida)!r}).open("a") as arquivo:
+        arquivo.write(f"{{request.node.name}}={{desfecho}}\\n")
+"""
+    testes = (
+        "def test_a():\n    pass\n\n\n"
+        "def test_b():\n    assert False\n\n\n"
+        "def test_c():\n    raise KeyboardInterrupt\n"
+    )
+
+    resultado = _rodar(tmp_path, estado, testes, conftest)
+
+    assert resultado.returncode == 2, resultado.stdout
+    assert saida.read_text().splitlines() == [
+        "test_a=passed",
+        "test_b=failed",
+        "test_c=None",
+    ]
+
+
 @pytest.mark.parametrize(
     ("tipo", "imprime"), [("given", False), ("when", False), ("then", True)]
 )

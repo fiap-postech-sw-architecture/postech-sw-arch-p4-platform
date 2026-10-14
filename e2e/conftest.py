@@ -11,7 +11,7 @@ from __future__ import annotations
 import itertools
 import os
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NoReturn
 
 import pytest
 
@@ -20,6 +20,7 @@ from e2e.ambiente import (
     CONTEXTO,
     DURACAO_DOS_BLOCOS,
     LIMITE_DO_BLOCO,
+    MP_MODO,
     NARRAR,
     RELATORIOS,
     URL_DA_BORDA,
@@ -28,15 +29,22 @@ from e2e.ambiente import (
 )
 from e2e.apoio import dados
 from e2e.apoio.contexto import (
+    ContextoNaoDescartavelError,
     conferir_borda_local,
     conferir_contexto,
     escape_do_ambiente,
 )
 from e2e.apoio.credenciais import Credenciais
 from e2e.apoio.http import ClienteHttp
-from e2e.apoio.kube import Escalas, Kubectl
+from e2e.apoio.kube import ErroDeComandoError, Escalas, Kubectl
 from e2e.apoio.preflight import conferir_dlqs_vazias, conferir_overlay_kind_ci
+from e2e.apoio.preflight_mp import (
+    PreflightDoSandboxError,
+    Sandbox,
+    preflight_do_sandbox,
+)
 from e2e.apoio.relatorio import Registro
+from e2e.apoio.segredos import mascarar
 from e2e.servicos import Api, Cenario
 
 if TYPE_CHECKING:
@@ -45,21 +53,53 @@ if TYPE_CHECKING:
     from _pytest.fixtures import FixtureRequest
     from pytest_bdd.parser import Feature, Scenario, Step
 
-# Mascara no relatorio, SIGTERM e log do httpx: e2e/apoio/plugin.py.
-pytest_plugins = ["e2e.apoio.plugin"]
+# Mascara no relatorio, SIGTERM e log do httpx: e2e/apoio/plugin.py. Os ganchos do
+# sandbox do Mercado Pago (resultado do cenario, interrupcao, pulos e diagnostico):
+# e2e/apoio/plugin_sandbox.py.
+pytest_plugins = ["e2e.apoio.plugin", "e2e.apoio.plugin_sandbox"]
+
+
+def _recusar_o_sandbox(erro: AssertionError) -> NoReturn:
+    """No sandbox, o preflight que reprova encerra a sessao so com a mensagem.
+
+    Sem traceback e sem repetir o erro em cada cenario: quem roda o script le o que
+    mudar. A mensagem sai mascarada, como todo texto do E2E.
+    """
+    pytest.exit(f"sandbox do Mercado Pago: {mascarar(str(erro))}", returncode=2)
 
 
 @pytest.fixture(scope="session")
 def kubectl() -> Kubectl:
-    """kubectl no contexto escolhido, depois de provado: kind descartavel no kind-ci."""
+    """kubectl no contexto escolhido, depois de provado: um kind que e o da borda."""
     # So o escape entra no guarda: o ambiente inteiro apareceria no traceback.
     escape = escape_do_ambiente(os.environ)
-    conferir_contexto(CONTEXTO, escape)
-    kubectl = Kubectl(CONTEXTO)
-    conferir_borda_local(kubectl, escape, url_da_borda=URL_DA_BORDA)
+    try:
+        conferir_contexto(CONTEXTO, escape)
+        kubectl = Kubectl(CONTEXTO)
+        conferir_borda_local(kubectl, escape, url_da_borda=URL_DA_BORDA)
+    except (ContextoNaoDescartavelError, ErroDeComandoError) as erro:
+        if MP_MODO:
+            _recusar_o_sandbox(erro)
+        raise
+    return kubectl
+
+
+@pytest.fixture(scope="session")
+def preflight(kubectl: Kubectl, borda: ClienteHttp) -> Sandbox | None:
+    """A conferencia previa do cluster, antes de qualquer ``kubectl scale``.
+
+    O E2E da saga exige o overlay ``kind-ci`` e as DLQs vazias. Com
+    ``E2E_MP_MODO`` (sandbox do Mercado Pago), o overlay ``kind`` e, no modo real,
+    o token: devolve o que o preflight decidiu.
+    """
+    if MP_MODO:
+        try:
+            return preflight_do_sandbox(kubectl, borda, os.environ)
+        except PreflightDoSandboxError as erro:
+            _recusar_o_sandbox(erro)
     conferir_overlay_kind_ci(kubectl)
     conferir_dlqs_vazias(kubectl)
-    return kubectl
+    return None
 
 
 @pytest.fixture(scope="session")
@@ -69,8 +109,9 @@ def execucao() -> str:
 
 
 @pytest.fixture(scope="session", autouse=True)
-def escalas(kubectl: Kubectl) -> Iterator[Escalas]:
+def escalas(kubectl: Kubectl, preflight: Sandbox | None) -> Iterator[Escalas]:
     """O que um cenario derruba volta no fim; o que sobrou de antes, no inicio."""
+    del preflight  # so garante a ordem: a conferencia vem antes de qualquer scale
     escalas = Escalas(kubectl)
     for _, deployment in escalas.recuperar_do_inicio(ALVOS_DE_FALHA):
         narrar(f"[e2e] {deployment} estava em 0 replicas (execucao anterior): religado")

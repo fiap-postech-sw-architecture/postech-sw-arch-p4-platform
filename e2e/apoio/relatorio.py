@@ -94,30 +94,39 @@ def gerar_resumo(
     return "\n".join([*cabecalho, *linhas, ""])
 
 
-def escrever_resumo(diretorio: Path, titulo: str = "Resumo do E2E da saga") -> Path:
-    """Le cucumber.json e cenarios.json de ``diretorio`` e escreve o resumo.md."""
+def escrever_resumo(
+    diretorio: Path,
+    titulo: str = "Resumo do E2E da saga",
+    arquivo: str = "resumo.md",
+) -> Path:
+    """Le cucumber.json e cenarios.json de ``diretorio`` e escreve o ``arquivo``."""
     cucumber = json.loads((diretorio / "cucumber.json").read_text())
     registros_arquivo = diretorio / "cenarios.json"
     registros = (
         json.loads(registros_arquivo.read_text()) if registros_arquivo.exists() else {}
     )
     texto = gerar_resumo(cucumber, registros, titulo)
-    destino = diretorio / "resumo.md"
+    destino = diretorio / arquivo
     destino.write_text(texto)
     resumo_do_actions = os.environ.get("GITHUB_STEP_SUMMARY")
     if resumo_do_actions:
-        with Path(resumo_do_actions).open("a") as arquivo:
-            arquivo.write(texto + "\n")
+        with Path(resumo_do_actions).open("a") as saida:
+            saida.write(texto + "\n")
     return destino
 
 
 def principal(argumentos: list[str]) -> int:
-    if len(argumentos) != 1:
-        print("uso: python -m e2e.resumo <diretorio dos relatorios>", file=sys.stderr)
+    """``<diretorio> [arquivo [titulo]]``: o arquivo padrao e o ``resumo.md``."""
+    if not 1 <= len(argumentos) <= 3:
+        print(
+            "uso: python -m e2e.resumo <diretorio dos relatorios> [arquivo [titulo]]",
+            file=sys.stderr,
+        )
         return 2
     diretorio = Path(argumentos[0])
+    opcoes = dict(zip(("arquivo", "titulo"), argumentos[1:], strict=False))
     try:
-        destino = escrever_resumo(diretorio)
+        destino = escrever_resumo(diretorio, **opcoes)
     except FileNotFoundError:
         print(
             f"sem {diretorio / 'cucumber.json'}: o pytest terminou antes de escrever "

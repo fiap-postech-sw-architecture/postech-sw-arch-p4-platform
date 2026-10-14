@@ -147,10 +147,17 @@ def test_escrever_resumo_sem_registro_e_sem_step_summary(
     assert "| Pulado |" in destino.read_text()
 
 
+@pytest.mark.parametrize(
+    "argumentos",
+    [
+        pytest.param([], id="nenhum-argumento"),
+        pytest.param(["a", "b", "c", "d"], id="argumentos-demais"),
+    ],
+)
 def test_principal_exige_o_diretorio_dos_relatorios(
-    capsys: pytest.CaptureFixture[str],
+    argumentos: list[str], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    assert principal([]) == 2
+    assert principal(argumentos) == 2
     assert "uso:" in capsys.readouterr().err
 
 
@@ -195,3 +202,33 @@ def test_principal_sem_cucumber_json_diz_o_que_aconteceu(
 ) -> None:
     assert principal([str(tmp_path)]) == 1
     assert "terminou antes de escrever" in capsys.readouterr().err
+
+
+def test_escrever_resumo_com_outro_nome_nao_toca_no_resumo_md(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "cucumber.json").write_text(json.dumps(_cucumber()))
+    (tmp_path / "resumo.md").write_text("a evidencia do sandbox\n")
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+
+    destino = escrever_resumo(tmp_path, "Relatorio", "relatorio-e2e.md")
+
+    assert destino == tmp_path / "relatorio-e2e.md"
+    assert destino.read_text().startswith("## Relatorio")
+    assert (tmp_path / "resumo.md").read_text() == "a evidencia do sandbox\n"
+
+
+def test_principal_com_arquivo_e_titulo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "cucumber.json").write_text(json.dumps(_cucumber()))
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+
+    assert principal([str(tmp_path), "outro.md", "Meu titulo"]) == 0
+    assert (tmp_path / "outro.md").read_text().startswith("## Meu titulo")
+    assert principal([str(tmp_path), "so-o-arquivo.md"]) == 0
+    assert (
+        (tmp_path / "so-o-arquivo.md")
+        .read_text()
+        .startswith("## Resumo do E2E da saga")
+    )

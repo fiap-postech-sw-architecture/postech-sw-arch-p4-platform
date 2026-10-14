@@ -30,7 +30,7 @@ class OverlayErradoError(AssertionError):
     """O cluster nao esta no overlay ``kind-ci``."""
 
 
-def _numero(texto: str | None) -> float | None:
+def numero(texto: str | None) -> float | None:
     try:
         return None if texto is None else float(texto)
     except ValueError:
@@ -42,11 +42,11 @@ def conferir_overlay_kind_ci(kubectl: Kubectl) -> None:
     problemas: list[str] = []
     for chave, esperado in EXIGIDOS_NO_BILLING.items():
         lido = kubectl.valor_de_configmap(NAMESPACE_BILLING, chave)
-        if _numero(lido) != _numero(esperado):
+        if numero(lido) != numero(esperado):
             problemas.append(
                 f"{chave} no Billing e {lido!r}, o kind-ci pede {esperado}"
             )
-    limite = _numero(
+    limite = numero(
         kubectl.executar(
             "get",
             "kongclusterplugin",

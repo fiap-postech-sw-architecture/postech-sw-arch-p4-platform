@@ -7,6 +7,7 @@ import sys
 import pytest
 
 from e2e.apoio import segredos
+from e2e_apoio.falsos import CHAVE_APP_USR, CHAVE_DO_MP
 
 
 def test_mascarar_troca_segredo_registrado() -> None:
@@ -128,3 +129,52 @@ def test_registrar_fora_do_actions_nao_imprime_o_segredo(
 
     assert capsys.readouterr().out == ""
     assert segredos.mascarar("senha-do-admin-123") == "***"
+
+
+@pytest.mark.parametrize(
+    "token",
+    [
+        pytest.param(CHAVE_DO_MP, id="prefixo-test"),
+        pytest.param(CHAVE_APP_USR, id="prefixo-app-usr"),
+        pytest.param("APP_USR-12345678", id="app-usr-curto"),
+    ],
+)
+def test_mascarar_pega_o_access_token_do_mercado_pago_mesmo_sem_registro(
+    token: str,
+) -> None:
+    assert segredos.mascarar(f"token {token} fim") == "token *** fim"
+    assert segredos.mascarar(f"Authorization: Bearer {token}") == (
+        "Authorization: Bearer ***"
+    )
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        pytest.param("SRV-TEST-12345678", id="no-meio-de-um-codigo"),
+        pytest.param("PEC-E2E-3FA9C1-4", id="codigo-do-e2e"),
+        pytest.param("TEST-curto", id="curto-demais"),
+        pytest.param("o TEST de integracao", id="palavra-solta"),
+    ],
+)
+def test_mascarar_nao_toca_em_texto_que_so_parece_token(texto: str) -> None:
+    assert segredos.mascarar(texto) == texto
+
+
+def test_registrados_lista_o_que_foi_registrado_e_esquecer_todos_zera() -> None:
+    segredos.registrar("segredo-um-123\nsegredo-dois-456\nab")
+
+    assert segredos.registrados() == frozenset({"segredo-um-123", "segredo-dois-456"})
+
+    segredos.esquecer_todos()
+    assert segredos.registrados() == frozenset()
+
+
+def test_registrados_devolve_copia_que_nao_mexe_na_mascara() -> None:
+    segredos.registrar("segredo-um-123")
+
+    copia = segredos.registrados()
+
+    assert isinstance(copia, frozenset)
+    segredos.esquecer_todos()
+    assert copia == frozenset({"segredo-um-123"})
