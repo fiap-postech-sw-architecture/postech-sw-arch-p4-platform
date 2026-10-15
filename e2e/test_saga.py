@@ -926,6 +926,26 @@ def _api_responde(cenario: Cenario, status: int) -> None:
     assert resposta.status_code == status, f"HTTP {resposta.status_code}"
 
 
+@when("consulto as métricas das OS sem token")
+def _metricas_sem_token(api: Api, cenario: Cenario) -> None:
+    cenario.ultima_resposta = api.os.metricas(None)
+
+
+@when("o administrador consulta as métricas das OS")
+def _metricas_do_admin(api: Api, cenario: Cenario) -> None:
+    cenario.ultima_resposta = api.os.metricas("admin")
+
+
+@then("a resposta traz o total e as OS dos nove status")
+def _metricas_com_os_nove_status(cenario: Cenario) -> None:
+    resposta = cenario.ultima_resposta
+    assert resposta is not None
+    corpo = resposta.json()
+    assert set(corpo) == {"total", "por_status", "tempo_medio_por_status_segundos"}
+    assert len(corpo["por_status"]) == 9, "os nove status, com zero onde nao ha OS"
+    assert corpo["total"] == sum(corpo["por_status"].values())
+
+
 @then(parsers.parse('o erro tem o código "{codigo}"'))
 def _erro_tem_o_codigo(cenario: Cenario, codigo: str) -> None:
     resposta = cenario.ultima_resposta
