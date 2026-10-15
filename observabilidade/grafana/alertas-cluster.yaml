@@ -1,6 +1,6 @@
-# Regras de alerta que so valem no cluster (Kubernetes). Dependem do Kong, que
-# o compose nao tem: la o alvo nunca existe e, com "sem dado" como alerta, a
-# regra ficaria disparada para sempre. Por isso mora a parte: o
+# Regras de alerta que so valem no cluster (Kubernetes). Dependem do Kong e dos
+# exporters dos bancos, que o compose nao tem: la o alvo nunca existe e, com "sem
+# dado" como alerta, a regra ficaria disparada para sempre. Por isso mora a parte: o
 # configMapGenerator de kustomization.yaml monta este arquivo no Grafana do
 # cluster, e o compose monta so alertas.yaml. Mesmo formato e mesma pasta, em
 # grupo proprio (pytstop-cluster).
@@ -170,6 +170,41 @@ groups:
               refId: A
               instant: true
               expr: max(up{job="execution-service-api"})
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: lt, params: [1]}
+      # Banco fora do ar: o exporter de cada banco publica pg_up (PostgreSQL do OS e
+      # da Execucao) ou mongodb_up (MongoDB do Billing) em 0 quando nao alcanca o banco.
+      # Sem serie nenhuma de pg_up e mongodb_up (nenhum exporter de banco na descoberta),
+      # sem dado tambem e alerta, como nas regras de servico fora do ar. Um exporter que
+      # some enquanto os outros seguem de pe nao e visto aqui: o painel Bancos 1 mostra
+      # e o pytstop-alvo-fora acusa o alvo em 0. Com o banco fora a API responde o
+      # /metrics sem as series do coletor e o up segue em 1; so o /api/v1/saude/pronto
+      # (503) e este alerta enxergam o banco.
+      - uid: pytstop-banco-fora
+        title: Banco fora do ar ou sem alvo (1min)
+        condition: C
+        for: 1m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: O exporter de um banco (o label job diz qual) não alcança o banco, ou nenhum exporter de banco está na descoberta; veja o painel "Exporters dos bancos".
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: min by (job) (pg_up) or min by (job) (mongodb_up)
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__

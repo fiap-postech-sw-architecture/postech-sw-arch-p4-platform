@@ -84,7 +84,7 @@ make kind-down
 |---|---|
 | `make kind-up` | cria o cluster `pytstop-p4` (contexto `kind-pytstop-p4`) |
 | `make deploy` | segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check |
-| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, dashboards e alertas carregados pelo Grafana (um dashboard por JSON de `observabilidade/dashboards`, uma regra por regra de `observabilidade/grafana`, e só as quatro de serviço fora e de fila sem consumidor disparando, porque ainda não há serviços) e pods endurecidos; sai com status 1 se uma prova não valer |
+| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, dashboards e alertas carregados pelo Grafana (um dashboard por JSON de `observabilidade/dashboards`, uma regra por regra de `observabilidade/grafana`, e só as cinco de serviço fora, de fila sem consumidor e de banco fora disparando, porque ainda não há serviços) e pods endurecidos; sai com status 1 se uma prova não valer |
 | `make status` | pods, serviços, volumes e filas do RabbitMQ |
 | `make port-forward` | Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025 |
 | `make kind-down` | apaga o cluster |

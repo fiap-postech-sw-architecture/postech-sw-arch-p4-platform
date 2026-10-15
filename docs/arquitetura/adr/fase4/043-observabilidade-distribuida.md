@@ -78,6 +78,7 @@ No Grafana, como na fase 3, separando aviso de alerta crítico, como recomenda a
 | Outbox com linha morta | `outbox_dead` acima de zero em qualquer serviço (o relay desistiu de publicar a linha; a saga que a espera não anda sozinha) | 1 min | crítico |
 | Latência p95 acima de 500 ms | regra da fase 3, agregada por serviço, sem as sondas; o limiar é um fim de faixa do histograma (250 ms, 500 ms, 1 s), porque o `histogram_quantile` interpola dentro da faixa e um limiar no meio dela dispararia sem o p95 ter passado dele | 5 min | aviso |
 | Serviço fora do ar | `max(up{job="<serviço>-api"})` abaixo de 1, ou sem série (nenhuma réplica da API de pé) | 2 min | crítico |
+| Banco fora do ar | `min by (job) (pg_up) or min by (job) (mongodb_up)` abaixo de 1 (o exporter do banco não o alcança), ou sem série (nenhum exporter de banco na descoberta); `noDataState: Alerting`, como as de serviço fora do ar | 1 min | crítico |
 | Fila de trabalho sem consumidor | `rabbitmq_queue_consumers` abaixo de 1 em `billing.comandos`, `execucao.comandos` ou `os.eventos` (consumidor do serviço fora) | 2 min | crítico |
 | Assinatura inválida no webhook | `pytstop_webhook_assinatura_invalida_total` crescendo | 5 min | aviso |
 | Falha na busca do conjunto de chaves públicas (JWKS) | `pytstop_jwks_falhas_total` crescendo | 5 min | aviso |

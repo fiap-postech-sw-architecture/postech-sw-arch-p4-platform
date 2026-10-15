@@ -1065,6 +1065,61 @@ tests:
         exp_alerts:
           - exp_labels: {namespace: pytstop-billing}
 
+  # ------------------------------------------------------------- banco fora do ar
+  - name: pytstop-banco-fora, exporter do PostgreSQL com pg_up 0 por 1 min dispara so no banco afetado
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os"}
+        values: 0x10
+      - series: pg_up{job="execucao-postgres", namespace="pytstop-execucao"}
+        values: 1x10
+      - series: mongodb_up{job="billing-mongo", namespace="pytstop-billing"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: pytstop-banco-fora
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: pytstop-banco-fora
+        exp_alerts:
+          - exp_labels: {job: os-postgres}
+  - name: pytstop-banco-fora, mongodb_up 0 do Billing dispara so nele
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os"}
+        values: 1x10
+      - series: mongodb_up{job="billing-mongo", namespace="pytstop-billing"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: pytstop-banco-fora
+        exp_alerts:
+          - exp_labels: {job: billing-mongo}
+  - name: pytstop-banco-fora, bancos de pe e API fora do ar nao disparam esta regra
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os"}
+        values: 1x10
+      - series: pg_up{job="execucao-postgres", namespace="pytstop-execucao"}
+        values: 1x10
+      - series: mongodb_up{job="billing-mongo", namespace="pytstop-billing"}
+        values: 1x10
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-banco-fora
+        exp_alerts: []
+  - name: pytstop-banco-fora, banco que volta em menos de 1 min nao dispara
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os"}
+        values: 1 0 1 1 1 1
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-banco-fora
+        exp_alerts: []
+
   # ---------------------------------------- consultas de painel (promql_expr_test)
   # Serviços 2 e 11: a taxa de sucesso é a razão das respostas sem 5xx sobre todas,
   # e o painel de erro é 1 menos ela. A série com status 5xx só nasce no primeiro
