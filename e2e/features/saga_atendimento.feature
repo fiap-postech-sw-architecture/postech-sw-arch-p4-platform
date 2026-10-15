@@ -161,8 +161,8 @@ Funcionalidade: Saga de atendimento da ordem de serviço
       | /billing  |
       | /execucao |
 
-  # RF-027 da fase 3: a rota de onde vêm o volume de OS e o tempo médio por status dos
-  # dashboards de negócio. Os gauges do Prometheus leem o mesmo cálculo.
+  # RF-027 da fase 3: a rota que devolve a contagem de OS por status e o tempo médio por
+  # status, o mesmo cálculo dos gauges do Prometheus que os dashboards de negócio leem.
   @borda
   Cenário: As métricas das OS pela borda exigem o administrador e trazem os nove status
     Quando consulto as métricas das OS sem token

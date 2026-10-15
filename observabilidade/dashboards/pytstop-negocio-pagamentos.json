@@ -112,7 +112,7 @@
     {
       "id": 2,
       "title": "Faturamento por dia",
-      "description": "Valor confirmado em cada dia (UTC).",
+      "description": "Valor confirmado em cada dia (UTC). O dia em curso só aparece depois das 00:00 UTC (21:00 em Brasília).",
       "type": "timeseries",
       "gridPos": {
         "h": 6,
@@ -169,7 +169,7 @@
     {
       "id": 3,
       "title": "Pagamentos por desfecho",
-      "description": "Cobranças abertas no período e o desfecho, contados quando o OS processa o evento do Billing. Recusado: o provedor recusou PAGAMENTO_MAX_RECUSAS tentativas; expirado: o cliente não pagou em 60 min; cancelado e estornado vêm do cancelamento da OS ou de pagamento que chegou depois do encerramento.",
+      "description": "Cobranças abertas no período e o desfecho, contados quando o OS processa o evento do Billing. Recusado: o provedor recusou todas as tentativas permitidas; expirado: o cliente não pagou em 60 min; cancelado e estornado vêm do cancelamento da OS ou de pagamento que chegou depois do encerramento.",
       "type": "bargauge",
       "gridPos": {
         "h": 8,
@@ -378,7 +378,7 @@
     {
       "id": 5,
       "title": "Aguardando pagamento agora",
-      "description": "OS com peças reservadas esperando o pagamento e a espera da mais antiga. A cobrança expira em 60 min (PAGAMENTO_VALIDADE_MINUTOS) e a OS é cancelada.",
+      "description": "OS com peças reservadas esperando o pagamento e a espera da mais antiga. A cobrança expira em 60 min e a OS é cancelada.",
       "type": "stat",
       "gridPos": {
         "h": 5,

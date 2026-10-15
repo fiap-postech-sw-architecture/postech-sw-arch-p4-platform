@@ -344,7 +344,7 @@ O enunciado pede os entregáveis por repositório de microsserviço (l. 106-113)
 | Fluxo completo de uma OS passando pelos microsserviços (l. 119) | `make demo`: abertura, diagnóstico, orçamento, aprovação, reserva de peças, pagamento (simulador ou sandbox), agendamento, execução, finalização e entrega, com o status consultado no OS Service a cada passo | 4 min | RF-028 a RF-038 |
 | Execução do Saga Pattern e tratamento de falhas (l. 120) | Reserva sem saldo, com orçamento e OS cancelados sem cobrança; cancelamento depois do pagamento, com execução cancelada, estorno, reserva liberada e orçamento cancelado; pedido de cancelamento depois do início da execução respondendo 409; cenário `@resiliencia`, com o consumidor do Billing parado e a saga seguindo na volta, sem nada na DLQ, e a API do Billing parada na conclusão do diagnóstico, com 503 e circuito aberto | 4 min | RN-023 a RN-026, RN-029, RNF-055 |
 | Deploy automatizado de pelo menos um microsserviço com validação de testes (l. 121) | PR com os checks obrigatórios bloqueando o merge e o ruleset da `main`; execução do pipeline de um serviço: testes, gate de cobertura, SonarQube, imagem, deploy no kind e E2E. O trecho é gravado antes e editado, com serviço e commit escolhidos no roteiro | 3 min | RNF-042, RNF-043 |
-| Monitoramento e rastreamento dos fluxos distribuídos (l. 122) | Trace da saga no Jaeger, dashboards de saga e filas no Grafana, logs por `correlation_id` no Loki | 3 min | RNF-046, RNF-056 |
+| Monitoramento e rastreamento dos fluxos distribuídos (l. 122) | Trace da saga no Jaeger, dashboards de saga e filas no Grafana, o dashboard de negócio (volume diário de OS e tempo médio por status, que a banca cobrou), logs por `correlation_id` no Loki | 3 min | RNF-046, RNF-056 |
 
 Os quatro trechos somam 14 minutos, abaixo do limite de 15 (l. 117). Responsável, janela e plano B estão na seção 12.1.
 
@@ -367,7 +367,7 @@ Artefatos de CI expiram, e o Jaeger guarda os traces em memória. Por isso, o qu
 |---|---|
 | Saída de `gh api` com o ruleset e a proteção da `main` dos quatro repositórios e o resultado da verificação first-parent | RNF-043 |
 | Preferência criada, pagamento aprovado e estorno na sandbox do Mercado Pago | RF-034 |
-| Prints do trace de uma saga no Jaeger, de cada um dos oito dashboards (quatro de negócio e quatro técnicos) e de um alerta disparado | RNF-046, RNF-056 |
+| Prints do trace de uma saga no Jaeger, de cada um dos nove dashboards (quatro de negócio e cinco técnicos) e de um alerta disparado | RNF-046, RNF-056 |
 | Print do quality gate do SonarQube e relatório do E2E | RNF-039, RNF-041 |
 | Tabela e print da cobertura, também no README de cada serviço | RNF-040, RNF-050 |
 

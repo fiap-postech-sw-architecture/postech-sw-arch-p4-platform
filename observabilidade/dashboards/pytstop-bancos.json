@@ -409,7 +409,7 @@
     {
       "id": 7,
       "title": "Dados, armazenamento e índices do MongoDB",
-      "description": "Tamanho dos dados, espaço alocado no disco (inclui o que o MongoDB ainda não devolveu) e dos índices do banco billing. Índice do tamanho dos dados, ou maior, pede revisão dos índices.",
+      "description": "Tamanho dos dados, espaço alocado no disco (inclui o que o MongoDB ainda não devolveu) e dos índices do banco billing. Índices do tamanho dos dados, ou maiores, pedem revisão.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,

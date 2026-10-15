@@ -227,7 +227,7 @@
     {
       "id": 5,
       "title": "Outbox pendente",
-      "description": "Linhas da outbox esperando o relay; a idade da mais antiga está no painel 7 e, acima de 300 s por 5 min, dispara Outbox parada (broker fora ou relay parado). Vale o maior valor do serviço (o Billing exporta da API e do relay). Com o relay parado a série do OS e da Execução some; com o banco fora, a de todos: a ausência não é zero.",
+      "description": "Linhas da outbox esperando o relay; a idade da mais antiga está no painel 7 e, acima de 300 s por 5 min, dispara Outbox parada (broker fora ou relay parado). Vale o maior valor do serviço (o Billing exporta da API e do relay). Com o relay parado a série do OS e da Execução some; com o banco fora, a do Billing some e a do OS e da Execução vira NaN, e nem a ausência nem o NaN é zero.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -272,7 +272,7 @@
     {
       "id": 6,
       "title": "Outbox dead",
-      "description": "Linhas que esgotaram as tentativas de publicação; precisam do operador (runbook da saga). Dispara Outbox com mensagem dead. A série some com o relay parado ou com o banco fora.",
+      "description": "Linhas que esgotaram as tentativas de publicação; precisam do operador (runbook da saga). Dispara Outbox com mensagem dead. A série some com o relay parado; com o banco fora, some no Billing e vira NaN no OS e na Execução, e o painel mostra sem leitura.",
       "type": "stat",
       "gridPos": {
         "h": 8,
@@ -300,7 +300,19 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "nan",
+                "result": {
+                  "text": "sem leitura",
+                  "color": "text"
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       },
