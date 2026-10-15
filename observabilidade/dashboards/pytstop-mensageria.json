@@ -242,7 +242,8 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "decimals": 0
+          "decimals": 0,
+          "noValue": "sem dado"
         },
         "overrides": []
       },
@@ -312,7 +313,8 @@
                 }
               }
             }
-          ]
+          ],
+          "noValue": "sem dado"
         },
         "overrides": []
       },
@@ -385,7 +387,8 @@
             "thresholdsStyle": {
               "mode": "line"
             }
-          }
+          },
+          "noValue": "sem dado"
         },
         "overrides": []
       },

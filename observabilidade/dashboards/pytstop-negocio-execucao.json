@@ -222,7 +222,8 @@
                 "value": null
               }
             ]
-          }
+          },
+          "noValue": "sem dado"
         },
         "overrides": []
       },
@@ -375,7 +376,8 @@
                 "value": 0.001
               }
             ]
-          }
+          },
+          "noValue": "sem dado"
         },
         "overrides": []
       },

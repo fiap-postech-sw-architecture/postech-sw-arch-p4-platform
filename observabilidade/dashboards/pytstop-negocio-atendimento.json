@@ -176,7 +176,8 @@
                 "value": 259200
               }
             ]
-          }
+          },
+          "noValue": "sem dado"
         },
         "overrides": []
       },

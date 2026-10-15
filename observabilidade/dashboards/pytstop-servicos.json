@@ -113,7 +113,8 @@
             "thresholdsStyle": {
               "mode": "line"
             }
-          }
+          },
+          "noValue": "sem dado"
         },
         "overrides": []
       },
@@ -619,7 +620,8 @@
             "thresholdsStyle": {
               "mode": "line"
             }
-          }
+          },
+          "noValue": "sem dado"
         },
         "overrides": []
       },

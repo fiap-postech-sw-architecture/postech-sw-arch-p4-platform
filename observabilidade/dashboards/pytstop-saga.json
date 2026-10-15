@@ -65,7 +65,8 @@
                 "value": 60
               }
             ]
-          }
+          },
+          "noValue": "sem dado"
         },
         "overrides": []
       },
@@ -127,7 +128,8 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "noValue": "sem dado"
         },
         "overrides": []
       },

@@ -371,6 +371,16 @@ def test_so_o_painel_de_serie_consulta_um_intervalo(
     ] * len(painel["targets"])
 
 
+@pytest.mark.parametrize(("dashboard", "painel"), paineis())
+def test_painel_que_diz_sem_dado_mostra_sem_dado(
+    dashboard: dict[str, Any], painel: dict[str, Any]
+) -> None:
+    # O Grafana mostra "No data" quando a consulta nao devolve serie (idioma padrao
+    # em ingles); o texto do painel promete "sem dado", entao o painel mostra isso.
+    if "sem dado" in painel["description"].lower():
+        assert painel["fieldConfig"]["defaults"]["noValue"] == "sem dado"
+
+
 def test_configmap_dos_dashboards_lista_todos_os_json() -> None:
     arquivos = geradores_da_kustomization()["grafana-dashboards"]
 
