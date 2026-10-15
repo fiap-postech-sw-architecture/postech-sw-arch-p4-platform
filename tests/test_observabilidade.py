@@ -275,6 +275,98 @@ def test_painel_por_dia_arredonda_o_increase_e_usa_passo_de_um_dia(
     assert "[1d]" in alvo["expr"]
     assert alvo["interval"] == "1d"
     assert DASHBOARD_POR_UID[uid]["timezone"] == "utc"
+    # A barra do ponto conta o dia anterior; -1 a poe no dia que ela conta (com 0 ela
+    # sairia meio dia deslocada).
+    custom = painel["fieldConfig"]["defaults"]["custom"]
+    assert (custom["drawStyle"], custom["barAlignment"]) == ("bars", -1)
+
+
+# A coluna "Tipo" da doc ("bargauge; s; amarelo a partir de 86400, ...") diz o tipo, a
+# unidade e os limiares do painel; o JSON tem de fazer o mesmo.
+TIPO_DO_PAINEL = {
+    "séries": "timeseries",
+    "stat": "stat",
+    "bargauge": "bargauge",
+    "pizza": "piechart",
+    "tabela": "table",
+}
+NUMERO_DA_DOC = re.compile(r"\d+(?:,\d+)?")
+
+
+def partes_do_tipo(celula: str) -> tuple[str, str | None, str]:
+    """(tipo, unidade, limiares) da coluna "Tipo"; o painel de mapa nao tem unidade."""
+    tipo, unidade, *resto = [parte.strip() for parte in celula.split(";")]
+    if unidade.startswith("mapa"):
+        return tipo, None, "; ".join([unidade, *resto])
+    return tipo, unidade, "; ".join(resto)
+
+
+def unidades_da_doc(unidade: str) -> set[str]:
+    sem_casas = re.sub(r",?\s*`decimals: \d+`", "", unidade)
+    return {parte.strip() for parte in sem_casas.split(" e ")}
+
+
+def limiares_da_doc(texto: str) -> list[float]:
+    texto = re.sub(r"mapa[^;]*", "", texto)
+    if "sem limiar" in texto:
+        return []
+    # O Grafana compara com >=: "acima de 0" e o degrau em 0,001.
+    texto = re.sub(r"acima de 0(?!,)", "acima de 0,001", texto)
+    return sorted(float(n.replace(",", ".")) for n in NUMERO_DA_DOC.findall(texto))
+
+
+def unidades_do_json(painel: dict[str, Any]) -> set[str]:
+    campos = painel["fieldConfig"]
+    unidades = {campos["defaults"].get("unit")} - {None}
+    return unidades | {
+        propriedade["value"]
+        for sobreposicao in campos["overrides"]
+        for propriedade in sobreposicao["properties"]
+        if propriedade["id"] == "unit"
+    }
+
+
+def limiares_do_json(painel: dict[str, Any]) -> list[float]:
+    campos = painel["fieldConfig"]
+    degraus = list(campos["defaults"].get("thresholds", {}).get("steps", []))
+    for sobreposicao in campos["overrides"]:
+        for propriedade in sobreposicao["properties"]:
+            if propriedade["id"] == "thresholds":
+                degraus += propriedade["value"]["steps"]
+    return sorted(d["value"] for d in degraus if d["value"] is not None)
+
+
+@pytest.mark.parametrize(("dashboard", "painel"), paineis())
+def test_tipo_unidade_e_limiares_da_doc_sao_os_do_json(
+    dashboard: dict[str, Any], painel: dict[str, Any]
+) -> None:
+    celula = tabela_do_dashboard(dashboard)[painel["id"]][2]
+    tipo, unidade, limiares = partes_do_tipo(celula)
+    padrao = painel["fieldConfig"]["defaults"]
+
+    assert painel["type"] == TIPO_DO_PAINEL[tipo.split()[0]], celula
+    em_barras = padrao.get("custom", {}).get("drawStyle") == "bars"
+    assert ("em barras" in tipo) == em_barras, celula
+    if unidade is not None:
+        assert unidades_da_doc(unidade) == unidades_do_json(painel), celula
+        casas = re.search(r"`decimals: (\d+)`", unidade)
+        if casas:
+            assert padrao["decimals"] == int(casas.group(1)), celula
+    assert limiares_da_doc(limiares) == limiares_do_json(painel), celula
+
+
+@pytest.mark.parametrize(("dashboard", "painel"), paineis())
+def test_so_o_painel_de_serie_consulta_um_intervalo(
+    dashboard: dict[str, Any], painel: dict[str, Any]
+) -> None:
+    # stat, bargauge, pizza e tabela mostram o valor de agora: a consulta tem de ser
+    # instantanea. Sem isso o painel reduz o intervalo inteiro (ultimo, soma...) e
+    # mostra outro numero que o "Como ler".
+    instantaneo = painel["type"] in {"stat", "bargauge", "piechart", "table"}
+
+    assert [alvo.get("instant", False) for alvo in painel["targets"]] == [
+        instantaneo
+    ] * len(painel["targets"])
 
 
 def test_configmap_dos_dashboards_lista_todos_os_json() -> None:
@@ -301,6 +393,63 @@ def test_tabela_de_alertas_diz_o_que_a_regra_faz(
     assert linha["Severidade"] == regra["labels"]["severity"]
     assert linha["Janela"] == f"{int(regra['for'].removesuffix('m'))} min"
     assert linha["Onde"] == ONDE[arquivo]
+
+
+def consulta_e_limiar(regra: dict[str, Any]) -> tuple[str, str, float]:
+    """(consulta A, tipo do avaliador, limiar) de uma regra, como o Grafana os le."""
+    (consulta,) = [d["model"]["expr"] for d in regra["data"] if d["refId"] == "A"]
+    (avaliador,) = [
+        d["model"]["conditions"][0]["evaluator"]
+        for d in regra["data"]
+        if d["refId"] == "C"
+    ]
+    return consulta, avaliador["type"], avaliador["params"][0]
+
+
+@pytest.mark.parametrize("regra", [regra for _, regra in REGRAS], ids=IDS_DAS_REGRAS)
+def test_regra_tem_o_modelo_que_o_grafana_avalia(regra: dict[str, Any]) -> None:
+    # O promtool le so a consulta, o for e o limiar; o resto do modelo e do Grafana,
+    # e o kind-ci nao o tem. Um campo trocado (a condicao que avalia a consulta e nao
+    # o limiar, o datasource, a consulta por intervalo) so aparece no smoke local.
+    dados = {d["refId"]: d for d in regra["data"]}
+    consulta, limiar = dados["A"], dados["C"]
+
+    assert set(dados) == {"A", "C"}
+    assert regra["condition"] == "C"
+    assert regra["execErrState"] == "Error"
+    assert regra["noDataState"] in {"OK", "Alerting"}
+    assert regra["labels"]["severity"] in {"warning", "critical"}
+    assert regra["annotations"]["summary"].strip()
+    assert regra["for"].endswith("m")
+    assert consulta["datasourceUid"] == "prometheus"
+    assert consulta["relativeTimeRange"]["from"] > 0
+    assert consulta["model"]["refId"] == "A"
+    assert consulta["model"]["instant"] is True
+    assert limiar["datasourceUid"] == "__expr__"
+    assert limiar["model"]["type"] == "threshold"
+    assert limiar["model"]["expression"] == "A"
+    assert len(limiar["model"]["conditions"]) == 1
+
+
+def numero_da_doc(valor: float) -> str:
+    return f"{valor:g}".replace(".", ",")
+
+
+@pytest.mark.parametrize(("arquivo", "regra"), REGRAS, ids=IDS_DAS_REGRAS)
+def test_tabela_de_alertas_traz_a_consulta_e_o_limiar_da_regra(
+    arquivo: str, regra: dict[str, Any]
+) -> None:
+    # A consulta tambem e de painel, entao procurar no README inteiro nao basta: a
+    # celula da regra tem de trazer a consulta dela e o limiar com o operador
+    # (acima no gt, abaixo no lt; no "Outbox parada", o valor de producao).
+    celula = linhas_de_alerta()[regra["uid"]]["Condição (PromQL)"].replace("\\|", "|")
+    consulta, tipo, limiar = consulta_e_limiar(regra)
+    operador = {"gt": "acima de", "lt": "abaixo de"}[tipo]
+
+    assert f"`{consulta}`" in celula
+    assert re.search(
+        rf"{operador} {re.escape(numero_da_doc(limiar))}(?![\d]|,\d)", celula
+    ), celula
 
 
 def test_saga_parada_dispara_acima_de_zero_depois_de_5_min() -> None:
