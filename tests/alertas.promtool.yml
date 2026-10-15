@@ -1120,6 +1120,169 @@ tests:
         alertname: pytstop-banco-fora
         exp_alerts: []
 
+  # -------------------------------- no instante exato do for, janelas e limiares
+  # Casos que separam a regra de uma versao dela com o for, a janela do rate ou o
+  # limiar um pouco diferentes: cada um avalia no minuto exato em que a regra
+  # certa dispara (e um minuto antes, quieta), ou usa um valor entre o limiar certo
+  # e o errado.
+  - name: pytstop-fila-sem-consumidor, 0 consumidores dispara no minuto exato do for (2 min) e nao um minuto antes
+    interval: 1m
+    input_series:
+      - series: rabbitmq_queue_consumers{queue="os.eventos"}
+        values: 0x10
+      - series: rabbitmq_queue_consumers{queue="billing.comandos"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-fila-sem-consumidor
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-fila-sem-consumidor
+        exp_alerts:
+          - exp_labels: {queue: os.eventos}
+  - name: servico fora do ar, up 0 dispara no minuto exato do for (2 min) e nao um minuto antes
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 0x10
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 0x10
+      - series: up{job="execution-service-api", pod="exec-api-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-os-service-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-os-service-fora
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 1m
+        alertname: pytstop-billing-service-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-billing-service-fora
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 1m
+        alertname: pytstop-execution-service-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-execution-service-fora
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-webhook-assinatura-invalida, mais 1 por minuto dispara no minuto exato (1 min de dado e 5 min de for) e nao antes
+    interval: 1m
+    input_series:
+      - series: pytstop_webhook_assinatura_invalida_total{pod="billing-api-1"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-servico-5xx, 2% de 5xx dispara no minuto exato (1 min de dado e 5 min de for) e nao antes
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", status="200"}
+        values: 0+98x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="503"}
+        values: 0+2x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-servico-5xx
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-servico-5xx
+        exp_alerts:
+          - exp_labels: {job: os-service-api}
+  - name: pytstop-servico-5xx, 1,2% de 5xx dispara (entre o limiar de 1% e um de 1,5%)
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", status="200"}
+        values: 0+247x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="503"}
+        values: 0+3x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-servico-5xx
+        exp_alerts:
+          - exp_labels: {job: os-service-api}
+  - name: pytstop-servico-5xx, rajada de 5 min de 5xx ainda conta 3 min depois (a janela do rate e de 5 min)
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", status="200"}
+        values: 0+100x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="503"}
+        values: 0 10 20 30 40 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50
+    alert_rule_test:
+      # Com a janela de 2 min o 5xx ja teria saido da conta em 6 min e a regra nunca
+      # teria passado dos 5 min do for.
+      - eval_time: 7m
+        alertname: pytstop-servico-5xx
+        exp_alerts:
+          - exp_labels: {job: os-service-api}
+      - eval_time: 10m
+        alertname: pytstop-servico-5xx
+        exp_alerts: []
+  - name: pytstop-gateway-5xx, rajada de 5 min de 5xx no Kong ainda conta 3 min depois (a janela do rate e de 5 min)
+    interval: 1m
+    input_series:
+      - series: kong_http_requests_total{code="200", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+100x20
+      - series: kong_http_requests_total{code="500", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0 10 20 30 40 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-gateway-5xx
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 10m
+        alertname: pytstop-gateway-5xx
+        exp_alerts: []
+  - name: pytstop-gateway-5xx, 5xx do Kong dispara no minuto exato (1 min de dado e 5 min de for) e nao antes
+    interval: 1m
+    input_series:
+      - series: kong_http_requests_total{code="200", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+98x20
+      - series: kong_http_requests_total{code="500", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+2x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-gateway-5xx
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-gateway-5xx
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-compensacoes-acima-do-normal, 0,55 compensacao por saga iniciada dispara (entre o limiar de 0,5 e um de 0,6)
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_compensacoes_total{pod="os-api-1"}
+        values: 0+0.55x70
+      - series: pytstop_saga_iniciadas_total{pod="os-api-1"}
+        values: 0+1x70
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: pytstop-compensacoes-acima-do-normal
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-cpu-pod-alta, 82% do limite por 10 min dispara (entre o limiar de 80% e um de 85%)
+    interval: 1m
+    input_series:
+      - series: container_cpu_usage_seconds_total{namespace="pytstop-os", pod="os-api-1", container="api"}
+        values: 0+49.2x30
+      - series: kube_pod_container_resource_limits{namespace="pytstop-os", pod="os-api-1", container="api", resource="cpu"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: pytstop-cpu-pod-alta
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-os, pod: os-api-1}
+
   # ---------------------------------------- consultas de painel (promql_expr_test)
   # Serviços 2 e 11: a taxa de sucesso é a razão das respostas sem 5xx sobre todas,
   # e o painel de erro é 1 menos ela. A série com status 5xx só nasce no primeiro
