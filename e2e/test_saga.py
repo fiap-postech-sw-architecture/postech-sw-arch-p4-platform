@@ -41,6 +41,7 @@ from e2e.apoio.saga import (
     STATUS_EM_ORDEM,
     achar_acesso,
     comandos_de_compensacao,
+    divergencias_das_metricas,
     sem_id_da_requisicao,
 )
 from e2e.apoio.segredos import mascarar, registrar
@@ -940,10 +941,7 @@ def _metricas_do_admin(api: Api, cenario: Cenario) -> None:
 def _metricas_com_os_nove_status(cenario: Cenario) -> None:
     resposta = cenario.ultima_resposta
     assert resposta is not None
-    corpo = resposta.json()
-    assert set(corpo) == {"total", "por_status", "tempo_medio_por_status_segundos"}
-    assert len(corpo["por_status"]) == 9, "os nove status, com zero onde nao ha OS"
-    assert corpo["total"] == sum(corpo["por_status"].values())
+    assert divergencias_das_metricas(resposta.json()) == []
 
 
 @then(parsers.parse('o erro tem o código "{codigo}"'))
