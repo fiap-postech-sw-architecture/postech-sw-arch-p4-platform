@@ -270,7 +270,11 @@ groups:
       # publica 0,5 em meia-abertura (o prazo venceu e a proxima chamada e a prova).
       # Sem trafego o circuito fica em 0,5 para sempre, entao o limiar e 0,5 e nao 0:
       # com acima de 0 o alerta ficaria preso depois de um circuito que abriu e que
-      # ninguem mais chamou.
+      # ninguem mais chamou. O disjuntor da Execucao fica aberto so 30 s e depois volta
+      # a 0,5 ate a proxima chamada; com o for de 1 min e a avaliacao a cada 1 min, a
+      # regra pediria duas leituras seguidas em 1 e nao dispararia com trafego raro.
+      # O max_over_time de 2 min segura o 1 por duas avaliacoes: dispara em 1 min depois
+      # da abertura e solta em ate 2 min depois da ultima leitura em 1.
       - uid: pytstop-circuito-aberto
         title: Circuito aberto
         condition: C
@@ -288,7 +292,7 @@ groups:
             model:
               refId: A
               instant: true
-              expr: max by (namespace, dependencia) (pytstop_circuit_breaker_aberto)
+              expr: max by (namespace, dependencia) (max_over_time(pytstop_circuit_breaker_aberto[2m]))
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__

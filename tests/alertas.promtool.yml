@@ -498,6 +498,56 @@ tests:
         alertname: pytstop-circuito-aberto
         exp_alerts: []
 
+  # A Execucao fica aberta so 30 s (1, por 30 s) e volta a 0,5 ate a proxima chamada:
+  # com trafego raro o gauge faz 1 por 30 s, 0,5 por 60 s, e assim por diante.
+  - name: pytstop-circuito-aberto, Execucao com trafego raro (1 por 30 s, 0,5 por 60 s) dispara
+    interval: 15s
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: "1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5"
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+  - name: pytstop-circuito-aberto, uma rajada em 1 e depois so meia-abertura solta em ate 2 min
+    interval: 15s
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: "1x8 0.5x40"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+      - eval_time: 6m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+  - name: pytstop-circuito-aberto, meia-abertura estavel por 10 min (sem nenhuma leitura em 1) nao dispara
+    interval: 15s
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: "0.5x40"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+  - name: pytstop-circuito-aberto, uma replica aberta e a outra fechada disparam (o maximo decide)
+    interval: 1m
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: 0x10
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-2"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+
   # ------------------------------------------------------------ outbox parada
   - name: pytstop-outbox-parada, 400 s por 7 min dispara
     interval: 1m
