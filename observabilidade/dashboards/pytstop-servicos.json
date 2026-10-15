@@ -34,7 +34,7 @@
     {
       "id": 1,
       "title": "Requisições por serviço (req/s)",
-      "description": "Taxa de requisições de cada API (job = Deployment da API).",
+      "description": "Taxa de requisições de clientes de cada API (job = Deployment da API). As sondas de saúde e o scrape do Prometheus (/metrics, /api/v1/saude e /api/v1/saude/pronto) ficam de fora: mantêm a taxa acima de zero mesmo sem nenhum cliente.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -59,7 +59,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (job) (rate(http_request_duration_seconds_count[$__rate_interval]))",
+          "expr": "sum by (job) (rate(http_request_duration_seconds_count{rota!~\"/metrics|/api/v1/saude.*\"}[$__rate_interval]))",
           "legendFormat": "{{job}}"
         }
       ],
@@ -78,7 +78,7 @@
     {
       "id": 2,
       "title": "Erro 5xx por serviço",
-      "description": "Fração de respostas 5xx de cada API, calculada como 1 menos a taxa de sucesso (painel 11): aparece em 0 antes do primeiro 5xx. Acima de 1% por 5 min dispara o alerta do serviço.",
+      "description": "Fração de respostas 5xx de cada API, calculada como 1 menos a taxa de sucesso (painel 11): aparece em 0 antes do primeiro 5xx. Conta só requisições de clientes, sem as sondas de saúde e o scrape; o alerta do serviço (acima de 1% por 5 min) conta também as sondas, porque o /api/v1/saude/pronto responde 503 quando a API perde o banco. Sem requisição de cliente nos últimos minutos, o painel fica sem dado.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -124,7 +124,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "1 - (sum by (job) (rate(http_request_duration_seconds_count{status!~\"5..\"}[$__rate_interval])) / sum by (job) (rate(http_request_duration_seconds_count[$__rate_interval])))",
+          "expr": "1 - (sum by (job) (rate(http_request_duration_seconds_count{rota!~\"/metrics|/api/v1/saude.*\", status!~\"5..\"}[$__rate_interval])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~\"/metrics|/api/v1/saude.*\"}[$__rate_interval])))",
           "legendFormat": "{{job}}"
         }
       ],
@@ -148,8 +148,8 @@
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 16,
-        "y": 0
+        "x": 0,
+        "y": 8
       },
       "datasource": {
         "type": "prometheus",
@@ -208,7 +208,7 @@
     {
       "id": 4,
       "title": "Rotas mais lentas (p95, 5 min)",
-      "description": "As 10 rotas (template, sem ids) com maior p95 nos últimos 5 minutos.",
+      "description": "As 10 rotas (template, sem ids) com maior p95 nos últimos 5 minutos, só as que receberam requisição de cliente nesse período; as sondas de saúde e o scrape ficam de fora.",
       "type": "table",
       "gridPos": {
         "h": 8,
@@ -233,7 +233,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "topk(10, histogram_quantile(0.95, sum by (le, job, rota) (rate(http_request_duration_seconds_bucket[5m]))))",
+          "expr": "topk(10, histogram_quantile(0.95, sum by (le, job, rota) (rate(http_request_duration_seconds_bucket{rota!~\"/metrics|/api/v1/saude.*\"}[5m]))) and on (job, rota) (sum by (job, rota) (rate(http_request_duration_seconds_count{rota!~\"/metrics|/api/v1/saude.*\"}[5m])) > 0))",
           "instant": true,
           "format": "table"
         }
@@ -584,13 +584,13 @@
     {
       "id": 11,
       "title": "Taxa de sucesso por serviço",
-      "description": "Fração de respostas sem erro 5xx de cada API (erro do cliente, 4xx, conta como sucesso do serviço). Vale 100% desde a primeira requisição, antes de existir qualquer 5xx. Abaixo de 99% por 5 min o alerta de 5xx dispara.",
+      "description": "Fração de respostas sem erro 5xx de cada API (erro do cliente, 4xx, conta como sucesso do serviço), só de requisições de clientes: as sondas de saúde e o scrape ficam de fora. Vale 100% desde a primeira requisição, antes de existir qualquer 5xx; sem requisição de cliente nos últimos minutos, o painel fica sem dado. Abaixo de 99% por 5 min o alerta de 5xx dispara.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
         "w": 8,
-        "x": 0,
-        "y": 8
+        "x": 16,
+        "y": 0
       },
       "datasource": {
         "type": "prometheus",
@@ -630,7 +630,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (job) (rate(http_request_duration_seconds_count{status!~\"5..\"}[$__rate_interval])) / sum by (job) (rate(http_request_duration_seconds_count[$__rate_interval]))",
+          "expr": "sum by (job) (rate(http_request_duration_seconds_count{rota!~\"/metrics|/api/v1/saude.*\", status!~\"5..\"}[$__rate_interval])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~\"/metrics|/api/v1/saude.*\"}[$__rate_interval]))",
           "legendFormat": "{{job}}"
         }
       ],

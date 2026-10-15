@@ -951,7 +951,8 @@ tests:
   # Serviços 2 e 11: a taxa de sucesso é a razão das respostas sem 5xx sobre todas,
   # e o painel de erro é 1 menos ela. A série com status 5xx só nasce no primeiro
   # 5xx; a razão do 5xx sobre o total (e o 1 menos ela) ficava vazia numa API sadia.
-  - name: paineis Servicos 2 e 11, API so com 200 e 404 (nenhum 5xx ainda) mostram 100% e 0
+  # As sondas (/metrics e /api/v1/saude*) ficam de fora dos painéis de requisição.
+  - name: paineis Servicos 2 e 11, API so com 200 e 404 (nenhum 5xx ainda) mostram 100% e 0, e as sondas nao contam
     interval: 1m
     input_series:
       - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="200"}
@@ -960,42 +961,85 @@ tests:
         values: 0+6x10
       - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
         values: 0+30x10
+      # So sondas: sem requisicao de cliente o painel nao tem amostra, em vez de 100%.
+      - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/api/v1/saude", status="200"}
+        values: 0+6x10
+      - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/metrics", status="200"}
+        values: 0+4x10
     promql_expr_test:
-      - expr: sum by (job) (rate(http_request_duration_seconds_count{status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m]))
+      - expr: sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*", status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m]))
         eval_time: 10m
         exp_samples:
           - labels: '{job="os-service-api"}'
             value: 1
           - labels: '{job="billing-service-api"}'
             value: 1
-      - expr: 1 - (sum by (job) (rate(http_request_duration_seconds_count{status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m])))
+      - expr: 1 - (sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*", status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m])))
         eval_time: 10m
         exp_samples:
           - labels: '{job="os-service-api"}'
             value: 0
           - labels: '{job="billing-service-api"}'
             value: 0
-  - name: paineis Servicos 2 e 11, API com 10 respostas 503 a cada 100 de sucesso
+  - name: paineis Servicos 2 e 11, API com 10 respostas 503 a cada 100 de sucesso, e o 503 do /pronto nao conta
     interval: 1m
     input_series:
       - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="200"}
         values: 0+100x10
       - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="503"}
         values: 0+10x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/saude/pronto", status="503"}
+        values: 0+50x10
       - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
         values: 0+30x10
     promql_expr_test:
-      - expr: sum by (job) (rate(http_request_duration_seconds_count{status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m]))
+      - expr: sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*", status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m]))
         eval_time: 10m
         exp_samples:
           - labels: '{job="os-service-api"}'
             value: 0.9090909090909091
           - labels: '{job="billing-service-api"}'
             value: 1
-      - expr: 1 - (sum by (job) (rate(http_request_duration_seconds_count{status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m])))
+      - expr: 1 - (sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*", status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m])))
         eval_time: 10m
         exp_samples:
           - labels: '{job="os-service-api"}'
             value: 0.09090909090909094
           - labels: '{job="billing-service-api"}'
             value: 0
+  # Serviços 4: so a rota com requisicao de cliente nos ultimos 5 min entra. A rota
+  # que parou de receber (contadores constantes) daria NaN, e a sonda lenta
+  # (/metrics a ~1 s) apareceria no topo.
+  - name: painel Servicos 4, rota parada nao vira NaN e a sonda lenta fica de fora
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.25"}
+        values: 0+50x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="+Inf"}
+        values: 0+50x20
+      - series: http_request_duration_seconds_count{job="os-service-api", rota="/api/v1/ordens-de-servico"}
+        values: 0+50x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", rota="/api/v1/orcamentos", le="0.1"}
+        values: 100x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", rota="/api/v1/orcamentos", le="0.25"}
+        values: 100x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", rota="/api/v1/orcamentos", le="+Inf"}
+        values: 100x20
+      - series: http_request_duration_seconds_count{job="billing-service-api", rota="/api/v1/orcamentos"}
+        values: 100x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="0.25"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="1"}
+        values: 0+10x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="+Inf"}
+        values: 0+10x20
+      - series: http_request_duration_seconds_count{job="os-service-api", rota="/metrics"}
+        values: 0+10x20
+    promql_expr_test:
+      - expr: topk(10, histogram_quantile(0.95, sum by (le, job, rota) (rate(http_request_duration_seconds_bucket{rota!~"/metrics|/api/v1/saude.*"}[5m]))) and on (job, rota) (sum by (job, rota) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m])) > 0))
+        eval_time: 15m
+        exp_samples:
+          - labels: '{job="os-service-api", rota="/api/v1/ordens-de-servico"}'
+            value: 0.2425
