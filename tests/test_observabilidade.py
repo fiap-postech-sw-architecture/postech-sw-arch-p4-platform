@@ -382,6 +382,24 @@ def test_painel_que_diz_sem_dado_mostra_sem_dado(
         assert painel["fieldConfig"]["defaults"]["noValue"] == "sem dado"
 
 
+@pytest.mark.parametrize(("dashboard", "painel"), paineis())
+def test_painel_que_diz_sem_leitura_mapeia_o_nan_para_sem_leitura(
+    dashboard: dict[str, Any], painel: dict[str, Any]
+) -> None:
+    # Com o banco fora o relay exporta NaN, que o stat mostraria como "NaN": o mapa
+    # especial o troca pelo texto que o painel promete.
+    if "sem leitura" in painel["description"].lower():
+        assert painel["fieldConfig"]["defaults"]["mappings"] == [
+            {
+                "type": "special",
+                "options": {
+                    "match": "nan",
+                    "result": {"text": "sem leitura", "color": "text"},
+                },
+            }
+        ]
+
+
 def motivos_de_compensacao() -> set[str]:
     """Os codigos de `motivo` que o README da raiz lista para a saga."""
     texto = (RAIZ / "README.md").read_text(encoding="utf-8")
@@ -553,6 +571,24 @@ def test_grafana_do_cluster_monta_todos_os_alertas_e_o_compose_so_os_comuns() ->
     assert "alertas-outbox-parada" not in montados
     # O compose monta a pasta inteira dos dashboards.
     assert "../observabilidade/dashboards:/var/lib/grafana/dashboards" in montados
+
+
+# O Kong e o RabbitMQ existem no cluster so com a plataforma (o do smoke); o OS, o
+# Billing, a Execucao e os exporters dos bancos nao.
+ALVOS_DA_PLATAFORMA = {"pytstop-kong-fora", "pytstop-rabbitmq-fora"}
+
+
+def test_smoke_espera_disparando_as_regras_que_disparam_sem_os_servicos() -> None:
+    # Sem alvo, a regra com `noDataState: Alerting` dispara; a fila de trabalho dispara
+    # porque nenhum consumidor existe. Regra nova que dispara por desenho e nao esta na
+    # lista do smoke o faria esperar 3 min e reprovar so no cluster.
+    smoke = (RAIZ / "scripts" / "smoke.sh").read_text(encoding="utf-8")
+    (lista,) = re.findall(r"for uid in ([a-z0-9 -]+); do", smoke)
+    sem_alvo = {
+        regra["uid"] for _, regra in REGRAS if regra["noDataState"] == "Alerting"
+    } - ALVOS_DA_PLATAFORMA
+
+    assert set(lista.split()) == sem_alvo | {"pytstop-fila-sem-consumidor"}
 
 
 @pytest.mark.parametrize("uid", IDS_DAS_REGRAS)
