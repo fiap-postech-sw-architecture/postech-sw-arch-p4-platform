@@ -27,15 +27,8 @@ for arquivo in observabilidade/grafana/alertas*.yaml; do
     < "$arquivo")$'\n'
 done
 
-grupos=$(printf '%s' "$regras" | jq -c -s '
-  def regra:
-    if (.for | test("^[0-9]+m$")) | not then error("rule \(.uid): unexpected for: \(.for)")
-    elif (.limiar | type) != "number" then error("rule \(.uid): unexpected threshold \(.limiar)")
-    elif .tipo == "gt" then {alert: .uid, expr: "(\(.expr)) > \(.limiar)", for: .for}
-    elif .tipo == "lt" then {alert: .uid, expr: "(\(.expr)) < \(.limiar)", for: .for}
-    else error("rule \(.uid): threshold type \(.tipo) is neither gt nor lt; the test rule only models those")
-    end;
-  {groups: [{name: "alertas", rules: map(regra)}]}')
+# O filtro do jq (scripts/alertas-promtool.jq) tem teste proprio, um por ramo de erro.
+grupos=$(printf '%s' "$regras" | jq -c -s -f scripts/alertas-promtool.jq)
 printf '%s' "$regras" | jq -r '"rule \(.uid) (for \(.for), \(.tipo) \(.limiar)): \(.expr)"'
 
 # Os mesmos exprs dos paineis e dos alertas, como regras de gravacao so para a

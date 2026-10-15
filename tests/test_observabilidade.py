@@ -36,6 +36,8 @@ from typing import Any
 import pytest
 import yaml
 
+from e2e.apoio.paineis import carregar
+
 RAIZ = Path(__file__).resolve().parents[1]
 OBSERVABILIDADE = RAIZ / "observabilidade"
 # Prazo total do coletor da API do OS e da Execucao, em segundos.
@@ -692,16 +694,24 @@ def test_analise_ignora_literais_funcoes_agrupamentos_e_numeros() -> None:
 @pytest.mark.parametrize(
     ("expr", "achado"),
     [
-        (
+        pytest.param(
             "sum(pytstop_inventada_total)",
             "metrica fora do catalogo: pytstop_inventada_total",
+            id="metrica-inventada",
         ),
         # Sufixo de histograma so vale em histograma.
-        ("rate(outbox_dead_count[5m])", "metrica fora do catalogo: outbox_dead_count"),
-        ('up{rota="x"}', "label rota nao existe em up"),
-        (
+        pytest.param(
+            "rate(outbox_dead_count[5m])",
+            "metrica fora do catalogo: outbox_dead_count",
+            id="sufixo-de-histograma-em-contador",
+        ),
+        pytest.param(
+            'up{rota="x"}', "label rota nao existe em up", id="label-inventado"
+        ),
+        pytest.param(
             "sum by (tipo) (pytstop_os_criadas_total)",
             "agrupa por tipo, que nenhuma metrica da consulta tem",
+            id="agrupamento-inventado",
         ),
     ],
 )
@@ -718,6 +728,107 @@ def test_catalogo_conhece_o_tipo_e_os_labels_de_um_histograma() -> None:
     assert labels == {"method", "rota", "status"}
     assert metrica_do_catalogo("http_request_duration_seconds_bucket") == (
         "http_request_duration_seconds"
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ferramentas: o filtro do jq do promtool e os extratores de "toda consulta".
+
+FILTRO_DO_PROMTOOL = RAIZ / "scripts" / "alertas-promtool.jq"
+
+
+def executar(*comando: str) -> str:
+    """A saida de um comando do PATH (jq, sed), sem shell."""
+    return subprocess.run(  # noqa: S603  # nosec B603
+        comando, capture_output=True, text=True, timeout=30, check=True
+    ).stdout
+
+
+def filtrar(*regras: dict[str, Any]) -> subprocess.CompletedProcess[str]:
+    """O filtro do scripts/alertas-promtool.sh sobre regras ja lidas do YAML."""
+    return subprocess.run(  # noqa: S603  # nosec B603 B607
+        ["jq", "-c", "-s", "-f", str(FILTRO_DO_PROMTOOL)],  # noqa: S607
+        input="\n".join(json.dumps(regra) for regra in regras),
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+
+
+REGRA_VALIDA = {"uid": "r1", "for": "5m", "tipo": "gt", "limiar": 0.5, "expr": "x"}
+
+
+def test_filtro_do_promtool_monta_a_regra_com_o_operador_do_avaliador() -> None:
+    saida = filtrar(REGRA_VALIDA, {**REGRA_VALIDA, "uid": "r2", "tipo": "lt"})
+
+    assert saida.returncode == 0
+    assert json.loads(saida.stdout) == {
+        "groups": [
+            {
+                "name": "alertas",
+                "rules": [
+                    {"alert": "r1", "expr": "(x) > 0.5", "for": "5m"},
+                    {"alert": "r2", "expr": "(x) < 0.5", "for": "5m"},
+                ],
+            }
+        ]
+    }
+
+
+@pytest.mark.parametrize(
+    ("regra", "erro"),
+    [
+        pytest.param(
+            {**REGRA_VALIDA, "for": "30s"},
+            "rule r1: unexpected for: 30s",
+            id="for-fora-de-minutos",
+        ),
+        pytest.param(
+            {**REGRA_VALIDA, "limiar": "0.5"},
+            "rule r1: unexpected threshold 0.5",
+            id="limiar-que-nao-e-numero",
+        ),
+        pytest.param(
+            {**REGRA_VALIDA, "tipo": "within_range"},
+            "rule r1: threshold type within_range is neither gt nor lt",
+            id="tipo-que-nao-e-gt-nem-lt",
+        ),
+    ],
+)
+def test_filtro_do_promtool_reprova_regra_que_o_modelo_de_teste_nao_cobre(
+    regra: dict[str, Any], erro: str
+) -> None:
+    saida = filtrar(regra)
+
+    assert saida.returncode != 0
+    assert erro in saida.stderr
+
+
+def test_os_extratores_de_consulta_de_painel_e_de_alerta_concordam() -> None:
+    # Quatro lugares tiram "toda consulta de painel e de alerta", cada um com o seu
+    # parser: o gate de paineis do E2E (Python), o teste de catalogo, e o script do
+    # promtool e o smoke (jq nos JSON, sed nos YAML). Uma lista que diverge deixaria
+    # uma consulta sem prova.
+    paineis_jq = executar(
+        "jq", "-r", ".panels[].targets[].expr", *map(str, DASHBOARDS)
+    ).splitlines()
+    alertas_sed = executar(
+        "sed", "-n", "s/^ *expr: //p", *map(str, ALERTAS)
+    ).splitlines()
+    do_gate = carregar(OBSERVABILIDADE)
+    paineis_do_gate = [c.expr for c in do_gate if not c.origem.startswith("alerta ")]
+    alertas_do_gate = [c.expr for c in do_gate if c.origem.startswith("alerta ")]
+    do_teste = consultas()
+    paineis_do_teste = [expr for nome, expr in do_teste if nome not in IDS_DAS_REGRAS]
+    alertas_do_teste = [expr for nome, expr in do_teste if nome in IDS_DAS_REGRAS]
+
+    assert paineis_jq == paineis_do_gate == paineis_do_teste
+    assert sorted(alertas_sed) == sorted(alertas_do_gate) == sorted(alertas_do_teste)
+    assert len(paineis_jq) == sum(
+        len(painel["targets"])
+        for dashboard in DASHBOARD_POR_UID.values()
+        for painel in dashboard["panels"]
     )
 
 
