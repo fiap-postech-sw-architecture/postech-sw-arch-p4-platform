@@ -38,6 +38,8 @@ import yaml
 
 RAIZ = Path(__file__).resolve().parents[1]
 OBSERVABILIDADE = RAIZ / "observabilidade"
+# Prazo total do coletor da API do OS e da Execucao, em segundos.
+PRAZO_DO_COLETOR_S = 5
 DOC_CRU = (OBSERVABILIDADE / "README.md").read_text(encoding="utf-8")
 NEGOCIO_CRU = (OBSERVABILIDADE / "negocio.md").read_text(encoding="utf-8")
 # Tabela Markdown escapa o | das consultas.
@@ -306,6 +308,23 @@ def test_saga_parada_dispara_acima_de_zero_depois_de_5_min() -> None:
     assert limiar["type"] == "threshold"
     assert limiar["expression"] == "A"
     assert limiar["conditions"] == [{"evaluator": {"type": "gt", "params": [0]}}]
+
+
+def test_regra_que_le_o_coletor_das_sagas_espera_mais_que_duas_raspagens() -> None:
+    # O coletor le uma vez por vez: duas raspagens ao mesmo tempo fazem a segunda
+    # sair com pytstop_saga_coletor_disponivel em 0, por desenho. O `for` cobre
+    # mais que duas raspagens de 15 s, ou esse 0 isolado alertaria.
+    regras = [
+        regra
+        for _, regra in REGRAS
+        if any(
+            "pytstop_saga_coletor_disponivel" in dado["model"].get("expr", "")
+            for dado in regra["data"]
+        )
+    ]
+
+    assert [regra["uid"] for regra in regras] == ["pytstop-saga-parada"]
+    assert int(regras[0]["for"].removesuffix("m")) * 60 > 2 * 15
 
 
 def test_tabela_de_alertas_nao_tem_regra_que_nenhum_arquivo_define() -> None:
@@ -646,8 +665,12 @@ def test_prometheus_tem_scrape_timeout_explicito_que_o_readme_documenta(
     globais = yaml.safe_load(arquivo.read_text(encoding="utf-8"))["global"]
 
     assert globais["scrape_timeout"] == "10s"
+    # O coletor do OS e da Execucao desiste da raspagem em 5 s: o prazo do Prometheus
+    # fica acima disso, ou ele cortaria uma raspagem ainda dentro do prazo.
+    assert int(globais["scrape_timeout"].removesuffix("s")) > PRAZO_DO_COLETOR_S
     assert globais["scrape_interval"] == "15s"
     assert "`scrape_timeout: 10s`" in DOC
+    assert "acima de 5 s" in DOC
 
 
 def alertas_renderizados(caminho: str) -> dict[str, str]:

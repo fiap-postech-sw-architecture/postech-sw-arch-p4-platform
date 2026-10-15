@@ -84,7 +84,7 @@ make kind-down
 |---|---|
 | `make kind-up` | cria o cluster `pytstop-p4` (contexto `kind-pytstop-p4`) |
 | `make deploy` | segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check |
-| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, dashboards e alertas carregados pelo Grafana (um dashboard por JSON de `observabilidade/dashboards`, uma regra por regra de `observabilidade/grafana`) e pods endurecidos; sai com status 1 se uma prova não valer |
+| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, dashboards e alertas carregados pelo Grafana (um dashboard por JSON de `observabilidade/dashboards`, uma regra por regra de `observabilidade/grafana`, e só as quatro de serviço fora e de fila sem consumidor disparando, porque ainda não há serviços) e pods endurecidos; sai com status 1 se uma prova não valer |
 | `make status` | pods, serviços, volumes e filas do RabbitMQ |
 | `make port-forward` | Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025 |
 | `make kind-down` | apaga o cluster |
@@ -862,7 +862,7 @@ scripts/ci/implantar-servicos.sh --overlay kind-ci \
   billing-service=../postech-sw-arch-p4-billing-service \
   execution-service=../postech-sw-arch-p4-execution-service
 scripts/ci/smoke-servicos.sh
-make e2e      # os 13 cenários, cerca de 3 min; relatórios em reports/e2e
+make e2e      # os 14 cenários, cerca de 3 min; relatórios em reports/e2e
 make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 2 min; relatórios em reports/demo
 ```
 
@@ -910,6 +910,7 @@ Os usuários nascem uma vez por sessão: o E2E entra como o admin semeado e regi
 | `@resiliencia` | consumidor do Billing em 0 por 20 s | a OS fica em `em_diagnostico` durante os 20 s, segue na volta até `aguardando_aprovacao`, e nenhuma das três DLQs ganha mensagem (amostra por 8 s, porque a contagem das filas quorum atualiza a cada ~5 s) | RNF-055, RN-028 |
 | `@resiliencia` | API do Billing em 0 na conclusão do diagnóstico | duas conclusões dão 503; o indicador (*gauge*) `pytstop_circuit_breaker_aberto{dependencia="billing"}` vale 1 (lido do Service da Execução; 0,5 é meia-abertura e 0, fechado); com o Billing de volta, o teste espera o circuito sair do aberto, que dura 30 s ([RFC-004, 6.1](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#61-rotas-por-serviço) e [10.3](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#103-parâmetros-e-variáveis-de-ambiente)); a conclusão passa e o indicador volta a 0 | RNF-034, RNF-055 |
 | `@borda` | Swagger pelo Kong | `/os/docs`, `/billing/docs` e `/execucao/docs` abrem e o `openapi.json` declara `servers: [{url: "/<prefixo>"}]` | ADR-038 |
+| `@borda` | métricas das OS pela borda | `GET /os/api/v1/ordens-de-servico/metricas` sem token responde 401; com o admin, 200 com `total`, `por_status` (os nove status, zero onde não há OS) e `tempo_medio_por_status_segundos`, o cálculo que os gauges do painel "Tempo médio por status" leem | RF-027 da fase 3, ADR-039 |
 
 As mensagens de erro de negócio se afirmam pelo código (`TRANSICAO_STATUS_INVALIDA`) e, quando o texto aparece, sem depender de acento ou de caixa. As compensações se afirmam pela ordem dos comandos nos passos da saga (`GET /os/api/v1/sagas/{id}`, só do admin), não pelo texto livre do histórico.
 

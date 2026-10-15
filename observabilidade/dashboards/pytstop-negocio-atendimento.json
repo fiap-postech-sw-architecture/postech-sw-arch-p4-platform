@@ -88,7 +88,7 @@
     {
       "id": 2,
       "title": "OS por status agora",
-      "description": "OS em cada status não final, contadas no banco do OS a cada coleta, a mesma contagem do GET /api/v1/ordens-de-servico/metricas. Acúmulo em aguardando_aprovacao ou aguardando_pagamento é espera do cliente; em aguardando_execucao, falta de mecânico.",
+      "description": "OS em cada status não final, contadas no banco do OS a cada coleta, a mesma contagem do GET /api/v1/ordens-de-servico/metricas. Acúmulo em aguardando_aprovacao ou aguardando_pagamento é espera do cliente; em aguardando_execucao, falta de mecânico. O número chega até 45 s depois da transição (leitura guardada por 30 s e raspagem de 15 s); com duas réplicas de caches defasados, o máximo de cada status pode vir de réplicas diferentes, e a soma das barras passar do total por até 30 s.",
       "type": "bargauge",
       "gridPos": {
         "h": 8,
@@ -145,7 +145,7 @@
     {
       "id": 3,
       "title": "Tempo médio por status",
-      "description": "Permanência média da OS em cada status, da entrada até a transição seguinte, calculada do histórico dos últimos 30 dias: o mesmo número do GET /api/v1/ordens-de-servico/metricas. Alto em aguardando_aprovacao é cliente demorando a decidir (o orçamento expira em 72 h). Status sem permanência concluída na janela não aparece. Pedido da banca da fase 3 (RF-027).",
+      "description": "Permanência média da OS em cada status, da entrada até a transição seguinte, calculada do histórico dos últimos 30 dias: o mesmo número do GET /api/v1/ordens-de-servico/metricas. Alto em aguardando_aprovacao é cliente demorando a decidir (o orçamento expira em 72 h). Status sem permanência concluída na janela não aparece. Pedido da banca da fase 3 (RF-027). O número chega até 45 s depois da transição (leitura guardada por 30 s e raspagem de 15 s).",
       "type": "bargauge",
       "gridPos": {
         "h": 8,

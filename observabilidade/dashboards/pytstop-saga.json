@@ -34,7 +34,7 @@
     {
       "id": 1,
       "title": "Prazo técnico vencido",
-      "description": "Maior atraso entre as sagas cujo comando já foi entregue e passou do prazo de resposta (120 s). Acima de 60 s por 5 min dispara Saga parada; siga o runbook da saga.",
+      "description": "Maior atraso entre as sagas cujo comando já foi entregue e passou do prazo de resposta (120 s). Acima de 60 s por 5 min dispara Saga parada; siga o runbook da saga. Se o coletor não conseguir ler o banco, a série some e o painel fica sem dado, e não em zero; o coletor indisponível também dispara Saga parada.",
       "type": "stat",
       "gridPos": {
         "h": 5,
@@ -99,7 +99,7 @@
     {
       "id": 2,
       "title": "Em falha na compensação",
-      "description": "Sagas cuja compensação esgotou os reenvios ou recebeu EstornoDePagamentoFalhou. Resolva pelo runbook e retome com POST /api/v1/sagas/{ordem_id}/compensacao.",
+      "description": "Sagas cuja compensação esgotou os reenvios ou recebeu EstornoDePagamentoFalhou. Resolva pelo runbook e retome com POST /api/v1/sagas/{ordem_id}/compensacao. Sem dado quer dizer coletor sem ler o banco, e não zero sagas; Saga parada também avisa.",
       "type": "stat",
       "gridPos": {
         "h": 5,
@@ -464,7 +464,7 @@
     {
       "id": 8,
       "title": "Último ciclo do prazos",
-      "description": "Segundos desde o último ciclo do prazos no OS e no Billing (intervalo de 30 s). Parado, não há reenvio nem expiração; os gauges da saga continuam certos porque vêm da API.",
+      "description": "Segundos desde o último ciclo do prazos no OS e no Billing (intervalo de 30 s). Parado, não há reenvio nem expiração; os gauges da saga continuam certos porque vêm da API. Vale 0 até o primeiro ciclo terminar, e a conta mostra então um número enorme (vermelho), que some no primeiro ciclo, em até 30 s; se ficar, o prazos não completou nenhum ciclo.",
       "type": "stat",
       "gridPos": {
         "h": 5,

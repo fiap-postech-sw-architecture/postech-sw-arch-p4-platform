@@ -54,8 +54,8 @@ Esta é a matriz única de autorização; a [RFC-004](../../rfc/fase4/rfc-004-mi
 | OS Service | clientes e veículos (`/api/v1/clientes`), com acesso e portabilidade dos dados pessoais | `atendente` |
 | OS Service | exclusão dos dados pessoais pela LGPD (Lei Geral de Proteção de Dados) | `admin` |
 | OS Service | `/api/v1/ordens-de-servico`: abrir, listar, consultar, histórico, cancelamento e entrega | `atendente` |
-| OS Service | `GET /api/v1/ordens-de-servico/metricas` | `admin`; a rota entra com a observabilidade do OS Service e ainda não existe |
-| OS Service | `GET /api/v1/sagas/{ordem_id}` e `POST /api/v1/sagas/{ordem_id}/compensacao` | `admin`; a retomada (`POST`) ainda não existe e entra com o PR de prazos e retomada do OS Service |
+| OS Service | `GET /api/v1/ordens-de-servico/metricas` | `admin` |
+| OS Service | `GET /api/v1/sagas/{ordem_id}` e `POST /api/v1/sagas/{ordem_id}/compensacao` | `admin` |
 | Billing | leitura de `/api/v1/precos/servicos` e `/api/v1/precos/pecas` | `atendente` ou `mecanico` |
 | Billing | escrita nas tabelas de preço | `admin` |
 | Billing | `POST /api/v1/precos/validacao` | `mecanico` |
