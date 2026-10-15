@@ -946,3 +946,56 @@ tests:
         alertname: pytstop-outbox-parada
         exp_alerts:
           - exp_labels: {namespace: pytstop-billing}
+
+  # ---------------------------------------- consultas de painel (promql_expr_test)
+  # Serviços 2 e 11: a taxa de sucesso é a razão das respostas sem 5xx sobre todas,
+  # e o painel de erro é 1 menos ela. A série com status 5xx só nasce no primeiro
+  # 5xx; a razão do 5xx sobre o total (e o 1 menos ela) ficava vazia numa API sadia.
+  - name: paineis Servicos 2 e 11, API so com 200 e 404 (nenhum 5xx ainda) mostram 100% e 0
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="200"}
+        values: 0+60x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico/{ordem_id}", status="404"}
+        values: 0+6x10
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
+        values: 0+30x10
+    promql_expr_test:
+      - expr: sum by (job) (rate(http_request_duration_seconds_count{status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m]))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 1
+          - labels: '{job="billing-service-api"}'
+            value: 1
+      - expr: 1 - (sum by (job) (rate(http_request_duration_seconds_count{status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m])))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 0
+          - labels: '{job="billing-service-api"}'
+            value: 0
+  - name: paineis Servicos 2 e 11, API com 10 respostas 503 a cada 100 de sucesso
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="200"}
+        values: 0+100x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="503"}
+        values: 0+10x10
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
+        values: 0+30x10
+    promql_expr_test:
+      - expr: sum by (job) (rate(http_request_duration_seconds_count{status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m]))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 0.9090909090909091
+          - labels: '{job="billing-service-api"}'
+            value: 1
+      - expr: 1 - (sum by (job) (rate(http_request_duration_seconds_count{status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m])))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 0.09090909090909094
+          - labels: '{job="billing-service-api"}'
+            value: 0

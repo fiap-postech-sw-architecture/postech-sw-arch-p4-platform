@@ -79,13 +79,20 @@ DEFINITIONS = json.loads(
     )
 )
 FILAS = {fila["name"] for fila in DEFINITIONS["queues"]}
+PROMTOOL = yaml.safe_load(
+    (RAIZ / "tests" / "alertas.promtool.yml").read_text(encoding="utf-8")
+)["tests"]
 # Casos do promtool: (nome do teste, alertname, tem alerta esperado) de cada avaliacao.
 CASOS_DO_PROMTOOL = [
     (teste["name"], caso["alertname"], bool(caso["exp_alerts"]))
-    for teste in yaml.safe_load(
-        (RAIZ / "tests" / "alertas.promtool.yml").read_text(encoding="utf-8")
-    )["tests"]
-    for caso in teste["alert_rule_test"]
+    for teste in PROMTOOL
+    for caso in teste.get("alert_rule_test", [])
+]
+# Consultas de painel que o promtool avalia direto (promql_expr_test).
+EXPRESSOES_DO_PROMTOOL = [
+    (teste["name"], caso["expr"])
+    for teste in PROMTOOL
+    for caso in teste.get("promql_expr_test", [])
 ]
 PROMETHEUS = {"type": "prometheus", "uid": "prometheus"}
 AREAS = ("negocio", "tecnico")
@@ -363,6 +370,24 @@ def test_promtool_so_testa_regra_que_existe() -> None:
     # Um alertname que nenhuma regra tem passaria calado no promtool: o teste
     # esperaria uma lista vazia de alertas de uma regra que nao existe.
     assert {alertname for _, alertname, _ in CASOS_DO_PROMTOOL} <= set(IDS_DAS_REGRAS)
+
+
+@pytest.mark.parametrize(
+    ("nome", "expr"),
+    EXPRESSOES_DO_PROMTOOL,
+    ids=[f"{i}-{nome}" for i, (nome, _) in enumerate(EXPRESSOES_DO_PROMTOOL)],
+)
+def test_promtool_so_avalia_consulta_que_um_painel_ou_um_alerta_tem(
+    nome: str, expr: str
+) -> None:
+    # O script troca $__rate_interval por 5m e $__range por 1h; o caso escreve a
+    # consulta ja trocada, e uma consulta que ninguem mais usa passaria calada.
+    resolvidas = {
+        e.replace("$__rate_interval", "5m").replace("$__range", "1h")
+        for _, e in consultas()
+    }
+
+    assert expr in resolvidas, nome
 
 
 # ---------------------------------------------------------------------------

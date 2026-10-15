@@ -78,7 +78,7 @@
     {
       "id": 2,
       "title": "Erro 5xx por serviço",
-      "description": "Fração de respostas 5xx de cada API. Acima de 1% por 5 min dispara o alerta do serviço.",
+      "description": "Fração de respostas 5xx de cada API, calculada como 1 menos a taxa de sucesso (painel 11): aparece em 0 antes do primeiro 5xx. Acima de 1% por 5 min dispara o alerta do serviço.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -124,7 +124,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (job) (rate(http_request_duration_seconds_count{status=~\"5..\"}[$__rate_interval])) / sum by (job) (rate(http_request_duration_seconds_count[$__rate_interval]))",
+          "expr": "1 - (sum by (job) (rate(http_request_duration_seconds_count{status!~\"5..\"}[$__rate_interval])) / sum by (job) (rate(http_request_duration_seconds_count[$__rate_interval])))",
           "legendFormat": "{{job}}"
         }
       ],
@@ -584,7 +584,7 @@
     {
       "id": 11,
       "title": "Taxa de sucesso por serviço",
-      "description": "Fração de respostas sem erro 5xx de cada API: 1 menos o painel 2 (erro do cliente, 4xx, conta como sucesso do serviço). Abaixo de 99% por 5 min o alerta de 5xx dispara. É a taxa de sucesso que o vídeo da fase 3 mostrou, junto da latência (painel 3) e do erro (painel 2).",
+      "description": "Fração de respostas sem erro 5xx de cada API (erro do cliente, 4xx, conta como sucesso do serviço). Vale 100% desde a primeira requisição, antes de existir qualquer 5xx. Abaixo de 99% por 5 min o alerta de 5xx dispara.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -630,7 +630,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "1 - (sum by (job) (rate(http_request_duration_seconds_count{status=~\"5..\"}[$__rate_interval])) / sum by (job) (rate(http_request_duration_seconds_count[$__rate_interval])))",
+          "expr": "sum by (job) (rate(http_request_duration_seconds_count{status!~\"5..\"}[$__rate_interval])) / sum by (job) (rate(http_request_duration_seconds_count[$__rate_interval]))",
           "legendFormat": "{{job}}"
         }
       ],
