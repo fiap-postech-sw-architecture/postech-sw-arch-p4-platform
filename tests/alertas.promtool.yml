@@ -773,15 +773,17 @@ tests:
         exp_alerts: []
 
   # ------------------------------------------------------------- latencia p95
-  - name: pytstop-latencia-p95, p95 em meio segundo dispara so no job lento
+  # O limiar e 500 ms, fim de bucket (250 ms, 500 ms, 1 s): o histogram_quantile
+  # interpola dentro do bucket, entao so passa de 0,5 se o p95 de verdade passou.
+  - name: pytstop-latencia-p95, p95 na faixa de 500 ms a 1 s dispara so no job lento
     interval: 1m
     input_series:
-      # Billing: toda observacao entre 250 ms e 500 ms, p95 interpolado em 0,4875 s.
-      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.1"}
-        values: 0x20
+      # Billing: toda observacao entre 500 ms e 1 s, p95 interpolado em 0,975 s.
       - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.25"}
         values: 0x20
       - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="1"}
         values: 0+60x20
       - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
         values: 0+60x20
@@ -791,6 +793,8 @@ tests:
       - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.25"}
         values: 0+60x20
       - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.5"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="1"}
         values: 0+60x20
       - series: http_request_duration_seconds_bucket{job="os-service-api", le="+Inf"}
         values: 0+60x20
@@ -802,16 +806,55 @@ tests:
         alertname: pytstop-latencia-p95
         exp_alerts:
           - exp_labels: {job: billing-service-api}
+  - name: pytstop-latencia-p95, todas as requisicoes em 260 ms (faixa de 250 a 500 ms) nao disparam
+    interval: 1m
+    input_series:
+      # p95 de verdade: 260 ms. A estimativa por interpolacao na faixa e 0,4875 s,
+      # abaixo do limiar de 0,5; com o limiar no meio da faixa (0,3) ela disparava.
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.25"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.5"}
+        values: 0+100x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="1"}
+        values: 0+100x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="+Inf"}
+        values: 0+100x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
   - name: pytstop-latencia-p95, 10% de requisicoes lentas puxam o p95 e a mediana continua rapida
     interval: 1m
     input_series:
-      # 90% das observacoes abaixo de 100 ms e 10% entre 250 ms e 500 ms: o p95
-      # cai na cauda lenta (0,375 s) e a mediana (p50) ficaria em 50 ms.
+      # 90% das observacoes abaixo de 100 ms e 10% entre 500 ms e 1 s: o p95 cai na
+      # cauda lenta (0,75 s) e a mediana (p50) ficaria em 50 ms.
       - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.1"}
         values: 0+54x20
       - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.25"}
         values: 0+54x20
       - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0+54x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-latencia-p95
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+  - name: pytstop-latencia-p95, 7% de requisicoes lentas passam do limiar por pouco (p95 em 0,625 s) e disparam
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.1"}
+        values: 0+56x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.25"}
+        values: 0+56x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0+56x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="1"}
         values: 0+60x20
       - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
         values: 0+60x20
@@ -828,6 +871,31 @@ tests:
       - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.25"}
         values: 0+60x20
       - series: http_request_duration_seconds_bucket{job="os-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
+  - name: pytstop-latencia-p95, sonda lenta (/metrics) nao puxa o p95 de quem atende rapido
+    interval: 1m
+    input_series:
+      # Clientes: tudo abaixo de 100 ms. Scrape: tudo entre 500 ms e 1 s, no mesmo
+      # volume. Contada, a sonda levaria o p95 do job a 0,975 s; fora, ele fica em 95 ms.
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.5"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="+Inf"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="0.5"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="+Inf"}
         values: 0+60x20
     alert_rule_test:
       - eval_time: 12m

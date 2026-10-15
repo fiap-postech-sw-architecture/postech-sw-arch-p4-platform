@@ -76,7 +76,7 @@ No Grafana, como na fase 3, separando aviso de alerta crítico, como recomenda a
 | Circuito aberto | `pytstop_circuit_breaker_aberto` acima de 0,5 (1, aberto) para qualquer dependência; a meia-abertura (0,5) que a Execução publica não conta, porque sem tráfego o gauge fica nela | 1 min | aviso |
 | Outbox parada | `pytstop_outbox_mais_antiga_segundos` acima de 300 s em qualquer serviço, o que mostra broker fora do ar ou relay parado (`outbox_pendentes` acima de zero dispararia em falso com tráfego contínuo) | 5 min | crítico |
 | Outbox com linha morta | `outbox_dead` acima de zero em qualquer serviço (o relay desistiu de publicar a linha; a saga que a espera não anda sozinha) | 1 min | crítico |
-| Latência p95 acima de 300 ms | regra da fase 3, agregada por serviço | 5 min | aviso |
+| Latência p95 acima de 500 ms | regra da fase 3, agregada por serviço, sem as sondas; o limiar é um fim de faixa do histograma (250 ms, 500 ms, 1 s), porque o `histogram_quantile` interpola dentro da faixa e um limiar no meio dela dispararia sem o p95 ter passado dele | 5 min | aviso |
 | Serviço fora do ar | `max(up{job="<serviço>-api"})` abaixo de 1, ou sem série (nenhuma réplica da API de pé) | 2 min | crítico |
 | Fila de trabalho sem consumidor | `rabbitmq_queue_consumers` abaixo de 1 em `billing.comandos`, `execucao.comandos` ou `os.eventos` (consumidor do serviço fora) | 2 min | crítico |
 | Assinatura inválida no webhook | `pytstop_webhook_assinatura_invalida_total` crescendo | 5 min | aviso |
