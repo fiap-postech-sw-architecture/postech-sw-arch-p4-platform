@@ -7,7 +7,8 @@
 # local-path no k3s). O retention.size fica em 1536MB, tres quartos do volume:
 # o Prometheus conta o WAL nesse limite, e o resto e folga da compactacao. Se as
 # series passarem disso antes dos 15 dias, vale o limite de tamanho, e a janela de
-# 7 dias do painel continua dentro dele.
+# 7 dias do painel continua dentro dele (conta estimada, nao medida, em
+# observabilidade/README.md, "Retencao e prazos").
 #
 # O overlay kind-ci nao usa este componente: o runner e descartavel (ADR-042).
 apiVersion: kustomize.config.k8s.io/v1alpha1
