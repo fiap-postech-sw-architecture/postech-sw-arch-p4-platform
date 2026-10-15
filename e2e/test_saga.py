@@ -674,7 +674,10 @@ def _fora_da_fila(api: Api, cenario: Cenario) -> None:
     assert all(i["ordem_id"] != cenario.ordem_id for i in api.execucao.fila())
 
 
-@then(parsers.parse('a saga terminou como "{etapa}"'))
+# parsers.re casa o texto inteiro (fullmatch): com parsers.parse, {etapa} aceitaria
+# `compensada" pelo motivo "x` e este passo taparia o de baixo, conforme a ordem em que
+# test_saga.py e test_mp_sandbox.py registram os passos.
+@then(parsers.re(r'a saga terminou como "(?P<etapa>[^"]+)"'))
 def _saga_terminou(api: Api, cenario: Cenario, etapa: str) -> None:
     saga = esperar_saga(api, cenario, etapa)
     assert saga["falha"] is None
