@@ -1043,6 +1043,35 @@ def test_prometheus_tem_scrape_timeout_explicito_que_o_readme_documenta(
     assert "acima de 5 s" in DOC
 
 
+def teto_de_traces_do_cluster() -> str:
+    objetos = yaml.safe_load_all(
+        (RAIZ / "k8s" / "base" / "observabilidade" / "jaeger.yaml").read_text(
+            encoding="utf-8"
+        )
+    )
+    (deployment,) = [o for o in objetos if o and o["kind"] == "Deployment"]
+    (conteiner,) = deployment["spec"]["template"]["spec"]["containers"]
+    return next(
+        e["value"] for e in conteiner["env"] if e["name"] == "MEMORY_MAX_TRACES"
+    )
+
+
+def test_jaeger_tem_o_mesmo_teto_de_traces_no_cluster_no_compose_e_na_doc() -> None:
+    # O teto vem da conta do README (12 KB por span, limite de 512 Mi): cluster,
+    # compose e os textos que o citam dizem o mesmo numero.
+    compose = yaml.safe_load(
+        (RAIZ / "compose" / "docker-compose.yml").read_text(encoding="utf-8")
+    )
+    runbook = (RAIZ / "docs" / "operacao" / "runbook-saga.md").read_text(
+        encoding="utf-8"
+    )
+    teto = teto_de_traces_do_cluster()
+
+    assert compose["services"]["jaeger"]["environment"]["MEMORY_MAX_TRACES"] == teto
+    assert f"`MEMORY_MAX_TRACES={teto}`" in DOC
+    assert f"(até {teto}," in runbook
+
+
 def alertas_renderizados(caminho: str) -> dict[str, str]:
     """arquivo -> texto do ConfigMap grafana-alerting que o kustomize renderiza."""
     (configmap,) = [

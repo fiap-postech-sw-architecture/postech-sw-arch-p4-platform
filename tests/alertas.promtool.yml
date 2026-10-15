@@ -526,6 +526,24 @@ tests:
       - eval_time: 6m
         alertname: pytstop-circuito-aberto
         exp_alerts: []
+  # Uma abertura isolada de 30 s cai numa janela de 1 min so; a de 2 min a mostra em duas
+  # avaliacoes seguidas, e e isso que deixa o `for` de 1 min disparar.
+  - name: pytstop-circuito-aberto, uma unica abertura de 30 s da Execucao dispara e solta em 3 min
+    interval: 15s
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: "0.5 1 1 0.5x45"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+      - eval_time: 4m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
   - name: pytstop-circuito-aberto, meia-abertura estavel por 10 min (sem nenhuma leitura em 1) nao dispara
     interval: 15s
     input_series:
@@ -1119,6 +1137,18 @@ tests:
       - eval_time: 5m
         alertname: pytstop-banco-fora
         exp_alerts: []
+  - name: pytstop-banco-fora, duas replicas do mesmo job com uma sem banco disparam (o minimo decide)
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os", pod="os-postgres-0"}
+        values: 1x10
+      - series: pg_up{job="os-postgres", namespace="pytstop-os", pod="os-postgres-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: pytstop-banco-fora
+        exp_alerts:
+          - exp_labels: {job: os-postgres}
 
   # -------------------------------- no instante exato do for, janelas e limiares
   # Casos que separam a regra de uma versao dela com o for, a janela do rate ou o
