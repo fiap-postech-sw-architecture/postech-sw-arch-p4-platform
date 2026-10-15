@@ -1051,8 +1051,8 @@ def teto_de_traces_do_cluster() -> str:
     )
     (deployment,) = [o for o in objetos if o and o["kind"] == "Deployment"]
     (conteiner,) = deployment["spec"]["template"]["spec"]["containers"]
-    return next(
-        e["value"] for e in conteiner["env"] if e["name"] == "MEMORY_MAX_TRACES"
+    return str(
+        next(e["value"] for e in conteiner["env"] if e["name"] == "MEMORY_MAX_TRACES")
     )
 
 
