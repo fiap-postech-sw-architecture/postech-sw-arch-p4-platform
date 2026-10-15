@@ -412,7 +412,7 @@ Resultado esperado: a linha `after:` do `make redrive` mostra a `<fila>.dlq` em 
    - spans `process` repetidos da mesma mensagem: cada passagem pelo retry acrescenta um ao trace;
    - os reenvios do `prazos`, o cancelamento e a retomada, que entram no mesmo trace, como filhos do contexto guardado na saga, com link para o trace de quem os disparou;
    - na compensação, a ordem dos comandos: `CancelarExecucao` antes de `EstornarPagamento`, e cada resposta antes do comando seguinte.
-3. O Jaeger guarda os traces em memória (cerca de 5000), e uma saga pode durar dias: depois de um reinício do pod, o trace pode não existir mais. Os logs por `correlation_id` contam a mesma história ([ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md)).
+3. O Jaeger guarda os traces em memória (até 250, [Retenção e prazos](../../observabilidade/README.md#retenção-e-prazos)), e uma saga pode durar dias: depois de um reinício do pod, o trace pode não existir mais. Os logs por `correlation_id` contam a mesma história ([ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md)).
 
 Resultado esperado: você sabe em que serviço a OS parou e por quê, pelo último `publish` sem o `process` correspondente, pelo span em erro ou pelo log de rejeição, e volta à seção da causa.
 
