@@ -37,6 +37,7 @@ import pytest
 import yaml
 
 from e2e.apoio.paineis import carregar
+from e2e.apoio.saga import STATUS_DA_OS
 
 RAIZ = Path(__file__).resolve().parents[1]
 OBSERVABILIDADE = RAIZ / "observabilidade"
@@ -379,6 +380,44 @@ def test_painel_que_diz_sem_dado_mostra_sem_dado(
     # em ingles); o texto do painel promete "sem dado", entao o painel mostra isso.
     if "sem dado" in painel["description"].lower():
         assert painel["fieldConfig"]["defaults"]["noValue"] == "sem dado"
+
+
+def motivos_de_compensacao() -> set[str]:
+    """Os codigos de `motivo` que o README da raiz lista para a saga."""
+    texto = (RAIZ / "README.md").read_text(encoding="utf-8")
+    (linha,) = re.findall(r"^- `motivo` dos cinco comandos.*$", texto, re.MULTILINE)
+    (lista,) = re.findall(r"\(((?:`\w+`(?:, )?)+)\)", linha)
+    return set(re.findall(r"\w+", lista))
+
+
+@pytest.mark.parametrize(
+    ("id_do_painel", "codigos"),
+    [
+        pytest.param(2, set(STATUS_DA_OS), id="os-por-status"),
+        pytest.param(3, set(STATUS_DA_OS), id="tempo-por-status"),
+        pytest.param(5, {"concluida", "compensada"}, id="desfecho-das-sagas"),
+        pytest.param(6, motivos_de_compensacao(), id="motivos-de-cancelamento"),
+    ],
+)
+def test_painel_de_atendimento_da_nome_legivel_a_todo_codigo_da_legenda(
+    id_do_painel: int, codigos: set[str]
+) -> None:
+    # A legenda e o codigo cru da API ("aguardando_aprovacao"); o nome de exibicao
+    # cobre todos eles, senao o que ficar sem nome aparece cru entre os legiveis.
+    (painel,) = [
+        p
+        for p in DASHBOARD_POR_UID["pytstop-negocio-atendimento"]["panels"]
+        if p["id"] == id_do_painel
+    ]
+    nomes = {
+        o["matcher"]["options"]: o["properties"][0]["value"]
+        for o in painel["fieldConfig"]["overrides"]
+        if (o["matcher"]["id"], o["properties"][0]["id"]) == ("byName", "displayName")
+    }
+
+    assert set(nomes) == codigos
+    assert len(set(nomes.values())) == len(nomes)
+    assert all(nome[0].isupper() for nome in nomes.values())
 
 
 def test_configmap_dos_dashboards_lista_todos_os_json() -> None:

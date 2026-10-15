@@ -114,7 +114,116 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "recebida"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Recebida"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "em_diagnostico"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Em diagnóstico"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_aprovacao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando aprovação"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_pagamento"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando pagamento"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_execucao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando execução"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "em_execucao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Em execução"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "finalizada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Finalizada"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "entregue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Entregue"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cancelada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cancelada"
+              }
+            ]
+          }
+        ]
       },
       "targets": [
         {
@@ -179,7 +288,116 @@
           },
           "noValue": "sem dado"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "recebida"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Recebida"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "em_diagnostico"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Em diagnóstico"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_aprovacao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando aprovação"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_pagamento"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando pagamento"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_execucao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando execução"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "em_execucao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Em execução"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "finalizada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Finalizada"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "entregue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Entregue"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cancelada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cancelada"
+              }
+            ]
+          }
+        ]
       },
       "targets": [
         {
@@ -334,7 +552,32 @@
           "unit": "short",
           "decimals": 0
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "concluida"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Concluída"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "compensada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Compensada"
+              }
+            ]
+          }
+        ]
       },
       "targets": [
         {
@@ -378,7 +621,7 @@
     {
       "id": 6,
       "title": "Motivos de cancelamento",
-      "description": "Compensações iniciadas no período por motivo: orçamento recusado ou expirado, falta de peça (reserva_falhou), pagamento recusado ou expirado, cancelamento pelo atendente, falha na geração do orçamento e prazo técnico. Só prazo_tecnico é falha de sistema.",
+      "description": "Compensações iniciadas no período por motivo: orçamento recusado ou expirado, falta de peça, pagamento recusado ou expirado, cancelamento pelo atendente, falha na geração do orçamento e prazo técnico. Só o prazo técnico é falha de sistema.",
       "type": "bargauge",
       "gridPos": {
         "h": 8,
@@ -404,7 +647,104 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "orcamento_recusado"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Orçamento recusado"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "orcamento_expirado"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Orçamento expirado"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "geracao_falhou"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Falha ao gerar o orçamento"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reserva_falhou"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Falta de peça"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pagamento_recusado"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pagamento recusado"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pagamento_expirado"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pagamento expirado"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cancelamento"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cancelamento pelo atendente"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prazo_tecnico"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Prazo técnico"
+              }
+            ]
+          }
+        ]
       },
       "targets": [
         {
