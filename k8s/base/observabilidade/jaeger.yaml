@@ -4,9 +4,12 @@
 #   OTLP HTTP: jaeger:4318
 #   UI e API de consulta (datasource do Grafana): jaeger:16686
 # Traces em memoria, limitados por MEMORY_MAX_TRACES para nao crescer ate o
-# OOMKill num cluster que fica de pe dias (k3s). O teto acompanha o limite
-# de 512Mi: com spans de ~9 atributos (~3,4 KB cada), 5000 traces de 20 spans
-# ocupam ~340 MB. Subiu o limite para 1Gi, cabem ~10000.
+# OOMKill num cluster que fica de pe dias (k3s). O teto sai da conta com o trace
+# real: com o banco instrumentado, o de uma saga chega a 339 spans (os tres
+# servicos), e no kind, depois de tres execucoes do E2E (1929 traces, 14 mil
+# spans), o Jaeger ocupava 181Mi dos 512Mi do limite, uns 6 KB por span. Com 5000
+# traces o limite estouraria, entao o teto e 1000. O Jaeger e para a demonstracao:
+# gere o trace e capture logo.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -44,7 +47,7 @@ spec:
             - name: COLLECTOR_OTLP_ENABLED
               value: "true"
             - name: MEMORY_MAX_TRACES
-              value: "5000"
+              value: "1000"
           ports:
             - name: otlp-grpc
               containerPort: 4317
