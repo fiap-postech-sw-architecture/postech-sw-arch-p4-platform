@@ -11,8 +11,11 @@
 # (8100). Raspagem por pod, nao pelo Service: contadores sao por processo e,
 # com mais de uma replica, o Service balancearia e subcontaria.
 #
-# Sem PVC, como na fase 3: o TSDB fica num emptyDir, que aguenta restart do
-# container mas some com o pod (cluster de demonstracao).
+# O base guarda o TSDB num emptyDir (2 dias, como na fase 3): aguenta restart
+# do container, mas some com o pod. E o que o overlay kind-ci usa (runner
+# descartavel, ADR-042). Os overlays kind e k3s trocam por um PVC e 15 dias
+# (componente k8s/componentes/prometheus-pvc), porque o painel de volume diario
+# de OS pede dias de historico.
 #
 # Configuracao em config/prometheus.yml (configMapGenerator do k8s/base).
 apiVersion: v1
@@ -63,6 +66,11 @@ metadata:
     app: prometheus
 spec:
   replicas: 1
+  # Recreate: com o PVC (ReadWriteOnce) dos overlays kind e k3s, o pod novo de um
+  # rollout RollingUpdate subiria com o antigo ainda de pe e ficaria preso no
+  # lock do TSDB, e o antigo so sai quando o novo fica pronto.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: prometheus

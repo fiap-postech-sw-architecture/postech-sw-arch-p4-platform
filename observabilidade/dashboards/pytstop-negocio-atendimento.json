@@ -1,0 +1,851 @@
+{
+  "uid": "pytstop-negocio-atendimento",
+  "title": "PytStop Negócio - Atendimento",
+  "description": "Dashboard de negócio do PytStop (ADR-043), com a janela de 7 dias. Documentação painel a painel em observabilidade/negocio.md.",
+  "tags": [
+    "pytstop",
+    "negocio"
+  ],
+  "timezone": "utc",
+  "refresh": "1m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "schemaVersion": 39,
+  "editable": false,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [
+        "pytstop"
+      ],
+      "targetBlank": false,
+      "title": "Dashboards PytStop",
+      "tooltip": "",
+      "type": "dashboards",
+      "url": ""
+    }
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "Volume diário de OS",
+      "description": "OS abertas em cada dia (UTC), contadas na abertura pelo OS Service. Queda em dia útil indica menos clientes ou falha na abertura; confira os 5xx no dashboard Serviços. O dia em curso só aparece depois das 00:00 UTC (21:00 em Brasília). Pedido da banca da fase 3.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "showPoints": "never",
+            "barAlignment": -1,
+            "axisSoftMin": 0
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "round(sum(increase(pytstop_os_criadas_total[1d])))",
+          "legendFormat": "OS abertas",
+          "interval": "1d"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "OS por status agora",
+      "description": "OS em cada status não final, contadas no banco do OS, a mesma contagem do GET /api/v1/ordens-de-servico/metricas. Acúmulo em aguardando_aprovacao ou aguardando_pagamento é espera do cliente; em aguardando_execucao, falta de mecânico. O número pode atrasar até 45 s depois da transição.",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "recebida"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Recebida"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "em_diagnostico"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Em diagnóstico"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_aprovacao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando aprovação"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_pagamento"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando pagamento"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_execucao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando execução"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "em_execucao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Em execução"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "finalizada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Finalizada"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "entregue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Entregue"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cancelada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cancelada"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (status) (pytstop_os_por_status{status!~\"entregue|cancelada\"})",
+          "legendFormat": "{{status}}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Tempo médio por status",
+      "description": "Permanência média da OS em cada status, da entrada até a transição seguinte, calculada do histórico dos últimos 30 dias: o mesmo número do GET /api/v1/ordens-de-servico/metricas. Alto em aguardando_aprovacao é cliente demorando a decidir (o orçamento expira em 72 h). Status sem permanência concluída na janela não aparece. Pedido da banca da fase 3 (RF-027). O número pode atrasar até 45 s depois da transição.",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 86400
+              },
+              {
+                "color": "red",
+                "value": 259200
+              }
+            ]
+          },
+          "noValue": "sem dado"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "recebida"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Recebida"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "em_diagnostico"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Em diagnóstico"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_aprovacao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando aprovação"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_pagamento"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando pagamento"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "aguardando_execucao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Aguardando execução"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "em_execucao"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Em execução"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "finalizada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Finalizada"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "entregue"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Entregue"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cancelada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cancelada"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "max by (status) (pytstop_os_tempo_medio_status_segundos)",
+          "legendFormat": "{{status}}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Funil do atendimento",
+      "description": "OS abertas e passos da saga concluídos no período, contados quando o OS processa o evento do participante (um por OS; resposta repetida é ignorada). A queda entre duas barras mostra onde as OS saem do fluxo; o motivo está no painel 6.",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_os_criadas_total[$__range]))",
+          "legendFormat": "OS abertas",
+          "instant": true
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"DiagnosticoConcluido\"}[$__range]))",
+          "legendFormat": "Diagnóstico concluído",
+          "instant": true
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"OrcamentoGerado\"}[$__range]))",
+          "legendFormat": "Orçamento gerado",
+          "instant": true
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"OrcamentoAprovado\"}[$__range]))",
+          "legendFormat": "Orçamento aprovado",
+          "instant": true
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"PagamentoConfirmado\"}[$__range]))",
+          "legendFormat": "Pagamento confirmado",
+          "instant": true
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mensagens_consumidas_total{resultado=\"processada\", tipo=\"ExecucaoFinalizada\"}[$__range]))",
+          "legendFormat": "Execução finalizada",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Desfecho das sagas",
+      "description": "Sagas encerradas no período: concluída (execução finalizada) ou compensada (OS cancelada com os passos desfeitos: reserva liberada, cobrança cancelada ou estornada).",
+      "type": "piechart",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "concluida"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Concluída"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "compensada"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Compensada"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (resultado) (increase(pytstop_saga_finalizadas_total[$__range]))",
+          "legendFormat": "{{resultado}}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "pieType": "pie",
+        "displayLabels": [
+          "percent"
+        ],
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Motivos de cancelamento",
+      "description": "Compensações iniciadas no período por motivo: orçamento recusado ou expirado, falta de peça, pagamento recusado ou expirado, cancelamento pelo atendente, falha na geração do orçamento e prazo técnico. Só o prazo técnico é falha de sistema.",
+      "type": "bargauge",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "orcamento_recusado"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Orçamento recusado"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "orcamento_expirado"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Orçamento expirado"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "geracao_falhou"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Falha ao gerar o orçamento"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reserva_falhou"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Falta de peça"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pagamento_recusado"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pagamento recusado"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pagamento_expirado"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Pagamento expirado"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "cancelamento"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Cancelamento pelo atendente"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "prazo_tecnico"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Prazo técnico"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (motivo) (increase(pytstop_saga_compensacoes_total[$__range]))",
+          "legendFormat": "{{motivo}}",
+          "instant": true
+        }
+      ],
+      "options": {
+        "displayMode": "gradient",
+        "orientation": "horizontal",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Erros de integração",
+      "description": "Por hora: mensagens que cada serviço mandou para a DLQ e chamadas ao Mercado Pago que falharam por indisponibilidade ou resposta inválida. Acima de zero a OS afetada para ou compensa; detalhe nos dashboards Mensageria e Serviços.",
+      "type": "timeseries",
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 16
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.001
+              }
+            ]
+          },
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum by (namespace) (increase(pytstop_mensagens_consumidas_total{resultado=\"dlq\"}[1h]))",
+          "legendFormat": "DLQ {{namespace}}"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(pytstop_mercadopago_requisicoes_total{resultado=~\"falha_transitoria|resposta_invalida|circuito_aberto\"}[1h]))",
+          "legendFormat": "Mercado Pago com falha"
+        }
+      ],
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      }
+    }
+  ]
+}

@@ -418,12 +418,27 @@ KUBE_CONTEXT="$CONTEXTO" ESPERA=10 scripts/kong-check.sh
 titulo "Grafana: dashboards and alert rules loaded from provisioning"
 if implantado Grafana; then
   grafana() { $K get --raw "/api/v1/namespaces/$NS/services/grafana:3000/proxy$1"; }
-  grafana "/api/search?type=dash-db" | jq -r '.[] | "dashboard \(.uid): \(.title) (folder \(.folderTitle))"'
+  grafana "/api/search?type=dash-db" > "$TMP/dashboards.json"
+  jq -r '.[] | "dashboard \(.uid): \(.title) (folder \(.folderTitle))"' "$TMP/dashboards.json"
+  # Um dashboard por JSON em observabilidade/dashboards: sem a conta, um arquivo que
+  # o Grafana nao carregou (ou um uid que nao e o do arquivo) passaria calado.
+  confere "Grafana dashboards loaded" \
+    "$(jq -r '.uid' observabilidade/dashboards/*.json | sort | paste -sd, -)" \
+    "$(jq -r '.[].uid' "$TMP/dashboards.json" | sort | paste -sd, -)"
+  # O smoke roda num cluster so com a plataforma, e ali cinco regras disparam por
+  # desenho: sem os servicos nao ha alvo do OS, do Billing e da Execucao, nenhuma
+  # fila de trabalho tem consumidor e nenhum banco tem exporter. Os titulos vem dos
+  # arquivos de regras.
+  disparam=$(for uid in pytstop-fila-sem-consumidor pytstop-os-service-fora pytstop-billing-service-fora pytstop-execution-service-fora pytstop-banco-fora; do
+    grep -h -A1 "^      - uid: $uid\$" observabilidade/grafana/alertas*.yaml | sed -n 's/^ *title: //p'
+  done | jq -R . | jq -s -c .)
   # Logo depois do deploy a primeira avaliacao pega o Prometheus ainda sem dado
-  # (erro ou sem dado); espera a avaliacao de regime, ate 3 minutos.
+  # (erro ou sem dado) e as cinco ainda estao pendentes (o `for` de 1 a 2 minutos);
+  # espera a avaliacao de regime, ate 3 minutos: tudo saudavel, so as cinco
+  # disparando e as demais quietas.
   for _ in $(seq 18); do
     grafana "/api/prometheus/grafana/api/v1/rules" \
-      | jq -e '[.data.groups[].rules[] | select(.health != "ok" or .state != "inactive")] | length == 0' >/dev/null && break
+      | jq -e --argjson disparam "$disparam" '[.data.groups[].rules[] | select(.health != "ok" or .state != (if (.name | IN($disparam[])) then "firing" else "inactive" end))] | length == 0' >/dev/null && break
     sleep 10
   done
   grafana "/api/prometheus/grafana/api/v1/rules" > "$TMP/regras.json"
@@ -433,6 +448,12 @@ if implantado Grafana; then
   esperadas=$(cat observabilidade/grafana/alertas*.yaml | grep -c '^      - uid: ')
   confere "Grafana alert rules loaded" "$esperadas" "$(jq '[.data.groups[].rules[]] | length' "$TMP/regras.json")"
   confere "Grafana alert rules not healthy" "" "$(jq -r '[.data.groups[].rules[] | select(.health != "ok") | .name] | join(", ")' "$TMP/regras.json")"
+  # As cinco disparam e nenhuma outra: as regras de servico fora, de fila sem
+  # consumidor e de banco fora provam, no Grafana de verdade, que acusam o que
+  # deviam acusar.
+  confere "Grafana alerts firing without the services" \
+    "$(jq -r 'sort | join(", ")' <<< "$disparam")" \
+    "$(jq -r '[.data.groups[].rules[] | select(.state == "firing") | .name] | sort | join(", ")' "$TMP/regras.json")"
 fi
 
 titulo "Prometheus: series returned now by each dashboard and alert query"
@@ -440,9 +461,9 @@ prometheus() {
   $K get --raw "/api/v1/namespaces/$NS/services/prometheus:9090/proxy/api/v1/query?query=$(jq -rn --arg q "$1" '$q|@uri')" \
     | jq '.data.result | length'
 }
-# shellcheck disable=SC2016 # $__rate_interval e do Grafana, vai literal ao sed
+# shellcheck disable=SC2016 # $__range e $__rate_interval sao do Grafana, vao literais ao sed
 { jq -r '.panels[].targets[].expr' observabilidade/dashboards/*.json; sed -n 's/^ *expr: //p' observabilidade/grafana/alertas*.yaml; } \
-  | sed 's/\$__rate_interval/5m/g' | sort -u | while read -r consulta; do
+  | sed -e 's/\$__rate_interval/5m/g' -e 's/\$__range/1h/g' | sort -u | while read -r consulta; do
     printf '%3s series  %s\n' "$(prometheus "$consulta")" "$consulta"
   done
 

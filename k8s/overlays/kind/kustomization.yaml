@@ -1,6 +1,7 @@
 # Overlay do kind local (make kind-up deploy): a plataforma completa, com os
 # recursos do base (limites somam ~4,4 GiB). O overlay kind-ci, do runner do
-# CI, e este sem Loki, Promtail e Grafana (ADR-042).
+# CI, e este sem Loki, Promtail e Grafana, e com o Prometheus efemero
+# (ADR-042).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
@@ -9,6 +10,21 @@ resources:
   # metrics-server (kube-system), pre-requisito do HPA dos servicos. O k3s ja
   # traz o dele, por isso so o kind o recebe daqui.
   - metrics-server.yaml
+
+# Prometheus com 15 dias de historico num PVC (o painel de volume diario de OS
+# pede dias de dados). O kind-ci, que parte deste overlay, volta ao emptyDir.
+components:
+  - ../../componentes/prometheus-pvc
+
+# Alerta "Outbox parada" da demonstracao no video: 30 s e 1 minuto, no lugar dos
+# 300 s e 5 minutos de producao (base e k3s). O arquivo troca, no ConfigMap
+# grafana-alerting, o alertas-outbox-parada.yaml do base por uma copia so com
+# esses dois valores diferentes; o teste de observabilidade confere.
+configMapGenerator:
+  - name: grafana-alerting
+    behavior: merge
+    files:
+      - alertas-outbox-parada.yaml
 
 patches:
   - path: rate-limit-x10.yaml

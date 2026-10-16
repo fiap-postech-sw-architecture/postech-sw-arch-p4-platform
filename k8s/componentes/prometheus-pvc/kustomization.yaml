@@ -1,0 +1,36 @@
+# Prometheus com 15 dias de historico num PVC, para os overlays kind e k3s
+# (ADR-042, ADR-043). O painel de volume diario de OS (dashboard Negocio -
+# Atendimento) pede dias de dados: com a retencao de 2 dias num emptyDir ele
+# mostraria no maximo duas barras, e um restart do pod zeraria o historico.
+#
+# O PVC e de 2Gi na StorageClass padrao do cluster (standard no kind,
+# local-path no k3s). O retention.size fica em 1536MB, tres quartos do volume:
+# o Prometheus conta o WAL nesse limite, e o resto e folga da compactacao. Se as
+# series passarem disso antes dos 15 dias, vale o limite de tamanho, e a janela de
+# 7 dias do painel continua dentro dele (conta estimada, nao medida, em
+# observabilidade/README.md, "Retencao e prazos").
+#
+# O overlay kind-ci nao usa este componente: o runner e descartavel (ADR-042).
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - pvc.yaml
+
+patches:
+  - target:
+      kind: Deployment
+      name: prometheus
+    patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/args/1
+        value: --storage.tsdb.retention.time=15d
+      - op: replace
+        path: /spec/template/spec/containers/0/args/2
+        value: --storage.tsdb.retention.size=1536MB
+      - op: replace
+        path: /spec/template/spec/volumes/1
+        value:
+          name: dados
+          persistentVolumeClaim:
+            claimName: prometheus-dados

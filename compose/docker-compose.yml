@@ -166,7 +166,7 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
       # Mesmo teto do Kubernetes (k8s/base/observabilidade/jaeger.yaml).
-      MEMORY_MAX_TRACES: "5000"
+      MEMORY_MAX_TRACES: "250"
     ports:
       - "127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"
       - "127.0.0.1:${OTLP_GRPC_PORT:-4317}:4317"

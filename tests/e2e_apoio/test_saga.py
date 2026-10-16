@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from e2e.apoio.saga import (
     COMPENSACOES,
+    STATUS_DA_OS,
     STATUS_EM_ORDEM,
     achar_acesso,
     comandos_de_compensacao,
+    divergencias_das_metricas,
     sem_id_da_requisicao,
 )
 
@@ -111,3 +115,80 @@ def test_sem_id_da_requisicao_corpo_sem_envelope_passa_como_esta() -> None:
         "detail": "422",
         "id_requisicao": "r1",
     }
+
+
+def _metricas(**mudancas: object) -> dict[str, object]:
+    base: dict[str, object] = {
+        "total": 3,
+        "por_status": dict.fromkeys(STATUS_DA_OS, 0) | {"recebida": 3},
+        "tempo_medio_por_status_segundos": {"em_diagnostico": 12.5},
+    }
+    return base | mudancas
+
+
+def test_os_nove_status_sao_os_oito_do_fluxo_e_a_cancelada() -> None:
+    assert (*STATUS_EM_ORDEM, "cancelada") == STATUS_DA_OS
+    assert len(set(STATUS_DA_OS)) == 9
+
+
+def test_metricas_conformes_nao_tem_divergencia() -> None:
+    assert divergencias_das_metricas(_metricas()) == []
+    # Sem permanencia concluida no periodo o tempo medio vem vazio.
+    assert (
+        divergencias_das_metricas(_metricas(tempo_medio_por_status_segundos={})) == []
+    )
+
+
+@pytest.mark.parametrize(
+    ("corpo", "trecho"),
+    [
+        pytest.param({"total": 0}, "chaves", id="chave-que-falta"),
+        pytest.param(_metricas(extra=1), "chaves", id="chave-a-mais"),
+        pytest.param(
+            _metricas(
+                por_status=dict.fromkeys(STATUS_DA_OS[:-1], 0) | {"cancelad": 0},
+                total=0,
+            ),
+            "status",
+            id="status-renomeado",
+        ),
+        pytest.param(
+            _metricas(por_status=dict.fromkeys(STATUS_DA_OS[:-1], 0), total=0),
+            "status",
+            id="so-oito-status",
+        ),
+        pytest.param(
+            _metricas(por_status=dict.fromkeys(STATUS_DA_OS, 0.5), total=4.5),
+            "inteiro",
+            id="contagem-fracionada",
+        ),
+        pytest.param(
+            _metricas(por_status=dict.fromkeys(STATUS_DA_OS, -1), total=-9),
+            "inteiro",
+            id="contagem-negativa",
+        ),
+        pytest.param(_metricas(total=4), "soma", id="total-maior-que-a-soma"),
+        pytest.param(_metricas(total=2), "soma", id="total-menor-que-a-soma"),
+        pytest.param(
+            _metricas(tempo_medio_por_status_segundos={"emdiagnostico": 1.0}),
+            "desconhecido",
+            id="status-do-tempo-medio-desconhecido",
+        ),
+        pytest.param(
+            _metricas(tempo_medio_por_status_segundos={"recebida": "12"}),
+            "numero",
+            id="tempo-medio-em-texto",
+        ),
+        pytest.param(
+            _metricas(tempo_medio_por_status_segundos={"recebida": -1.0}),
+            "numero",
+            id="tempo-medio-negativo",
+        ),
+    ],
+)
+def test_metricas_com_divergencia_dizem_qual(
+    corpo: dict[str, object], trecho: str
+) -> None:
+    (divergencia,) = divergencias_das_metricas(corpo)
+
+    assert trecho in divergencia
