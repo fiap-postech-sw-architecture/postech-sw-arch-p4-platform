@@ -167,7 +167,8 @@ def test_metricas_conformes_nao_tem_divergencia() -> None:
             "inteiro",
             id="contagem-negativa",
         ),
-        pytest.param(_metricas(total=4), "soma", id="total-que-nao-e-a-soma"),
+        pytest.param(_metricas(total=4), "soma", id="total-maior-que-a-soma"),
+        pytest.param(_metricas(total=2), "soma", id="total-menor-que-a-soma"),
         pytest.param(
             _metricas(tempo_medio_por_status_segundos={"emdiagnostico": 1.0}),
             "desconhecido",

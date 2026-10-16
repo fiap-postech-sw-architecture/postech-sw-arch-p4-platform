@@ -492,12 +492,25 @@ def test_regra_tem_o_modelo_que_o_grafana_avalia(regra: dict[str, Any]) -> None:
     assert regra["for"].endswith("m")
     assert consulta["datasourceUid"] == "prometheus"
     assert consulta["relativeTimeRange"]["from"] > 0
+    # Um `to` acima de 0 avaliaria a consulta no passado.
+    assert consulta["relativeTimeRange"]["to"] == 0
     assert consulta["model"]["refId"] == "A"
     assert consulta["model"]["instant"] is True
     assert limiar["datasourceUid"] == "__expr__"
     assert limiar["model"]["type"] == "threshold"
     assert limiar["model"]["expression"] == "A"
     assert len(limiar["model"]["conditions"]) == 1
+
+
+def test_p95_cita_no_titulo_e_no_resumo_o_limiar_da_regra() -> None:
+    # O limiar mudou de 300 para 500 ms; um texto que ficou com o numero velho mente
+    # sobre quando o alerta dispara.
+    (regra,) = [r for _, r in REGRAS if r["uid"] == "pytstop-latencia-p95"]
+    (limiar,) = [d for d in regra["data"] if d["refId"] == "C"]
+    ms = round(limiar["model"]["conditions"][0]["evaluator"]["params"][0] * 1000)
+
+    assert f"{ms} ms" in regra["title"]
+    assert f"{ms} ms" in regra["annotations"]["summary"]
 
 
 def numero_da_doc(valor: float) -> str:
@@ -1065,11 +1078,20 @@ def test_jaeger_tem_o_mesmo_teto_de_traces_no_cluster_no_compose_e_na_doc() -> N
     runbook = (RAIZ / "docs" / "operacao" / "runbook-saga.md").read_text(
         encoding="utf-8"
     )
+    adr = (
+        RAIZ
+        / "docs"
+        / "arquitetura"
+        / "adr"
+        / "fase4"
+        / "043-observabilidade-distribuida.md"
+    ).read_text(encoding="utf-8")
     teto = teto_de_traces_do_cluster()
 
     assert compose["services"]["jaeger"]["environment"]["MEMORY_MAX_TRACES"] == teto
     assert f"`MEMORY_MAX_TRACES={teto}`" in DOC
     assert f"(até {teto}," in runbook
+    assert f"(`MEMORY_MAX_TRACES` em {teto}," in adr
 
 
 def alertas_renderizados(caminho: str) -> dict[str, str]:
