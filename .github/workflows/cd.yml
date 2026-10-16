@@ -5,6 +5,10 @@ name: CD
 # Mede minutos e pico de memoria e escreve os dois no summary do job: o
 # deploy-kind de cada servico sobe esta mesma plataforma com os tres servicos.
 #
+# O job e2e sobe a plataforma deste commit com os tres servicos num segundo
+# kind, e roda o E2E BDD da saga e o ZAP baseline na borda (ADR-041). Os dois
+# jobs rodam em paralelo, cada um no seu runner.
+#
 # Sem filtro de paths: o deploy-kind e check obrigatorio do ruleset da main, e
 # check obrigatorio precisa rodar em todo PR.
 on:
@@ -12,7 +16,27 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Reexecuta uma combinacao de commits no job e2e. O platform e sempre o
+  # commit do run: sha_platform so aceita esse valor e existe para os quatro
+  # workflows de CD terem as mesmas entradas.
   workflow_dispatch:
+    inputs:
+      sha_platform:
+        description: "Vazio ou o commit deste run"
+        required: false
+        type: string
+      sha_os_service:
+        description: "Commit do OS Service (40 hexadecimais minusculos); vazio usa o do ultimo CD verde"
+        required: false
+        type: string
+      sha_billing_service:
+        description: "Commit do Billing Service (40 hexadecimais minusculos); vazio usa o do ultimo CD verde"
+        required: false
+        type: string
+      sha_execution_service:
+        description: "Commit do Execution Service (40 hexadecimais minusculos); vazio usa o do ultimo CD verde"
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -88,3 +112,186 @@ jobs:
       - name: Pods, eventos e logs (diagnostico)
         if: failure() || cancelled()
         run: scripts/ci/diagnostico.sh
+
+  # O E2E BDD da saga e o ZAP baseline na borda, contra a plataforma deste
+  # commit e os tres servicos, tudo construido do codigo num kind do runner
+  # (ADR-041, ADR-042). Cada servico entra no commit do ultimo CD verde dele; o
+  # platform, no commit do run. Ainda nao e check obrigatorio do ruleset: vira
+  # depois de alguns runs verdes, como o deploy-kind.
+  e2e:
+    needs: ci
+    if: ${{ !cancelled() && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      # Os quatro inputs do dispatch entram so por env e sao validados antes de
+      # qualquer checkout. Sem input, o commit do ultimo run verde do cd.yml do
+      # servico na main (push); sem run verde ainda (o cd.yml novo, ou o
+      # repositorio sem ele: 404), a main HEAD, com aviso. Qualquer outra falha
+      # da API reprova o passo, em vez de cair na main calado. A mesma consulta
+      # do cd.yml de cada servico.
+      - id: shas
+        name: Commits do platform e dos servicos
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DONO: ${{ github.repository_owner }}
+          SHA_PROPRIO: ${{ github.sha }}
+          SHA_PLATFORM: ${{ inputs.sha_platform }}
+          SHA_OS_SERVICE: ${{ inputs.sha_os_service }}
+          SHA_BILLING_SERVICE: ${{ inputs.sha_billing_service }}
+          SHA_EXECUTION_SERVICE: ${{ inputs.sha_execution_service }}
+        run: |
+          set -euo pipefail
+          padrao='^[0-9a-f]{40}$'
+          for nome in SHA_PLATFORM SHA_OS_SERVICE SHA_BILLING_SERVICE SHA_EXECUTION_SERVICE; do
+            valor=${!nome}
+            if [ -n "$valor" ] && ! [[ "$valor" =~ $padrao ]]; then
+              echo "::error::input $(tr '[:upper:]' '[:lower:]' <<< "$nome") must be 40 lowercase hexadecimal characters"
+              exit 1
+            fi
+          done
+          if [ -n "$SHA_PLATFORM" ] && [ "$SHA_PLATFORM" != "$SHA_PROPRIO" ]; then
+            echo "::error::input sha_platform must be empty or the commit of this run: the platform is built from the commit that started the workflow"
+            exit 1
+          fi
+          erro=$(mktemp)
+          ultimo_verde() {
+            local resposta
+            if ! resposta=$(gh api -X GET "repos/$DONO/$1/actions/workflows/cd.yml/runs" \
+              -f branch=main -f event=push -f status=success -f per_page=1 \
+              --jq '.workflow_runs[0].head_sha // empty' 2> "$erro"); then
+              grep -q 'HTTP 404' "$erro" || { cat "$erro" >&2; return 1; }
+              resposta=""
+            fi
+            echo "$resposta"
+          }
+          # resolver <nome> <input do dispatch>: grava sha_<nome> e origem_<nome>.
+          resolver() {
+            local repo sha origem
+            repo=postech-sw-arch-p4-${1//_/-}
+            if [ -n "$2" ]; then
+              sha=$2
+              origem="dispatch input"
+            else
+              sha=$(ultimo_verde "$repo")
+              origem="last green CD"
+              if [ -z "$sha" ]; then
+                sha=$(gh api "repos/$DONO/$repo/commits/main" --jq .sha)
+                origem="main HEAD, no green CD yet"
+                if [[ "$sha" =~ $padrao ]]; then
+                  echo "::warning::$repo has no green CD run on main yet: using main HEAD $sha"
+                fi
+              fi
+            fi
+            [[ "$sha" =~ $padrao ]] || { echo "::error::could not resolve a commit for $repo"; exit 1; }
+            printf -v "sha_$1" %s "$sha"
+            printf -v "origem_$1" %s "$origem"
+          }
+          resolver os_service "$SHA_OS_SERVICE"
+          resolver billing_service "$SHA_BILLING_SERVICE"
+          resolver execution_service "$SHA_EXECUTION_SERVICE"
+          {
+            echo "sha_os_service=$sha_os_service"
+            echo "sha_billing_service=$sha_billing_service"
+            echo "sha_execution_service=$sha_execution_service"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "### Commits used by the e2e job"
+            echo
+            echo "| Repository | Commit | Origin |"
+            echo "|---|---|---|"
+            echo "| postech-sw-arch-p4-platform | \`$SHA_PROPRIO\` | this run |"
+            echo "| postech-sw-arch-p4-os-service | \`$sha_os_service\` | $origem_os_service |"
+            echo "| postech-sw-arch-p4-billing-service | \`$sha_billing_service\` | $origem_billing_service |"
+            echo "| postech-sw-arch-p4-execution-service | \`$sha_execution_service\` | $origem_execution_service |"
+          } >> "$GITHUB_STEP_SUMMARY"
+      # Os mesmos nomes de pasta do CD dos servicos: o comando de cada passo e
+      # o mesmo nos quatro workflows.
+      - uses: actions/checkout@v7
+        with:
+          path: platform
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/postech-sw-arch-p4-os-service
+          ref: ${{ steps.shas.outputs.sha_os_service }}
+          path: os-service
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/postech-sw-arch-p4-billing-service
+          ref: ${{ steps.shas.outputs.sha_billing_service }}
+          path: billing-service
+          persist-credentials: false
+      - uses: actions/checkout@v7
+        with:
+          repository: ${{ github.repository_owner }}/postech-sw-arch-p4-execution-service
+          ref: ${{ steps.shas.outputs.sha_execution_service }}
+          path: execution-service
+          persist-credentials: false
+      # uv no runner para o make e2e: o Python vem do .python-version do
+      # platform e as dependencias, do uv.lock. Action de terceiro por SHA de
+      # commit (a tag ao lado); as oficiais, por tag.
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: false
+      # kind e kubectl fixados, make kind-up e make deploy no overlay kind-ci,
+      # que tambem gera os Secrets dos servicos. As etapas sao medidas pelo
+      # medir-kind.sh e o resumo sai num passo proprio, mesmo com falha. Cada
+      # passo longo tem prazo proprio: um que pendura nao gasta o job inteiro, e
+      # o diagnostico ainda tem tempo de rodar.
+      - name: Plataforma no kind (overlay kind-ci)
+        timeout-minutes: 15
+        run: platform/scripts/ci/deploy-kind.sh
+      - name: Servicos no kind (todos construidos do codigo)
+        timeout-minutes: 25
+        run: |
+          platform/scripts/medir-kind.sh etapa servicos
+          platform/scripts/ci/implantar-servicos.sh --overlay kind-ci \
+            os-service=os-service billing-service=billing-service execution-service=execution-service
+      - id: smoke
+        name: Smoke por namespace
+        timeout-minutes: 10
+        run: |
+          platform/scripts/medir-kind.sh etapa smoke
+          platform/scripts/ci/smoke-servicos.sh
+      - name: E2E BDD da saga (make e2e)
+        timeout-minutes: 20
+        run: |
+          platform/scripts/medir-kind.sh etapa e2e
+          make -C platform e2e
+      # Depois do E2E, no mesmo kind. Roda mesmo com o E2E reprovado, para um
+      # resultado nao esconder o outro, mas nao sem o smoke verde: sem os
+      # servicos de pe nao ha o que varrer.
+      - name: ZAP baseline na borda
+        if: ${{ !cancelled() && steps.smoke.conclusion == 'success' }}
+        timeout-minutes: 20
+        run: |
+          platform/scripts/medir-kind.sh etapa zap
+          platform/scripts/ci/zap-baseline.sh
+      - name: Minutos e memoria no summary
+        if: always()
+        run: platform/scripts/medir-kind.sh resumo
+      - name: Publica os relatorios do E2E
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-kind
+          path: |
+            platform/reports/
+            !platform/reports/zap/**
+          retention-days: 90
+      - name: Publica o relatorio do ZAP
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: zap-baseline
+          path: platform/reports/zap/
+          retention-days: 90
+      # Tambem no cancelamento, inclusive o do timeout-minutes.
+      - name: Pods, eventos e logs (diagnostico)
+        if: failure() || cancelled()
+        run: platform/scripts/ci/diagnostico.sh
