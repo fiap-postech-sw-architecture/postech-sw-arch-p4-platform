@@ -41,6 +41,7 @@ from e2e.apoio.saga import (
     STATUS_EM_ORDEM,
     achar_acesso,
     comandos_de_compensacao,
+    divergencias_das_metricas,
     sem_id_da_requisicao,
 )
 from e2e.apoio.segredos import mascarar, registrar
@@ -674,7 +675,10 @@ def _fora_da_fila(api: Api, cenario: Cenario) -> None:
     assert all(i["ordem_id"] != cenario.ordem_id for i in api.execucao.fila())
 
 
-@then(parsers.parse('a saga terminou como "{etapa}"'))
+# parsers.re casa o texto inteiro (fullmatch): com parsers.parse, {etapa} aceitaria
+# `compensada" pelo motivo "x` e este passo taparia o de baixo, conforme a ordem em que
+# test_saga.py e test_mp_sandbox.py registram os passos.
+@then(parsers.re(r'a saga terminou como "(?P<etapa>[^"]+)"'))
 def _saga_terminou(api: Api, cenario: Cenario, etapa: str) -> None:
     saga = esperar_saga(api, cenario, etapa)
     assert saga["falha"] is None
@@ -921,6 +925,23 @@ def _api_responde(cenario: Cenario, status: int) -> None:
     resposta = cenario.ultima_resposta
     assert resposta is not None
     assert resposta.status_code == status, f"HTTP {resposta.status_code}"
+
+
+@when("consulto as métricas das OS sem token")
+def _metricas_sem_token(api: Api, cenario: Cenario) -> None:
+    cenario.ultima_resposta = api.os.metricas(None)
+
+
+@when("o administrador consulta as métricas das OS")
+def _metricas_do_admin(api: Api, cenario: Cenario) -> None:
+    cenario.ultima_resposta = api.os.metricas("admin")
+
+
+@then("a resposta traz o total e as OS dos nove status")
+def _metricas_com_os_nove_status(cenario: Cenario) -> None:
+    resposta = cenario.ultima_resposta
+    assert resposta is not None
+    assert divergencias_das_metricas(resposta.json()) == []
 
 
 @then(parsers.parse('o erro tem o código "{codigo}"'))

@@ -2,14 +2,27 @@
 
 from __future__ import annotations
 
+import json
 import os
 import stat
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from e2e.apoio.segredos import CREDENCIAIS_DO_AMBIENTE
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
+
+# Credenciais de mentira: o formato imita o do Mercado Pago so para a mascara e a
+# varredura as reconhecerem. Nenhuma vale em lugar nenhum.
+CHAVE_DO_MP = "TEST-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
+CHAVE_APP_USR = (
+    "APP_USR-1234567890123456-101420-0a1b2c3d4e5f60718293a4b5c6d7e8f9-123456789"
+)
+ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
+# Sem prefixo de token conhecido: a mascara central so a pega se foi registrada.
+CHAVE_OPACA = "opaco-0123456789-abcdef"
 
 
 class Relogio:
@@ -89,7 +102,8 @@ class ClusterFalso:
 
 # kubectl falso: "sai" morre com erro; "nao-escuta" fica vivo sem abrir a porta;
 # "jaeger" (um dos Services da sessao) morre com erro; o resto escuta. Todo
-# processo anota o proprio pid em pids, ao lado do script.
+# processo anota o proprio pid em pids, ao lado do script, e quais credenciais do
+# Mercado Pago (nunca o valor) havia no ambiente que recebeu, em ambiente.
 _KUBECTL_FALSO = """\
 #!{python}
 import os, socket, sys, time
@@ -97,6 +111,8 @@ from pathlib import Path
 args = sys.argv[1:]
 with Path(__file__).with_name("pids").open("a") as pids:
     pids.write(f"{{os.getpid()}}\\n")
+with Path(__file__).with_name("ambiente").open("a") as ambiente:
+    ambiente.write(",".join(c for c in {credenciais!r} if c in os.environ) + "\\n")
 if "sai" in args or "svc/jaeger" in args:
     sys.stderr.write("error: unable to listen on port: address already in use\\n")
     sys.exit(3)
@@ -113,13 +129,22 @@ time.sleep(60)
 def criar_kubectl_falso(tmp_path: Path) -> Path:
     """Escreve o kubectl falso (um script Python executavel) em ``tmp_path``."""
     caminho = tmp_path / "kubectl"
-    caminho.write_text(_KUBECTL_FALSO.format(python=sys.executable))
+    caminho.write_text(
+        _KUBECTL_FALSO.format(
+            python=sys.executable, credenciais=CREDENCIAIS_DO_AMBIENTE
+        )
+    )
     caminho.chmod(caminho.stat().st_mode | stat.S_IXUSR)
     return caminho
 
 
 def pids_do_kubectl_falso(kubectl_falso: Path) -> list[int]:
     return [int(p) for p in kubectl_falso.with_name("pids").read_text().split()]
+
+
+def credenciais_vistas_pelo_kubectl_falso(kubectl_falso: Path) -> list[str]:
+    """Por processo que o kubectl falso viu, as credenciais que havia no ambiente."""
+    return kubectl_falso.with_name("ambiente").read_text().splitlines()
 
 
 def processo_vivo(pid: int) -> bool:
@@ -142,6 +167,8 @@ args = sys.argv[1:]
 nome = Path(sys.argv[0]).name
 with (estado / "chamadas").open("a") as chamadas:
     chamadas.write(nome + " " + " ".join(args) + "\\n")
+with (estado / "ambiente").open("a") as ambiente:
+    ambiente.write(",".join(c for c in {credenciais!r} if c in os.environ) + "\\n")
 juntos = " ".join(args)
 if nome == "docker":
     print("127.0.0.1:443")
@@ -171,6 +198,12 @@ elif "get pods" in juntos:
 sys.exit(0)
 """
 
+
+def credenciais_vistas_pelo_cluster_falso(estado: Path) -> list[str]:
+    """Por chamada ao kubectl ou ao docker falsos, as credenciais no ambiente dela."""
+    return (estado / "ambiente").read_text().splitlines()
+
+
 KIND_CI_NO_BILLING = {
     "ORCAMENTO_VALIDADE_HORAS": "0.02",
     "PAGAMENTO_MAX_RECUSAS": "1",
@@ -199,10 +232,49 @@ def criar_cluster_falso(pasta: Path) -> Path:
         )
     )
     (estado / "chamadas").write_text("")
+    (estado / "ambiente").write_text("")
     bin_ = pasta / "bin"
     bin_.mkdir()
     for nome in ("kubectl", "docker"):
         script = bin_ / nome
-        script.write_text(_CLUSTER_FALSO.replace("{python}", sys.executable))
+        script.write_text(
+            _CLUSTER_FALSO.replace("{python}", sys.executable).replace(
+                "{credenciais!r}", repr(CREDENCIAIS_DO_AMBIENTE)
+            )
+        )
         script.chmod(script.stat().st_mode | stat.S_IXUSR)
     return estado
+
+
+# kubectl falso que grava cada chamada (argv e o stdin, se o comando le `-f -`) em
+# `chamadas.jsonl`, ao lado do script. Os Deployments do namespace respondem como
+# os do Billing; o resto sai com 0. Serve a provar o que passa por argv e o que so
+# passa pelo stdin.
+_KUBECTL_GRAVADOR = """\
+#!{python}
+import json, sys
+from pathlib import Path
+args = sys.argv[1:]
+entrada = ""
+if "-f" in args and args[args.index("-f") + 1] == "-":
+    entrada = sys.stdin.read()
+with Path(__file__).with_name("chamadas.jsonl").open("a") as arquivo:
+    arquivo.write(json.dumps({{"argv": args, "stdin": entrada}}) + "\\n")
+if "get" in args and "deployment" in args and "name" in args:
+    print("deployment.apps/billing-service-api")
+    print("deployment.apps/billing-service-consumidor")
+"""
+
+
+def criar_kubectl_gravador(pasta: Path) -> Path:
+    """Escreve o kubectl gravador em ``pasta`` e devolve o caminho dele."""
+    caminho = pasta / "kubectl"
+    caminho.write_text(_KUBECTL_GRAVADOR.format(python=sys.executable))
+    caminho.chmod(caminho.stat().st_mode | stat.S_IXUSR)
+    return caminho
+
+
+def chamadas_do_gravador(kubectl: Path) -> list[dict[str, Any]]:
+    """As chamadas que o kubectl gravador recebeu, na ordem."""
+    arquivo = kubectl.with_name("chamadas.jsonl")
+    return [json.loads(linha) for linha in arquivo.read_text().splitlines()]

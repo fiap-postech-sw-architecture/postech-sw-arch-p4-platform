@@ -2,30 +2,82 @@
 
 from __future__ import annotations
 
+import contextlib
+import json
+import os
+import signal
 import subprocess  # nosec B404
 import sys
-from typing import TYPE_CHECKING
+import time
+from pathlib import Path
 
 import pytest
 
 from e2e.apoio import segredos
 from e2e.apoio.espera import TempoEsgotadoError
 from e2e.apoio.kube import (
+    ComandoAusenteError,
     ErroDeComandoError,
     Kubectl,
     PortForward,
     executar_processo,
 )
-from e2e_apoio.falsos import pids_do_kubectl_falso, processo_vivo
+from e2e_apoio.falsos import (
+    ASSINATURA,
+    CHAVE_DO_MP,
+    credenciais_vistas_pelo_kubectl_falso,
+    pids_do_kubectl_falso,
+    processo_vivo,
+)
 
-if TYPE_CHECKING:
-    from pathlib import Path
+RAIZ = Path(__file__).resolve().parents[2]
 
 
 def test_executar_processo_devolve_a_saida() -> None:
     assert (
         executar_processo([sys.executable, "-c", "print('ola')"], 10).strip() == "ola"
     )
+
+
+def test_executar_processo_nao_passa_as_credenciais_ao_filho(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # O pytest e o conferir_sandbox tem as credenciais no ambiente ate o preflight as
+    # tirar; o kubectl e o docker da conferencia previa e da fixture rodam antes disso.
+    monkeypatch.setenv("MP_ACCESS_TOKEN", CHAVE_DO_MP)
+    monkeypatch.setenv("MP_WEBHOOK_SECRET", ASSINATURA)
+    monkeypatch.setenv("OUTRA_VARIAVEL_DO_TESTE", "continua")
+    programa = "import json, os; print(json.dumps(sorted(os.environ)))"
+
+    nomes = json.loads(executar_processo([sys.executable, "-c", programa], 10))
+
+    assert "OUTRA_VARIAVEL_DO_TESTE" in nomes, "o resto do ambiente chega ao filho"
+    assert "MP_ACCESS_TOKEN" not in nomes
+    assert "MP_WEBHOOK_SECRET" not in nomes
+
+
+def test_executar_processo_entrada_vai_so_pelo_stdin_e_nao_pelo_argv() -> None:
+    programa = "import sys; sys.stdout.write(sys.stdin.read().upper())"
+
+    saida = executar_processo([sys.executable, "-c", programa], 10, "token-secreto")
+
+    assert saida == "TOKEN-SECRETO"
+    assert "token-secreto" not in programa
+
+
+def test_executar_processo_de_programa_ausente_diz_que_nao_esta_no_path() -> None:
+    with pytest.raises(ComandoAusenteError) as erro:
+        executar_processo(["programa-que-nao-existe-9f3a", "get", "nodes"], 10)
+
+    assert isinstance(erro.value, ErroDeComandoError)
+    assert "programa-que-nao-existe-9f3a não está no PATH" in str(erro.value)
+    assert "instale-o" in str(erro.value)
+
+
+def test_executar_processo_sem_entrada_o_stdin_e_vazio() -> None:
+    programa = "import sys; print(repr(sys.stdin.read()))"
+
+    assert executar_processo([sys.executable, "-c", programa], 10).strip() == "''"
 
 
 def test_executar_processo_codigo_de_saida_diferente_de_zero_reprova_sem_segredo() -> (
@@ -60,6 +112,19 @@ def test_port_forward_abre_a_porta_e_fecha_no_fim(kubectl_falso: Path) -> None:
 
     with pytest.raises(OSError, match=r"refused|Connection"):
         socket.create_connection(("127.0.0.1", ponte.porta), timeout=2)
+
+
+def test_port_forward_nao_passa_as_credenciais_ao_kubectl(
+    kubectl_falso: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("MP_ACCESS_TOKEN", CHAVE_DO_MP)
+    monkeypatch.setenv("MP_WEBHOOK_SECRET", ASSINATURA)
+    kubectl = Kubectl("kind-x", binario=str(kubectl_falso))
+
+    with PortForward(kubectl, "ns", "svc/mailpit", 8025):
+        pass
+
+    assert credenciais_vistas_pelo_kubectl_falso(kubectl_falso) == [""]
 
 
 def test_port_forward_garantir_religa_o_kubectl_que_morreu(kubectl_falso: Path) -> None:
@@ -191,3 +256,52 @@ def test_port_forward_sem_iniciar_nao_tem_stderr_para_mostrar() -> None:
     ponte = PortForward(Kubectl("kind-x"), "ns", "svc/x", 1)
 
     assert ponte._ultimas_linhas_do_erro() == ""
+
+
+def test_executar_processo_roda_em_sessao_propria_e_o_ctrl_c_do_terminal_nao_o_alcanca(
+    tmp_path: Path,
+) -> None:
+    # O Ctrl-C do terminal vai ao grupo de processos inteiro (os.killpg). O Python do
+    # desfazer o ignora, mas o kubectl em voo morreria junto sem a sessao propria.
+    filho = tmp_path / "filho.py"
+    filho.write_text(
+        "import signal, time\n"
+        "from pathlib import Path\n"
+        f"pasta = Path({str(tmp_path)!r})\n"
+        "signal.signal(signal.SIGINT, lambda *_: (pasta / 'sigint').write_text('1'))\n"
+        "(pasta / 'inicio').write_text('1')\n"
+        "time.sleep(1.5)\n"
+        "(pasta / 'fim').write_text('1')\n"
+    )
+    lider = tmp_path / "lider.py"
+    lider.write_text(
+        "import signal, sys\n"
+        "from e2e.apoio.kube import executar_processo\n"
+        "signal.signal(signal.SIGINT, signal.SIG_IGN)\n"
+        f"executar_processo([sys.executable, {str(filho)!r}], 30)\n"
+    )
+    # start_new_session: o killpg do teste so alcanca o lider e o filho dele.
+    processo = subprocess.Popen(  # noqa: S603  # nosec B603
+        [sys.executable, str(lider)],
+        env={**os.environ, "PYTHONPATH": str(RAIZ)},
+        start_new_session=True,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        limite = time.monotonic() + 30
+        while not (tmp_path / "inicio").exists():
+            assert time.monotonic() < limite, "o filho nao chegou a rodar"
+            time.sleep(0.05)
+        os.killpg(processo.pid, signal.SIGINT)
+        processo.wait(timeout=30)
+    finally:
+        # Sobra de grupo so se o teste falhar; com o grupo ja vazio, nao ha o que matar.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(processo.pid, signal.SIGKILL)
+        processo.wait()
+
+    assert processo.returncode == 0
+    assert (tmp_path / "fim").exists()
+    assert not (tmp_path / "sigint").exists(), "o kubectl recebeu o Ctrl-C do terminal"

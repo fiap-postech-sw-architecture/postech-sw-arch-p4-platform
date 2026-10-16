@@ -66,7 +66,7 @@ Fora do escopo:
 - Operação de produção (alta disponibilidade, backup).
 - Filiais como dimensão do modelo: as "múltiplas filiais" do enunciado (l. 15) não mudam os dados nesta fase; a escala vem de réplicas e do HPA (*Horizontal Pod Autoscaler*), e o volume de cada serviço cabe num nó (ADR-037).
 
-Continua da fase 1 o tempo médio de execução (RF-008), agora calculado por status a partir do histórico da OS ([seção 6.1](#61-rotas-por-serviço)).
+Continua da fase 3 o tempo médio por status (RF-027), agora calculado do histórico da OS ([seção 6.1](#61-rotas-por-serviço)); o tempo médio de execução por serviço (RF-008, da fase 1) passa a sair do banco da Execução.
 
 ### 1.1 Tecnologias
 
@@ -724,7 +724,7 @@ Papel exigido em cada rota: matriz única do [ADR-039](../../adr/fase4/039-auten
 | `/api/v1/clientes` (clientes, veículos e rotas da LGPD do p3; CPF ou CNPJ validado pelo dígito verificador, módulo 11, e placa validada antes de consultar; a eliminação de dados envia `AnonimizarVeiculo`) | JWT |
 | `POST /api/v1/ordens-de-servico` (abre a OS e inicia a saga); `GET /api/v1/ordens-de-servico` (fila por prioridade de status) | JWT |
 | `GET /api/v1/ordens-de-servico/{id}` (com resumo de orçamento, pagamento e etapa); `GET .../{id}/historico` (duas listas, cada uma na sua ordem: `mudancas`, as transições de status com ator e motivo, e `passos`, os registros da saga) | JWT |
-| `GET /api/v1/ordens-de-servico/metricas` (tempo médio por status, calculado do histórico; RF-008 da fase 1) | JWT (admin) |
+| `GET /api/v1/ordens-de-servico/metricas` (RF-027 da fase 3; 200 com `total`, `por_status`, com os nove status e zero onde não há OS, e `tempo_medio_por_status_segundos`, esparso, em segundos, só com o status que teve permanência concluída nos últimos 30 dias, calculada do histórico; 401 sem token e 403 sem o papel admin) | JWT (admin) |
 | `POST /api/v1/ordens-de-servico/{id}/cancelamento` (202 com a etapa; 409 depois do pivot; respostas abaixo); `POST .../{id}/entrega` (T10) | JWT |
 | `GET /api/v1/sagas/{ordem_id}` (etapa, motivo, falha, plano restante com a compensação pendente primeiro, comando em voo com tipo e hora do envio, reenvios, prazo e registros de `passos`); `POST /api/v1/sagas/{ordem_id}/compensacao` (retoma a compensação suspensa; respostas abaixo) | JWT (admin) |
 | `POST /api/v1/publico/acompanhamento` (placa e documento no corpo, nunca na URL; documento validado pelo módulo 11 e placa pelo formato antes da consulta, com o mesmo 404 para dado inválido e para OS não encontrada) | sem JWT |
@@ -919,6 +919,7 @@ erDiagram
     itens_estoque {
         uuid id PK
         varchar sku UK "até 50 caracteres"
+        varchar nome "até 255 caracteres"
         int quantidade_disponivel
         int quantidade_reservada
         boolean ativo
@@ -929,6 +930,8 @@ erDiagram
         varchar status "ATIVA, LIBERADA, CONSUMIDA ou RECUSADA"
         jsonb itens "sku e quantidade"
         jsonb faltantes "sku, solicitado e disponivel"
+        timestamptz criada_em
+        timestamptz encerrada_em
     }
     diagnosticos {
         uuid ordem_id PK
@@ -936,8 +939,12 @@ erDiagram
         text descricao_problema "texto livre: marcador na eliminação LGPD"
         varchar status
         uuid mecanico_id
-        jsonb itens
+        jsonb itens "tipo (servico ou peca), codigo e quantidade"
         text observacoes "texto livre: marcador na eliminação LGPD"
+        timestamptz solicitado_em
+        timestamptz iniciado_em
+        timestamptz concluido_em
+        timestamptz descartado_em
         uuid solicitacao_id "id do SolicitarDiagnostico"
         varchar traceparent
         varchar tracestate
@@ -948,7 +955,10 @@ erDiagram
         varchar status
         varchar prioridade "normal ou alta"
         uuid mecanico_id
+        timestamptz enfileirada_em "ordem de chegada na fila"
         timestamptz iniciada_em
+        timestamptz finalizada_em
+        timestamptz cancelada_em
         uuid agendamento_id "id do AgendarExecucao"
         varchar traceparent
         varchar tracestate
@@ -974,7 +984,7 @@ erDiagram
     itens_estoque }o--o{ reservas : "sku nos itens"
 ```
 
-Ao contrário do p3, reservar não consome o saldo: a reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. A reserva guarda os itens em JSONB e, quando recusada, os faltantes que seguem em `ReservaDePecasFalhou`. `ordem_id` é referência lógica, sem chave estrangeira, e único por tabela (a chave primária de diagnóstico e execução), o que torna reserva, diagnóstico e execução idempotentes por OS e sustenta a lápide.
+Ao contrário do p3, reservar não consome o saldo: a reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. A reserva guarda os itens em JSONB e, quando recusada, os faltantes que seguem em `ReservaDePecasFalhou`. O coletor da API lê `execucoes.iniciada_em` e `finalizada_em` com `diagnosticos.itens` (o tempo médio de execução por serviço, RF-008 da fase 1) e `reservas.criada_em` com `reservas.faltantes` (as peças em falta), ambos numa janela de 7 dias. `ordem_id` é referência lógica, sem chave estrangeira, e único por tabela (a chave primária de diagnóstico e execução), o que torna reserva, diagnóstico e execução idempotentes por OS e sustenta a lápide.
 
 Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent` e o `tracestate` e o `id` do comando que os abriu (`solicitacao_id` e `agendamento_id`), de onde saem o `causation_id` e o pai do trace dos eventos que o mecânico provoca. O diagnóstico guarda o retrato do veículo, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois e, no diagnóstico, também `descricao_problema` e `observacoes`, que são texto livre (seção 5.3). Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
 
@@ -1097,19 +1107,19 @@ Métricas novas levam o prefixo `pytstop_`; as herdadas do p3 mantêm o nome (`o
 | `pytstop_saga_finalizadas_total{resultado}` | contador; `resultado` em `concluida` ou `compensada` | consumidor |
 | `pytstop_saga_compensacoes_total{motivo}` | contador | quem inicia a compensação (consumidor, api ou `prazos`) |
 | `pytstop_saga_etapa_duracao_segundos{etapa}` | histograma | quem tira a saga da etapa |
-| `pytstop_saga_reenvios_total{comando}` | contador; `comando` é o tipo do comando reenviado | `prazos` (entra com o PR de prazos e retomada do OS Service) |
-| `pytstop_saga_prazos_esgotados_total{comando}` | contador | `prazos` (entra com o PR de prazos e retomada do OS Service) |
+| `pytstop_saga_reenvios_total{comando}` | contador; `comando` é o tipo do comando reenviado | `prazos` |
+| `pytstop_saga_prazos_esgotados_total{comando}` | contador | `prazos` |
 | `pytstop_saga_ativas{etapa}` | gauge: instâncias em cada etapa não final | coletor da API |
 | `pytstop_saga_etapa_mais_antiga_segundos{etapa}` | gauge: idade da instância mais antiga em cada etapa | coletor da API |
-| `pytstop_saga_prazo_vencido_segundos` | gauge: maior atraso, `agora` menos (`entregue_em` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS`) da linha da outbox do envio mais recente, entre as instâncias com esse envio entregue e o prazo vencido; zero sem atraso | coletor da API (entra com o PR de prazos e retomada do OS Service) |
+| `pytstop_saga_prazo_vencido_segundos` | gauge: maior atraso, `agora` menos (`entregue_em` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS`) da linha da outbox do envio mais recente, entre as instâncias com esse envio entregue e o prazo vencido; zero sem atraso | coletor da API |
 | `pytstop_saga_coletor_disponivel` | gauge: 1 se o coletor leu as sagas nesta raspagem, 0 se falhou | coletor da API |
 | `pytstop_saga_coletor_falhas_total` | contador: raspagens em que o coletor não leu as sagas | coletor da API |
 
-Os gauges da saga saem de uma consulta que o coletor da API faz na hora da raspagem, à tabela `sagas` e, no prazo vencido (que entra com o PR de prazos e retomada do OS Service), também à `outbox` (o envio mais recente de cada instância), e por isso continuam certos com o `prazos` fora do ar. O comando que ainda espera na outbox não entra no prazo vencido: quem o acusa é o alerta de outbox parada. Se a leitura falha (banco fora, tabela travada, prazo de 2 s esgotado), o coletor omite os gauges de contagem e de idade, que ficam ausentes e nunca zero, soma uma falha em `pytstop_saga_coletor_falhas_total` e publica `pytstop_saga_coletor_disponivel` em 0; o alerta de saga parada olha essa série, para não ficar mudo com o coletor quebrado. O label `etapa` leva o valor gravado na coluna, em minúsculas (`falha_na_compensacao`, [seção 7.2](#72-os-service-postgresql-16)), e o `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. Mensageria, Mercado Pago, circuit breaker, webhook, JWKS, Kong e bancos têm métricas próprias, com os nomes no ADR-043.
+Os gauges da saga saem de uma consulta que o coletor da API faz na hora da raspagem, à tabela `sagas` e, no prazo vencido, também à `outbox` (o envio mais recente de cada instância), e por isso continuam certos com o `prazos` fora do ar. O comando que ainda espera na outbox não entra no prazo vencido: quem o acusa é o alerta de outbox parada. O coletor é um só por API: abre uma conexão por raspagem e faz uma consulta por gauge (as sagas, a idade da outbox e as OS por status), cada uma na sua transação, com 2 s de execução e 1 s de espera por lock, dentro de 5 s para a raspagem inteira, e guarda a leitura das OS por status por 30 s. Se a leitura das sagas falha (banco fora, tabela travada, prazo esgotado), o coletor omite os gauges de contagem e de idade, que ficam ausentes e nunca zero, soma uma falha em `pytstop_saga_coletor_falhas_total` e publica `pytstop_saga_coletor_disponivel` em 0; o alerta de saga parada olha essa série, para não ficar mudo com o coletor quebrado. A falha de outra consulta omite só o gauge dela. Duas raspagens ao mesmo tempo fazem a segunda sair com `pytstop_saga_coletor_disponivel` em 0, porque a leitura é uma por vez, e o `for` do alerta cobre isso. O label `etapa` leva o valor gravado na coluna, em minúsculas (`falha_na_compensacao`, [seção 7.2](#72-os-service-postgresql-16)), e o `motivo` é enumeração fechada: `orcamento_recusado`, `orcamento_expirado`, `geracao_falhou`, `reserva_falhou`, `pagamento_recusado`, `pagamento_expirado`, `cancelamento` e `prazo_tecnico`. Mensageria, Mercado Pago, circuit breaker, webhook, JWKS, Kong, bancos e as de negócio (OS por status, tempo médio por status, tempo até a decisão do orçamento, valor dos pagamentos em centavos, tempo de execução por serviço e peças em falta) têm métricas próprias, com os nomes no ADR-043 e, com o tipo, os rótulos e o processo que emite cada uma, no catálogo do `observabilidade/README.md`.
 
 Coleta: o Prometheus raspa por pod, com `kubernetes_sd`, a porta `metrics` de todo Deployment nos namespaces `pytstop-*` e no da plataforma, com o label `processo` (api, relay, consumidor, `notificador` e `prazos`; o `notificador` só existe no OS Service).
 
-Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do `platform`, documentados painel a painel: Saga, Mensageria, Serviços (taxa, erros e duração, o RED, mais recursos e respostas 401, 403 e 429 do Kong) e Negócio (inclusive o tempo médio por status do RF-008). Alertas, com níveis de aviso e de alerta (Microsserviços II, Aula 06): DLQ com mensagens, compensações acima do normal, saga parada, 5xx acima de 1%, circuit breaker aberto, outbox parada (idade da linha pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, acima de 300 s por 5 minutos; métrica decidida, ainda não implementada), outbox com linha morta (`outbox_dead` acima de zero), fila de trabalho sem consumidor, assinatura inválida no webhook e falha na busca do JWKS. Em `alertas.yaml` estão hoje DLQ com mensagens, saga parada e o 5xx do gateway; os outros estão decididos e entram com as métricas dos serviços. Saga parada é prazo técnico vencido e não tratado há mais de 60 s (duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão), em qualquer etapa, ou alguma instância em `FALHA_NA_COMPENSACAO`, ou o coletor das sagas indisponível (`pytstop_saga_coletor_disponivel` em 0, ou a série ausente com a API de pé), por 5 minutos; cada condição dispara sozinha, mesmo sem a série da outra. O procedimento está no [runbook da saga](../../../operacao/runbook-saga.md). Expressões e janelas ficam no ADR-043.
+Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do `platform`, documentados painel a painel: Saga, Mensageria, Serviços (taxa, erros e duração, o RED, mais recursos e respostas 401, 403 e 429 do Kong) e Negócio, que se dividem em nove arquivos (o da plataforma, quatro técnicos e quatro de negócio, em JSON separado e documentados em `observabilidade/negocio.md`). O Negócio traz o volume diário de OS e o tempo médio por status (o RF-027 da fase 3, no mesmo cálculo de `GET /api/v1/ordens-de-servico/metricas`) e o tempo médio de execução por serviço (o RF-008 da fase 1). Alertas, com níveis de aviso e de alerta (Microsserviços II, Aula 06): DLQ com mensagens, compensações acima do normal, saga parada, 5xx acima de 1% e latência p95 acima de 500 ms por serviço, circuit breaker aberto, outbox parada (idade da linha pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, acima de 300 s por 5 minutos), outbox com linha morta (`outbox_dead` acima de zero), fila de trabalho sem consumidor, serviço fora do ar, banco fora do ar, assinatura inválida no webhook e falha na busca do JWKS. Todos estão em `observabilidade/grafana/` e cada um tem no promtool um caso que dispara e um que não dispara. Saga parada é prazo técnico vencido e não tratado há mais de 60 s (duas vezes o `PRAZOS_INTERVALO_SEGUNDOS` padrão), em qualquer etapa, ou alguma instância em `FALHA_NA_COMPENSACAO`, ou o coletor das sagas indisponível (`pytstop_saga_coletor_disponivel` em 0, ou a série ausente com a API de pé), por 5 minutos; cada condição dispara sozinha, mesmo sem a série da outra. O procedimento está no [runbook da saga](../../../operacao/runbook-saga.md). Expressões e janelas ficam no ADR-043 e na tabela de alertas do `observabilidade/README.md`.
 
 ## 10. Implantação
 

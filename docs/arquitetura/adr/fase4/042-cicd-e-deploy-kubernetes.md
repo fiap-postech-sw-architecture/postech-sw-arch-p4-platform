@@ -76,7 +76,7 @@ O overlay `kind-ci` é enxuto: sem Loki, Promtail e Grafana, uma réplica por De
 | Mailpit e kube-state-metrics | 64/128 Mi cada | p3 | 12 e 13 Mi |
 | Total, sem metrics-server e Jobs | cerca de 3,4/8,7 GiB | | só a plataforma, sem os três serviços e os bancos: nó do kind inteiro, working set de até 1,5 GiB e pico de 3,5 GiB no cgroup |
 
-O Prometheus retém 15 dias, num PVC (volume persistente do Kubernetes) no lugar do `emptyDir` da fase 3: o painel de volume diário de OS pede dias de histórico, e com a retenção de 2 dias no kind (7 no k3s) mostraria no máximo duas barras no kind. Está decidido e ainda não aplicado: os manifestos retêm hoje 2 dias (7 no k3s) num `emptyDir`, e a troca entra com os painéis de negócio. O volume não muda a tabela de memória.
+O Prometheus retém 15 dias, num PVC (volume persistente do Kubernetes) de 2 Gi no lugar do `emptyDir` da fase 3, nos overlays `kind` e `k3s`: o painel de volume diário de OS pede dias de histórico, e com a retenção de 2 dias do kind mostraria no máximo duas barras. O `kind-ci` segue com `emptyDir` e 2 dias, porque o runner é descartável. O limite de tamanho (`retention.size`) fica em 1536MB, três quartos do volume, porque o WAL conta nele. O volume não muda a tabela de memória.
 
 O total estimado fica abaixo de 10 GiB no runner padrão de 16 GB, o que o GitHub dá a repositório público; os quatro repositórios da fase 4 são públicos, e o orçamento depende disso. Cada job tem `timeout-minutes`, cada etapa do deploy tem `kubectl wait --timeout`, e o `deploy-kind` mede minutos e pico de memória e os escreve no summary.
 

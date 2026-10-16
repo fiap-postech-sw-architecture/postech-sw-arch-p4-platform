@@ -4,7 +4,7 @@
   "description": "Parte de infraestrutura de dois dashboards do ADR-043: Mensageria (painéis 1 a 8: filas, DLQ e dead-letter do RabbitMQ) e Serviços (painéis 9 a 11: alvos do Prometheus e tráfego do gateway Kong). Documentação painel a painel em observabilidade/README.md.",
   "tags": [
     "pytstop",
-    "plataforma"
+    "tecnico"
   ],
   "timezone": "browser",
   "refresh": "30s",
@@ -14,11 +14,27 @@
   },
   "schemaVersion": 39,
   "editable": false,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "external link",
+      "includeVars": false,
+      "keepTime": true,
+      "tags": [
+        "pytstop"
+      ],
+      "targetBlank": false,
+      "title": "Dashboards PytStop",
+      "tooltip": "",
+      "type": "dashboards",
+      "url": ""
+    }
+  ],
   "panels": [
     {
       "id": 1,
       "title": "Mensagens nas DLQs",
-      "description": "Mensagens paradas em cada fila .dlq. Fica verde em zero; qualquer valor acima de zero significa comando ou evento que esgotou os retries ou falhou de forma permanente, e a saga daquela OS espera intervenção. A mensagem fica até 7 dias na DLQ e depois é descartada (carrega dado pessoal). Mesmo critério do alerta \"DLQ com mensagens\".",
+      "description": "Um quadro por DLQ, verde em zero e vermelho a partir de uma mensagem. Mensagem aqui esgotou os retries ou falhou de forma permanente, e a saga daquela OS (ordem de serviço) está parada esperando alguém olhar. A DLQ guarda cada mensagem por até 7 dias e depois a descarta, porque ela carrega dado pessoal. Mesmo critério do alerta `pytstop-dlq-com-mensagens`; corrigida a causa, `make redrive FILA=<fila>` a devolve para a fila.",
       "type": "stat",
       "gridPos": {
         "h": 5,
@@ -78,7 +94,7 @@
     {
       "id": 2,
       "title": "Consumidores por fila",
-      "description": "Consumidores conectados em cada fila principal (billing.comandos, execucao.comandos, os.eventos). Zero em vermelho: o consumidor daquele serviço caiu e as mensagens vão se acumular.",
+      "description": "Consumidores conectados em `billing.comandos`, `execucao.comandos` e `os.eventos`. Zero (vermelho) quer dizer que o consumidor do serviço caiu e as mensagens vão acumular no painel 4.",
       "type": "stat",
       "gridPos": {
         "h": 5,
@@ -138,7 +154,7 @@
     {
       "id": 3,
       "title": "Alarmes do broker",
-      "description": "Alarmes de memória e de disco do RabbitMQ. Com qualquer um ativo o broker bloqueia todos os publishers e a saga para de andar.",
+      "description": "OK ou ALARME para memória e disco. Com qualquer alarme ativo o RabbitMQ bloqueia todos os publishers; o limite de memória é o `vm_memory_high_watermark` de `k8s/base/rabbitmq/rabbitmq.conf`.",
       "type": "stat",
       "gridPos": {
         "h": 5,
@@ -221,7 +237,7 @@
     {
       "id": 4,
       "title": "Mensagens prontas por fila",
-      "description": "Mensagens esperando consumidor em cada fila principal. Crescimento contínuo indica consumidor lento ou parado.",
+      "description": "Mensagens esperando consumidor em cada fila de trabalho. Pico que desce é carga normal; crescimento contínuo é consumidor lento ou parado (confira o painel 2). A fila cheia (10000 mensagens) recusa a publicação.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -255,7 +271,7 @@
     {
       "id": 5,
       "title": "Mensagens em processamento (sem ack)",
-      "description": "Mensagens entregues a um consumidor e ainda sem confirmação. Valor alto e parado sugere handler travado; o prefetch de cada consumidor é o teto por conexão.",
+      "description": "Entregues e ainda sem confirmação. O teto é o prefetch de cada consumidor; valor alto e parado sugere handler travado.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -289,7 +305,7 @@
     {
       "id": 6,
       "title": "Entrada por fila (msg/s)",
-      "description": "Taxa de mensagens roteadas para cada fila, incluindo as republicações nas filas de retry (uma por atraso, <fila>.retry.1s a <fila>.retry.300s). Mostra o ritmo de comandos e eventos da saga.",
+      "description": "Ritmo de comandos e eventos roteados para cada fila, incluindo as republicações nas filas de retry (uma por atraso, `<fila>.retry.1s` a `<fila>.retry.300s`). Durante uma saga aparecem os degraus de cada passo.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -322,7 +338,7 @@
     {
       "id": 7,
       "title": "Aguardando retry e DLQ",
-      "description": "Profundidade das filas de retry, uma por atraso (<fila>.retry.1s a <fila>.retry.300s, mensagens esperando o TTL da fila para voltar à fila principal), e das .dlq. Retry que sobe e desce é o mecanismo funcionando; DLQ deveria ficar em zero (e descarta o que passar de 7 dias).",
+      "description": "Profundidade das filas de retry, uma por atraso (`<fila>.retry.1s` a `<fila>.retry.300s`, mensagens esperando o TTL da fila para voltar), e das `.dlq` ao longo do tempo. Retry que sobe e desce é o mecanismo funcionando; DLQ deveria ficar em zero e descarta o que passar de 7 dias.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -356,7 +372,7 @@
     {
       "id": 8,
       "title": "Dead-letter por motivo (msg/s)",
-      "description": "Mensagens que saíram de uma fila por dead-letter, por motivo. \"rejeitada\" vai para a DLQ; \"volta do retry\" é o TTL vencendo nas filas de retry, o caminho normal de uma nova tentativa; \"descartada da DLQ\" é mensagem que passou 7 dias na DLQ sem ninguém tratar; \"limite de entregas\" é mensagem que chegou ao limite de 5 entregas das filas de trabalho (`delivery-limit`), em geral porque derrubou o consumidor a cada entrega, e vai para a DLQ na sexta; \"sem rota\" é publicação com routing key que nenhuma fila escuta (contrato quebrado).",
+      "description": "Na ordem: \"rejeitada\" é o que foi para a DLQ; \"volta do retry\" é o TTL vencendo nas filas de retry, o caminho normal de uma nova tentativa; \"descartada da DLQ\" é mensagem que passou 7 dias na DLQ sem tratamento (a DLQ não tem dead-letter); \"limite de entregas\" é mensagem que chegou ao limite de 5 entregas das filas de trabalho (`delivery-limit`), em geral porque derrubou o consumidor a cada entrega, e vai para a DLQ na sexta; \"sem rota\" é publicação com routing key que nenhuma fila escuta, sinal de contrato quebrado entre os serviços.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -425,7 +441,7 @@
     {
       "id": 9,
       "title": "Alvos raspados pelo Prometheus",
-      "description": "Um quadro por job (label app do pod anotado, mais kube-state-metrics). Vermelho quando o Prometheus não alcança o /metrics: serviço, broker ou gateway fora do ar. Pod que some da descoberta deixa de aparecer aqui; para o broker e o gateway, os alertas de alvo ausente cobrem esse caso.",
+      "description": "Um quadro por job (label `app` do pod anotado, mais o kube-state-metrics). Vermelho quando o Prometheus não alcança o `/metrics`: serviço, broker ou gateway fora do ar. Pod que some da descoberta deixa de aparecer; para o broker e o gateway, os alertas `pytstop-rabbitmq-fora` e `pytstop-kong-fora` cobrem esse caso (o do gateway só no cluster).",
       "type": "stat",
       "gridPos": {
         "h": 8,
@@ -498,7 +514,7 @@
     {
       "id": 10,
       "title": "Gateway: requisições por status (req/s)",
-      "description": "Requisições que passaram pelo Kong, por código HTTP. 429 é o rate limiting do gateway; 5xx acima de 1% do total dispara o alerta do gateway.",
+      "description": "Tráfego que passou pelo Kong, por código HTTP. 429 é o rate limiting do gateway; 5xx acima de 1% do total dispara o alerta `pytstop-gateway-5xx`.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -531,7 +547,7 @@
     {
       "id": 11,
       "title": "Gateway: latência p95 por serviço",
-      "description": "Percentil 95 da latência total da requisição no Kong (gateway mais serviço), por serviço do Kubernetes de destino.",
+      "description": "Percentil 95 do tempo total da requisição no Kong (gateway mais serviço), por Service de destino (`<namespace>.<service>.<porta>`).",
       "type": "timeseries",
       "gridPos": {
         "h": 8,

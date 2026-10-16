@@ -239,7 +239,7 @@ def test_sessao_com_contexto_que_nao_e_kind_nao_chega_a_chamar_o_kubectl(
     )
 
     assert resultado.returncode != 0
-    assert "nao e um kind descartavel" in resultado.stdout
+    assert "não é um kind descartável" in resultado.stdout
     assert not registro.exists(), "o kubectl foi chamado antes do guarda"
 
 
@@ -269,7 +269,7 @@ def test_guarda_que_recusa_nao_imprime_o_ambiente_no_traceback(tmp_path: Path) -
         **{"CREDENCIAL_DO_AMBIENTE": "valor-secreto-do-ambiente-9999"},
     )
 
-    assert "nao e um kind descartavel" in resultado.stdout
+    assert "não é um kind descartável" in resultado.stdout
     escrito = resultado.stdout + junit.read_text()
     assert "valor-secreto-do-ambiente-9999" not in escrito
     assert "CREDENCIAL_DO_AMBIENTE" not in escrito

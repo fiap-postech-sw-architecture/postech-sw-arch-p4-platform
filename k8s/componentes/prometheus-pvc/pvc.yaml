@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: prometheus-dados
+  # Namespace explicito: o NamespaceTransformer do k8s/base so alcanca o que o
+  # base lista, e este recurso entra pelo componente do overlay.
+  namespace: pytstop-plataforma
+  labels:
+    app: prometheus
+    app.kubernetes.io/part-of: pytstop-plataforma
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 2Gi

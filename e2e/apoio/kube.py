@@ -9,39 +9,75 @@ tem prazo, e o que o cenario derruba volta no teardown.
 from __future__ import annotations
 
 import base64
+import json
+import os
 import socket
 import subprocess  # nosec B404
 import tempfile
 import time
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Any, Final
 
 from e2e.apoio.espera import esperar
-from e2e.apoio.segredos import mascarar
+from e2e.apoio.segredos import CREDENCIAIS_DO_AMBIENTE, mascarar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from types import TracebackType
     from typing import IO
 
     type Executor = Callable[[Sequence[str], float], str]
+    # O mesmo executor com o texto que vai pelo stdin do processo.
+    type ExecutorComEntrada = Callable[[Sequence[str], float, str], str]
 
 NAMESPACE_DA_PLATAFORMA: Final = "pytstop-plataforma"
 # As DLQs do broker (k8s/base/rabbitmq): uma ausente na leitura e nome que mudou, e
 # "nenhuma mensagem nova" nao vale se a fila nem aparece.
+FILA_MORTA_DO_BILLING: Final = "billing.comandos.dlq"
 FILAS_MORTAS: Final = (
-    "billing.comandos.dlq",
+    FILA_MORTA_DO_BILLING,
     "execucao.comandos.dlq",
     "os.eventos.dlq",
 )
 _TAMANHO_DO_ERRO: Final = 400
+PRAZO_DAS_DLQS: Final = 40.0
 
 
 class ErroDeComandoError(AssertionError):
     """O comando saiu com erro ou passou do prazo."""
 
 
-def executar_processo(argumentos: Sequence[str], prazo: float) -> str:
-    """Roda o comando sem shell, com prazo (estourou, o processo e morto)."""
+class ComandoAusenteError(ErroDeComandoError):
+    """O programa (``kubectl``, ``docker``) nao esta no PATH: nao e falha do cluster."""
+
+    def __init__(self, programa: str) -> None:
+        super().__init__(
+            f"{programa} não está no PATH: instale-o e abra um terminal novo "
+            '(README, "Pré-requisitos")'
+        )
+
+
+def _ambiente_dos_filhos() -> dict[str, str]:
+    """O ambiente deste processo sem as credenciais do Mercado Pago.
+
+    O ``kubectl``, o ``docker`` e o ``port-forward`` nao as usam. O pytest e o
+    ``conferir_sandbox`` as tem no proprio ambiente ate o preflight tira-las, e os
+    primeiros filhos (a conferencia previa e a fixture ``kubectl``) rodam antes disso.
+    """
+    return {
+        chave: valor
+        for chave, valor in os.environ.items()
+        if chave not in CREDENCIAIS_DO_AMBIENTE
+    }
+
+
+def executar_processo(
+    argumentos: Sequence[str], prazo: float, entrada: str | None = None
+) -> str:
+    """Roda o comando sem shell, com prazo (estourou, o processo e morto).
+
+    ``entrada`` vai pelo stdin do processo e so por ele: e o caminho do que nao
+    pode estar em argv (``ps``) nem em arquivo. Sem ``entrada``, o stdin e vazio.
+    """
     comando = " ".join(argumentos[:8])
     try:
         processo = subprocess.run(  # noqa: S603  # nosec B603
@@ -50,12 +86,20 @@ def executar_processo(argumentos: Sequence[str], prazo: float) -> str:
             text=True,
             timeout=prazo,
             check=False,
-            stdin=subprocess.DEVNULL,
+            env=_ambiente_dos_filhos(),
+            input=entrada,
+            # input e stdin nao convivem: sem entrada, o stdin e vazio.
+            stdin=subprocess.DEVNULL if entrada is None else None,
+            # Sessao propria: o Ctrl-C do terminal vai ao grupo de processos inteiro e
+            # mataria o kubectl em voo do desfazer, que ignora o sinal so no Python.
+            start_new_session=True,
         )
     except subprocess.TimeoutExpired as erro:
         raise ErroDeComandoError(
             mascarar(f"{comando}: passou de {prazo:g} s")
         ) from erro
+    except FileNotFoundError as erro:
+        raise ComandoAusenteError(argumentos[0]) from erro
     if processo.returncode != 0:
         # Mascara o texto inteiro e so entao corta: um JWT cortado ao meio nao casa
         # com o padrao nem com o valor registrado.
@@ -84,15 +128,42 @@ class Kubectl:
         contexto: str,
         *,
         executor: Executor = executar_processo,
+        executor_com_entrada: ExecutorComEntrada = executar_processo,
         binario: str = "kubectl",
     ) -> None:
         self.contexto = contexto
         self.binario = binario
         self._executor = executor
+        self._executor_com_entrada = executor_com_entrada
 
-    def executar(self, *argumentos: str, prazo: float = 60.0) -> str:
-        return self._executor(
-            [self.binario, "--context", self.contexto, *argumentos], prazo
+    def executar(
+        self, *argumentos: str, prazo: float = 60.0, entrada: str | None = None
+    ) -> str:
+        comando = [self.binario, "--context", self.contexto, *argumentos]
+        if entrada is None:
+            return self._executor(comando, prazo)
+        return self._executor_com_entrada(comando, prazo, entrada)
+
+    def aplicar_json(
+        self,
+        manifesto: Mapping[str, Any],  # Any: JSON livre do Kubernetes
+        *,
+        prazo: float = 60.0,
+    ) -> None:
+        """``kubectl apply`` de um manifesto montado em memoria.
+
+        O JSON viaja pelo stdin: nunca em argv, nem em arquivo. Server-side, para
+        o Secret nao ganhar a anotacao ``last-applied`` com o valor dentro, e com
+        ``--force-conflicts`` para assumir um Secret criado a mao antes.
+        """
+        self.executar(
+            "apply",
+            "--server-side",
+            "--force-conflicts",
+            "-f",
+            "-",
+            prazo=prazo,
+            entrada=json.dumps(manifesto),
         )
 
     def segredo(self, namespace: str, nome: str, chave: str) -> str:
@@ -174,7 +245,7 @@ class Kubectl:
             "list_queues",
             "name",
             "messages",
-            prazo=40,
+            prazo=PRAZO_DAS_DLQS,
         )
         filas = ler_filas_mortas(saida)
         ausentes = [fila for fila in FILAS_MORTAS if fila not in filas]
@@ -182,6 +253,16 @@ class Kubectl:
             msg = f"o rabbitmqctl nao listou as DLQs {ausentes}: {sorted(filas)}"
             raise ErroDeComandoError(msg)
         return filas
+
+    def ultimas_linhas(
+        self, namespace: str, app: str, *, container: str, quantidade: int = 40
+    ) -> str:
+        """As ultimas ``quantidade`` linhas de log de cada pod do ``app``."""
+        return self.executar(
+            "-n", namespace, "logs", "-l", f"app={app}", "-c", container,
+            f"--tail={quantidade}",
+            prazo=30,
+        )  # fmt: skip
 
     def logs(
         self, namespace: str, app: str, *, container: str, desde: str = "10m"
@@ -315,6 +396,7 @@ class PortForward:
                 self._alvo,
                 f"{self.porta}:{self._porta_remota}",
             ],
+            env=_ambiente_dos_filhos(),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=self._erros,

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import json
 from typing import TYPE_CHECKING
 
 import pytest
@@ -187,3 +188,59 @@ def test_as_dlq_conhecidas_sao_as_tres_do_broker() -> None:
         "execucao.comandos.dlq",
         "os.eventos.dlq",
     }
+
+
+class _ExecutorComEntrada:
+    """Registra a chamada que leva o texto do stdin."""
+
+    def __init__(self) -> None:
+        self.chamadas: list[tuple[list[str], float, str]] = []
+
+    def __call__(self, argumentos: Sequence[str], prazo: float, entrada: str) -> str:
+        self.chamadas.append((list(argumentos), prazo, entrada))
+        return "ok"
+
+
+def test_kubectl_executar_com_entrada_usa_o_executor_do_stdin_e_so_ele() -> None:
+    sem_entrada = ExecutorFalso()
+    com_entrada = _ExecutorComEntrada()
+    kubectl = Kubectl("kind-x", executor=sem_entrada, executor_com_entrada=com_entrada)
+
+    assert kubectl.executar("apply", "-f", "-", prazo=7, entrada="{}") == "ok"
+
+    assert com_entrada.chamadas == [
+        (["kubectl", "--context", "kind-x", "apply", "-f", "-"], 7, "{}")
+    ]
+    assert sem_entrada.comandos == []
+    kubectl.executar("get", "pods")
+    assert len(com_entrada.chamadas) == 1
+    assert sem_entrada.comandos == [["kubectl", "--context", "kind-x", "get", "pods"]]
+
+
+def test_kubectl_aplicar_json_manda_o_manifesto_so_pelo_stdin() -> None:
+    com_entrada = _ExecutorComEntrada()
+    kubectl = Kubectl("kind-x", executor_com_entrada=com_entrada)
+
+    kubectl.aplicar_json({"kind": "Secret", "data": {"a": "segredo-123"}})
+
+    comando, prazo, entrada = com_entrada.chamadas[0]
+    assert comando[-5:] == ["apply", "--server-side", "--force-conflicts", "-f", "-"]
+    assert prazo == 60.0
+    assert json.loads(entrada) == {"kind": "Secret", "data": {"a": "segredo-123"}}
+    assert "segredo-123" not in " ".join(comando)
+
+
+def test_kubectl_ultimas_linhas_pede_o_corte_explicito() -> None:
+    # Com seletor de label o kubectl corta em 10 linhas se --tail nao vier.
+    executor = ExecutorFalso({"logs": "linha"})
+
+    saida = Kubectl("c", executor=executor).ultimas_linhas(
+        "ns", "billing-service-api", container="api", quantidade=25
+    )
+
+    assert saida == "linha"
+    comando = " ".join(executor.comandos[0])
+    assert "-l app=billing-service-api" in comando
+    assert "-c api" in comando
+    assert "--tail=25" in comando
+    assert "--since" not in comando
