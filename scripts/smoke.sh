@@ -470,7 +470,10 @@ titulo "policies converge on boot: change the DLQ policy at runtime and restart 
 $R rabbitmqctl -q set_policy --apply-to queues dlq '\.dlq$' '{"message-ttl":60000}'
 printf 'before restart: '; $R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}'
 $K -n pytstop-plataforma delete pod rabbitmq-0 --wait=true >/dev/null
-$K -n pytstop-plataforma wait --for=condition=Ready pod/rabbitmq-0 --timeout=300s >/dev/null
+# O StatefulSet recria o pod um instante depois do delete, e o kubectl wait logo
+# em seguida sai com NotFound se ele ainda nao existe (reprovou o deploy-kind):
+# o script espera o pod existir e ficar Ready, dentro dos mesmos 300 s.
+KUBE_CONTEXT="$CONTEXTO" NAMESPACE="$NS" scripts/esperar-pod.sh rabbitmq-0 300
 depois=$($R rabbitmqctl -q list_policies --no-table-headers | awk -F'\t' '$2 == "dlq" {print $5}')
 printf 'after restart:  %s\n' "$depois"
 confere "DLQ policy back to the file value after the restart" '{"message-ttl":604800000}' "$depois"
