@@ -1,5 +1,10 @@
 global:
   scrape_interval: 15s
+  # 10 s e o padrao; fica explicito porque o /metrics da API de cada servico
+  # consulta o banco na raspagem (coletor) e a conta tem de caber aqui: o OS e a
+  # Execucao limitam a raspagem inteira a 5 s (cada consulta, a 2 s) e o Billing,
+  # a 2 s. Passou do timeout, o alvo vira up = 0 justo no incidente do banco.
+  scrape_timeout: 10s
 scrape_configs:
   - job_name: pods-anotados
     # Contrato do ADR-043 (README, "Endereços e variáveis"): pods anotados dos

@@ -4,17 +4,18 @@
 
 Vale a partir da versão do OS Service com o orquestrador e as compensações da saga, implantada no kind. Antes dela não existem a rota `GET /api/v1/sagas/{ordem_id}`, a tabela `sagas`, as métricas da saga e os logs da saga, e os passos que os usam não têm o que mostrar. A fila, a DLQ, o redrive e o alerta "DLQ com mensagens" já valem.
 
-Ainda não existem na `main` do OS Service o processo `prazos`, o reenvio por prazo, `POST /api/v1/sagas/{ordem_id}/compensacao` e as métricas `pytstop_saga_prazo_vencido_segundos`, `pytstop_saga_reenvios_total` e `pytstop_saga_prazos_esgotados_total`: entram com o PR de prazos e retomada do OS Service, ainda aberto. Todo trecho deste runbook que cita o `prazos`, o reenvio ou a retomada descreve o desenho decidido e só vale com esse PR, mesmo onde não traz a marca "ainda não existe" (as seções 2 e 3, o item da saga parada com prazo vencido, a linha dos consumidores da seção 1, a tabela de motivos da seção 4 e o item 2 da seção 5).
+O processo `prazos`, o reenvio por prazo, `POST /api/v1/sagas/{ordem_id}/compensacao` e as métricas `pytstop_saga_prazo_vencido_segundos`, `pytstop_saga_reenvios_total` e `pytstop_saga_prazos_esgotados_total` estão na `main` do OS Service, e este runbook vale com eles.
 
 Procedimento para os alertas "Saga parada" e "DLQ com mensagens" e para a ordem de serviço que não anda. As regras citadas estão na [RFC-004](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), seções 4.3, 4.5 a 4.7, 6.1, 7.2 e 9; métricas e alertas, no [ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md); retry, DLQ e redrive, no [ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md).
 
 | Sinal | Seção |
 |---|---|
 | Alerta "Saga parada", com instância em `falha_na_compensacao` | [1](#1-achar-a-saga-parada) e [2](#2-falha-na-compensação-e-retomada) |
-| Alerta "Saga parada", com prazo técnico vencido (a métrica `pytstop_saga_prazo_vencido_segundos` ainda não existe) | [1](#1-achar-a-saga-parada) e [3](#3-prazo-técnico-vencido-sem-reenvio) |
+| Alerta "Saga parada", com prazo técnico vencido (`pytstop_saga_prazo_vencido_segundos`) | [1](#1-achar-a-saga-parada) e [3](#3-prazo-técnico-vencido-sem-reenvio) |
 | Alerta "Saga parada", com o coletor das sagas indisponível (`pytstop_saga_coletor_disponivel` em 0, ou ausente com a API de pé) | [1](#1-achar-a-saga-parada) |
 | Alerta "DLQ com mensagens" (`pytstop-dlq-com-mensagens`) | [4](#4-mensagem-na-dlq-e-redrive) |
-| `outbox_dead` acima de zero (ainda sem alerta) | [Linha `dead` na outbox](#linha-dead-na-outbox) |
+| Alerta "Outbox com mensagem dead" (`pytstop-outbox-dead`: `outbox_dead` acima de zero) | [Linha `dead` na outbox](#linha-dead-na-outbox) |
+| Alerta "Outbox parada" (`pytstop-outbox-parada`: a linha pendente mais antiga passou do limite) | [Comando preso na outbox](#3-prazo-técnico-vencido-sem-reenvio) |
 | OS que não anda, relatada pelo atendente | [1](#1-achar-a-saga-parada) e [5](#5-o-trace-e-os-logs-pelo-correlation_id) |
 
 ## Termos
@@ -74,25 +75,25 @@ No Prometheus (`http://localhost:9090`) ou no Explore do Grafana, entrando como 
 
 | Consulta | Leitura |
 |---|---|
-| `max(pytstop_saga_prazo_vencido_segundos)` (ainda não existe) | maior atraso de prazo técnico, em segundos; até cerca de 30 s é normal |
+| `max(pytstop_saga_prazo_vencido_segundos)` | maior atraso de prazo técnico, em segundos; até cerca de 30 s é normal |
 | `min(pytstop_saga_coletor_disponivel)` | 1: o coletor leu as sagas na última raspagem; 0: a leitura falhou em alguma réplica, e os gauges de etapa e de idade somem ([abaixo](#coletor-das-sagas-indisponível)) |
 | `max by (etapa) (pytstop_saga_ativas)` | instâncias em cada etapa |
 | `max by (etapa) (pytstop_saga_etapa_mais_antiga_segundos)` | idade da instância mais antiga em cada etapa; nas esperas humanas ela cresce sem problema |
-| `sum by (comando) (increase(pytstop_saga_reenvios_total[1h]))` (ainda não existe) | comandos que precisaram de reenvio: participante lento |
-| `sum by (comando) (increase(pytstop_saga_prazos_esgotados_total[1h]))` (ainda não existe) | comandos que esgotaram os reenvios: participante mudo |
+| `sum by (comando) (increase(pytstop_saga_reenvios_total[1h]))` | comandos que precisaram de reenvio: participante lento |
+| `sum by (comando) (increase(pytstop_saga_prazos_esgotados_total[1h]))` | comandos que esgotaram os reenvios: participante mudo |
 | `sum by (motivo) (increase(pytstop_saga_compensacoes_total[1h]))` | por que as sagas compensam; `prazo_tecnico` subindo é participante sem responder |
 | `rabbitmq_queue_consumers{queue="os.eventos"}` | zero: o consumidor do OS Service está fora, e o `prazos` fica em pausa |
 | `sum by (queue) (rabbitmq_queue_messages{queue=~".+[.]dlq"})` | mensagem em alguma DLQ ([seção 4](#4-mensagem-na-dlq-e-redrive)) |
-| `outbox_pendentes`, `outbox_dead` | comando ou evento que não saiu da outbox: quantas linhas esperam o relay e quantas desistiram ([seção 3](#3-prazo-técnico-vencido-sem-reenvio) e [linha `dead`](#linha-dead-na-outbox)); a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, está decidida e ainda não implementada |
+| `outbox_pendentes`, `outbox_dead` | comando ou evento que não saiu da outbox: quantas linhas esperam o relay e quantas desistiram ([seção 3](#3-prazo-técnico-vencido-sem-reenvio) e [linha `dead`](#linha-dead-na-outbox)); a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, vem da API do serviço e continua certa com o relay parado |
 
 ### Coletor das sagas indisponível
 
-O coletor lê a tabela `sagas` na hora de cada raspagem, numa conexão própria, com prazo de 2 s para a consulta e de 1 s para esperar um lock. Se a leitura falha, ele omite os gauges da saga que calcula (`pytstop_saga_ativas` e `pytstop_saga_etapa_mais_antiga_segundos`; o do prazo vencido, quando existir, sai ausente do mesmo jeito), que ficam ausentes e nunca em zero, soma uma falha em `pytstop_saga_coletor_falhas_total` e publica `pytstop_saga_coletor_disponivel` em 0. O alerta tem dois caminhos, e cada um tem o seu procedimento.
+O coletor da API lê o banco na hora de cada raspagem, numa conexão própria e com uma consulta por gauge: as sagas (`pytstop_saga_ativas`, `pytstop_saga_etapa_mais_antiga_segundos` e `pytstop_saga_prazo_vencido_segundos`), a idade da pendente mais antiga da outbox e as OS por status (`pytstop_os_por_status` e `pytstop_os_tempo_medio_status_segundos`, com a leitura guardada por 30 s). Cada consulta tem a transação dela, com prazo de 2 s e de 1 s para esperar um lock, e a raspagem inteira não passa de 5 s. Quando uma consulta falha, só o gauge dela fica ausente, nunca em zero, e o log da API traz `api gauge unavailable` com `gauge` (`saga`, `outbox` ou `ordens`) e `erro` (o tipo do erro). A falha da leitura das sagas soma uma falha em `pytstop_saga_coletor_falhas_total` e publica `pytstop_saga_coletor_disponivel` em 0. Estourar os 5 s, ou pegar a leitura da raspagem anterior ainda presa, deixa todos os gauges ausentes e traz `api gauges unavailable` com o `motivo` (`prazo_esgotado` ou `raspagem_anterior_presa`; se for outro erro, o nome dele). Duas raspagens ao mesmo tempo fazem a segunda sair com `pytstop_saga_coletor_disponivel` em 0 por desenho, porque o coletor faz uma leitura por vez; o `for` de 5 minutos do alerta cobre isso, e um 0 isolado não dispara. O alerta tem dois caminhos, e cada um tem o seu procedimento.
 
 **A série em 0** (`min(pytstop_saga_coletor_disponivel) == 0`): a leitura falhou em alguma réplica da API.
 
-1. `sum(increase(pytstop_saga_coletor_falhas_total[10m]))` acima de zero confirma que a falha se repete.
-2. O log da API do OS Service, no Loki (`{namespace="pytstop-os"} |= "saga gauges unavailable"`), traz a linha `saga gauges unavailable` com o tipo do erro.
+1. `sum(increase(pytstop_saga_coletor_falhas_total{processo="api"}[10m]))` acima de zero confirma que a falha se repete. O filtro `processo="api"` é só para ler o que importa: o consumidor, o `prazos` e o `notificador` do OS Service exportam a série, sempre em 0.
+2. O log da API do OS Service, no Loki: `{namespace="pytstop-os"} |= "api gauge unavailable"` traz a linha com o gauge que falhou e o tipo do erro, e `{namespace="pytstop-os"} |= "api gauges unavailable"` traz a do prazo de 5 s estourado ou da raspagem anterior presa, com o `motivo`.
 3. Um comando por causa:
    - Banco fora: o pod do banco e o StatefulSet dizem o estado, e o `rollout status` espera até 60 s:
 
@@ -125,7 +126,7 @@ O coletor lê a tabela `sagas` na hora de cada raspagem, numa conexão própria,
      SQL
      ```
 
-**A série ausente com a API de pé** (`up` em 1 e nenhuma `pytstop_saga_coletor_disponivel`): o `pytstop_saga_coletor_falhas_total` também falta, porque sai do mesmo coletor, e o log `saga gauges unavailable` só aparece quando a leitura falha. A API não está exportando o coletor:
+**A série ausente com a API de pé** (`up` em 1 e nenhuma `pytstop_saga_coletor_disponivel`): o `pytstop_saga_coletor_falhas_total{processo="api"}` também falta, porque sai do mesmo coletor (as séries dos outros processos do OS Service seguem lá, em 0), e os logs `api gauge unavailable` e `api gauges unavailable` só aparecem quando a leitura falha. A API não está exportando o coletor:
 
 1. Confira o `/metrics` de uma réplica, com o Python da imagem:
 
@@ -161,7 +162,7 @@ As métricas não levam o `ordem_id`, porque os labels são fechados. Para chega
    SQL
    ```
 
-   O comando que o relay ainda não entregou não entra na lista, porque o prazo dele não começou: o sinal é `outbox_pendentes` que sobe e não volta a cair, e a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, está decidida e ainda não implementada ([seção 3](#3-prazo-técnico-vencido-sem-reenvio)). `entregue_em` e `venceu_em` vazios são de instância sem comando em voo, como a que está em `falha_na_compensacao`. O significado das colunas está na [RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16).
+   O comando que o relay ainda não entregou não entra na lista, porque o prazo dele não começou: o sinal é a idade da pendente mais antiga, `pytstop_outbox_mais_antiga_segundos` (painel "Idade da pendente mais antiga" do dashboard Mensageria e alerta "Outbox parada", [seção 3](#3-prazo-técnico-vencido-sem-reenvio)), e `outbox_pendentes` que sobe e não volta a cair. `entregue_em` e `venceu_em` vazios são de instância sem comando em voo, como a que está em `falha_na_compensacao`. O significado das colunas está na [RFC-004, seção 7.2](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#72-os-service-postgresql-16).
 
 Guarde o `ordem_id` achado, no lugar do UUID de exemplo:
 
@@ -212,7 +213,7 @@ A sequência parou na compensação pendente. O que já foi compensado continua 
    - A OS ainda está na fila: a execução não começou. Retome (passo 3).
    - A OS saiu da fila e os logs da Execução, pelo `correlation_id`, mostram o início: não retome. A Execução dá `ack` no `CancelarExecucao` que chega depois do início e o ignora, sem resposta (log `command_ignored`). O `ExecucaoIniciada` devolve a saga a `em_execucao` sozinho, mesmo em `falha_na_compensacao` (corrida do pivot, [RFC-004, seção 4.5](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#45-contramedidas-de-isolamento)); se ele estiver na `os.eventos.dlq`, faça o redrive dela.
    - A OS saiu da fila e os logs mostram o cancelamento: retome (passo 3). A Execução responde ao novo envio com o `ExecucaoCancelada` registrado.
-3. Resolvida a causa, retome (a rota ainda não existe na `main` do OS Service; entra com o PR de prazos e retomada, e até lá este passo não está disponível: chame quem mantém o OS Service):
+3. Resolvida a causa, retome:
 
    ```bash
    curl -s -X POST "$OS/api/v1/sagas/$ORDEM_ID/compensacao" -H "Authorization: Bearer $TOKEN" | jq
@@ -224,7 +225,7 @@ Resultado esperado: `GET $OS/api/v1/sagas/$ORDEM_ID` chega a `compensada`, com a
 
 ## 3. Prazo técnico vencido sem reenvio
 
-O processo `prazos` e o reenvio por prazo ainda não existem na `main` do OS Service; esta seção descreve o desenho decidido. Com tudo de pé, o `prazos` reenvia o comando a cada prazo vencido, e o atraso não passa do intervalo dele (`PRAZOS_INTERVALO_SEGUNDOS`, 30 s por padrão). Atraso acima de 60 s quer dizer que o prazo não está sendo tratado. Confira as causas nesta ordem:
+Com tudo de pé, o `prazos` reenvia o comando a cada prazo vencido, e o atraso não passa do intervalo dele (`PRAZOS_INTERVALO_SEGUNDOS`, 30 s por padrão). Atraso acima de 60 s quer dizer que o prazo não está sendo tratado. Confira as causas nesta ordem:
 
 | Causa | Como confirmar | O que fazer |
 |---|---|---|
@@ -234,7 +235,7 @@ O processo `prazos` e o reenvio por prazo ainda não existem na `main` do OS Ser
 
 Sem consumidor em `os.eventos` ou com o broker fora, o `prazos` não reenvia nem esgota prazo, porque a resposta pode estar esperando na fila, e a saga segue de onde estava, sem gastar reenvio ([RFC-004, seção 4.6](../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#46-prazos)).
 
-Comando preso na outbox não dispara "Saga parada": o prazo só começa quando o relay entrega o comando. Hoje o sinal é `outbox_pendentes` acima de zero que não volta a cair: com tráfego ele sobe e desce, e só a parada do relay ou do broker o mantém alto. A idade da linha pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, e o alerta "Outbox parada" sobre ela (acima de 300 s por 5 minutos) estão decididos no ADR-043 e ainda não implementados: entram com as métricas e os alertas dos serviços. Suba o relay ou o broker. A linha que o relay desistiu de publicar (`dead`) não é acusada por alerta nenhum hoje: veja [Linha `dead` na outbox](#linha-dead-na-outbox).
+Comando preso na outbox não dispara "Saga parada": o prazo só começa quando o relay entrega o comando. O sinal é a idade da linha pendente mais antiga, `pytstop_outbox_mais_antiga_segundos`, que a API de cada serviço exporta mesmo com o relay parado: o alerta "Outbox parada" dispara com ela acima de 300 s por 5 minutos (no overlay `kind`, para a demonstração, 30 s e 1 minuto) e o painel "Idade da pendente mais antiga" do dashboard Mensageria a mostra. `outbox_pendentes` acima de zero sozinho não serve: com tráfego ele sobe e desce, e só a parada do relay ou do broker o mantém alto. Suba o relay ou o broker. A linha que o relay desistiu de publicar (`dead`) tem alerta próprio: veja [Linha `dead` na outbox](#linha-dead-na-outbox).
 
 Participante lento, com o resto de pé, não para a saga: aparece em `pytstop_saga_reenvios_total` e, esgotados os reenvios, a saga compensa com `motivo=prazo_tecnico` ou, se já estava compensando, vai a `falha_na_compensacao` ([seção 2](#2-falha-na-compensação-e-retomada)).
 
@@ -242,7 +243,7 @@ Resultado esperado: no ciclo seguinte do `prazos`, em até 30 s, o que venceu é
 
 ### Linha `dead` na outbox
 
-A linha `dead` é a que o relay desistiu de publicar, depois de cinco falhas da própria mensagem ou por envelope fora do contrato ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)). A saga que espera aquele comando ou evento fica parada, e a linha só é apagada 30 dias depois. Hoje nenhum alerta a acusa: `outbox_dead` é uma série sem regra nem painel no `platform`. A regra "Outbox com linha morta" (`pytstop-outbox-dead`, `max by (namespace) (outbox_dead)` acima de zero por 1 minuto, crítica) e o painel "Outbox dead" estão decididos e ainda não implementados (PR de dashboards e alertas). Até lá, olhe `max by (namespace) (outbox_dead)` no Prometheus depois de qualquer parada do relay ou do broker.
+A linha `dead` é a que o relay desistiu de publicar, depois de cinco falhas da própria mensagem ou por envelope fora do contrato ([ADR-036](../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)). A saga que espera aquele comando ou evento fica parada, e a linha só é apagada 30 dias depois. O alerta "Outbox com mensagem dead" (`pytstop-outbox-dead`, `max by (namespace) (outbox_dead)` acima de zero por 1 minuto, crítico) a acusa, e o painel "Outbox dead" do dashboard Mensageria mostra o valor de cada serviço. Com o relay parado ou o banco fora a série some em vez de zerar, então depois de uma parada do relay olhe `max by (namespace) (outbox_dead)` no Prometheus quando o relay voltar.
 
 Reprocessar é um `UPDATE` no banco do serviço, uma linha por vez. Não passa por API (não há rota administrativa, [ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)) e não gera log de auditoria, então quem o faz deixa o registro no ticket do incidente:
 
@@ -411,7 +412,7 @@ Resultado esperado: a linha `after:` do `make redrive` mostra a `<fila>.dlq` em 
    - spans `process` repetidos da mesma mensagem: cada passagem pelo retry acrescenta um ao trace;
    - os reenvios do `prazos`, o cancelamento e a retomada, que entram no mesmo trace, como filhos do contexto guardado na saga, com link para o trace de quem os disparou;
    - na compensação, a ordem dos comandos: `CancelarExecucao` antes de `EstornarPagamento`, e cada resposta antes do comando seguinte.
-3. O Jaeger guarda os traces em memória (cerca de 5000), e uma saga pode durar dias: depois de um reinício do pod, o trace pode não existir mais. Os logs por `correlation_id` contam a mesma história ([ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md)).
+3. O Jaeger guarda os traces em memória (até 250, [Retenção e prazos](../../observabilidade/README.md#retenção-e-prazos)), e uma saga pode durar dias: depois de um reinício do pod, o trace pode não existir mais. Os logs por `correlation_id` contam a mesma história ([ADR-043](../arquitetura/adr/fase4/043-observabilidade-distribuida.md)).
 
 Resultado esperado: você sabe em que serviço a OS parou e por quê, pelo último `publish` sem o `process` correspondente, pelo span em erro ou pelo log de rejeição, e volta à seção da causa.
 

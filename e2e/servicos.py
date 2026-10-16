@@ -168,6 +168,12 @@ class ApiOs(_Servico):
             },
         )
 
+    def metricas(self, papel: Papel | None) -> httpx.Response:
+        """As metricas das OS, sem conferir o status (sem token, o esperado e 401)."""
+        return self._pedir(
+            papel, "GET", f"{OS}/ordens-de-servico/metricas", esperado=None
+        )
+
     def listar_ordens(self) -> Json:
         """A fila de ordens do atendente (``GET /api/v1/ordens-de-servico``)."""
         return self._json("atendente", "GET", f"{OS}/ordens-de-servico")

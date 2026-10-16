@@ -1,0 +1,1507 @@
+# Casos do promtool para as regras de observabilidade/grafana/alertas*.yaml
+# (scripts/alertas-promtool.sh, make manifests; ADR-043). O script transforma
+# cada regra do Grafana numa regra do Prometheus com `alert: <uid>`, a consulta A
+# comparada com o limiar do threshold (`> X` ou `< X`) e o `for` da propria regra,
+# e roda este arquivo contra elas. Os valores sao os de producao: o overlay kind
+# troca so o "Outbox parada" (30 s e 1 minuto) e o promtool continua testando
+# 300 s e 5 minutos.
+#
+# Toda regra tem ao menos um caso que dispara e um que nao dispara (o teste
+# tests/test_observabilidade.py confere). Onde da, o caso do limiar usa o valor
+# logo acima (dispara) e o valor igual (nao dispara), e o da janela avalia no
+# minuto do `for` (dispara) e um minuto antes (nao dispara). "Sem dado" nao se
+# prova aqui, porque a consulta sem serie nao gera alerta no promtool: a tabela
+# do README e o smoke cobrem o noDataState.
+rule_files: [regras.yml]
+evaluation_interval: 1m
+tests:
+  # ---------------------------------------------------------------- DLQ
+  - name: pytstop-dlq-com-mensagens, mensagem na DLQ dispara so na fila afetada
+    interval: 1m
+    input_series:
+      - series: rabbitmq_queue_messages{queue="os.eventos.dlq"}
+        values: 1x10
+      - series: rabbitmq_queue_messages{queue="billing.comandos.dlq"}
+        values: 0x10
+      - series: rabbitmq_queue_messages{queue="os.eventos"}
+        values: 50x10
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: pytstop-dlq-com-mensagens
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: pytstop-dlq-com-mensagens
+        exp_alerts:
+          - exp_labels: {queue: os.eventos.dlq}
+  - name: pytstop-dlq-com-mensagens, fila de trabalho e de retry com mensagens e DLQ vazia nao disparam
+    interval: 1m
+    input_series:
+      - series: rabbitmq_queue_messages{queue="os.eventos"}
+        values: 50x10
+      - series: rabbitmq_queue_messages{queue="os.eventos.retry.5s"}
+        values: 7x10
+      - series: rabbitmq_queue_messages{queue="os.eventos.dlq"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-dlq-com-mensagens
+        exp_alerts: []
+
+  # ------------------------------------------------------ alarme do broker
+  - name: pytstop-rabbitmq-alarme, alarme de memoria dispara
+    interval: 1m
+    input_series:
+      - series: rabbitmq_alarms_memory_used_watermark{job="rabbitmq"}
+        values: 1x10
+      - series: rabbitmq_alarms_free_disk_space_watermark{job="rabbitmq"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: pytstop-rabbitmq-alarme
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: pytstop-rabbitmq-alarme
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-rabbitmq-alarme, alarme de disco dispara
+    interval: 1m
+    input_series:
+      - series: rabbitmq_alarms_memory_used_watermark{job="rabbitmq"}
+        values: 0x10
+      - series: rabbitmq_alarms_free_disk_space_watermark{job="rabbitmq"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: pytstop-rabbitmq-alarme
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-rabbitmq-alarme, sem alarme nao dispara
+    interval: 1m
+    input_series:
+      - series: rabbitmq_alarms_memory_used_watermark{job="rabbitmq"}
+        values: 0x10
+      - series: rabbitmq_alarms_free_disk_space_watermark{job="rabbitmq"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-rabbitmq-alarme
+        exp_alerts: []
+
+  # --------------------------------------------------------- 5xx do gateway
+  - name: pytstop-gateway-5xx, 2% de 5xx no Kong dispara
+    interval: 1m
+    input_series:
+      - series: kong_http_requests_total{code="200", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+98x20
+      - series: kong_http_requests_total{code="500", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+2x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-gateway-5xx
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: pytstop-gateway-5xx
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-gateway-5xx, 1% de 5xx exato nao dispara (acima de 0,01)
+    interval: 1m
+    input_series:
+      - series: kong_http_requests_total{code="200", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+99x20
+      - series: kong_http_requests_total{code="500", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-gateway-5xx
+        exp_alerts: []
+
+  # ------------------------------------------------------------ alvo fora
+  - name: pytstop-alvo-fora, alvo com up 0 dispara so no job afetado
+    interval: 1m
+    input_series:
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 0x10
+      - series: up{job="rabbitmq", pod="rabbitmq-0"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-alvo-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-alvo-fora
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+  - name: pytstop-alvo-fora, todos de pe e cAdvisor fora nao disparam
+    interval: 1m
+    input_series:
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 1x10
+      - series: up{job="kubelet-cadvisor", instance="no-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-alvo-fora
+        exp_alerts: []
+
+  # --------------------------------------------------- RabbitMQ e Kong fora
+  - name: pytstop-rabbitmq-fora, up 0 do broker dispara e o de outro job nao
+    interval: 1m
+    input_series:
+      - series: up{job="rabbitmq"}
+        values: 0x10
+      - series: up{job="kong"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-rabbitmq-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-rabbitmq-fora
+        exp_alerts:
+          - exp_labels: {job: rabbitmq}
+  - name: pytstop-rabbitmq-fora, broker de pe e Kong fora nao disparam esta regra
+    interval: 1m
+    input_series:
+      - series: up{job="rabbitmq"}
+        values: 1x10
+      - series: up{job="kong"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-rabbitmq-fora
+        exp_alerts: []
+  - name: pytstop-kong-fora, up 0 do Kong dispara e o do broker nao
+    interval: 1m
+    input_series:
+      - series: up{job="kong"}
+        values: 0x10
+      - series: up{job="rabbitmq"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-kong-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-kong-fora
+        exp_alerts:
+          - exp_labels: {job: kong}
+  - name: pytstop-kong-fora, Kong de pe e broker fora nao disparam esta regra
+    interval: 1m
+    input_series:
+      - series: up{job="kong"}
+        values: 1x10
+      - series: up{job="rabbitmq"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-kong-fora
+        exp_alerts: []
+
+  # ------------------------------------------------------------- CPU do pod
+  - name: pytstop-cpu-pod-alta, 90% do limite por 10 min dispara so no pod afetado
+    interval: 1m
+    input_series:
+      - series: container_cpu_usage_seconds_total{namespace="pytstop-os", pod="os-api-1", container="api"}
+        values: 0+54x30
+      - series: kube_pod_container_resource_limits{namespace="pytstop-os", pod="os-api-1", container="api", resource="cpu"}
+        values: 1x30
+      - series: container_cpu_usage_seconds_total{namespace="pytstop-billing", pod="billing-api-1", container="api"}
+        values: 0+12x30
+      - series: kube_pod_container_resource_limits{namespace="pytstop-billing", pod="billing-api-1", container="api", resource="cpu"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: pytstop-cpu-pod-alta
+        exp_alerts: []
+      - eval_time: 20m
+        alertname: pytstop-cpu-pod-alta
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-os, pod: os-api-1}
+  - name: pytstop-cpu-pod-alta, 50% do limite e pod fora dos namespaces pytstop nao disparam
+    interval: 1m
+    input_series:
+      - series: container_cpu_usage_seconds_total{namespace="pytstop-os", pod="os-api-1", container="api"}
+        values: 0+30x30
+      - series: kube_pod_container_resource_limits{namespace="pytstop-os", pod="os-api-1", container="api", resource="cpu"}
+        values: 1x30
+      - series: container_cpu_usage_seconds_total{namespace="kube-system", pod="coredns-1", container="coredns"}
+        values: 0+59x30
+      - series: kube_pod_container_resource_limits{namespace="kube-system", pod="coredns-1", container="coredns", resource="cpu"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: pytstop-cpu-pod-alta
+        exp_alerts: []
+
+  # --------------------------------------------------------- saga parada
+  - name: pytstop-saga-parada, prazo vencido ha 90 s, sem as series de falha_na_compensacao e do coletor
+    interval: 1m
+    input_series:
+      # Cada replica da API repete o valor do coletor.
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-1"}
+        values: 90x10
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-2"}
+        values: 90x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-saga-parada, instancia em falha_na_compensacao, sem a serie do prazo
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_ativas{pod="os-api-1", etapa="falha_na_compensacao"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-saga-parada, coletor das sagas em 0 numa das duas replicas, com as outras series sadias
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_coletor_disponivel{pod="os-api-1"}
+        values: 1x10
+      - series: pytstop_saga_coletor_disponivel{pod="os-api-2"}
+        values: 0x10
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-saga-parada, serie do coletor ausente com a API do OS Service de pe
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-saga-parada, serie do coletor ausente no compose, onde o job da API e os-service
+    interval: 1m
+    input_series:
+      - series: up{job="os-service"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-saga-parada, coletor sadio, atraso de 45 s e instancias so em outras etapas
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+      - series: pytstop_saga_coletor_disponivel{pod="os-api-1"}
+        values: 1x10
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-1"}
+        values: 45x10
+      - series: pytstop_saga_ativas{pod="os-api-1", etapa="compensando"}
+        values: 2x10
+      - series: pytstop_saga_ativas{pod="os-api-1", etapa="falha_na_compensacao"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+  - name: pytstop-saga-parada, duas replicas a 40 s, soma acima de 60 s e maximo abaixo
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-1"}
+        values: 40x10
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-2"}
+        values: 40x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+  - name: pytstop-saga-parada, duas replicas, uma a 90 s de atraso e a outra a 0 (o maximo decide)
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-1"}
+        values: 90x10
+      - series: pytstop_saga_prazo_vencido_segundos{pod="os-api-2"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-saga-parada, duas replicas, uma com instancia em falha_na_compensacao e a outra sem
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_ativas{pod="os-api-1", etapa="falha_na_compensacao"}
+        values: 1x10
+      - series: pytstop_saga_ativas{pod="os-api-2", etapa="falha_na_compensacao"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-saga-parada, coletor fora por 3 minutos e de volta, menos que a janela de 5 min
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+      - series: pytstop_saga_coletor_disponivel{pod="os-api-1"}
+        values: 1 1 0 0 0 1 1 1 1 1 1
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+  - name: pytstop-saga-parada, duas replicas da API, uma com up 0, sem a serie do coletor
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+      - series: up{job="os-service-api", pod="os-api-2"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-saga-parada, API com up 0 e sem a serie do coletor (quem acusa e o pytstop-alvo-fora)
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+  - name: pytstop-saga-parada, nenhuma serie da saga e nenhum alvo da API na descoberta (OS Service fora)
+    interval: 1m
+    input_series:
+      # Relay e consumidor de pe nao contam: so a API exporta o coletor.
+      - series: up{job="os-service-relay"}
+        values: 1x10
+      - series: up{job="rabbitmq"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: pytstop-saga-parada
+        exp_alerts: []
+
+  # ------------------------------------------------ compensacoes acima do normal
+  - name: pytstop-compensacoes-acima-do-normal, 1 compensacao por minuto para cada saga iniciada dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_compensacoes_total{pod="os-api-1"}
+        values: 0+1x70
+      - series: pytstop_saga_iniciadas_total{pod="os-api-1"}
+        values: 0+1x70
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: pytstop-compensacoes-acima-do-normal
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: pytstop-compensacoes-acima-do-normal
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-compensacoes-acima-do-normal, 0,2 compensacao por minuto contra 1 saga por minuto nao dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_compensacoes_total{pod="os-api-1"}
+        values: 0+0.2x70
+      - series: pytstop_saga_iniciadas_total{pod="os-api-1"}
+        values: 0+1x70
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: pytstop-compensacoes-acima-do-normal
+        exp_alerts: []
+  - name: pytstop-compensacoes-acima-do-normal, 3 compensacoes em 30 min sem saga iniciada nao disparam (denominador minimo de 10)
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_compensacoes_total{pod="os-api-1"}
+        values: 0+0.1x70
+      - series: pytstop_saga_iniciadas_total{pod="os-api-1"}
+        values: 0x70
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: pytstop-compensacoes-acima-do-normal
+        exp_alerts: []
+  - name: pytstop-compensacoes-acima-do-normal, 9 compensacoes em 30 min sem saga iniciada disparam (9 sobre o denominador minimo de 10)
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_compensacoes_total{pod="os-api-1"}
+        values: 0+0.3x70
+      - series: pytstop_saga_iniciadas_total{pod="os-api-1"}
+        values: 0x70
+    alert_rule_test:
+      - eval_time: 25m
+        alertname: pytstop-compensacoes-acima-do-normal
+        exp_alerts: []
+      - eval_time: 65m
+        alertname: pytstop-compensacoes-acima-do-normal
+        exp_alerts:
+          - exp_labels: {}
+
+  # --------------------------------------------------------- circuito aberto
+  - name: pytstop-circuito-aberto, disjuntor aberto dispara com os labels e o fechado nao
+    interval: 1m
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-billing", dependencia="mercadopago", pod="billing-api-1"}
+        values: 1x10
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-billing", dependencia="jwks", pod="billing-api-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-billing, dependencia: mercadopago}
+  - name: pytstop-circuito-aberto, todos fechados nao disparam
+    interval: 1m
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-billing", dependencia="jwks", pod="billing-api-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+  - name: pytstop-circuito-aberto, meia-abertura da Execucao sem trafego (0,5) nao dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: 0.5x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+
+  # A Execucao fica aberta so 30 s (1, por 30 s) e volta a 0,5 ate a proxima chamada:
+  # com trafego raro o gauge faz 1 por 30 s, 0,5 por 60 s, e assim por diante.
+  - name: pytstop-circuito-aberto, Execucao com trafego raro (1 por 30 s, 0,5 por 60 s) dispara
+    interval: 15s
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: "1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5 1 1 0.5 0.5 0.5 0.5"
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+  - name: pytstop-circuito-aberto, uma rajada em 1 e depois so meia-abertura solta em ate 2 min
+    interval: 15s
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: "1x8 0.5x40"
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+      - eval_time: 6m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+  # Uma abertura isolada de 30 s cai numa janela de 1 min so; a de 2 min a mostra em duas
+  # avaliacoes seguidas, e e isso que deixa o `for` de 1 min disparar.
+  - name: pytstop-circuito-aberto, uma unica abertura de 30 s da Execucao dispara e solta em 3 min
+    interval: 15s
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: "0.5 1 1 0.5x45"
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+      - eval_time: 3m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+  - name: pytstop-circuito-aberto, meia-abertura estavel por 10 min (sem nenhuma leitura em 1) nao dispara
+    interval: 15s
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: "0.5x40"
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
+  - name: pytstop-circuito-aberto, uma replica aberta e a outra fechada disparam (o maximo decide)
+    interval: 1m
+    input_series:
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-1"}
+        values: 0x10
+      - series: pytstop_circuit_breaker_aberto{namespace="pytstop-execucao", dependencia="billing", pod="exec-api-2"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: pytstop-circuito-aberto
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+
+  # ------------------------------------------------------------ outbox parada
+  - name: pytstop-outbox-parada, 400 s por 7 min dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-billing", pod="billing-api-1"}
+        values: 400x10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-outbox-parada
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: pytstop-outbox-parada
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-billing}
+      - eval_time: 7m
+        alertname: pytstop-outbox-parada
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-billing}
+  - name: pytstop-outbox-parada, 400 s por 4 min e depois 0 nao dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-billing", pod="billing-api-1"}
+        values: 400 400 400 400 400 0 0 0 0 0 0
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-outbox-parada
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: pytstop-outbox-parada
+        exp_alerts: []
+  - name: pytstop-outbox-parada, 30 s e 300 s exatos (limite de producao) nao disparam, 301 s dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-os", pod="os-api-1"}
+        values: 30x10
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-execucao", pod="exec-api-1"}
+        values: 300x10
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-billing", pod="billing-api-1"}
+        values: 301x10
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-outbox-parada
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-billing}
+  - name: pytstop-outbox-parada, duas replicas com o mesmo valor geram um alerta so
+    interval: 1m
+    input_series:
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-os", pod="os-api-1"}
+        values: 400x10
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-os", pod="os-api-2"}
+        values: 400x10
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-outbox-parada
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-os}
+  - name: pytstop-outbox-parada, API e relay a 200 s somam 400 s e nao disparam (maximo, nao soma)
+    interval: 1m
+    input_series:
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-billing", processo="api"}
+        values: 200x10
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-billing", processo="relay"}
+        values: 200x10
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-outbox-parada
+        exp_alerts: []
+  - name: pytstop-outbox-parada, banco fora (sem a serie, com o servico de pe) nao e acusado por esta regra
+    interval: 1m
+    input_series:
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-outbox-parada
+        exp_alerts: []
+
+  # --------------------------------------------------------------- outbox dead
+  - name: pytstop-outbox-dead, linha dead dispara so no servico afetado
+    interval: 1m
+    input_series:
+      - series: outbox_dead{namespace="pytstop-os", pod="os-relay-1"}
+        values: 1x10
+      - series: outbox_dead{namespace="pytstop-execucao", pod="exec-relay-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-outbox-dead
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-os}
+  - name: pytstop-outbox-dead, Billing com a linha dead na API e no relay gera um alerta so
+    interval: 1m
+    input_series:
+      - series: outbox_dead{namespace="pytstop-billing", processo="api"}
+        values: 1x10
+      - series: outbox_dead{namespace="pytstop-billing", processo="relay"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: pytstop-outbox-dead
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-billing}
+  - name: pytstop-outbox-dead, sem linha dead nao dispara
+    interval: 1m
+    input_series:
+      - series: outbox_dead{namespace="pytstop-os", pod="os-relay-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-outbox-dead
+        exp_alerts: []
+
+  # ---------------------------------------------- fila de trabalho sem consumidor
+  - name: pytstop-fila-sem-consumidor, 0 consumidores por 3 min dispara so na fila afetada
+    interval: 1m
+    input_series:
+      - series: rabbitmq_queue_consumers{queue="billing.comandos"}
+        values: 0x10
+      - series: rabbitmq_queue_consumers{queue="os.eventos"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-fila-sem-consumidor
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: pytstop-fila-sem-consumidor
+        exp_alerts:
+          - exp_labels: {queue: billing.comandos}
+  - name: pytstop-fila-sem-consumidor, 1 consumidor por fila nao dispara
+    interval: 1m
+    input_series:
+      - series: rabbitmq_queue_consumers{queue="billing.comandos"}
+        values: 1x10
+      - series: rabbitmq_queue_consumers{queue="execucao.comandos"}
+        values: 1x10
+      - series: rabbitmq_queue_consumers{queue="os.eventos"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-fila-sem-consumidor
+        exp_alerts: []
+  - name: pytstop-fila-sem-consumidor, DLQ e fila de retry sem consumidor nao disparam
+    interval: 1m
+    input_series:
+      - series: rabbitmq_queue_consumers{queue="os.eventos"}
+        values: 1x10
+      - series: rabbitmq_queue_consumers{queue="os.eventos.dlq"}
+        values: 0x10
+      - series: rabbitmq_queue_consumers{queue="os.eventos.retry.300s"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-fila-sem-consumidor
+        exp_alerts: []
+
+  # --------------------------------------------- assinatura invalida no webhook
+  - name: pytstop-webhook-assinatura-invalida, mais 1 por minuto por 10 min dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_webhook_assinatura_invalida_total{pod="billing-api-1"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-webhook-assinatura-invalida, uma tentativa a cada 2 minutos por 12 min dispara (a janela de 5 min dá continuidade)
+    interval: 1m
+    input_series:
+      - series: pytstop_webhook_assinatura_invalida_total{pod="billing-api-1"}
+        values: 0 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts: []
+      - eval_time: 12m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-webhook-assinatura-invalida, um evento isolado nao dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_webhook_assinatura_invalida_total{pod="billing-api-1"}
+        values: 0x4 1x20
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts: []
+
+  # ------------------------------------------------------------ falha do JWKS
+  - name: pytstop-jwks-falhas, mais 1 por minuto num namespace dispara so nele
+    interval: 1m
+    input_series:
+      - series: pytstop_jwks_falhas_total{namespace="pytstop-billing", pod="billing-api-1"}
+        values: 0+1x20
+      - series: pytstop_jwks_falhas_total{namespace="pytstop-execucao", pod="exec-api-1"}
+        values: 0x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-jwks-falhas
+        exp_alerts: []
+      - eval_time: 10m
+        alertname: pytstop-jwks-falhas
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-billing}
+  - name: pytstop-jwks-falhas, uma falha a cada 2 minutos por 12 min dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_jwks_falhas_total{namespace="pytstop-execucao", pod="exec-api-1"}
+        values: 0 1 1 2 2 3 3 4 4 5 5 6 6 7 7 8 8 9 9 10 10
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-jwks-falhas
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-execucao}
+  - name: pytstop-jwks-falhas, uma falha isolada nao dispara
+    interval: 1m
+    input_series:
+      - series: pytstop_jwks_falhas_total{namespace="pytstop-billing", pod="billing-api-1"}
+        values: 0x4 1x20
+    alert_rule_test:
+      - eval_time: 9m
+        alertname: pytstop-jwks-falhas
+        exp_alerts: []
+      - eval_time: 14m
+        alertname: pytstop-jwks-falhas
+        exp_alerts: []
+
+  # ---------------------------------------------------------- 5xx por servico
+  - name: pytstop-servico-5xx, 2% de 5xx num job dispara so nele
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="billing-service-api", status="500", rota="/api/v1/x", method="GET"}
+        values: 0+2x20
+      - series: http_request_duration_seconds_count{job="billing-service-api", status="200", rota="/api/v1/x", method="GET"}
+        values: 0+98x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="500", rota="/api/v1/x", method="GET"}
+        values: 0+0.5x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="200", rota="/api/v1/x", method="GET"}
+        values: 0+99.5x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-servico-5xx
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: pytstop-servico-5xx
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+  - name: pytstop-servico-5xx, 0,5% e 1% exato de 5xx nao disparam, e 4xx nao conta
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", status="500", rota="/api/v1/x", method="GET"}
+        values: 0+0.5x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="200", rota="/api/v1/x", method="GET"}
+        values: 0+99.5x20
+      - series: http_request_duration_seconds_count{job="execution-service-api", status="500", rota="/api/v1/x", method="GET"}
+        values: 0+1x20
+      - series: http_request_duration_seconds_count{job="execution-service-api", status="200", rota="/api/v1/x", method="GET"}
+        values: 0+99x20
+      - series: http_request_duration_seconds_count{job="billing-service-api", status="404", rota="/api/v1/x", method="GET"}
+        values: 0+50x20
+      - series: http_request_duration_seconds_count{job="billing-service-api", status="200", rota="/api/v1/x", method="GET"}
+        values: 0+50x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-servico-5xx
+        exp_alerts: []
+
+  # ------------------------------------------------------------- latencia p95
+  # O limiar e 500 ms, fim de bucket (250 ms, 500 ms, 1 s): o histogram_quantile
+  # interpola dentro do bucket, entao so passa de 0,5 se o p95 de verdade passou.
+  - name: pytstop-latencia-p95, p95 na faixa de 500 ms a 1 s dispara so no job lento
+    interval: 1m
+    input_series:
+      # Billing: toda observacao entre 500 ms e 1 s, p95 interpolado em 0,975 s.
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.25"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
+        values: 0+60x20
+      # OS: toda observacao abaixo de 100 ms.
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.25"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.5"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: pytstop-latencia-p95
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+  - name: pytstop-latencia-p95, todas as requisicoes em 260 ms (faixa de 250 a 500 ms) nao disparam
+    interval: 1m
+    input_series:
+      # p95 de verdade: 260 ms. A estimativa por interpolacao na faixa e 0,4875 s,
+      # abaixo do limiar de 0,5; com o limiar no meio da faixa (0,3) ela disparava.
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.25"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.5"}
+        values: 0+100x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="1"}
+        values: 0+100x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="+Inf"}
+        values: 0+100x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
+  - name: pytstop-latencia-p95, 10% de requisicoes lentas puxam o p95 e a mediana continua rapida
+    interval: 1m
+    input_series:
+      # 90% das observacoes abaixo de 100 ms e 10% entre 500 ms e 1 s: o p95 cai na
+      # cauda lenta (0,75 s) e a mediana (p50) ficaria em 50 ms.
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.1"}
+        values: 0+54x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.25"}
+        values: 0+54x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0+54x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-latencia-p95
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+  - name: pytstop-latencia-p95, 7% de requisicoes lentas passam do limiar por pouco (p95 em 0,625 s) e disparam
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.1"}
+        values: 0+56x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.25"}
+        values: 0+56x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0+56x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-latencia-p95
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+  - name: pytstop-latencia-p95, p95 em 100 ms nao dispara
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="0.25"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
+  - name: pytstop-latencia-p95, sonda lenta (/metrics) nao puxa o p95 de quem atende rapido
+    interval: 1m
+    input_series:
+      # Clientes: tudo abaixo de 100 ms. Scrape: tudo entre 500 ms e 1 s, no mesmo
+      # volume. Contada, a sonda levaria o p95 do job a 0,975 s; fora, ele fica em 95 ms.
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.5"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="+Inf"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="0.5"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
+  - name: pytstop-latencia-p95, sonda lenta do /api/v1/saude/pronto (banco fora, ate 2 s) nao puxa o p95
+    interval: 1m
+    input_series:
+      # Clientes: tudo abaixo de 100 ms. /pronto com o banco fora: tudo acima de 1 s, no
+      # mesmo volume. Contada, a sonda levaria o p95 do job a 1 s; fora, ele fica em 95 ms.
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="+Inf"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
+  - name: pytstop-latencia-p95, rajada lenta de 10 min ainda conta na janela de 5 min do rate e deixa de contar depois
+    interval: 1m
+    input_series:
+      # Nos 10 primeiros minutos toda observacao fica entre 500 ms e 1 s; depois, abaixo
+      # de 100 ms. A janela de 5 min ainda enxerga a rajada no minuto 14 e a esqueceu no
+      # 16; uma janela de 2 min a esqueceria no 12, e uma de 10 min ainda a veria no 16.
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.1"}
+        values: 0x10 60+60x9
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0x10 60+60x9
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: pytstop-latencia-p95
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+      - eval_time: 16m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
+
+  # ---------------------------------------------------------- servico fora do ar
+  - name: pytstop-os-service-fora, API do OS com up 0 por 3 min dispara e as outras nao interferem
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 0x10
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 1x10
+      - series: up{job="execution-service-api", pod="exec-api-1"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-os-service-fora
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: pytstop-os-service-fora
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 3m
+        alertname: pytstop-billing-service-fora
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: pytstop-execution-service-fora
+        exp_alerts: []
+  - name: pytstop-billing-service-fora, API do Billing com up 0 por 3 min dispara so a regra do Billing
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 0x10
+      - series: up{job="execution-service-api", pod="exec-api-1"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-billing-service-fora
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: pytstop-billing-service-fora
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 3m
+        alertname: pytstop-os-service-fora
+        exp_alerts: []
+  - name: pytstop-execution-service-fora, API da Execucao com up 0 por 3 min dispara so a regra da Execucao
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 1x10
+      - series: up{job="execution-service-api", pod="exec-api-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-execution-service-fora
+        exp_alerts: []
+      - eval_time: 3m
+        alertname: pytstop-execution-service-fora
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 3m
+        alertname: pytstop-billing-service-fora
+        exp_alerts: []
+  - name: pytstop-os-service-fora, duas replicas com uma em 0 nao disparam (o pytstop-alvo-fora cobre)
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 1x10
+      - series: up{job="os-service-api", pod="os-api-2"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-os-service-fora
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: pytstop-alvo-fora
+        exp_alerts:
+          - exp_labels: {job: os-service-api}
+  - name: pytstop-billing-service-fora e pytstop-execution-service-fora, duas replicas com uma em 0 nao disparam
+    interval: 1m
+    input_series:
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 1x10
+      - series: up{job="billing-service-api", pod="billing-api-2"}
+        values: 0x10
+      - series: up{job="execution-service-api", pod="exec-api-1"}
+        values: 1x10
+      - series: up{job="execution-service-api", pod="exec-api-2"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-billing-service-fora
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: pytstop-execution-service-fora
+        exp_alerts: []
+  - name: servico fora do ar e outbox parada sao alertas distintos (API de pe com outbox travada)
+    interval: 1m
+    input_series:
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 1x10
+      - series: pytstop_outbox_mais_antiga_segundos{namespace="pytstop-billing", pod="billing-api-1"}
+        values: 400x10
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-billing-service-fora
+        exp_alerts: []
+      - eval_time: 7m
+        alertname: pytstop-outbox-parada
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-billing}
+
+  # ------------------------------------------------------------- banco fora do ar
+  - name: pytstop-banco-fora, exporter do PostgreSQL com pg_up 0 por 1 min dispara so no banco afetado
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os"}
+        values: 0x10
+      - series: pg_up{job="execucao-postgres", namespace="pytstop-execucao"}
+        values: 1x10
+      - series: mongodb_up{job="billing-mongo", namespace="pytstop-billing"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: pytstop-banco-fora
+        exp_alerts: []
+      - eval_time: 1m
+        alertname: pytstop-banco-fora
+        exp_alerts:
+          - exp_labels: {job: os-postgres}
+  - name: pytstop-banco-fora, mongodb_up 0 do Billing dispara so nele
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os"}
+        values: 1x10
+      - series: mongodb_up{job="billing-mongo", namespace="pytstop-billing"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: pytstop-banco-fora
+        exp_alerts:
+          - exp_labels: {job: billing-mongo}
+  - name: pytstop-banco-fora, bancos de pe e API fora do ar nao disparam esta regra
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os"}
+        values: 1x10
+      - series: pg_up{job="execucao-postgres", namespace="pytstop-execucao"}
+        values: 1x10
+      - series: mongodb_up{job="billing-mongo", namespace="pytstop-billing"}
+        values: 1x10
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-banco-fora
+        exp_alerts: []
+  - name: pytstop-banco-fora, banco que volta em menos de 1 min nao dispara
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os"}
+        values: 1 0 1 1 1 1
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-banco-fora
+        exp_alerts: []
+  - name: pytstop-banco-fora, duas replicas do mesmo job com uma sem banco disparam (o minimo decide)
+    interval: 1m
+    input_series:
+      - series: pg_up{job="os-postgres", namespace="pytstop-os", pod="os-postgres-0"}
+        values: 1x10
+      - series: pg_up{job="os-postgres", namespace="pytstop-os", pod="os-postgres-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 3m
+        alertname: pytstop-banco-fora
+        exp_alerts:
+          - exp_labels: {job: os-postgres}
+
+  # -------------------------------- no instante exato do for, janelas e limiares
+  # Casos que separam a regra de uma versao dela com o for, a janela do rate ou o
+  # limiar um pouco diferentes: cada um avalia no minuto exato em que a regra
+  # certa dispara (e um minuto antes, quieta), ou usa um valor entre o limiar certo
+  # e o errado.
+  - name: pytstop-fila-sem-consumidor, 0 consumidores dispara no minuto exato do for (2 min) e nao um minuto antes
+    interval: 1m
+    input_series:
+      - series: rabbitmq_queue_consumers{queue="os.eventos"}
+        values: 0x10
+      - series: rabbitmq_queue_consumers{queue="billing.comandos"}
+        values: 1x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-fila-sem-consumidor
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-fila-sem-consumidor
+        exp_alerts:
+          - exp_labels: {queue: os.eventos}
+  - name: servico fora do ar, up 0 dispara no minuto exato do for (2 min) e nao um minuto antes
+    interval: 1m
+    input_series:
+      - series: up{job="os-service-api", pod="os-api-1"}
+        values: 0x10
+      - series: up{job="billing-service-api", pod="billing-api-1"}
+        values: 0x10
+      - series: up{job="execution-service-api", pod="exec-api-1"}
+        values: 0x10
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: pytstop-os-service-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-os-service-fora
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 1m
+        alertname: pytstop-billing-service-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-billing-service-fora
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 1m
+        alertname: pytstop-execution-service-fora
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: pytstop-execution-service-fora
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-webhook-assinatura-invalida, mais 1 por minuto dispara no minuto exato (1 min de dado e 5 min de for) e nao antes
+    interval: 1m
+    input_series:
+      - series: pytstop_webhook_assinatura_invalida_total{pod="billing-api-1"}
+        values: 0+1x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-webhook-assinatura-invalida
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-servico-5xx, 2% de 5xx dispara no minuto exato (1 min de dado e 5 min de for) e nao antes
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", status="200"}
+        values: 0+98x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="503"}
+        values: 0+2x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-servico-5xx
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-servico-5xx
+        exp_alerts:
+          - exp_labels: {job: os-service-api}
+  - name: pytstop-servico-5xx, 1,2% de 5xx dispara (entre o limiar de 1% e um de 1,5%)
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", status="200"}
+        values: 0+247x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="503"}
+        values: 0+3x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-servico-5xx
+        exp_alerts:
+          - exp_labels: {job: os-service-api}
+  - name: pytstop-servico-5xx, rajada de 5 min de 5xx ainda conta 3 min depois (a janela do rate e de 5 min)
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", status="200"}
+        values: 0+100x20
+      - series: http_request_duration_seconds_count{job="os-service-api", status="503"}
+        values: 0 10 20 30 40 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50
+    alert_rule_test:
+      # Com a janela de 2 min o 5xx ja teria saido da conta em 6 min e a regra nunca
+      # teria passado dos 5 min do for.
+      - eval_time: 7m
+        alertname: pytstop-servico-5xx
+        exp_alerts:
+          - exp_labels: {job: os-service-api}
+      - eval_time: 10m
+        alertname: pytstop-servico-5xx
+        exp_alerts: []
+  - name: pytstop-gateway-5xx, rajada de 5 min de 5xx no Kong ainda conta 3 min depois (a janela do rate e de 5 min)
+    interval: 1m
+    input_series:
+      - series: kong_http_requests_total{code="200", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+100x20
+      - series: kong_http_requests_total{code="500", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0 10 20 30 40 50 50 50 50 50 50 50 50 50 50 50 50 50 50 50
+    alert_rule_test:
+      - eval_time: 7m
+        alertname: pytstop-gateway-5xx
+        exp_alerts:
+          - exp_labels: {}
+      - eval_time: 10m
+        alertname: pytstop-gateway-5xx
+        exp_alerts: []
+  - name: pytstop-gateway-5xx, 5xx do Kong dispara no minuto exato (1 min de dado e 5 min de for) e nao antes
+    interval: 1m
+    input_series:
+      - series: kong_http_requests_total{code="200", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+98x20
+      - series: kong_http_requests_total{code="500", service="pytstop-os.os-service-borda-api.8000"}
+        values: 0+2x20
+    alert_rule_test:
+      - eval_time: 5m
+        alertname: pytstop-gateway-5xx
+        exp_alerts: []
+      - eval_time: 6m
+        alertname: pytstop-gateway-5xx
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-compensacoes-acima-do-normal, 0,55 compensacao por saga iniciada dispara (entre o limiar de 0,5 e um de 0,6)
+    interval: 1m
+    input_series:
+      - series: pytstop_saga_compensacoes_total{pod="os-api-1"}
+        values: 0+0.55x70
+      - series: pytstop_saga_iniciadas_total{pod="os-api-1"}
+        values: 0+1x70
+    alert_rule_test:
+      - eval_time: 65m
+        alertname: pytstop-compensacoes-acima-do-normal
+        exp_alerts:
+          - exp_labels: {}
+  - name: pytstop-cpu-pod-alta, 82% do limite por 10 min dispara (entre o limiar de 80% e um de 85%)
+    interval: 1m
+    input_series:
+      - series: container_cpu_usage_seconds_total{namespace="pytstop-os", pod="os-api-1", container="api"}
+        values: 0+49.2x30
+      - series: kube_pod_container_resource_limits{namespace="pytstop-os", pod="os-api-1", container="api", resource="cpu"}
+        values: 1x30
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: pytstop-cpu-pod-alta
+        exp_alerts:
+          - exp_labels: {namespace: pytstop-os, pod: os-api-1}
+
+  # ---------------------------------------- consultas de painel (promql_expr_test)
+  # Serviços 2 e 11: a taxa de sucesso é a razão das respostas sem 5xx sobre todas,
+  # e o painel de erro é 1 menos ela. A série com status 5xx só nasce no primeiro
+  # 5xx; a razão do 5xx sobre o total (e o 1 menos ela) ficava vazia numa API sadia.
+  # As sondas (/metrics e /api/v1/saude*) ficam de fora dos painéis de requisição.
+  - name: paineis Servicos 2 e 11, API so com 200 e 404 (nenhum 5xx ainda) mostram 100% e 0, e as sondas nao contam
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="200"}
+        values: 0+60x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico/{ordem_id}", status="404"}
+        values: 0+6x10
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
+        values: 0+30x10
+      # So sondas: sem requisicao de cliente o painel nao tem amostra, em vez de 100%.
+      - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/api/v1/saude", status="200"}
+        values: 0+6x10
+      - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/metrics", status="200"}
+        values: 0+4x10
+    promql_expr_test:
+      - expr: sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*", status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m]))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 1
+          - labels: '{job="billing-service-api"}'
+            value: 1
+      - expr: 1 - (sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*", status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m])))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 0
+          - labels: '{job="billing-service-api"}'
+            value: 0
+  - name: paineis Servicos 2 e 11, API com 10 respostas 503 a cada 100 de sucesso, e o 503 do /pronto nao conta
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="200"}
+        values: 0+100x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="503"}
+        values: 0+10x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/saude/pronto", status="503"}
+        values: 0+50x10
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
+        values: 0+30x10
+    promql_expr_test:
+      - expr: sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*", status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m]))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 0.9090909090909091
+          - labels: '{job="billing-service-api"}'
+            value: 1
+      - expr: 1 - (sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*", status!~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m])))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 0.09090909090909094
+          - labels: '{job="billing-service-api"}'
+            value: 0
+  # Serviços 1: so requisicao de cliente conta; o scrape do OS, que o OS registra sem
+  # rota de template, cai em nao_roteada e entra.
+  - name: painel Servicos 1, so requisicao de cliente conta e o scrape do OS entra como nao_roteada
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
+        values: 0+30x10
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/metrics", status="200"}
+        values: 0+4x10
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/saude", status="200"}
+        values: 0+6x10
+      - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/api/v1/saude/pronto", status="503"}
+        values: 0+10x10
+      - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/metrics", status="200"}
+        values: 0+4x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="nao_roteada", status="200"}
+        values: 0+4x10
+    promql_expr_test:
+      - expr: sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m]))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="billing-service-api"}'
+            value: 0.5
+          - labels: '{job="os-service-api"}'
+            value: 0.06666666666666667
+  # Serviços 3: o p95 vem so das requisicoes de cliente; as sondas lentas (/metrics e
+  # /api/v1/saude/pronto) levariam o p95 do job de 0,2425 a 0,925 s.
+  - name: painel Servicos 3, o p95 vem so das requisicoes de cliente e as sondas lentas ficam de fora
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.25"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="+Inf"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="0.25"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="+Inf"}
+        values: 0+60x20
+    promql_expr_test:
+      - expr: histogram_quantile(0.95, sum by (le, job) (rate(http_request_duration_seconds_bucket{rota!~"/metrics|/api/v1/saude.*"}[5m])))
+        eval_time: 15m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 0.2425
+  # Serviços 4: so a rota com requisicao de cliente nos ultimos 5 min entra. A rota
+  # que parou de receber (contadores constantes) daria NaN, e a sonda lenta
+  # (/metrics a ~1 s) apareceria no topo.
+  - name: painel Servicos 4, rota parada nao vira NaN e a sonda lenta fica de fora
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.25"}
+        values: 0+50x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="+Inf"}
+        values: 0+50x20
+      - series: http_request_duration_seconds_count{job="os-service-api", rota="/api/v1/ordens-de-servico"}
+        values: 0+50x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", rota="/api/v1/orcamentos", le="0.1"}
+        values: 100x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", rota="/api/v1/orcamentos", le="0.25"}
+        values: 100x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", rota="/api/v1/orcamentos", le="+Inf"}
+        values: 100x20
+      - series: http_request_duration_seconds_count{job="billing-service-api", rota="/api/v1/orcamentos"}
+        values: 100x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="0.25"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="1"}
+        values: 0+10x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/metrics", le="+Inf"}
+        values: 0+10x20
+      - series: http_request_duration_seconds_count{job="os-service-api", rota="/metrics"}
+        values: 0+10x20
+    promql_expr_test:
+      - expr: topk(10, histogram_quantile(0.95, sum by (le, job, rota) (rate(http_request_duration_seconds_bucket{rota!~"/metrics|/api/v1/saude.*"}[5m]))) and on (job, rota) (sum by (job, rota) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m])) > 0))
+        eval_time: 15m
+        exp_samples:
+          - labels: '{job="os-service-api", rota="/api/v1/ordens-de-servico"}'
+            value: 0.2425

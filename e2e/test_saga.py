@@ -41,6 +41,7 @@ from e2e.apoio.saga import (
     STATUS_EM_ORDEM,
     achar_acesso,
     comandos_de_compensacao,
+    divergencias_das_metricas,
     sem_id_da_requisicao,
 )
 from e2e.apoio.segredos import mascarar, registrar
@@ -924,6 +925,23 @@ def _api_responde(cenario: Cenario, status: int) -> None:
     resposta = cenario.ultima_resposta
     assert resposta is not None
     assert resposta.status_code == status, f"HTTP {resposta.status_code}"
+
+
+@when("consulto as métricas das OS sem token")
+def _metricas_sem_token(api: Api, cenario: Cenario) -> None:
+    cenario.ultima_resposta = api.os.metricas(None)
+
+
+@when("o administrador consulta as métricas das OS")
+def _metricas_do_admin(api: Api, cenario: Cenario) -> None:
+    cenario.ultima_resposta = api.os.metricas("admin")
+
+
+@then("a resposta traz o total e as OS dos nove status")
+def _metricas_com_os_nove_status(cenario: Cenario) -> None:
+    resposta = cenario.ultima_resposta
+    assert resposta is not None
+    assert divergencias_das_metricas(resposta.json()) == []
 
 
 @then(parsers.parse('o erro tem o código "{codigo}"'))

@@ -24,7 +24,7 @@ O único commit da `main` fora de pull request é o `Initial commit` que o GitHu
 | Mensageria assíncrona para eventos e integração desacoplada (l. 66) e para a orquestração da saga (l. 101) | RabbitMQ em [`k8s/base/rabbitmq/`](k8s/base/rabbitmq), com topologia, policies e um usuário por serviço ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)); o contrato das mensagens em [`contratos/`](contratos) |
 | Nenhum serviço acessa o banco de outro (l. 67) | Os serviços trocam só mensagens e chamadas REST pela borda; as permissões do broker limitam o que cada usuário publica e lê |
 | Deploy automatizado em Kubernetes (l. 94 e 100) | `make kind-up deploy` com o overlay `kind-ci`, que o CD de cada serviço chama pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh) (`make -C platform kind-up deploy OVERLAY=kind-ci`), e o mesmo `make deploy` com o overlay `k3s` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)); o job `deploy-kind` do [CD](.github/workflows/cd.yml) implanta a plataforma no kind do runner, com o overlay `kind-ci`, em todo PR e push na `main`; os serviços entram em seguida pelo [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) (no CD de cada serviço, ou pelo `make kind-deploy` que cada serviço traz), conferidos pelo [`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh) ([Contrato com os serviços](#contrato-com-os-serviços)) |
-| Ferramentas de monitoramento e observabilidade da fase 3 (l. 102) | Prometheus, Grafana, Loki, Promtail e Jaeger em [`k8s/base/observabilidade/`](k8s/base/observabilidade); dashboards e alertas documentados em [`observabilidade/`](observabilidade/README.md) ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) |
+| Ferramentas de monitoramento e observabilidade da fase 3 (l. 102) | Prometheus, Grafana, Loki, Promtail e Jaeger em [`k8s/base/observabilidade/`](k8s/base/observabilidade); quatro dashboards de negócio (com o volume diário de OS e o tempo médio por status, que a banca da fase 3 pediu) documentados painel a painel em [`observabilidade/negocio.md`](observabilidade/negocio.md), e os técnicos (Saga, Mensageria, Serviços, Bancos e a plataforma), os alertas e o catálogo de métricas em [`observabilidade/README.md`](observabilidade/README.md) ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) |
 | `main` com PR obrigatório e checagens automáticas (l. 95) | Ruleset da `main` com os checks `manifests`, `contratos` e `gitleaks` do CI e `deploy-kind` do CD |
 | Pelo menos um fluxo completo testado com BDD (l. 82) | `make e2e`: a feature em português com a saga inteira e cada compensação, contra os três serviços no kind ([E2E da saga](#e2e-da-saga), [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)) |
 | Integração com o Mercado Pago nos pagamentos (l. 47) | O simulador do Billing no CI, no `make e2e` e no `make demo`; a evidência na sandbox do Mercado Pago, com credenciais de teste, em `make mp-sandbox` (e `make mp-sandbox-ensaio`, sem credencial) ([Mercado Pago na sandbox](#mercado-pago-na-sandbox), [ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md)) |
@@ -39,9 +39,10 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 |---|---|
 | `kind-up`, `deploy`, `smoke`, `redrive`, `kong-check`, `status`, `port-forward` | Docker, [kind](https://kind.sigs.k8s.io/) 0.31.0, a versão que publicou o nó pinado e a que o CI instala (o 0.32.0 também sobe o cluster), kubectl de 1.34 a 1.36 (no máximo uma minor de distância do nó 1.35; traz o kustomize 5), jq, curl e openssl; portas 80 e 443 do loopback livres; o `smoke` também usa o uv (a prova do retry roda em Python) |
 | `e2e`, `demo` | O cluster com a plataforma no overlay `kind-ci` e os três serviços implantados ([E2E da saga](#e2e-da-saga)), uv, kubectl e a porta 443 do loopback |
+| `paineis` | O cluster com a plataforma (o Prometheus) e, para os painéis de negócio terem série, os três serviços e o E2E ou o `make demo` já rodados; uv e kubectl |
 | `mp-sandbox-ensaio`, `mp-sandbox` | O cluster com a plataforma no overlay `kind` (o padrão) e os três serviços implantados, uv, kubectl, Docker (a conferência prévia usa o `docker port`) e a porta 443 do loopback; o `mp-sandbox` também precisa do Access Token de teste e da assinatura do webhook no ambiente do shell ([Mercado Pago na sandbox](#mercado-pago-na-sandbox)) |
 | `up`, `down` | Docker com Compose v2 |
-| `lint`, `test` | [uv](https://docs.astral.sh/uv/), que instala o Python 3.14 do `.python-version`; Node 24 com npx (o `make test` roda o `@asyncapi/cli`); Docker (o `make lint` roda o shellcheck e o actionlint pelas imagens pinadas, o `make lint-scripts`) |
+| `lint`, `test` | [uv](https://docs.astral.sh/uv/), que instala o Python 3.14 do `.python-version`; Node 24 com npx (o `make test` roda o `@asyncapi/cli`); Docker (o `make lint` roda o shellcheck e o actionlint pelas imagens pinadas, o `make lint-scripts`); kubectl (o teste de observabilidade renderiza os overlays com `kubectl kustomize`) e jq (o filtro do promtool tem teste próprio) |
 | `prova-retry` | Docker e uv: o broker roda num container avulso, e a prova, em Python |
 | `manifests` | Docker, kubectl e jq, com acesso a ghcr.io, Docker Hub, charts.konghq.com e raw.githubusercontent.com (imagens das ferramentas, chart do Kong e schemas do Kubernetes) |
 | `kong-render` | Docker, com acesso a charts.konghq.com |
@@ -54,14 +55,15 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 |---|---|
 | [`kind/cluster.yaml`](kind/cluster.yaml) | Cluster kind `pytstop-p4` de um nó, com o Kubernetes fixo por digest e as portas 80/443 do host (só loopback) mapeadas para o Kong |
 | [`k8s/base/`](k8s/base) | Kustomize da infraestrutura compartilhada no namespace `pytstop-plataforma` |
-| [`k8s/overlays/kind`](k8s/overlays/kind), [`k8s/overlays/kind-ci`](k8s/overlays/kind-ci), [`k8s/overlays/k3s`](k8s/overlays/k3s) | StorageClass, exposição do Kong e recursos de cada ambiente; o kind leva também o metrics-server e os limites de rate limit ×10, e o `kind-ci` é o kind sem Loki, Promtail e Grafana, para o runner do CI |
+| [`k8s/overlays/kind`](k8s/overlays/kind), [`k8s/overlays/kind-ci`](k8s/overlays/kind-ci), [`k8s/overlays/k3s`](k8s/overlays/k3s) | StorageClass, exposição do Kong e recursos de cada ambiente; o kind leva também o metrics-server e os limites de rate limit ×10, e o `kind-ci` é o kind sem Loki, Promtail e Grafana e com o Prometheus efêmero, para o runner do CI |
+| [`k8s/componentes/`](k8s/componentes) | Componente do kustomize que o kind e o k3s usam: o Prometheus com 15 dias num PVC |
 | [`k8s/exemplos/`](k8s/exemplos) | Exemplos de borda do OS, do Billing e da Execução (Ingress e Services do Kong), que o `make smoke` aplica no kind |
-| [`observabilidade/`](observabilidade) | Datasources, alertas e dashboards do Grafana, usados pelo Kubernetes e pelo compose; [documentação painel a painel](observabilidade/README.md) |
+| [`observabilidade/`](observabilidade) | Datasources, alertas e dashboards do Grafana, usados pelo Kubernetes e pelo compose; documentação painel a painel dos [dashboards de negócio](observabilidade/negocio.md) e dos [técnicos, alertas e catálogo de métricas](observabilidade/README.md) |
 | [`compose/`](compose) | Stack docker compose para desenvolver um serviço: RabbitMQ, observabilidade e Mailpit com a configuração do cluster, os bancos de cada serviço e um profile que sobe os três; sem o Kong |
 | [`contratos/`](contratos) | AsyncAPI 3.0 dos comandos e eventos, JSON Schema do envelope e de cada mensagem, exemplos e testes |
 | [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso, e a espera do broker que o smoke reinicia no fim, [`esperar-pod.sh`](scripts/esperar-pod.sh)), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong, segredos gerados no deploy, medição do kind, checagens do `make manifests` e, em [`scripts/ci/`](scripts/ci), os scripts do CD: deploy da plataforma, implantação e smoke dos serviços e diagnóstico ([Contrato com os serviços](#contrato-com-os-serviços)) |
 | [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md), o [runbook da saga](docs/operacao/runbook-saga.md) (saga parada, falha na compensação, retomada e redrive da DLQ) e o [ensaio integrado](docs/operacao/ensaio-integrado.md) (os três serviços no kind, com tempo, memória e CPU por pod) |
-| [`e2e/`](e2e) | O E2E BDD da saga (`make e2e`), as demonstrações 1 e 2 do vídeo (`make demo`) e a evidência do Mercado Pago na sandbox (`make mp-sandbox` e `make mp-sandbox-ensaio`): as features em português, os steps, as fixtures e o código auxiliar com testes próprios ([E2E da saga](#e2e-da-saga), [Mercado Pago na sandbox](#mercado-pago-na-sandbox)) |
+| [`e2e/`](e2e) | O E2E BDD da saga (`make e2e`, que confere também que cada painel de negócio tem série), as demonstrações 1 e 2 do vídeo (`make demo`) e a evidência do Mercado Pago na sandbox (`make mp-sandbox` e `make mp-sandbox-ensaio`): as features em português, os steps, as fixtures e o código auxiliar com testes próprios ([E2E da saga](#e2e-da-saga), [Mercado Pago na sandbox](#mercado-pago-na-sandbox)) |
 | [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos, de medição do kind e de implantação e smoke dos serviços, e do código auxiliar do E2E (em [`tests/e2e_apoio/`](tests/e2e_apoio)) |
 | [`Makefile`](Makefile) | Atalhos de cluster, deploy, compose e testes (`make` lista os alvos) |
 
@@ -82,7 +84,7 @@ make kind-down
 |---|---|
 | `make kind-up` | cria o cluster `pytstop-p4` (contexto `kind-pytstop-p4`) |
 | `make deploy` | segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check |
-| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, alertas e pods endurecidos; sai com status 1 se uma prova não valer |
+| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, dashboards e alertas carregados pelo Grafana (um dashboard por JSON de `observabilidade/dashboards`, uma regra por regra de `observabilidade/grafana`, e só as cinco de serviço fora, de fila sem consumidor e de banco fora disparando, porque ainda não há serviços) e pods endurecidos; sai com status 1 se uma prova não valer |
 | `make status` | pods, serviços, volumes e filas do RabbitMQ |
 | `make port-forward` | Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025 |
 | `make kind-down` | apaga o cluster |
@@ -263,7 +265,7 @@ make deploy OVERLAY=k3s KUBE_CONTEXT=k3s-pytstop
 
 No lugar de `k3s-pytstop`, use o nome do contexto do k3s no seu kubeconfig (`kubectl config get-contexts` lista os nomes).
 
-A diferença para o kind está no próprio [`kustomization.yaml`](k8s/overlays/k3s/kustomization.yaml): StorageClass `local-path`, volume de 5Gi e mais memória reservada (request) para o RabbitMQ, e sete dias de retenção no Prometheus.
+A diferença para o kind está no próprio [`kustomization.yaml`](k8s/overlays/k3s/kustomization.yaml): StorageClass `local-path`, volume de 5Gi e mais memória reservada (request) para o RabbitMQ, e limite de memória de 1Gi no Prometheus, que aqui fica de pé por dias. O Prometheus retém 15 dias num PVC de 2Gi nos dois overlays ([Retenção e prazos](observabilidade/README.md#retenção-e-prazos)).
 
 ### docker compose
 
@@ -860,7 +862,7 @@ scripts/ci/implantar-servicos.sh --overlay kind-ci \
   billing-service=../postech-sw-arch-p4-billing-service \
   execution-service=../postech-sw-arch-p4-execution-service
 scripts/ci/smoke-servicos.sh
-make e2e      # os 13 cenários, cerca de 3 min; relatórios em reports/e2e
+make e2e      # os 14 cenários, cerca de 3 min; relatórios em reports/e2e
 make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 2 min; relatórios em reports/demo
 ```
 
@@ -908,6 +910,7 @@ Os usuários nascem uma vez por sessão: o E2E entra como o admin semeado e regi
 | `@resiliencia` | consumidor do Billing em 0 por 20 s | a OS fica em `em_diagnostico` durante os 20 s, segue na volta até `aguardando_aprovacao`, e nenhuma das três DLQs ganha mensagem (amostra por 8 s, porque a contagem das filas quorum atualiza a cada ~5 s) | RNF-055, RN-028 |
 | `@resiliencia` | API do Billing em 0 na conclusão do diagnóstico | duas conclusões dão 503; o indicador (*gauge*) `pytstop_circuit_breaker_aberto{dependencia="billing"}` vale 1 (lido do Service da Execução; 0,5 é meia-abertura e 0, fechado); com o Billing de volta, o teste espera o circuito sair do aberto, que dura 30 s ([RFC-004, 6.1](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#61-rotas-por-serviço) e [10.3](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#103-parâmetros-e-variáveis-de-ambiente)); a conclusão passa e o indicador volta a 0 | RNF-034, RNF-055 |
 | `@borda` | Swagger pelo Kong | `/os/docs`, `/billing/docs` e `/execucao/docs` abrem e o `openapi.json` declara `servers: [{url: "/<prefixo>"}]` | ADR-038 |
+| `@borda` | métricas das OS pela borda | `GET /os/api/v1/ordens-de-servico/metricas` sem token responde 401; com o admin, 200 com `total`, `por_status` (os nove status, zero onde não há OS) e `tempo_medio_por_status_segundos`, o cálculo que os gauges do painel "Tempo médio por status" leem | RF-027 da fase 3, ADR-039 |
 
 As mensagens de erro de negócio se afirmam pelo código (`TRANSICAO_STATUS_INVALIDA`) e, quando o texto aparece, sem depender de acento ou de caixa. As compensações se afirmam pela ordem dos comandos nos passos da saga (`GET /os/api/v1/sagas/{id}`, só do admin), não pelo texto livre do histórico.
 
@@ -934,6 +937,10 @@ O `make demo` reaproveita os cenários marcados `@demo` e as mesmas fixtures. A 
 ```
 
 Ficam de fora a demonstração do deploy com testes e a do monitoramento (Jaeger, Grafana e Loki), que não são do E2E.
+
+### Painéis de negócio com série
+
+Com todos os cenários verdes, o `make e2e` confere ainda que cada consulta de painel de negócio devolve série no Prometheus do kind ([`e2e/apoio/paineis.py`](e2e/apoio/paineis.py)): o `expr` de cada alvo dos quatro [dashboards de negócio](observabilidade/negocio.md) roda em `/api/v1/query` (com `$__range` em 1h e `$__rate_interval` em 5m), e a que volta vazia ou com erro reprova, porque um nome de métrica trocado ou um rótulo errado deixaria vazio justamente o painel que a banca pediu. A tabela sai em `reports/e2e/paineis.md` e no resumo do job; os painéis técnicos e os alertas entram nela, mas não reprovam. O E2E alimenta até as duas séries esparsas da Execução (tempo de execução por serviço e peças em falta): um cenário finaliza uma execução e outro recusa a reserva por falta de peça. `make paineis` repete só essa conferência, sem o E2E (por exemplo depois do `make demo`), em qualquer cluster com o Prometheus da plataforma.
 
 ### Testes do código auxiliar
 
@@ -1018,4 +1025,4 @@ O workflow [`cd.yml`](.github/workflows/cd.yml) tem o job `deploy-kind` ([Kind n
 - Uma fila de retry por atraso, `<fila>.retry.1s` a `.300s` ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)): são 21 filas no broker, e mudar um atraso é criar outra fila.
 - Versões de Prometheus, Grafana e Loki iguais às da fase 3. Jaeger na última 1.x: a 2.x troca a configuração pelo formato do OpenTelemetry Collector.
 - CVEs conhecidas nas imagens (trivy, HIGH e CRITICAL com correção publicada, out/2026): Prometheus v2.54.1 (96 e 6), Loki 2.9.8 (53 e 3) e kube-state-metrics v2.13.0 (44 e 1) não têm versão de correção na própria linha (o Loki 2.9.17 tem mais achados, e o Prometheus 2.55.1 tira só quatro) e ficam como estão: rodam só dentro do cluster, sem Ingress, e o acesso de fora é por port-forward ou túnel. Sair delas é trocar de linha (Prometheus 3, Loki 3, kube-state-metrics 2.17), com mudança de configuração. O Mailpit subiu para v1.31.4, sem achado HIGH. Os exporters dos bancos, nas últimas versões publicadas, têm só achados HIGH com correção fora deles (postgres_exporter v0.20.1: 12; mongodb_exporter 0.53.0: 21), todos na biblioteca padrão do Go, em `golang.org/x` e no gRPC compilados no binário, que só um release novo do exporter troca: rodam como sidecar do banco, e a NetworkPolicy de cada serviço deixa só o Prometheus chegar à porta de métricas.
-- Sem persistência em Prometheus, Loki e Grafana (o estado do Grafana vem todo do provisioning; o TSDB do Prometheus fica num emptyDir). Só o RabbitMQ tem volume. Cada emptyDir tem teto (`sizeLimit`) para não encher o disco do nó, que no k3s guarda também os volumes do broker e dos bancos: o Prometheus guarda 2 dias (7 no k3s) e no máximo 1 GB (o [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) decide passar a 15 dias num PVC, o que ainda não está nos manifests), e o Loki apaga os logs com mais de 7 dias (compactor com retenção).
+- Sem persistência em Loki e Grafana (o estado do Grafana vem todo do provisioning). Têm volume o RabbitMQ e, nos overlays `kind` e `k3s`, o Prometheus: 15 dias num PVC de 2Gi, no máximo 1536MB de séries ([Retenção e prazos](observabilidade/README.md#retenção-e-prazos), [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). No `kind-ci` e no compose o Prometheus segue num emptyDir, com 2 dias e no máximo 1 GB. Cada emptyDir tem teto (`sizeLimit`) para não encher o disco do nó, que no k3s guarda também os volumes do broker, do Prometheus e dos bancos, e o Loki apaga os logs com mais de 7 dias (compactor com retenção).

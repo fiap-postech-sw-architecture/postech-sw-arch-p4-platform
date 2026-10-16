@@ -1,12 +1,11 @@
 # Regras de alerta da plataforma (Grafana alerting, provisionadas por
 # arquivo). Cada regra: consulta no Prometheus (A) e limiar (C). Notificacao
-# pela policy default do Grafana, sem canal externo, como na fase 3. Os
-# alertas do ADR-043 sobre metricas que os servicos ainda nao exportam
-# (compensacoes acima do normal, circuito aberto, outbox parada, fila de
-# trabalho sem consumidor, assinatura invalida no webhook e falha na busca do
-# JWKS) entram com elas; a saga parada ja esta aqui e fica em OK sem o OS
-# Service no ar. Este arquivo vale no Kubernetes e no compose; o que depende do Kong,
-# que o compose nao tem, fica em alertas-cluster.yaml.
+# pela policy default do Grafana, sem canal externo, como na fase 3. A tabela de
+# cada regra (UID, condicao, janela, severidade, sem dado e painel) esta no
+# observabilidade/README.md, e o scripts/alertas-promtool.sh prova cada uma no
+# promtool, com um caso que dispara e um que nao dispara. Este arquivo vale no
+# Kubernetes e no compose; o que depende do Kong, do relay ou do consumidor, que
+# o compose nao tem, fica em alertas-cluster.yaml e em alertas-outbox-parada.yaml.
 apiVersion: 1
 groups:
   - orgId: 1
@@ -204,7 +203,7 @@ groups:
       # deixa a regra com valor quando nenhuma vale. O job da API e
       # os-service-api no cluster e os-service no compose. O make manifests
       # prova cada condicao, o limiar e a janela no promtool
-      # (scripts/alerta-saga-parada.sh).
+      # (scripts/alertas-promtool.sh).
       - uid: pytstop-saga-parada
         title: Saga parada
         condition: C
@@ -224,6 +223,233 @@ groups:
               refId: A
               instant: true
               expr: max(pytstop_saga_prazo_vencido_segundos) > 60 or max(pytstop_saga_ativas{etapa="falha_na_compensacao"}) > 0 or (1 - min(pytstop_saga_coletor_disponivel)) > 0 or (max(up{job=~"os-service(-api)?"}) unless on() pytstop_saga_coletor_disponivel) or vector(0)
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      # Compensacoes acima do normal (ADR-043): a razao entre as compensacoes e as
+      # sagas iniciadas nos ultimos 30 minutos. O 0,5 e o minimo de 10 sagas no
+      # denominador sao a linha de base da demonstracao, fixada a mao e documentada: com
+      # poucas sagas, tres compensacoes sem nenhuma saga iniciada (valor 3 / 10) nao
+      # disparam, e e preciso seis para passar de 0,5. Sem as series (OS Service fora) a
+      # razao nao existe e a regra fica em OK; quem acusa o OS Service e o alerta de
+      # servico fora do ar.
+      - uid: pytstop-compensacoes-acima-do-normal
+        title: Compensações acima do normal (30min)
+        condition: C
+        for: 30m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Mais da metade das sagas iniciadas nos últimos 30 minutos terminou em compensação (OS cancelada); veja o painel Motivos de cancelamento do dashboard Negócio - Atendimento.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 1800, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(increase(pytstop_saga_compensacoes_total[30m])) / clamp_min(sum(increase(pytstop_saga_iniciadas_total[30m])), 10)
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.5]}
+      # Circuito aberto (ADR-043): o gauge vale 1 aberto e 0 fechado, e a Execucao
+      # publica 0,5 em meia-abertura (o prazo venceu e a proxima chamada e a prova).
+      # Sem trafego o circuito fica em 0,5 para sempre, entao o limiar e 0,5 e nao 0:
+      # com acima de 0 o alerta ficaria preso depois de um circuito que abriu e que
+      # ninguem mais chamou. O disjuntor da Execucao fica aberto so 30 s e depois volta
+      # a 0,5 ate a proxima chamada; com o for de 1 min e a avaliacao a cada 1 min, a
+      # regra pediria duas leituras seguidas em 1 e nao dispararia com trafego raro.
+      # O max_over_time de 2 min segura o 1 por duas avaliacoes: dispara em 1 min depois
+      # da abertura e solta em ate 2 min depois da ultima leitura em 1.
+      - uid: pytstop-circuito-aberto
+        title: Circuito aberto
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: Um disjuntor está aberto (os labels namespace e dependencia dizem qual); as chamadas à dependência falham na hora, sem esperar o timeout.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max by (namespace, dependencia) (max_over_time(pytstop_circuit_breaker_aberto[2m]))
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.5]}
+      # Assinatura invalida no webhook (ADR-043): o contador cresce a cada notificacao
+      # recusada. Um evento isolado nao dispara, porque o increase de 5 minutos fica
+      # acima de zero por menos que a janela da regra.
+      - uid: pytstop-webhook-assinatura-invalida
+        title: Assinatura inválida no webhook
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: O Billing recusou notificações do Mercado Pago com x-signature ausente ou inválida de forma contínua por 5 minutos; alguém forja o webhook ou o segredo de assinatura não confere.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(increase(pytstop_webhook_assinatura_invalida_total[5m]))
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      # Falha na busca do JWKS (ADR-043): Billing e Execucao validam o JWT com a copia
+      # em cache do JWKS do OS Service; a busca que falha por 5 minutos seguidos acaba
+      # derrubando a validacao quando a copia vence.
+      - uid: pytstop-jwks-falhas
+        title: Falha na busca do JWKS
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: A busca ao JWKS do OS Service falha de forma contínua há 5 minutos no namespace do label; o serviço valida com a cópia em cache, que expira.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum by (namespace) (increase(pytstop_jwks_falhas_total[5m]))
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0]}
+      # Mais de 1% das respostas de uma API com 5xx (regra da fase 3, agora por
+      # servico: o job e o Deployment da API). Job sem trafego da NaN e nao dispara.
+      - uid: pytstop-servico-5xx
+        title: Serviço com mais de 1% de 5xx (5min)
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: Mais de 1% das respostas de uma API (o label job diz qual) foram 5xx nos últimos 5 minutos.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum by (job) (rate(http_request_duration_seconds_count{status=~"5.."}[5m])) / sum by (job) (rate(http_request_duration_seconds_count[5m]))
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.01]}
+      # Latencia p95 acima de 500 ms (regra da fase 3, agora por servico). O limiar e
+      # um fim de bucket do histograma (250 ms, 500 ms, 1 s): o histogram_quantile
+      # interpola dentro do bucket, e um limiar no meio de um (300 ms, na faixa de 250
+      # a 500 ms) dispararia com todas as requisicoes em 260 ms. Com 500 ms a
+      # estimativa passa do limiar so se o p95 de verdade passou de 500 ms. As sondas
+      # (/metrics e /api/v1/saude*) ficam de fora: as rapidas baixariam o p95 e o
+      # /api/v1/saude/pronto, ate 2 s com o banco fora, o subiria. No OS o scrape aparece
+      # como nao_roteada e continua dentro (e rapido, so dilui).
+      - uid: pytstop-latencia-p95
+        title: Latência p95 acima de 500 ms (5min)
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+        annotations:
+          summary: O percentil 95 da duração das requisições de uma API (o label job diz qual) passou de 500 ms nos últimos 5 minutos.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: histogram_quantile(0.95, sum by (le, job) (rate(http_request_duration_seconds_bucket{rota!~"/metrics|/api/v1/saude.*"}[5m])))
+          - refId: C
+            relativeTimeRange: {from: 0, to: 0}
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: {type: gt, params: [0.5]}
+      # Outbox com mensagem dead (ADR-043): o relay esgotou as tentativas de uma linha
+      # e a saga que depende dela nao anda sozinha. A serie vem do relay e, no Billing,
+      # tambem da API: max por namespace, nunca soma. Com o relay parado ou o banco
+      # fora a serie some (nunca vira zero), e a regra fica em OK sem dado; o relay
+      # parado e acusado pelo Outbox parada, e o banco fora, por pg_up e mongodb_up
+      # (dashboard Bancos, painel 1).
+      - uid: pytstop-outbox-dead
+        title: Outbox com mensagem dead
+        condition: C
+        for: 1m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+        annotations:
+          summary: A outbox de um serviço (o label namespace diz qual) tem linha dead; o relay desistiu de publicar e a saga que a espera não anda sozinha; veja o runbook da saga.
+        data:
+          - refId: A
+            relativeTimeRange: {from: 300, to: 0}
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max by (namespace) (outbox_dead)
           - refId: C
             relativeTimeRange: {from: 0, to: 0}
             datasourceUid: __expr__

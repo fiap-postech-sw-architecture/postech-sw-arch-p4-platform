@@ -10,6 +10,11 @@ kind: Kustomization
 resources:
   - ../../base
 
+# Prometheus com 15 dias de historico num PVC (local-path), no lugar do
+# emptyDir: o painel de volume diario de OS e as evidencias pedem dias de dados.
+components:
+  - ../../componentes/prometheus-pvc
+
 patches:
   # StorageClass do k3s (local-path), mais disco e mais memoria reservada
   # (request) para o broker, que aqui fica de pe por dias. O limite (1Gi) e o
@@ -29,16 +34,12 @@ patches:
         value:
           cpu: 250m
           memory: 512Mi
-  # Uma semana de metricas para as evidencias (no kind, 2 dias bastam). O
-  # TSDB fica no emptyDir do pod: sobrevive a restart do container, nao a
-  # recriacao do pod.
+  # Mais memoria para o Prometheus, que aqui fica de pe por dias com 15 dias de
+  # historico (a retencao e o PVC vem do componente acima).
   - target:
       kind: Deployment
       name: prometheus
     patch: |-
-      - op: replace
-        path: /spec/template/spec/containers/0/args/1
-        value: --storage.tsdb.retention.time=7d
       - op: replace
         path: /spec/template/spec/containers/0/resources/limits/memory
         value: 1Gi

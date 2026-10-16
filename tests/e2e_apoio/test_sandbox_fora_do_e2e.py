@@ -261,7 +261,7 @@ def test_sem_o_sandbox_o_pytest_seleciona_so_os_cenarios_da_saga() -> None:
     assert len([t for t in todos if SANDBOX in t]) == CENARIOS_DO_SANDBOX
     assert not [t for t in sem_sandbox if SANDBOX in t]
     assert len(sem_sandbox) == len(todos) - CENARIOS_DO_SANDBOX
-    assert len(sem_sandbox) == 13, "os 13 cenarios do E2E da saga"
+    assert len(sem_sandbox) == 14, "os 14 cenarios do E2E da saga"
 
 
 def test_so_com_o_marker_o_pytest_seleciona_so_o_sandbox() -> None:
