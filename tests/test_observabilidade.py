@@ -513,6 +513,20 @@ def test_p95_cita_no_titulo_e_no_resumo_o_limiar_da_regra() -> None:
     assert f"{ms} ms" in regra["annotations"]["summary"]
 
 
+def test_painel_de_p95_consulta_o_mesmo_p95_do_alerta() -> None:
+    # O promql_expr_test so prova que a consulta existe em algum painel ou alerta: sem
+    # este teste, o painel 3 podia perder o filtro das sondas e a consulta do alerta,
+    # igual a dele, manter o caso no ar.
+    (painel,) = [
+        p for p in DASHBOARD_POR_UID["pytstop-servicos"]["panels"] if p["id"] == 3
+    ]
+    (regra,) = [r for _, r in REGRAS if r["uid"] == "pytstop-latencia-p95"]
+    (consulta,) = [d["model"]["expr"] for d in regra["data"] if d["refId"] == "A"]
+    (alvo,) = painel["targets"]
+
+    assert alvo["expr"].replace("$__rate_interval", "5m") == consulta
+
+
 def numero_da_doc(valor: float) -> str:
     return f"{valor:g}".replace(".", ",")
 
