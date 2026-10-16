@@ -34,7 +34,7 @@
     {
       "id": 1,
       "title": "Requisições por serviço (req/s)",
-      "description": "Taxa de requisições de clientes de cada API (job = Deployment da API). As sondas de saúde e o scrape do Prometheus (/metrics, /api/v1/saude e /api/v1/saude/pronto) ficam de fora: mantêm a taxa acima de zero mesmo sem nenhum cliente.",
+      "description": "Taxa de requisições de clientes de cada API (job = Deployment da API). As sondas de saúde e o scrape do Prometheus (/metrics, /api/v1/saude e /api/v1/saude/pronto) ficam de fora: mantêm a taxa acima de zero mesmo sem nenhum cliente. Exceção: no OS o scrape do Prometheus aparece como nao_roteada (o /metrics dele é registrado sem rota de template) e entra na conta, uns 0,07 req/s por réplica: um OS sem cliente não mostra zero.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -78,7 +78,7 @@
     {
       "id": 2,
       "title": "Erro 5xx por serviço",
-      "description": "Fração de respostas 5xx de cada API, calculada como 1 menos a taxa de sucesso (painel 11): aparece em 0 antes do primeiro 5xx. Conta só requisições de clientes, sem as sondas de saúde e o scrape; o alerta do serviço (acima de 1% por 5 min) conta também as sondas, porque o /api/v1/saude/pronto responde 503 quando a API perde o banco. Sem requisição de cliente nos últimos minutos, o painel fica sem dado.",
+      "description": "Fração de respostas 5xx de cada API, calculada como 1 menos a taxa de sucesso (painel 11): aparece em 0 antes do primeiro 5xx. Conta só requisições de clientes, sem as sondas de saúde e o scrape; o alerta do serviço (acima de 1% por 5 min) conta também as sondas, porque o /api/v1/saude/pronto responde 503 quando a API perde o banco. Sem requisição de cliente nos últimos minutos, o painel fica sem dado; também fica se a API só devolveu 5xx desde que subiu, e o alerta de 5xx cobre esse caso. No OS o scrape aparece como nao_roteada e entra na conta, então um OS sem cliente mostra 0.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -144,7 +144,7 @@
     {
       "id": 3,
       "title": "Latência p95 por serviço",
-      "description": "Percentil 95 da duração das requisições de clientes de cada API, sem as sondas de saúde e o scrape. Acima de 500 ms por 5 min dispara aviso, e a linha amarela marca 250 ms. O p95 vem de um histograma em faixas (250 ms, 500 ms, 1 s e assim por diante), então tem a resolução delas: um valor entre 250 e 500 ms diz que o p95 está nessa faixa, não o ponto exato.",
+      "description": "Percentil 95 da duração das requisições de clientes de cada API, sem as sondas de saúde e o scrape (no OS o scrape aparece como nao_roteada e entra na conta; é rápido). Acima de 500 ms por 5 min dispara aviso, e a linha amarela marca 250 ms. O p95 vem de um histograma em faixas (250 ms, 500 ms, 1 s e assim por diante), então tem a resolução delas: um valor entre 250 e 500 ms diz que o p95 está nessa faixa, não o ponto exato.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
@@ -209,7 +209,7 @@
     {
       "id": 4,
       "title": "Rotas mais lentas (p95, 5 min)",
-      "description": "As 10 rotas (template, sem ids) com maior p95 nos últimos 5 minutos, só as que receberam requisição de cliente nesse período; as sondas de saúde e o scrape ficam de fora.",
+      "description": "As 10 rotas (template, sem ids) com maior p95 nos últimos 5 minutos, só as que receberam requisição de cliente nesse período; as sondas de saúde e o scrape ficam de fora, menos no OS, onde o scrape aparece como a rota nao_roteada.",
       "type": "table",
       "gridPos": {
         "h": 8,
@@ -585,7 +585,7 @@
     {
       "id": 11,
       "title": "Taxa de sucesso por serviço",
-      "description": "Fração de respostas sem erro 5xx de cada API (erro do cliente, 4xx, conta como sucesso do serviço), só de requisições de clientes: as sondas de saúde e o scrape ficam de fora. Vale 100% desde a primeira requisição, antes de existir qualquer 5xx; sem requisição de cliente nos últimos minutos, o painel fica sem dado. Abaixo de 99% por 5 min o alerta de 5xx dispara.",
+      "description": "Fração de respostas sem erro 5xx de cada API (erro do cliente, 4xx, conta como sucesso do serviço), só de requisições de clientes: as sondas de saúde e o scrape ficam de fora. Vale 100% desde a primeira requisição, antes de existir qualquer 5xx; sem requisição de cliente nos últimos minutos, o painel fica sem dado; também fica se a API só devolveu 5xx desde que subiu, e o alerta de 5xx cobre esse caso. No OS o scrape aparece como nao_roteada e entra na conta, então um OS sem cliente mostra 100%. Abaixo de 99% por 5 min o alerta de 5xx dispara.",
       "type": "timeseries",
       "gridPos": {
         "h": 8,
