@@ -183,10 +183,12 @@ groups:
       # da Execucao) ou mongodb_up (MongoDB do Billing) em 0 quando nao alcanca o banco.
       # Sem serie nenhuma de pg_up e mongodb_up (nenhum exporter de banco na descoberta),
       # sem dado tambem e alerta, como nas regras de servico fora do ar. Um exporter que
-      # some enquanto os outros seguem de pe nao e visto aqui: o painel Bancos 1 mostra
-      # e o pytstop-alvo-fora acusa o alvo em 0. Com o banco fora a API responde o
+      # falha na raspagem (up 0) e acusado pelo pytstop-alvo-fora e aparece no painel
+      # Bancos 1; um pod de banco apagado ou Pending sai da descoberta (o prometheus.yml
+      # descarta Pending, Succeeded e Failed) e nenhum dos dois o ve, nem este alerta
+      # enquanto os outros exporters seguem de pe. Com o banco fora a API responde o
       # /metrics sem as series do coletor e o up segue em 1; so o /api/v1/saude/pronto
-      # (503) e este alerta enxergam o banco.
+      # (503) e este alerta, com o exporter de pe, enxergam o banco.
       - uid: pytstop-banco-fora
         title: Banco fora do ar ou sem alvo (1min)
         condition: C

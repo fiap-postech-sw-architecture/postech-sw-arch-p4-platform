@@ -8,7 +8,7 @@
 # real, medida no kind com os tres servicos: o trace de uma saga chega a 339 spans, e
 # 1929 traces (14 mil spans) depois de tres execucoes do E2E ocupavam 181Mi, perto de
 # 12 KB por span (181Mi menos os 11Mi do Jaeger ocioso). Uma saga completa pesa uns
-# 4 MB, e umas 110 enchem o limite de 512Mi; com 5000 traces ele estouraria. O teto
+# 4 MB, e umas 110 enchem o limite de 512Mi; com 5000 traces e trafego so de saga ele estouraria. O teto
 # de 250 vale para o mix medido, em que so 1 trace em cada 66 e de saga (29 em 1929):
 # uns 4 sagas e o resto de trafego pequeno ocupam cerca de 40Mi. Se o trafego for so
 # de saga, o limite de memoria e a rede de seguranca: estoura, o pod reinicia e os
