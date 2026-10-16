@@ -541,6 +541,9 @@ tests:
         alertname: pytstop-circuito-aberto
         exp_alerts:
           - exp_labels: {namespace: pytstop-execucao, dependencia: billing}
+      - eval_time: 3m
+        alertname: pytstop-circuito-aberto
+        exp_alerts: []
       - eval_time: 4m
         alertname: pytstop-circuito-aberto
         exp_alerts: []
@@ -969,6 +972,49 @@ tests:
       - eval_time: 12m
         alertname: pytstop-latencia-p95
         exp_alerts: []
+  - name: pytstop-latencia-p95, sonda lenta do /api/v1/saude/pronto (banco fora, ate 2 s) nao puxa o p95
+    interval: 1m
+    input_series:
+      # Clientes: tudo abaixo de 100 ms. /pronto com o banco fora: tudo acima de 1 s, no
+      # mesmo volume. Contada, a sonda levaria o p95 do job a 1 s; fora, ele fica em 95 ms.
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="+Inf"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 12m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
+  - name: pytstop-latencia-p95, rajada lenta de 10 min ainda conta na janela de 5 min do rate e deixa de contar depois
+    interval: 1m
+    input_series:
+      # Nos 10 primeiros minutos toda observacao fica entre 500 ms e 1 s; depois, abaixo
+      # de 100 ms. A janela de 5 min ainda enxerga a rajada no minuto 14 e a esqueceu no
+      # 16; uma janela de 2 min a esqueceria no 12, e uma de 10 min ainda a veria no 16.
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.1"}
+        values: 0x10 60+60x9
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="0.5"}
+        values: 0x10 60+60x9
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="billing-service-api", le="+Inf"}
+        values: 0+60x20
+    alert_rule_test:
+      - eval_time: 14m
+        alertname: pytstop-latencia-p95
+        exp_alerts:
+          - exp_labels: {job: billing-service-api}
+      - eval_time: 16m
+        alertname: pytstop-latencia-p95
+        exp_alerts: []
 
   # ---------------------------------------------------------- servico fora do ar
   - name: pytstop-os-service-fora, API do OS com up 0 por 3 min dispara e as outras nao interferem
@@ -1373,6 +1419,56 @@ tests:
             value: 0.09090909090909094
           - labels: '{job="billing-service-api"}'
             value: 0
+  # Serviços 1: so requisicao de cliente conta; o scrape do OS, que o OS registra sem
+  # rota de template, cai em nao_roteada e entra.
+  - name: painel Servicos 1, so requisicao de cliente conta e o scrape do OS entra como nao_roteada
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
+        values: 0+30x10
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/metrics", status="200"}
+        values: 0+4x10
+      - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/saude", status="200"}
+        values: 0+6x10
+      - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/api/v1/saude/pronto", status="503"}
+        values: 0+10x10
+      - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/metrics", status="200"}
+        values: 0+4x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="nao_roteada", status="200"}
+        values: 0+4x10
+    promql_expr_test:
+      - expr: sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m]))
+        eval_time: 10m
+        exp_samples:
+          - labels: '{job="billing-service-api"}'
+            value: 0.5
+          - labels: '{job="os-service-api"}'
+            value: 0.06666666666666667
+  # Serviços 3: o p95 vem so das requisicoes de cliente; as sondas lentas (/metrics e
+  # /api/v1/saude/pronto) levariam o p95 do job de 0,2425 a 0,925 s.
+  - name: painel Servicos 3, o p95 vem so das requisicoes de cliente e as sondas lentas ficam de fora
+    interval: 1m
+    input_series:
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.1"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="0.25"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/ordens-de-servico", le="+Inf"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="0.25"}
+        values: 0x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="1"}
+        values: 0+60x20
+      - series: http_request_duration_seconds_bucket{job="os-service-api", rota="/api/v1/saude/pronto", le="+Inf"}
+        values: 0+60x20
+    promql_expr_test:
+      - expr: histogram_quantile(0.95, sum by (le, job) (rate(http_request_duration_seconds_bucket{rota!~"/metrics|/api/v1/saude.*"}[5m])))
+        eval_time: 15m
+        exp_samples:
+          - labels: '{job="os-service-api"}'
+            value: 0.2425
   # Serviços 4: so a rota com requisicao de cliente nos ultimos 5 min entra. A rota
   # que parou de receber (contadores constantes) daria NaN, e a sonda lenta
   # (/metrics a ~1 s) apareceria no topo.
