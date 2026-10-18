@@ -57,6 +57,7 @@ Ponta a ponta (E2E), no `platform`: `e2e/features/saga_atendimento.feature` roda
 - `@expiracao`: orçamento vencido, com validade curta no overlay do kind.
 - `@ponto-de-nao-retorno`: cancelamento depois do início da execução responde 409.
 - `@resiliencia`: consumidor do Billing parado por 20 s, sem mensagem na DLQ e com a saga seguindo na volta; API do Billing parada na conclusão do diagnóstico, com 503, circuito aberto e conclusão aceita quando o Billing volta. O cenário derruba o componente com `kubectl scale --replicas=0`.
+- `e2e/features/mercadopago_sandbox.feature` (marcador `mp_sandbox`): pagamento no checkout, cancelamento depois do pagamento e cancelamento sem pagar, contra a sandbox do Mercado Pago. Roda à mão, em `make mp-sandbox` (quem paga é uma pessoa, no navegador) e em `make mp-sandbox-ensaio` (o simulador do Billing paga), e fica fora do `make e2e`, do `make demo` e do CD, porque o CD não tem credencial. Não prova o webhook: a sandbox não envia notificação, e a confirmação vem da conciliação ([README](../../../../README.md#mercado-pago-na-sandbox)).
 - O Swagger (`/docs`) de cada serviço abre através do Kong.
 
 O OWASP ZAP baseline contra o Kong e a collection do fluxo completo, executada com newman, rodam no job de E2E do pipeline do `platform`, não no CD de cada serviço, para não somar minutos a cada deploy.
@@ -67,7 +68,9 @@ O OWASP ZAP baseline contra o Kong e a collection do fluxo completo, executada c
 
 ### Teste de mutação
 
-Não é gate de CI nem tem pontuação mínima. Os módulos críticos de cada serviço (a máquina de status, as transições da saga, a idempotência, o objeto de valor do CPF e a validação do JWT) são mutados à mão, e o PR lista cada mutante: o que foi alterado e o teste que falhou. Além deles, o `mutmut` roda nos módulos críticos de cada serviço (consumidor, relay e orquestrador ou saga) quando a execução do módulo couber em 15 minutos; o que passar disso fica só com os mutantes manuais. O resultado vai no corpo do PR e a pontuação, no README do serviço.
+Não é gate de CI nem tem pontuação mínima. Os módulos críticos de cada serviço (a máquina de status, as transições da saga, a idempotência, o objeto de valor do CPF e a validação do JWT, mais o consumidor, o relay e o orquestrador ou a saga) são mutados à mão: cada mutante é um defeito plausível escrito à mão, e o resultado lista o que foi alterado e o teste que falhou.
+
+O `mutmut` 3.8.0 não roda nos serviços. Ele espera o pacote em `src/<pacote>`, e o pacote deles se chama `src` (``AssertionError: Failed trampoline hit. Module name starts with `src.`, which is invalid``, em `mutmut/stats.py`); renomear o pacote ou remendar a ferramenta mudaria o que se mede. O Billing traz a lista de mutantes (`scripts/mutantes.toml`) e o script que aplica um por vez numa cópia do código e para de iniciar mutantes depois de 15 minutos (`scripts/mutacao_manual.py`, `make mutacao`). A seção "Mutação" do README do Billing diz como levar o script a outro serviço, e a pontuação de cada serviço vai no README dele.
 
 ### SonarQube efêmero no CI (RNF-041)
 
@@ -158,7 +161,7 @@ As versões de que os testes e o CI dependem ficam fixadas: `pytest-bdd>=8.0` no
 
 ### Neutras
 
-* A cobertura mede linhas e ramos executados, não a força das asserções; a mutação (manual e com `mutmut` nos módulos críticos) cobre parte do que ela não vê, sem entrar no CI
+* A cobertura mede linhas e ramos executados, não a força das asserções; a mutação (manual, nos módulos críticos) cobre parte do que ela não vê, sem entrar no CI
 
 ## Decisões Relacionadas
 
