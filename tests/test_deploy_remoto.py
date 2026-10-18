@@ -7,8 +7,9 @@ tag e digest) para cada servico: o overlay gerado parte do overlay pedido e
 fixa a imagem pelo digest, a ordem do namespace, o contexto do argumento em
 toda chamada (nunca o KUBE_CONTEXT do ambiente), os prazos e o overlay gerado
 apagado no fim; que falha no cluster nomeia o servico; que checkout errado
-(sem o overlay, de outro repositorio, overlay gerado ja existente) para antes
-do cluster; e os argumentos recusados.
+(sem o overlay, de outro repositorio, overlay gerado ja existente) e render
+com objeto fora do namespace do servico param antes do cluster; e os
+argumentos recusados.
 """
 
 from __future__ import annotations
@@ -45,11 +46,13 @@ DIGEST = "sha256:" + "0123456789abcdef" * 4
 CONTEXTO = "cluster-remoto"
 GERADO = Path("k8s") / "overlays" / "execucao"
 
-# O kustomize do falso renderiza o overlay gerado como o real: com a imagem
-# trocada pelo nome e pelo digest dele. KUSTOMIZE_FALSO_SEM_A_IMAGEM simula o
-# checkout de outro repositorio (a troca nao casa nada), e
-# KUSTOMIZE_FALSO_FALHA, um overlay que nao renderiza. O resto das chamadas
-# vai para o kubectl falso do teste do implantar-servicos.sh.
+# O kustomize do falso renderiza o overlay gerado como o real: o Namespace do
+# servico e um Deployment nele, com a imagem trocada pelo nome e pelo digest
+# (o namespace sai do caminho do checkout, <tmp>/<namespace>/repo).
+# KUSTOMIZE_FALSO_SEM_A_IMAGEM simula o checkout de outro repositorio (a troca
+# nao casa nada), KUSTOMIZE_FALSO_FALHA, um overlay que nao renderiza, e
+# KUSTOMIZE_FALSO_A_MAIS, documentos acrescentados ao render. O resto das
+# chamadas vai para o kubectl falso do teste do implantar-servicos.sh.
 KUBECTL_REMOTO = (
     r"""
 import json
@@ -67,9 +70,15 @@ if sys.argv[1:2] == ["kustomize"]:
     gerado = yaml.safe_load((Path(sys.argv[2]) / "kustomization.yaml").read_text())
     imagem = gerado["images"][0]
     if os.environ.get("KUSTOMIZE_FALSO_SEM_A_IMAGEM"):
-        print("        image: pytstop-outro-servico")
+        trocada = "pytstop-outro-servico"
     else:
-        print(f"        image: {imagem['newName']}@{imagem['digest']}")
+        trocada = f"{imagem['newName']}@{imagem['digest']}"
+    ns = Path.cwd().parts[-2]
+    print(f"apiVersion: v1\nkind: Namespace\nmetadata:\n  name: {ns}\n---")
+    print("apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: api")
+    print(f"  namespace: {ns}\nspec:\n  template:\n    spec:\n      containers:")
+    print(f"      - image: {trocada}\n        name: api")
+    print(os.environ.get("KUSTOMIZE_FALSO_A_MAIS", ""), end="")
     sys.exit(0)
 """
     + KUBECTL_FALSO
@@ -404,6 +413,51 @@ def test_overlay_sem_a_imagem_do_servico_para_antes_do_cluster(
     assert processo.returncode == 1
     assert f"os-service: {mensagem.format(dir=dir_.resolve())}" in processo.stderr
     assert len(remoto.chamadas("kustomize")) == 1
+    assert remoto.chamadas("kubectl") == []
+    assert not (dir_ / GERADO).exists()
+
+
+# Documentos que o render nao pode ter: objeto de outro namespace, objeto sem
+# namespace (de cluster) e o Namespace de outro.
+FORA_DO_NAMESPACE = {
+    "objeto-de-outro-namespace": (
+        (
+            "---\napiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: x\n"
+            "  namespace: pytstop-plataforma\n"
+        ),
+        "ConfigMap/x",
+    ),
+    # O namespace do ServiceAccount em subjects nao e o do objeto.
+    "objeto-de-cluster": (
+        (
+            "---\napiVersion: rbac.authorization.k8s.io/v1\n"
+            "kind: ClusterRoleBinding\nmetadata:\n  name: admin-do-servico\n"
+            "roleRef:\n  name: cluster-admin\nsubjects:\n- kind: ServiceAccount\n"
+            "  name: api\n  namespace: pytstop-os\n"
+        ),
+        "ClusterRoleBinding/admin-do-servico",
+    ),
+    "namespace-de-outro": (
+        "---\napiVersion: v1\nkind: Namespace\nmetadata:\n  name: pytstop-plataforma\n",
+        "Namespace/pytstop-plataforma",
+    ),
+}
+
+
+@pytest.mark.parametrize(
+    ("a_mais", "objeto"), FORA_DO_NAMESPACE.values(), ids=FORA_DO_NAMESPACE
+)
+def test_render_com_objeto_fora_do_namespace_para_antes_do_cluster(
+    remoto: Remoto, a_mais: str, objeto: str
+) -> None:
+    dir_ = remoto.checkout("os-service")
+
+    processo = remoto.do_cd("os-service", dir_, KUSTOMIZE_FALSO_A_MAIS=a_mais)
+
+    assert processo.returncode == 1
+    assert (
+        f"os-service: k8s/overlays/k3s renders objects outside pytstop-os: {objeto}\n"
+    ) in processo.stderr
     assert remoto.chamadas("kubectl") == []
     assert not (dir_ / GERADO).exists()
 

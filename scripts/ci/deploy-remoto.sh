@@ -100,6 +100,23 @@ renderizado=$(prazo "$PRAZO_KUBECTL" kubectl kustomize "$EXECUCAO") \
   || { echo "$servico: kubectl kustomize $EXECUCAO failed or exceeded ${PRAZO_KUBECTL}s" >&2; exit 1; }
 grep -qF "image: $nome@$digest" <<< "$renderizado" \
   || { echo "$servico: k8s/overlays/$overlay in $PWD does not use the image pytstop-$servico (run from the checkout of $servico)" >&2; exit 1; }
+# Com a credencial de admin do cluster, o apply aplicaria qualquer objeto: o
+# render so tem objetos com metadata.namespace igual ao do servico, mais o
+# Namespace dele (o kustomize poe apiVersion, kind e metadata no comeco de
+# cada documento, separado por ---).
+fora=$(awk -v ns="$ns" '
+  function confere() { if (kind != "" && espaco != ns && !(kind == "Namespace" && nome == ns)) print kind "/" nome }
+  /^---$/ { confere(); kind = nome = espaco = ""; meta = 0; next }
+  /^kind: / { kind = $2 }
+  /^metadata:/ { meta = 1; next }
+  /^[^ ]/ { meta = 0 }
+  meta && /^  name: / { nome = $2 }
+  meta && /^  namespace: / { espaco = $2 }
+  END { confere() }' <<< "$renderizado")
+if [ -n "$fora" ]; then
+  echo "$servico: k8s/overlays/$overlay renders objects outside $ns: ${fora//$'\n'/ }" >&2
+  exit 1
+fi
 
 if ! implanta "$ns" "$PWD/$EXECUCAO"; then
   echo "deploy failed: $servico ($nome@$digest) in context $contexto" >&2
