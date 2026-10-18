@@ -3,10 +3,12 @@
 - Cada link relativo cai em arquivo e secao que existem; as ancoras sao as que o
   GitHub gera dos titulos. Os links para fora do repositorio (``https:``) e o que
   esta entre crases (uma consulta PromQL com ``](``) nao entram.
-- Os comandos dos blocos ``bash`` rodam colados no terminal: no zsh interativo (o
-  padrao do macOS) o ``#`` nao abre comentario, e o texto depois dele vira
-  argumento do comando (no make, vira alvo). O que o comando faz fica na frase
-  acima do bloco.
+- Toda cerca de codigo fecha: uma cerca sem par troca, no resto do arquivo, o que
+  e bloco de codigo pelo que nao e.
+- Os comandos dos blocos ``bash``, ``sh``, ``zsh``, ``shell`` e ``console`` rodam
+  colados no terminal: no zsh interativo (o padrao do macOS) o ``#`` nao abre
+  comentario, e o texto depois dele vira argumento do comando (no make, vira
+  alvo). O que o comando faz fica na frase acima do bloco.
 """
 
 from __future__ import annotations
@@ -37,11 +39,14 @@ def _documentos() -> list[str]:
 DOCUMENTOS = _documentos()
 # Bloco de codigo: um # dentro dele nao e titulo, e um [x](y) nao e link.
 _CERCA = re.compile(r"^[ \t]*```.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+# Linha de cerca, de abertura ou de fechamento: o total por documento e par.
+_LINHA_DE_CERCA = re.compile(r"^[ \t]*```", re.MULTILINE)
 # Trecho em linha: o que esta entre crases nao e link, mesmo com ](.
 _EM_LINHA = re.compile(r"`[^`\n]*`")
 # Bloco de comando: a cerca pode vir indentada, no passo numerado de uma lista.
 _BLOCO = re.compile(
-    r"^[ \t]*```(?:bash|sh|zsh)\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE
+    r"^[ \t]*```(?:bash|sh|zsh|shell|console)\n(.*?)^[ \t]*```[ \t]*$",
+    re.DOTALL | re.MULTILINE,
 )
 # Um # no comeco da linha ou depois de espaco: `make e2e #texto` tambem passa o
 # texto como argumento. O # no meio de uma palavra (https://x.dev/#y) nao conta.
@@ -89,6 +94,10 @@ def _quebrados(links: list[tuple[str, Path, str]]) -> list[str]:
     ]
 
 
+def _cercas_pares(texto: str) -> bool:
+    return len(_LINHA_DE_CERCA.findall(texto)) % 2 == 0
+
+
 def test_a_conferencia_cobre_o_readme_e_os_documentos_de_docs() -> None:
     em_docs = {p.relative_to(RAIZ).as_posix() for p in (RAIZ / "docs").rglob("*.md")}
 
@@ -101,6 +110,16 @@ def test_links_relativos_do_documento_caem_em_arquivo_e_secao_reais(
     documento: str,
 ) -> None:
     assert _quebrados(_links_relativos(RAIZ / documento)) == []
+
+
+@pytest.mark.parametrize("documento", DOCUMENTOS)
+def test_cercas_do_documento_fecham(documento: str) -> None:
+    assert _cercas_pares((RAIZ / documento).read_text(encoding="utf-8"))
+
+
+def test_cerca_sem_par_reprova() -> None:
+    assert _cercas_pares("```bash\nmake test\n```\n   ```text\nx\n   ```\n")
+    assert not _cercas_pares("```bash\nmake test\n```\n```text\nsem fechar\n")
 
 
 def test_ancora_gerada_como_a_do_github() -> None:
@@ -166,6 +185,8 @@ def test_comentario_em_bloco_de_comando_reprova() -> None:
         "1. Passo:\n\n"
         "   ```sh\n   kubectl get pods  # espera\n   ```\n\n"
         "```zsh\n# so comentario\nmake test\n```\n"
+        "```shell\nmake lint  # confere\n```\n"
+        "```console\n$ make lint  # confere\n```\n"
         "```text\nsaida # nao e comando\n```\n"
         "```bash\ncurl https://x.dev/#y\nmake kind-up\n```\n"
     )
@@ -175,4 +196,6 @@ def test_comentario_em_bloco_de_comando_reprova() -> None:
         "make e2e #os 14 cenarios",
         "   kubectl get pods  # espera",
         "# so comentario",
+        "make lint  # confere",
+        "$ make lint  # confere",
     ]
