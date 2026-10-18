@@ -971,36 +971,29 @@ zap-baseline.py -t https://localhost/os/openapi.json -c regras.conf -m 1 -I -z "
 
 Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_REDE` (rede do container, `host`), `RELATORIOS` (`reports/zap`, relativo à pasta de onde o script roda) e `PRAZO_ZAP` (segundos por serviço, 300) trocam o alvo, a rede, a pasta e o prazo. O `curl` roda na máquina do script, então a `BORDA` tem de responder ali também: um Kong avulso numa rede Docker entra com a porta publicada no loopback (`-p 127.0.0.1:<porta>:8443` e `BORDA=https://localhost:<porta>`).
 
-### O que o ZAP achou nos primeiros runs
+### O que o ZAP acusa
 
-Nos três runs do job (14/10/2026), com os três serviços na `main` deles, o ZAP leu 37 URLs do OS, 38 do Billing e 24 da Execução, sem nenhum `FAIL`. Os avisos e como foram tratados:
+Nenhuma regra em `FAIL` dispara com os três serviços na `main`: no run [38844023575](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/38844023575) (platform 0c88d58, OS e2bf48d, Billing d6d2776, Execução 301052a), o ZAP leu 38 URLs do OS, 38 do Billing e 24 da Execução, com `fail=0` nos três. Ficam os avisos abaixo.
 
 | Achado | Onde | Tratamento |
 |---|---|---|
-| 10035, `Strict-Transport-Security` ausente (`WARN`) | Só no 404 que o próprio Kong gera: `/`, `/<prefixo>`, `/robots.txt` e `/sitemap.xml`, que o spider pede. Toda resposta de serviço (`openapi.json`, `saude`, JWKS) traz o cabeçalho | Fica em `WARN`. A causa é o Kong sem rota casada, que não executa plugin nenhum; ela passa a `FAIL` se o relatório mostrar o achado numa resposta de serviço |
+| 10035, `Strict-Transport-Security` ausente (`WARN`) | Só nos 404 que o próprio Kong gera: `/`, `/<prefixo>`, `/robots.txt` e `/sitemap.xml`, que o spider pede. Toda resposta de serviço (`openapi.json`, `saude`, JWKS) traz o cabeçalho | Fica em `WARN`: o Kong sem rota casada não executa plugin nenhum. A regra só vira `FAIL` quando o Kong mandar o cabeçalho nesses 404 (dívida no MEMORY); um achado numa resposta de serviço é defeito do serviço e se corrige nele |
 | 10024, informação sensível na URL (`WARN`) | Billing: o checkout do simulador e o `aprovar` e o `recusar` dele levam o `token` na query | Por desenho do simulador do Mercado Pago ([ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md)), que só existe com `MP_MODE=simulado`; o Promtail mascara o `token=` antes de ele chegar ao Loki ([`make smoke`](scripts/smoke.sh)). Fica em `WARN`, visível |
-| 3% das respostas do Billing com 5xx | Um `POST /billing/api/v1/webhooks/mercadopago` sem assinatura, que o spider monta do `openapi.json` | É a resposta tratada `503 SERVICO_INDISPONIVEL` do serviço (log `http_exception_handled`, nível `warning`, conferido nos logs do Billing e do Kong de um dos runs). Nenhum `500` passou pelo Kong no intervalo do scan: os outros dois 503 do log do Kong são do cenário de resiliência do E2E, que derruba a API do Billing de propósito |
+| Respostas 5xx do Billing | Um `POST /billing/api/v1/webhooks/mercadopago` sem assinatura, que o spider monta do `openapi.json` | É a resposta tratada `503 SERVICO_INDISPONIVEL` do serviço (log `http_exception_handled`, nível `warning`), não um `500` |
 
 ### Regras e allowlist
 
-Cada regra tem uma linha em `regras.conf` (`id`, ação e motivo, separados por TAB), e a tabela abaixo é a mesma: um teste compara as duas. `FAIL` reprova o job, `WARN` aparece no relatório e no summary sem reprovar, `IGNORE` some do relatório. Regra que não está no arquivo fica em `WARN`. Regra nova ignorada só entra com o motivo na linha do arquivo e na descrição do PR, e achado real se corrige na causa (um cabeçalho de segurança no Kong, por exemplo), não aqui.
+Cada regra tem uma linha em `regras.conf` (`id`, ação e motivo, separados por TAB), e a tabela abaixo é a mesma: um teste compara as duas. `FAIL` reprova o job, `WARN` aparece no relatório e no summary sem reprovar, `IGNORE` some do relatório. Regra que não está no arquivo fica em `WARN`. Regra ignorada só entra quando o relatório mostrar o achado, com o motivo na linha do arquivo e na descrição do PR, e achado real se corrige na causa (um cabeçalho de segurança no Kong, por exemplo), não aqui.
 
 | Regra | Ação | Motivo |
 |---|---|---|
-| 10036 | FAIL | Server Leaks Version Information via "Server": nome e versão da pilha. Os serviços sobem sem o `server` do uvicorn e o Kong com `headers=off` ([Gateway](#gateway-como-um-serviço-publica-as-rotas)); sem a regra, qualquer um dos dois voltaria a anunciar a versão em silêncio |
+| 10036 | FAIL | HTTP Server Response Header: nome e versão de produto no `Server`. Os serviços sobem sem o `server` do uvicorn e o Kong com `headers=off` ([Gateway](#gateway-como-um-serviço-publica-as-rotas)); sem a regra, qualquer um dos dois voltaria a anunciar a versão em silêncio |
 | 10037 | FAIL | X-Powered-By: o mesmo motivo |
-| 10020 | WARN | Anti-clickjacking ausente. Os serviços põem o cabeçalho em toda resposta deles; a resposta que o Kong gera sozinho (404 de rota inexistente) sai sem ele. Passa a FAIL se o relatório mostrar o achado numa resposta de serviço |
-| 10021 | WARN | `X-Content-Type-Options` ausente: o mesmo caso do 10020 |
-| 10035 | WARN | `Strict-Transport-Security` ausente: o mesmo caso do 10020 |
-| 10038 | WARN | CSP ausente: o mesmo caso do 10020 |
-| 10017 | IGNORE | JavaScript de outro domínio: o Swagger UI do FastAPI carrega o bundle do jsDelivr; página de documentação, sem dado nem credencial |
-| 90003 | IGNORE | Sub Resource Integrity ausente: o mesmo script e o mesmo CSS do Swagger UI |
-| 10027 | IGNORE | Comentários suspeitos: bundle de terceiro do Swagger UI |
-| 10110 | IGNORE | Funções JavaScript perigosas: bundle de terceiro do Swagger UI |
-| 10096 | IGNORE | Timestamp no corpo: as datas das respostas são do contrato |
-| 10109 | IGNORE | Aplicação web moderna: informativo |
-| 10049 | IGNORE | Conteúdo armazenável em cache: informativo para uma API JSON |
-| 10015 | IGNORE | Diretivas de `Cache-Control`: informativo para uma API JSON, e os serviços respondem `no-store` |
+| 10020 | FAIL | Anti-clickjacking ausente. Os serviços põem o cabeçalho em toda resposta deles, e nenhum run o acusou, nem nos 404 do Kong: um serviço que o perder reprova |
+| 10021 | FAIL | `X-Content-Type-Options` ausente: o mesmo caso do 10020 |
+| 10038 | FAIL | CSP ausente: o mesmo caso do 10020 |
+| 10035 | WARN | `Strict-Transport-Security` ausente nos 404 que o Kong gera sozinho (ver acima) |
+| 10015 | IGNORE | Diretivas de `Cache-Control`: os serviços respondem `no-store`, e o JWKS responde `public, max-age=600` de propósito (a chave pública muda pouco); é nele que o alerta dispara |
 
 ## Contratos de mensageria
 

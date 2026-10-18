@@ -502,28 +502,22 @@ def test_regras_conf_no_formato_do_zap_com_motivo_em_toda_linha() -> None:
         assert len(motivo) > 10, f"{regra}: sem motivo"
 
 
-def test_versao_nos_cabecalhos_reprova_e_o_resto_so_avisa_ou_e_ignorado() -> None:
+def test_cabecalhos_reprovam_so_o_hsts_avisa_e_so_o_10015_e_ignorado() -> None:
     acoes = {regra: acao for regra, acao, _ in regras_do_arquivo()}
     # Server e X-Powered-By com versao: o Kong sem headers=off e o servico sem
-    # --no-server-header voltariam a anunciar a pilha.
-    assert acoes["10036"] == acoes["10037"] == "FAIL"
-    assert [r for r, a in acoes.items() if a == "FAIL"] == ["10036", "10037"]
-    assert {r for r, a in acoes.items() if a == "WARN"} == {
+    # --no-server-header voltariam a anunciar a pilha. Os cabecalhos de
+    # seguranca nunca dispararam: um servico que os perder reprova.
+    assert {r for r, a in acoes.items() if a == "FAIL"} == {
+        "10036",
+        "10037",
         "10020",
         "10021",
-        "10035",
         "10038",
     }
-    assert {r for r, a in acoes.items() if a == "IGNORE"} == {
-        "10017",
-        "90003",
-        "10027",
-        "10110",
-        "10096",
-        "10109",
-        "10049",
-        "10015",
-    }
+    # O HSTS falta nos 404 que o Kong gera sozinho, sem rota casada.
+    assert {r for r, a in acoes.items() if a == "WARN"} == {"10035"}
+    # Ignorada so a regra que o relatorio mostrou (o JWKS com max-age).
+    assert {r for r, a in acoes.items() if a == "IGNORE"} == {"10015"}
 
 
 def test_readme_documenta_cada_regra_com_a_mesma_acao() -> None:
