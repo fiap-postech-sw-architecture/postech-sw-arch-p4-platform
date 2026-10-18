@@ -13,7 +13,7 @@ A [gap analysis](../../../requisitos/fase4/gap-analysis-fase-4.md) traduz isso n
 
 O p3 (código da fase 3, commit `08dcffe`) não tem pagamento: era não-objetivo do produto, e a busca por `pagamento`, `payment` e `mercado` não encontra nada (gap analysis, RF-032 e RF-034). O precedente mais próximo é o canal externo de decisão do orçamento, autenticado por HMAC (código de autenticação de mensagem com hash) a cada requisição ([ADR-021](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/021-aprovacao-externa-orcamento.md)).
 
-O pipeline de integração contínua (CI) e o kind rodam sem segredo externo e sem URL pública, e a credencial de teste depende de um passo humano: criar as contas de teste (vendedor e comprador) no painel do Mercado Pago, configurar Webhooks na aplicação e gravar `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` como segredos da organização no GitHub.
+O pipeline de integração contínua (CI) e o kind rodam sem segredo externo e sem URL pública, e a credencial de teste depende de um passo humano: criar as contas de teste (vendedor e comprador) no painel do Mercado Pago, configurar Webhooks na aplicação e guardar `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET`, que nunca vão para o GitHub ([ADR-042](042-cicd-e-deploy-kubernetes.md)).
 
 Mercado Pago, webhooks e idempotência não estão no material. A prática de SAGA Pattern simula o provedor com um MockGateway, que confirma a cobrança por callback (Aula 05, Fig. 1 e 12), e a Aula 01 de Estrutura de Microsserviços põe o adaptador do provedor dentro do serviço dono (Fig. 2: o Paguei no serviço Pagamento).
 
@@ -50,7 +50,7 @@ O port `GatewayPagamento` (criar cobrança, consultar, buscar por referência, e
 - `MercadoPagoGateway` (httpx), coberto por teste de contrato com requisições e respostas da documentação: caminhos, headers (inclusive `X-Idempotency-Key`), corpos, códigos de status e o cálculo do `x-signature` ([ADR-041](041-estrategia-de-testes-e-qualidade.md)).
 - `GatewayPagamentoSimulado`: o `checkout_url` aponta para `GET /simulador/checkout/{pagamento_id}`, e `POST /api/v1/simulador/pagamentos/{id}/aprovar` (ou `/recusar`) percorre o mesmo caso de uso de confirmação ou recusa que o webhook. A recusa no simulador conta como a do provedor, e o E2E usa `PAGAMENTO_MAX_RECUSAS=1`.
 
-`MP_MODE` escolhe o adapter, é obrigatório e não tem padrão. O boot recusa `simulado` com `ENVIRONMENT=production`, salvo `SIMULADOR_PERMITIDO=true` explícito no overlay. As rotas do simulador só existem em modo simulado, exigem o token HMAC do `pagamento_id` que vai no `checkout_url` e têm rate limit ([ADR-038](038-borda-e-comunicacao-sincrona.md)), e `GET /api/v1/saude` informa o modo. `MP_MODE=mercadopago` exige `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET`, segredos da organização com acesso só para o repositório do Billing; a chave do `x-signature` só existe depois de configurar Webhooks na aplicação (Suas integrações).
+`MP_MODE` escolhe o adapter, é obrigatório e não tem padrão. O boot recusa `simulado` com `ENVIRONMENT=production`, salvo `SIMULADOR_PERMITIDO=true` explícito no overlay. As rotas do simulador só existem em modo simulado, exigem o token HMAC do `pagamento_id` que vai no `checkout_url` e têm rate limit ([ADR-038](038-borda-e-comunicacao-sincrona.md)), e `GET /api/v1/saude` informa o modo. `MP_MODE=mercadopago` exige `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET`, do Secret `billing-mercadopago`, criado no cluster e lido só pelo Billing; a chave do `x-signature` só existe depois de configurar Webhooks na aplicação (Suas integrações).
 
 ### Prova da integração real
 
@@ -120,7 +120,7 @@ Descartados pelo enunciado: usar só o simulador e trocar de provedor, porque a 
 - [ADR-038](038-borda-e-comunicacao-sincrona.md): rota do webhook na borda e envelope de resiliência
 - [ADR-039](039-autenticacao-entre-servicos.md): tokens HMAC e política de segredos
 - [ADR-041](041-estrategia-de-testes-e-qualidade.md): teste de contrato do adapter e cenários de pagamento
-- [ADR-042](042-cicd-e-deploy-kubernetes.md): segredos da organização e exposição do k3s
+- [ADR-042](042-cicd-e-deploy-kubernetes.md): credenciais do Mercado Pago fora do GitHub e deploy remoto opcional, desligado
 
 ## Notas
 
