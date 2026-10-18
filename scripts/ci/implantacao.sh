@@ -85,12 +85,20 @@ espera_job() {
 # Cada comando que falha devolve o status com o return, porque quem chama pode
 # rodar a funcao onde o set -e nao vale (num if ou do lado esquerdo de um ||).
 implanta() {
-  local ns=$1 recurso recursos jobs banco
+  local ns=$1 recurso recursos jobs banco erro
   banco=$(segredo_do_banco "$ns")
   # Sem os Secrets (o make deploy os cria), os pods ficariam em
-  # CreateContainerConfigError e o erro viria como timeout do banco.
-  k -n "$ns" get secret rabbitmq "$banco" -o name > /dev/null \
-    || { echo "Secrets rabbitmq and $banco are missing in $ns: run make deploy first" >&2; return 1; }
+  # CreateContainerConfigError e o erro viria como timeout do banco. So o
+  # NotFound e Secret ausente: contexto inexistente, credencial vencida, RBAC
+  # ou prazo estourado sao acesso ao cluster, e o make deploy nao resolve.
+  erro=$(k -n "$ns" get secret rabbitmq "$banco" -o name 2>&1 > /dev/null) || {
+    echo "$erro" >&2
+    case "$erro" in
+      *"(NotFound)"*) echo "Secrets rabbitmq and $banco are missing in $ns: run make deploy first" >&2 ;;
+      *) echo "cannot read the Secrets rabbitmq and $banco in $ns (kubectl error above; the cluster credential may have expired)" >&2 ;;
+    esac
+    return 1
+  }
   k -n "$ns" delete job -l "$INICIALIZACAO" --ignore-not-found --timeout=60s || return
   k apply --server-side -k "$2" || return
   recursos=$(k -n "$ns" get statefulset -o name) || return

@@ -499,18 +499,38 @@ def test_falha_no_cluster_nomeia_o_servico_e_apaga_o_overlay(
     assert not (dir_ / GERADO).exists()
 
 
-def test_sem_os_secrets_da_plataforma_pede_o_make_deploy(remoto: Remoto) -> None:
+AUSENTES = SEM_RECURSO["sem-secret"]
+INACESSIVEIS = (
+    "cannot read the Secrets rabbitmq and billing-mongo in pytstop-billing"
+    " (kubectl error above; the cluster credential may have expired)"
+)
+
+
+@pytest.mark.parametrize(
+    ("verbo", "erro", "mensagem", "outra"),
+    [
+        (
+            "sem-secret",
+            'Error from server (NotFound): secrets "billing-mongo" not found',
+            AUSENTES,
+            INACESSIVEIS,
+        ),
+        ("secret", "error: secret failed in pytstop-billing", INACESSIVEIS, AUSENTES),
+    ],
+    ids=["ausentes-pedem-o-make-deploy", "inacessiveis-falam-da-credencial"],
+)
+def test_secrets_da_plataforma_ausentes_ou_inacessiveis(
+    remoto: Remoto, verbo: str, erro: str, mensagem: str, outra: str
+) -> None:
     dir_ = remoto.checkout("billing-service")
 
     processo = remoto.do_cd(
-        "billing-service", dir_, KUBECTL_FALSO_FALHA="pytstop-billing:secret"
+        "billing-service", dir_, KUBECTL_FALSO_FALHA=f"pytstop-billing:{verbo}"
     )
 
     assert processo.returncode == 1
-    assert (
-        "Secrets rabbitmq and billing-mongo are missing in pytstop-billing:"
-        " run make deploy first"
-    ) in processo.stderr
+    assert f"{erro}\n{mensagem}\n" in processo.stderr
+    assert outra not in processo.stderr
 
 
 def test_job_que_falha_mostra_o_log_dele(remoto: Remoto) -> None:

@@ -131,9 +131,10 @@ os.execvp(sys.argv[2], sys.argv[2:])
 # uma na forma que o prefixo escolhe: "image:", "lista:", "aspas:" ou "volume:");
 # cada namespace tem o banco, o Job de inicializacao e dois Deployments.
 # KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
-# (secret, delete, apply, statefulset, job, deployment; job e o Job que falha, e
-# sem-statefulset, sem-job e sem-deployment, a lista vazia), e
-# KUBECTL_FALSO_PENDURA=<namespace>:<verbo>, pendurar.
+# (secret, delete, apply, statefulset, job, deployment; job e o Job que falha,
+# sem-secret, o NotFound do Secret do banco, e sem-statefulset, sem-job e
+# sem-deployment, a lista vazia), e KUBECTL_FALSO_PENDURA=<namespace>:<verbo>,
+# pendurar.
 # KUBECTL_FALSO_JOB_PENDENTE=<namespace> deixa o Job rodando para sempre.
 # KUSTOMIZE_FALSO_FALHA=1 faz o kustomize falhar.
 KUBECTL_FALSO = r"""
@@ -231,6 +232,8 @@ elif resto[:2] == ["get", "secret"]:
     assert resto[2:] == ["rabbitmq", SEGREDOS_DO_BANCO[ns], "-o", "name"], resto
     falha_em("secret")
     print("secret/rabbitmq")
+    if falha == f"{ns}:sem-secret":
+        sys.exit(f'Error from server (NotFound): secrets "{BANCOS[ns]}" not found')
 elif resto[0] == "logs":
     falha_em("logs")
     print(f"migration log of {resto[1]}")
@@ -408,6 +411,7 @@ _ANTES_DO_JOB = [*_ANTES_DO_BANCO, "get statefulset", "rollout status", "get job
 _ANTES_DOS_DEPLOYMENTS = [*_ANTES_DO_JOB, "poll job", "get deployment"]
 ATE_A_FALHA = {
     "secret": ["get secret"],
+    "sem-secret": ["get secret"],
     "delete": ["get secret", "delete job"],
     "apply": _ANTES_DO_BANCO,
     "get-statefulset": [*_ANTES_DO_BANCO, "get statefulset"],
@@ -422,8 +426,13 @@ ATE_A_FALHA = {
     "sem-deployment": _ANTES_DOS_DEPLOYMENTS,
     "deployment": [*_ANTES_DOS_DEPLOYMENTS, "rollout status"],
 }
-# A lista vazia que cada verbo "sem-" provoca, e a mensagem do script.
+# A lista vazia (ou o Secret ausente) que cada verbo "sem-" provoca, e a
+# mensagem do script.
 SEM_RECURSO = {
+    "sem-secret": (
+        "Secrets rabbitmq and billing-mongo are missing in pytstop-billing:"
+        " run make deploy first"
+    ),
     "sem-statefulset": "no StatefulSet in pytstop-billing",
     "sem-job": f"no Job labeled {INICIALIZACAO} in pytstop-billing",
     "sem-deployment": "no Deployment in pytstop-billing",
@@ -601,11 +610,18 @@ def test_falha_num_namespace_nomeia_o_servico_e_os_outros_seguem(
     # Lista vazia diz qual; com erro do cluster, so o erro dele.
     for sem, mensagem in SEM_RECURSO.items():
         assert (mensagem in processo.stdout) == (verbo == sem)
+    # Secret que o cluster nao deixa ler nao e Secret ausente: o erro do
+    # kubectl e a credencial, nao o make deploy.
+    inacessivel = (
+        "[billing-service] cannot read the Secrets rabbitmq and billing-mongo in "
+        "pytstop-billing (kubectl error above; the cluster credential may have"
+        " expired)"
+    )
+    assert (inacessivel in processo.stdout) == (verbo == "secret")
     if verbo == "secret":
-        assert (
-            "[billing-service] Secrets rabbitmq and billing-mongo are missing in "
-            "pytstop-billing: run make deploy first"
-        ) in processo.stdout
+        assert "[billing-service] error: secret failed in pytstop-billing" in (
+            processo.stdout
+        )
     for dir_ in implantacao.dirs.values():
         assert not (dir_ / "k8s" / "overlays" / "execucao").exists()
 
