@@ -31,7 +31,7 @@ Três workflows em cada repositório de serviço (OS Service, de ordens de servi
 |---|---|---|
 | `ci.yml` | PR; chamado pelo `cd.yml` na `main` | `lint` (ruff e import-linter), `type-check` (mypy strict), `security` (bandit), `test` (unitário, integração, contrato e BDD, *behavior-driven development*, com gate de cobertura de 95% e `diff-cover` de 90% no código novo, [ADR-041](041-estrategia-de-testes-e-qualidade.md)), `sonarqube` (depois de `test`), `build` |
 | `security.yml` | PR; chamado pelo `cd.yml` na `main`; semanal | `pip-audit`, `gitleaks`, `trivy` |
-| `cd.yml` | push na `main`; `workflow_dispatch` com SHAs fixos | `ci` e `security-scan` → `image` → `deploy-kind` → alvo remoto opcional, desligado por padrão (`deploy-remoto`, neutro de provedor) |
+| `cd.yml` | push na `main`; `workflow_dispatch` com SHAs fixos | `ci` e `security-scan` → `image` → `deploy-kind` → `deploy-k3s` ou `k3s-skipped` |
 | `ci.yml` do `platform` | PR; chamado pelo `cd.yml` do `platform` na `main` | `manifests`, `contratos`, `gitleaks` |
 | `cd.yml` do `platform` | PR, push na `main` e `workflow_dispatch`, sem filtro de caminhos, porque o `deploy-kind` é check obrigatório e tem de rodar em todo PR | `ci` (só fora de PR) → `deploy-kind` (a plataforma no `kind-ci` e o `make smoke`) e `e2e` (a plataforma e os três serviços no `kind-ci`, o smoke por namespace, o `make e2e` e o ZAP), em paralelo |
 
