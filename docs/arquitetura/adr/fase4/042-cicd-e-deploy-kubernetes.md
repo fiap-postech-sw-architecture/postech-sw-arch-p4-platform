@@ -80,7 +80,7 @@ O total estimado fica abaixo de 10 GiB no runner padrão de 16 GB, o que o GitHu
 
 A coluna medida vem do `deploy-kind` do CD do OS Service, com os três serviços:
 
-- O que rodou: o [run 38837346818](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/38837346818), de 16/10/2026, no runner `ubuntu-24.04` de 16 GB: a plataforma no `kind-ci` (`platform` em `22eb797`), os três serviços (OS Service em `e2bf48d`, Billing em `d1003a3` e Execução em `301052a`), o smoke de cada namespace e o E2E.
+- O que rodou: o [run 38837346818](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/38837346818), de 15/10/2026, no runner `ubuntu-24.04` de 16 GB: a plataforma no `kind-ci` (`platform` em `22eb797`), os três serviços (OS Service em `e2bf48d`, Billing em `d1003a3` e Execução em `301052a`), o smoke de cada namespace e o E2E.
 - Por componente: o maior uso de cada pod que o `kubectl top` mostrou nas amostras a cada 5 s; o pod do banco conta junto o exporter, sidecar dele.
 - Duração das etapas: a criação do kind levou 45 s, a plataforma 50 s, os três serviços 1 min 13 s, o smoke 21 s e o E2E 3 min 25 s, 6 min 34 s no total.
 - Memória do nó do kind: o nó é um container, e a memória dele é a do seu cgroup, o grupo de controle do kernel que limita e conta o que os processos do container usam. O working set, a memória em uso sem o cache de arquivos que o kernel devolve sob pressão (a conta que o kubelet usa para despejar pod), chegou a 3,0 GiB; o pico do cgroup, que conta também o cache de arquivos, a 7,4 GiB, nos 15,6 GiB do Docker do runner.
