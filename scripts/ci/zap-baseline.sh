@@ -14,16 +14,16 @@
 #   scripts/ci/zap-baseline.sh [<servico>...]   (sem argumento, os tres)
 #
 # Reprova (status 1, nomeando os servicos) se alguma regra em FAIL do
-# regras.conf disparar ou se o ZAP nao conseguir varrer: o openapi.json que nao
-# responde 200 ao curl antes do scan, o ZAP que nao consegue le-lo, o que sai
-# sem a linha de resumo ou sem URL lida, o que sai com erro e o que estoura o
-# prazo. Relatorios em reports/zap (html, json e md por servico, mais o log do
-# ZAP); a tabela e o md de cada servico vao para o summary do job. O ZAP sobe
-# com -silent: sem verificar atualizacao, sem baixar add-on e sem telemetria,
-# entao a varredura nao fala com a internet. Variaveis: BORDA
-# (https://localhost), ZAP_REDE (rede do container, host: o localhost do
-# runner), RELATORIOS (reports/zap), PRAZO_ZAP (segundos por servico, 300) e
-# ZAP_ALVO_DESCARTAVEL.
+# regras.conf disparar ou se o ZAP nao conseguir varrer: o openapi.json que o
+# curl -f nao alcanca antes do scan (erro HTTP ou sem resposta), o ZAP que nao
+# consegue le-lo, o que sai sem a linha de resumo ou sem URL lida, o que sai
+# com erro e o que estoura o prazo. Relatorios em reports/zap (html, json e md
+# por servico, mais o log do ZAP); a tabela e o md de cada servico vao para o
+# summary do job. O ZAP sobe com -silent: sem verificar atualizacao, sem baixar
+# add-on e sem telemetria, entao a varredura nao fala com a internet.
+# Variaveis: BORDA (https://localhost), ZAP_REDE (rede do container, host: o
+# localhost do runner), RELATORIOS (reports/zap), PRAZO_ZAP (segundos por
+# servico, 300) e ZAP_ALVO_DESCARTAVEL.
 set -euo pipefail
 
 # Versao e digest do indice multi-arquitetura; a mesma imagem esta na tabela
@@ -82,8 +82,8 @@ for nome in "$@"; do
   avisos=""
   lidas=""
   # O spider conta tambem os 404 que o proprio Kong gera, entao um openapi.json
-  # que responde 404 ou 503 ainda deixa URLs lidas: o alvo responde 200 antes
-  # do scan, ou o servico reprova sem ele.
+  # que responde 404 ou 503 ainda deixa URLs lidas: o curl -f alcanca o alvo
+  # (sem erro HTTP) antes do scan, ou o servico reprova sem ele.
   if ! curl -fsSk --max-time 10 -o /dev/null "$alvo" 2> "$log"; then
     cat "$log" >&2
     resultado="FAILED (target did not answer 200)"
