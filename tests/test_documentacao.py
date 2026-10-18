@@ -1,9 +1,8 @@
-"""Links, ancoras e blocos de comando dos documentos que o alinhamento tocou.
+"""Links, ancoras e blocos de comando de todo .md versionado.
 
-- O titulo de uma secao muda (o do overlay `k3s` no README mudou e levou o link
-  da nuvem opcional junto) e o link que apontava para ele fica morto sem ninguem
-  ver. Cada link relativo desses documentos cai em arquivo e secao que existem;
-  os links para fora do repositorio (``https:``) nao entram.
+- Cada link relativo cai em arquivo e secao que existem; as ancoras sao as que o
+  GitHub gera dos titulos. Os links para fora do repositorio (``https:``) e o que
+  esta entre crases (uma consulta PromQL com ``](``) nao entram.
 - Os comandos dos blocos ``bash`` rodam colados no terminal: no zsh interativo (o
   padrao do macOS) o ``#`` nao abre comentario, e o texto depois dele vira
   argumento do comando (no make, vira alvo). O que o comando faz fica na frase
@@ -13,23 +12,33 @@
 from __future__ import annotations
 
 import re
+import subprocess  # nosec B404
 from pathlib import Path
 from urllib.parse import unquote
 
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
-DOCUMENTOS = (
-    "README.md",
-    "docs/arquitetura/adr/fase4/037-banco-por-servico.md",
-    "docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md",
-    "docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md",
-    "docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md",
-    "docs/operacao/nuvem-opcional.md",
-    "docs/operacao/runbook-saga.md",
-)
+
+
+def _documentos() -> list[str]:
+    """Todo .md que o git versiona: um documento novo entra sem mexer aqui."""
+    saida = subprocess.run(  # nosec B603 B607
+        ["git", "ls-files", "-z", "*.md"],  # noqa: S607
+        cwd=RAIZ,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=True,
+    ).stdout
+    return list(filter(None, saida.split("\0")))
+
+
+DOCUMENTOS = _documentos()
 # Bloco de codigo: um # dentro dele nao e titulo, e um [x](y) nao e link.
 _CERCA = re.compile(r"^[ \t]*```.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+# Trecho em linha: o que esta entre crases nao e link, mesmo com ](.
+_EM_LINHA = re.compile(r"`[^`\n]*`")
 # Bloco de comando: a cerca pode vir indentada, no passo numerado de uma lista.
 _BLOCO = re.compile(
     r"^[ \t]*```(?:bash|sh|zsh)\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE
@@ -55,10 +64,9 @@ def _ancoras(texto: str) -> set[str]:
 
 def _links_relativos(origem: Path) -> list[tuple[str, Path, str]]:
     """(link, arquivo de destino, ancora) dos links de ``origem`` ao repositorio."""
+    texto = _EM_LINHA.sub("", _CERCA.sub("", origem.read_text(encoding="utf-8")))
     links = []
-    for link in re.findall(
-        r"\]\(([^)\s]+)\)", _CERCA.sub("", origem.read_text(encoding="utf-8"))
-    ):
+    for link in re.findall(r"\]\(([^)\s]+)\)", texto):
         caminho, _, ancora = unquote(link).partition("#")
         # https:, mailto: e afins saem do repositorio.
         if re.match(r"[a-z]+:", caminho) is None:
@@ -79,14 +87,18 @@ def _quebrados(links: list[tuple[str, Path, str]]) -> list[str]:
     ]
 
 
+def test_a_conferencia_cobre_o_readme_e_os_documentos_de_docs() -> None:
+    em_docs = {p.relative_to(RAIZ).as_posix() for p in (RAIZ / "docs").rglob("*.md")}
+
+    assert "README.md" in DOCUMENTOS
+    assert em_docs <= set(DOCUMENTOS)
+
+
 @pytest.mark.parametrize("documento", DOCUMENTOS)
 def test_links_relativos_do_documento_caem_em_arquivo_e_secao_reais(
     documento: str,
 ) -> None:
-    links = _links_relativos(RAIZ / documento)
-
-    assert links, "o documento nao tem nenhum link relativo: o teste nao conferiu nada"
-    assert _quebrados(links) == []
+    assert _quebrados(_links_relativos(RAIZ / documento)) == []
 
 
 def test_ancora_gerada_como_a_do_github() -> None:
@@ -115,6 +127,7 @@ def test_link_para_arquivo_ou_secao_que_nao_existe_reprova(tmp_path: Path) -> No
         "[a](docs/a.md#seção-a) [a2](docs/a.md#se%C3%A7%C3%A3o-a) [b](#topo)\n"
         "[c](docs/) [d](https://x.dev/#y) [e](docs/b.md) [f](docs/a.md#outra)\n"
         "[g](#fim) [h](docs/a.md) [i](docs/dados.json#qualquer)\n"
+        '`sum(x{q!~".+[.](dlq|retry[.].+)"})` [j](docs/c.md) `y`\n'
         "```bash\n[nao e link](nada.md)\n```\n",
         encoding="utf-8",
     )
@@ -123,6 +136,7 @@ def test_link_para_arquivo_ou_secao_que_nao_existe_reprova(tmp_path: Path) -> No
         "docs/b.md",
         "docs/a.md#outra",
         "#fim",
+        "docs/c.md",
     ]
 
 
