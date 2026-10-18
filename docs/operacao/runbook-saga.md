@@ -311,7 +311,7 @@ Os e-mails ao cliente que esgotaram as tentativas ficam na tabela `notificacoes`
 
 ### Motivos de recusa no consumidor do OS Service
 
-O motivo de cada recusa sai em código no log `message rejected to dlq` do consumidor e no status de erro do span do consumo. Seis pedem uma decisão antes do redrive, porque ele devolve a fila inteira e a mensagem que o consumidor recusar de novo volta à DLQ:
+O motivo de cada recusa sai em código no log `message rejected to dlq` do consumidor e no status de erro do span do consumo. A tabela abaixo traz os motivos da saga que pedem uma decisão antes do redrive, porque ele devolve a fila inteira e a mensagem que o consumidor recusar de novo volta à DLQ. Não é a lista inteira: o consumidor recusa também mensagem inválida e falha do tratador (como o `erro_no_handler` da peça com código fora do formato do Billing), e o [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#evento-fora-de-ordem) descreve esse caso.
 
 | Motivo | O que é | O que fazer |
 |---|---|---|
