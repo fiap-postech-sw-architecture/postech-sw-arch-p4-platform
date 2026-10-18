@@ -14,7 +14,7 @@ O desenho integrado está na [RFC-004: PytStop em microsserviços com saga orque
 | [039](adr/fase4/039-autenticacao-entre-servicos.md) | JWT RS256 emitido pelo OS Service e validado por JWKS | Aceita |
 | [040](adr/fase4/040-integracao-mercado-pago.md) | Mercado Pago via Checkout Pro com webhook verificado e simulador para CI | Aceita |
 | [041](adr/fase4/041-estrategia-de-testes-e-qualidade.md) | Estratégia de testes e qualidade por serviço | Aceita |
-| [042](adr/fase4/042-cicd-e-deploy-kubernetes.md) | CI/CD por serviço com deploy em kind e k3s | Aceita |
+| [042](adr/fase4/042-cicd-e-deploy-kubernetes.md) | CI/CD por serviço com deploy em kind | Aceita, com emenda de 18/10/2026 |
 | [043](adr/fase4/043-observabilidade-distribuida.md) | Stack da fase 3 reaproveitada com rastreamento da saga ponta a ponta | Aceita |
 
 Os ADRs 000 a 033 e as RFCs 001 a 003, das fases 1 a 3, ficam no [repositório da fase 3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/tree/main/docs/arquitetura); os ADRs desta fase citam os que retomam ou substituem.

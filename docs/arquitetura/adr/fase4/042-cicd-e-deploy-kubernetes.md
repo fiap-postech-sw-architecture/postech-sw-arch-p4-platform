@@ -1,8 +1,8 @@
-# CI/CD por serviço com deploy em kind e k3s
+# CI/CD por serviço com deploy em kind
 
 > [↑ Raiz do projeto](../../../../README.md) · [↑ Arquitetura](../../README.md)
 
-* Status: Aceita
+* Status: Aceita, com a [emenda de 18/10/2026](#emenda-de-18102026)
 * Data: 2026-10-06
 
 ## Contexto e Problema
@@ -31,7 +31,7 @@ Três workflows em cada repositório de serviço (OS Service, de ordens de servi
 |---|---|---|
 | `ci.yml` | PR; chamado pelo `cd.yml` na `main` | `lint` (ruff e import-linter), `type-check` (mypy strict), `security` (bandit), `test` (unitário, integração, contrato e BDD, *behavior-driven development*, com gate de cobertura de 95% e `diff-cover` de 90% no código novo, [ADR-041](041-estrategia-de-testes-e-qualidade.md)), `sonarqube` (depois de `test`), `build` |
 | `security.yml` | PR; chamado pelo `cd.yml` na `main`; semanal | `pip-audit`, `gitleaks`, `trivy` |
-| `cd.yml` | push na `main`; `workflow_dispatch` com SHAs fixos | `ci` e `security-scan` → `image` → `deploy-kind` → `deploy-k3s` ou `k3s-skipped` |
+| `cd.yml` | push na `main`; `workflow_dispatch` com SHAs fixos | `ci` e `security-scan` → `image` → `deploy-kind` → `deploy-remote` ou `remote-skipped` |
 | `ci.yml` do `platform` | PR; chamado pelo `cd.yml` do `platform` na `main` | `manifests`, `contratos`, `gitleaks` |
 | `cd.yml` do `platform` | PR, push na `main` e `workflow_dispatch`, sem filtro de caminhos, porque o `deploy-kind` é check obrigatório e tem de rodar em todo PR | `ci` (só fora de PR) → `deploy-kind` (a plataforma no `kind-ci` e o `make smoke`) |
 
@@ -51,10 +51,10 @@ O CD só começa depois que o CI daquele commit passa:
 
 - `ci` e `security-scan`: o `cd.yml` chama o `ci.yml` e o `security.yml` como workflows reutilizáveis (`workflow_call`), e o `image` depende dos dois. O commit da `main` passa pelos mesmos checks do PR antes de virar imagem, e o CI não roda uma segunda vez no push.
 - `image`: constrói a imagem uma vez e a publica no GitHub Container Registry (GHCR) com tag igual ao SHA do commit, usando o `GITHUB_TOKEN` do workflow (`packages: write`), sem token pessoal. Gera junto o SBOM, a lista de componentes da imagem, em SPDX (`--sbom=true` do BuildKit), e exporta o tar da imagem como artefato. O build usa cache de camadas do BuildKit (`type=gha`) e cache do `uv`.
-- `deploy-kind`, o deploy obrigatório: cria um kind efêmero no runner com os mesmos alvos do ambiente local, pelo `scripts/ci/deploy-kind.sh` do `platform` (`make -C platform kind-up deploy` com o overlay `kind-ci`), e carrega o tar do `image` (`kind load image-archive`), de modo que o E2E testa a mesma imagem que vai ao GHCR e ao k3s.
+- `deploy-kind`, o deploy obrigatório: cria um kind efêmero no runner com os mesmos alvos do ambiente local, pelo `scripts/ci/deploy-kind.sh` do `platform` (`make -C platform kind-up deploy` com o overlay `kind-ci`), e carrega o tar do `image` (`kind load image-archive`), de modo que o E2E testa a mesma imagem que vai ao GHCR e, se o deploy remoto estiver ligado, ao cluster remoto.
 
   Os dois serviços vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, consultado na API do GitHub com `branch=main` e `event=push` (o CD do `platform` roda também em PR), e não no último commit da `main`; os vizinhos são construídos desse código. Um `workflow_dispatch` com SHAs fixos reexecuta uma combinação. Os segredos de runtime nascem no run. Antes do E2E, um smoke por namespace confere cada serviço, e o summary nomeia o serviço que falhou. O job só fica verde se o E2E do `platform` passar ([ADR-041](041-estrategia-de-testes-e-qualidade.md)).
-- `deploy-k3s`, o alvo persistente: implanta no k3s o mesmo digest que passou no kind. Com a variável da organização `K3S_HABILITADO` diferente de `true`, roda no lugar dele o `k3s-skipped`, que só registra o aviso, o padrão do `deploy-eks` da fase 3 (ADR-033).
+- `deploy-remote`, o gancho opcional e desligado: com a variável `DEPLOY_REMOTO_HABILITADO` igual a `true`, e só a partir da `main`, implanta num cluster persistente o mesmo digest que passou no kind, pelo `scripts/ci/deploy-remoto.sh` do `platform` no commit usado no kind. Com outro valor, ou sem a variável, roda no lugar dele o `remote-skipped`, que só registra o aviso, o padrão do `deploy-eks` da fase 3 (ADR-033). O estado entregue o deixa desligado ([abaixo](#deploy-remoto-opcional-e-desligado)).
 
 A independência pedida na l. 90 está no que cada pipeline controla: build, testes, análise, imagem e deploy de cada serviço saem do seu repositório, com os seus checks, e nenhum pipeline publica ou implanta a imagem de outro. O kind é o ambiente de integração: sobe os vizinhos na última versão verde para que o E2E prove a saga com os três serviços, e uma falha ali aponta, no summary, o serviço responsável.
 
@@ -91,25 +91,24 @@ A coluna medida cobre só a plataforma:
 
 Os serviços entram nas linhas que faltam quando o `deploy-kind` de cada um subir os três.
 
-### Alvo persistente: k3s na Azure
+### Deploy remoto opcional e desligado
 
-VM sob demanda (não Spot) com k3s, de 4 vCPU e 16 GB se a quota permitir, senão de 2 vCPU e 8 GB com o perfil enxuto do `kind-ci`. O Terraform da VM e das credenciais federadas roda uma vez, no passo humano da Azure, com o state num storage account da própria assinatura; o CD não roda Terraform. A VM desliga todo dia pelo auto-shutdown nativo e é religada à mão antes de gravar evidências.
+A fase 4 não liga nuvem: o deploy obrigatório e único é o kind efêmero do runner, e o que fica de cada execução são os relatórios do E2E, no artefato `e2e-kind`, por 90 dias. O enunciado pede deploy automatizado em Kubernetes e não cita nuvem, e a infraestrutura AWS da fase 3 já foi desmontada. Para o caso de a avaliação pedir um ambiente que fique de pé, o CD tem um gancho neutro de provedor, desligado:
 
-- Acesso sem segredo: o `deploy-k3s` autentica na Azure por OIDC, com credencial federada de subject `repo:<org>/<repo>:environment:producao`. O environment `producao` só aceita a `main`, só esse job tem `id-token: write`, e o papel na Azure é o mínimo no resource group da VM. A API do Kubernetes não fica exposta: o job aplica os manifestos por `az vm run-command`.
-- Pré-checagem: antes de implantar, o job confere o estado de energia da VM e o login; VM desligada ou login recusado, como com o crédito esgotado, terminam verdes com aviso.
-- Imagem sem token pessoal: o job faz o pull da imagem no nó, também por `az vm run-command`, com o token de curta duração do próprio job, e os pods usam `imagePullPolicy: IfNotPresent`. Com um nó só, HPA e religamento da VM reusam a imagem já gravada no disco do containerd.
-- Exposição: hostname do rótulo DNS do IP público da Azure, certificado Let's Encrypt emitido pelo cert-manager para o Kong e Network Security Group (NSG) só com 80 e 443 abertos, mais a porta 22 restrita aos IPs do grupo. Grafana, Jaeger, Prometheus, Mailpit e o console do RabbitMQ ficam acessíveis só por túnel SSH, e o ambiente tem só dados fictícios. Com hostname e HTTPS, o webhook real do Mercado Pago chega ao k3s ([ADR-040](040-integracao-mercado-pago.md)).
+- Variáveis: `DEPLOY_REMOTO_HABILITADO` (`true` liga o `deploy-remote`), `DEPLOY_REMOTO_CONTEXTO` (o contexto do kubeconfig, obrigatória com o job ligado) e `DEPLOY_REMOTO_OVERLAY` (padrão `k3s`, o overlay que os manifests mantêm para um cluster persistente genérico). Nenhuma existe no estado entregue.
+- Script: `scripts/ci/deploy-remoto.sh --contexto <contexto> --overlay <overlay> --servico <serviço> --imagem <referência>@sha256:<digest>`, do `platform`. Roda a partir do checkout do serviço, recusa imagem sem digest e contexto vazio, fixa a imagem pelo digest num overlay gerado e implanta na mesma ordem e com os mesmos prazos do `implantar-servicos.sh` do kind.
+- Acesso: o `cd.yml` entregue não tem segredo, `environment` nem `id-token` no `deploy-remote`; quem ligar o job põe o kubeconfig num segredo de um `environment` restrito à `main`, ou o login do provedor, no passo de acesso. Antes de qualquer coisa, o job confere que o commit do `platform` usado no kind está na `main` do `platform`.
+- Receitas: EKS no AWS Academy, como na fase 3, e k3s numa VM da Azure, como na fase 2, em [nuvem opcional](../../../operacao/nuvem-opcional.md), não executadas nesta fase.
 
 ### Segredos e configuração
 
-Nenhum segredo de aplicação fica no GitHub, e o inevitável fica na organização, nunca por repositório.
+O CD não lê segredo do GitHub: o registry usa o `GITHUB_TOKEN` do workflow, e os segredos de runtime nascem no cluster.
 
 | O quê | Onde e como gira |
 |---|---|
-| Credencial da Azure | OIDC: token de curta duração por run, nada a girar |
 | Registry (GHCR) | `GITHUB_TOKEN` do workflow |
-| `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `K3S_HABILITADO` | variáveis da organização, visíveis só aos repositórios da fase 4 |
-| `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | segredos da organização, visíveis só ao Billing e lidos só pelo `deploy-k3s` |
+| `DEPLOY_REMOTO_HABILITADO`, `DEPLOY_REMOTO_CONTEXTO`, `DEPLOY_REMOTO_OVERLAY` | variáveis do repositório ou da organização, ausentes no estado entregue; o acesso a um cluster remoto (kubeconfig ou credencial do provedor) só existe se alguém ligar o deploy remoto, num segredo de `environment` restrito à `main` ([nuvem opcional](../../../operacao/nuvem-opcional.md)) |
+| `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` | nunca no GitHub: as credenciais de teste ficam no ambiente do shell de quem roda o `make mp-sandbox` no kind local, e num cluster remoto o Secret `billing-mercadopago` é criado no cluster pelo dono do ambiente ([ADR-040](040-integracao-mercado-pago.md)) |
 | Chave RSA do JSON Web Token (JWT) e chave HMAC (código de autenticação de mensagem com hash) do link de decisão | geradas no cluster; a HMAC gira apagando o Secret, reimplantando e reiniciando o Billing, que a lê no start, a RSA em duas etapas, com a chave que entra e depois a que sai publicadas no JWKS ao lado da que assina ([ADR-039](039-autenticacao-entre-servicos.md)) |
 | `ENCRYPTION_KEY`, que cifra os dados pessoais no OS Service | gerada uma vez e nunca regenerada; girá-la exige recifrar os dados e recalcular o hash do documento |
 | Senhas dos bancos: no PostgreSQL de cada serviço, uma por papel (o superusuário `postgres`, que só inicializa o banco; o dono das tabelas, com DDL, que o Job de migração usa; o da aplicação, só com DML nas tabelas do dono, que os processos usam; e o do exporter, com `pg_monitor`); no MongoDB do Billing, o root, o `billing` e o `exporter`, mais o keyfile do replica set | geradas no cluster; com um papel por uso, uma injeção de SQL ou um processo comprometido do serviço não chega ao superusuário. O exporter, sidecar do pod do banco, chega ao PostgreSQL pela loopback, e a imagem oficial deixa o socket, o `127.0.0.1` e o `::1` em `trust`: sem senha, um sidecar comprometido entraria como `postgres`. Por isso os manifests do banco de cada serviço definem `POSTGRES_INITDB_ARGS="--auth-host=scram-sha-256 --auth-local=scram-sha-256"`, requisito do contrato com os serviços. O banco só aplica as senhas do Secret e esse `initdb` na primeira inicialização do volume, e os papéis do PostgreSQL nascem num script de init dos manifests do serviço; as senhas giram com `ALTER ROLE` ou `db.changeUserPassword`, com a senha pela entrada padrão do `kubectl exec` e nunca por argumento nem no log do servidor, e o restart de quem as lê ([troca de senha do banco, no README](../../../../README.md#troca-de-senha-do-banco)) |
@@ -124,7 +123,7 @@ Um script do `platform`, o `scripts/gerar-segredos.sh`, chamado pelo `make deplo
 - Conferência antes de gerar: o script confere todas as fontes antes de gerar qualquer valor e para o deploy sem gravar nada em dois casos. A fonte que existe sem uma das chaves do contrato, porque o pod que a lê não subiria e o script nunca reescreve uma fonte. E a fonte que guarda estado no banco de um serviço (as senhas do banco, a `ENCRYPTION_KEY` e a senha do `admin`) e sumiu com o volume do banco de pé, porque uma senha nova não vale para o volume e uma `ENCRYPTION_KEY` nova deixaria ilegível o que já foi cifrado: o caminho é devolver o Secret. Erro ao listar os volumes também para o deploy. A chave RSA e a HMAC nascem de novo nesse caso, e apagar o Secret é como a HMAC gira.
 - Secret derivado: a senha de cada usuário do RabbitMQ fica no namespace do broker, cujo Job cria os usuários, e o script a copia, em todo deploy, para o Secret `rabbitmq` do namespace do serviço, já na URL de conexão.
 - URL de conexão: a chave `RABBITMQ_URL` do Secret `rabbitmq`, `amqp://<usuario>:<senha>@rabbitmq.pytstop-plataforma.svc.cluster.local:5672/%2F`, com o vhost `/` codificado como manda a especificação de URI AMQP do RabbitMQ.
-- Onde roda: no kind do CI, no runner, e os valores morrem com ele; no k3s, na própria VM pelo `az vm run-command`, e os valores não passam pelo GitHub.
+- Onde roda: no kind do CI, no runner, e os valores morrem com ele; num cluster remoto, na máquina de quem roda o `make deploy` da plataforma, e os valores ficam no cluster, sem passar pelo GitHub.
 
 A guarda de boot do p3, que recusa literal de demonstração fora do ambiente de desenvolvimento, passa a cobrir a chave RSA.
 
@@ -141,11 +140,12 @@ Rolling Update, o padrão do Deployment no Kubernetes e a estratégia que a Aula
 - Saúde: a API tem liveness em `/api/v1/saude`, sem dependências, como no p3, e readiness em `/api/v1/saude/pronto`, que confere só o banco. Com o broker fora do ar, a API continua no Service, porque a outbox segura as mensagens. Relay, consumidor e `prazos`, sem HTTP de negócio, usam heartbeat em arquivo, como o relay do p3, e ficam prontos quando a conexão está estabelecida.
 - Encerramento gracioso: no SIGTERM, o processo para de consumir, conclui a mensagem em curso e fecha as conexões, dentro de um `terminationGracePeriodSeconds` maior que o tempo de tratar uma mensagem.
 - Convívio de versões: durante o Rolling Update, versões antiga e nova coexistem. Migrações seguem expandir e contrair, compatíveis com a versão anterior, e mensagens seguem a regra de versão do [ADR-036](036-mensageria-rabbitmq.md), com leitor tolerante e consumidor implantado antes do produtor numa mudança que quebra.
-- Rollback: `kubectl rollout undo`, sem desfazer migração. E2E vermelho depois do `image` não chega ao k3s, e `main` vermelha se corrige com PR de revert imediato.
+- Rollback: `kubectl rollout undo`, sem desfazer migração. E2E vermelho depois do `image` não chega ao deploy remoto, e `main` vermelha se corrige com PR de revert imediato.
 
 ## Alternativas Consideradas
 
-* Pipeline por repositório, kind obrigatório e k3s opcional via OIDC
+* Pipeline por repositório, kind obrigatório e deploy remoto desligado
+* k3s na Azure como alvo persistente, por OIDC
 * EKS no AWS Academy, como na fase 3
 * AKS na Azure for Students
 * Argo CD (GitOps)
@@ -153,13 +153,22 @@ Rolling Update, o padrão do Deployment no Kubernetes e a estratégia que a Aula
 
 Descartado pelo enunciado: deploy manual, porque a l. 94 pede deploy automatizado.
 
-### Pipeline por repositório, kind obrigatório e k3s opcional via OIDC
+### Pipeline por repositório, kind obrigatório e deploy remoto desligado
 
-* Bom, porque cumpre o enunciado em cada repositório sem credencial externa: o deploy em Kubernetes acontece a cada push na `main`, validado pelo E2E dos três serviços sobre a mesma imagem que vai ao k3s
-* Bom, porque no alvo persistente nada expira durante a avaliação e ninguém renova credencial
-* Bom, porque reaproveita o kind no runner das fases 2 e 3 e a VM com k3s da fase 2
+* Bom, porque cumpre o enunciado em cada repositório sem credencial externa: o deploy em Kubernetes acontece a cada push na `main`, validado pelo E2E dos três serviços sobre a mesma imagem que vai ao GHCR
+* Bom, porque nada expira durante a avaliação e ninguém renova credencial: o deploy validado não depende de nuvem, de crédito nem de administrador da organização
+* Bom, porque reaproveita o kind no runner das fases 2 e 3, e o gancho desligado deixa pronto o caminho para um cluster persistente, se a avaliação pedir
+* Ruim, porque nada sobrevive ao job: a evidência é o relatório do E2E, guardado como artefato, e o vídeo mostra o kind
 * Ruim, porque cada CD constrói os dois serviços vizinhos e sobe a plataforma: mais minutos por deploy e boa parte da memória do runner
 * Ruim, porque o `deploy-kind` de um serviço depende da última versão verde dos vizinhos e do `platform`: uma regressão que só aparece na integração deixa vermelho o CD de quem não a causou, até o revert
+
+### k3s na Azure como alvo persistente, por OIDC
+
+* Bom, porque um ambiente de pé, com hostname e HTTPS, receberia o webhook real do Mercado Pago
+* Bom, porque o OIDC dispensa credencial guardada, e a fase 2 já rodou k3s numa VM da mesma assinatura
+* Ruim, porque depende de crédito da Azure aprovado, de uma VM a religar antes de cada gravação e de um passo humano com Terraform e credenciais federadas
+* Ruim, porque as variáveis e os segredos da organização dependem de um administrador dela
+* Ruim, porque o enunciado não pede nuvem: o esforço não muda o que a avaliação confere
 
 ### EKS no AWS Academy, como na fase 3
 
@@ -170,7 +179,7 @@ Descartado pelo enunciado: deploy manual, porque a l. 94 pede deploy automatizad
 
 ### AKS na Azure for Students
 
-* Bom, porque seria Kubernetes gerenciado na mesma assinatura, com o mesmo OIDC
+* Bom, porque seria Kubernetes gerenciado, com OIDC na Azure
 * Ruim, porque a assinatura o bloqueia: o AKS só aceita VMs das famílias v5 a v7, com quota zero em todas as regiões permitidas, e o pedido de aumento foi negado na fase 2
 
 ### Argo CD (GitOps)
@@ -182,24 +191,22 @@ Descartado pelo enunciado: deploy manual, porque a l. 94 pede deploy automatizad
 
 ### Só kind
 
-* Bom, porque atende o enunciado com custo zero e sem credencial, e é o plano se o crédito Azure não for aprovado
-* Ruim, porque nada sobrevive ao job: evidências e vídeo dependeriam do kind na máquina de um integrante, com a stack inteira disputando memória local
+* Bom, porque atende o enunciado com custo zero e sem credencial
+* Ruim, porque, se a avaliação pedir um ambiente que fique de pé, nada estaria pronto: o gancho desligado custa só um job pulado por execução
 
 ## Consequências
 
 ### Positivas
 
 * RNF-042, RNF-043, RNF-048 e RNF-049 atendidos em cada repositório, com a proteção da `main` visível à banca pelo ruleset
-* A imagem testada no kind é a mesma que vai ao GHCR e ao k3s
-* Nenhuma credencial de nuvem ou de registry guardada, e, no k3s, os segredos de runtime nascem na VM
+* A imagem testada no kind é a mesma que vai ao GHCR e, se ligado, ao cluster remoto
+* Nenhuma credencial de nuvem ou de registry guardada no GitHub, e os segredos de runtime nascem no cluster
 * Zero commit direto na `main` desde a criação dos repositórios, conferível pelo histórico
 
 ### Negativas
 
-* O caminho até o k3s é longo: o CI inteiro do commit, SonarQube incluído, e o E2E do kind antes do deploy. Por isso o trecho de CI/CD do vídeo é gravado antes e editado, com serviço e commit escolhidos no roteiro e os minutos de cada job registrados
-* O k3s é um nó só, sem alta disponibilidade, depende de crédito Azure aprovado e fica fora do ar enquanto a VM está desligada
-* Variáveis e segredos da organização dependem de um administrador da organização
-* Segredo da organização fica ao alcance de qualquer workflow do repositório do Billing, inclusive de um PR que altere um workflow; o risco é aceito porque as credenciais do Mercado Pago são de sandbox e são revogadas ao fim da avaliação
+* O caminho até o deploy validado é longo: o CI inteiro do commit, SonarQube incluído, e o E2E do kind. Por isso o trecho de CI/CD do vídeo é gravado antes e editado, com serviço e commit escolhidos no roteiro e os minutos de cada job registrados
+* Nenhum ambiente fica de pé: o kind morre com o job, e ligar o deploy remoto exige um cluster e passos do dono do ambiente que não foram executados nesta fase ([nuvem opcional](../../../operacao/nuvem-opcional.md))
 * O tráfego interno do cluster corre sem TLS, risco aceito do ambiente de demonstração
 
 ### Neutras
@@ -210,18 +217,27 @@ Descartado pelo enunciado: deploy manual, porque a l. 94 pede deploy automatizad
 ## Decisões Relacionadas
 
 - [ADR-019](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/019-pipeline-cicd-deploy.md): o kind efêmero no runner segue como deploy obrigatório, agora com três serviços e E2E
-- [ADR-025](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/025-ambiente-cloud-demonstracao.md): bloqueio do AKS, VM com k3s e OIDC da fase 2
-- [ADR-030](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase3/030-cluster-kubernetes-eks.md): substituído pelo k3s na Azure
+- [ADR-025](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/025-ambiente-cloud-demonstracao.md): bloqueio do AKS e VM com k3s da fase 2, base da receita de k3s da nuvem opcional
+- [ADR-030](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase3/030-cluster-kubernetes-eks.md): o EKS da fase 3, base da receita de EKS da nuvem opcional, fora do estado entregue
 - [ADR-033](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase3/033-cicd-multi-repo.md): continuam o pipeline por repositório e o aviso quando o alvo de nuvem não está disponível; proteção tardia e credencial manual são as lições
 - [ADR-036](036-mensageria-rabbitmq.md): regra de versão das mensagens no convívio de versões
 - [ADR-039](039-autenticacao-entre-servicos.md): chaves do JWT e do link geradas no cluster
-- [ADR-040](040-integracao-mercado-pago.md): segredos do Mercado Pago e webhook real no k3s
+- [ADR-040](040-integracao-mercado-pago.md): credenciais do Mercado Pago, fora do GitHub
 - [ADR-041](041-estrategia-de-testes-e-qualidade.md): jobs `test` e `sonarqube` e o E2E do `deploy-kind`
 
 ## Notas
 
 * Material: Estrutura de Microsserviços Parte II, Aulas 04 e 05; Estrutura de Microsserviços, Aula 01 (pipeline próprio por serviço como benefício)
 * Configuração da proteção conferida pela API do GitHub em 06/10/2026 nos quatro repositórios da fase 4
-* Rulesets visíveis a quem tem leitura: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets; OIDC entre GitHub Actions e Azure: https://learn.microsoft.com/en-us/azure/developer/github/connect-from-azure-openid-connect; k3s: https://docs.k3s.io/; Rolling Update: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment
+* Rulesets visíveis a quem tem leitura: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets; k3s: https://docs.k3s.io/; Rolling Update: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment
+
+## Emenda de 18/10/2026
+
+Decisão do grupo de 14/10/2026, registrada com a implementação do gancho:
+
+- A fase 4 não liga nuvem. O enunciado, relido inteiro, pede deploy automatizado em Kubernetes e não cita nuvem nem a infraestrutura AWS da fase 3, que já foi desmontada. O deploy obrigatório e único é o kind efêmero do runner.
+- Saem o job `deploy-k3s` e o `k3s-skipped`, a variável `K3S_HABILITADO`, o OIDC com a Azure (a credencial federada, as variáveis `AZURE_*` e o environment `producao`), os segredos do Mercado Pago na organização e, com eles, a dependência de um administrador da organização.
+- Entram o job `deploy-remote` e o irmão `remote-skipped`, desligados pela variável `DEPLOY_REMOTO_HABILITADO` e neutros de provedor, e o `scripts/ci/deploy-remoto.sh` do `platform`. As receitas de EKS no AWS Academy e de k3s numa VM da Azure ficam em [nuvem opcional](../../../operacao/nuvem-opcional.md), fora do estado entregue.
+- O overlay `k3s` dos manifests permanece, como alvo de um cluster persistente genérico.
 
 > [↑ Raiz do projeto](../../../../README.md) · [↑ Arquitetura](../../README.md)
