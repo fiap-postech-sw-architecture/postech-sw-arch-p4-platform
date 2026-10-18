@@ -54,7 +54,7 @@ O port `GatewayPagamento` (criar cobrança, consultar, buscar por referência, e
 
 ### Prova da integração real
 
-A evidência de RF-034 depende das credenciais de teste. A execução na sandbox roda num kind local com `MP_MODE=mercadopago`, confirmada pela conciliação, ou no k3s, que tem hostname e certificado para receber o webhook ([ADR-042](042-cicd-e-deploy-kubernetes.md)). Preferência criada, pagamento aprovado e estorno ficam versionados em `docs/entrega/fase4/evidencias/`. CI, kind do CI e E2E continuam no simulador.
+A evidência de RF-034 depende das credenciais de teste. A execução na sandbox roda num kind local com `MP_MODE=mercadopago`, confirmada pela conciliação; o webhook pediria um cluster persistente com hostname e certificado, que a fase não liga ([ADR-042](042-cicd-e-deploy-kubernetes.md)). Preferência criada, pagamento aprovado e estorno ficam versionados em `docs/entrega/fase4/evidencias/`. CI, kind do CI e E2E continuam no simulador.
 
 ### Resiliência
 

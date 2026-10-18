@@ -123,7 +123,7 @@ Nenhum segredo de aplicação fica no GitHub, por onde o `JWT_SECRET` do p3 pass
 * Bom, porque é o padrão que a Aula 04 recomenda
 * Bom, porque JWKS, revogação, introspecção e login único vêm prontos
 * Ruim, porque o Keycloak é mais um serviço com banco próprio no cluster, e usuários, login, refresh e logout do p3, com seus testes, teriam de migrar para ele
-* Ruim, porque o Cognito prende a autenticação à AWS, fora dos alvos da fase (kind e k3s na Azure), e já foi descartado no ADR-028; o ADR-004 recusou provedor externo pelo custo desproporcional
+* Ruim, porque o Cognito prende a autenticação à AWS, que a fase não usa (o alvo é o kind), e já foi descartado no ADR-028; o ADR-004 recusou provedor externo pelo custo desproporcional
 
 ## Consequências
 
