@@ -2,7 +2,7 @@
 
 > [↑ Raiz do projeto](../../README.md)
 
-Nada deste documento faz parte do estado entregue da fase 4. O deploy automatizado da fase é o kind efêmero do runner: o job `deploy-kind` do CD de cada serviço sobe a plataforma e os três serviços num cluster que some com o job e valida o deploy com o smoke de cada namespace e o E2E da saga ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). O enunciado pede deploy automatizado em Kubernetes e não cita nuvem, e a infraestrutura AWS da fase 3 já foi desmontada.
+Nada deste documento faz parte do estado entregue da fase 4. O deploy automatizado da fase é o kind efêmero do runner: o job `deploy-kind` do CD do OS Service sobe a plataforma e os três serviços num cluster que some com o job e valida o deploy com o smoke de cada namespace e o E2E da saga ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). O enunciado pede deploy automatizado em Kubernetes e não cita nuvem, e a infraestrutura AWS da fase 3 já foi desmontada.
 
 Para o caso de a avaliação pedir um ambiente que fique de pé, o CD tem um gancho neutro de provedor, desligado: o job `deploy-remote`, que chama o [`scripts/ci/deploy-remoto.sh`](../../scripts/ci/deploy-remoto.sh) deste repositório. Este documento diz o que o gancho faz, o que o dono do ambiente teria de criar para ligá-lo e traz duas receitas de cluster. As receitas não foram executadas nesta fase, e cada uma abre com esse aviso.
 
