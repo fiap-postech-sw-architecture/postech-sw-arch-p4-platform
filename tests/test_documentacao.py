@@ -119,7 +119,7 @@ def test_cercas_do_documento_fecham(documento: str) -> None:
 
 def test_cerca_sem_par_reprova() -> None:
     assert _cercas_pares("```bash\nmake test\n```\n   ```text\nx\n   ```\n")
-    assert not _cercas_pares("```bash\nmake test\n```\n```text\nsem fechar\n")
+    assert not _cercas_pares("```bash\nmake test\n```\n   ```text\nsem fechar\n")
 
 
 def test_ancora_gerada_como_a_do_github() -> None:
