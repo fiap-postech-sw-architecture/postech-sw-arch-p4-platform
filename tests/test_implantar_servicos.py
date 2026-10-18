@@ -307,6 +307,17 @@ def sha(dir_: Path) -> str:
     return git("rev-parse", "HEAD", cwd=dir_)
 
 
+def ambiente_sem_o_que_o_script_le() -> dict[str, str]:
+    """O ambiente de quem roda o teste sem contexto, cluster e prazos: um
+    PRAZO_KUBECTL esquecido no shell mudaria o que os testes conferem."""
+    return {
+        chave: valor
+        for chave, valor in os.environ.items()
+        if chave not in {"KUBE_CONTEXT", "CLUSTER"}
+        and not chave.startswith(("PRAZO_", "ESPERA_"))
+    }
+
+
 def faz_tar(destino: Path, *refs: str) -> Path:
     """Um arquivo no formato do docker save, com o manifest.json das refs."""
     manifest = json.dumps([{"Config": "c.json", "RepoTags": list(refs), "Layers": []}])
@@ -333,11 +344,7 @@ class Implantacao:
             binario = binarios / nome
             binario.write_text(f"#!{sys.executable}\n{codigo}", encoding="utf-8")
             binario.chmod(0o755)
-        self.env = {
-            chave: valor
-            for chave, valor in os.environ.items()
-            if chave not in {"KUBE_CONTEXT", "CLUSTER"}
-        } | {
+        self.env = ambiente_sem_o_que_o_script_le() | {
             "PATH": f"{binarios}{os.pathsep}{os.environ['PATH']}",
             "FALSOS": str(tmp_path),
         }
@@ -347,8 +354,12 @@ class Implantacao:
         self.script = SCRIPT
 
     def roda(self, *args: str, **ambiente: str) -> subprocess.CompletedProcess[str]:
+        # Fora da raiz do repositorio, como no CD (o script chamado por
+        # platform/scripts/ci/ da raiz do workspace): o arquivo comum carregado
+        # por um caminho relativo ao diretorio atual nao seria achado.
         return subprocess.run(  # noqa: S603  # nosec B603
             [str(self.script), *args],
+            cwd=self.tmp,
             env=self.env | ambiente,
             capture_output=True,
             text=True,

@@ -32,6 +32,7 @@ from test_implantar_servicos import (
     SEM_RECURSO,
     SERVICOS,
     TIMEOUT_FALSO,
+    ambiente_sem_o_que_o_script_le,
     prazos_do_script,
     verbo_com_prazo,
     verbos,
@@ -86,7 +87,7 @@ class Remoto:
         kubectl.write_text(f"#!{sys.executable}\n{KUBECTL_REMOTO}", encoding="utf-8")
         kubectl.chmod(0o755)
         # O KUBE_CONTEXT do ambiente nao pode trocar o contexto do argumento.
-        self.env = os.environ | {
+        self.env = ambiente_sem_o_que_o_script_le() | {
             "PATH": f"{binarios}{os.pathsep}{os.environ['PATH']}",
             "FALSOS": str(tmp_path),
             "KUBE_CONTEXT": "contexto-do-ambiente",
