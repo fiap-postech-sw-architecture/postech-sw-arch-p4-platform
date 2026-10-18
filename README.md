@@ -739,7 +739,7 @@ Para o modo real você precisa de quatro coisas do painel do Mercado Pago (os no
 1. uma aplicação do tipo Checkout Pro, em [Mercado Pago Developers](https://www.mercadopago.com.br/developers/panel/app), Suas integrações;
 2. duas contas de teste do Brasil (o Billing cobra em BRL, e o checkout de outro país não paga nessa moeda), uma Vendedor e outra Comprador, na página da aplicação, Contas de teste (anote usuário e senha de cada uma; elas não podem ser apagadas);
 3. o Access Token de teste, em Suas integrações, Dados da integração, Testes, Credenciais de teste (entre com a sua conta real para ver essa tela; o prefixo pode ser `TEST-` ou `APP_USR-`);
-4. a assinatura secreta do webhook, em Webhooks, Configurar notificações: em Modo produtivo, informe uma URL HTTPS pública qualquer (por exemplo `https://example.com/api/v1/webhooks/mercadopago`), marque o evento Pagamentos e salve; a chave aparece depois de salvar. Segundo a documentação (veja "Não prova o webhook", acima), a sandbox não envia webhook, então a URL só precisa ser pública.
+4. a assinatura secreta do webhook, em Webhooks, Configurar notificações: em Modo produtivo, informe uma URL HTTPS pública qualquer (por exemplo `https://example.com/api/v1/webhooks/mercadopago`), marque o evento Pagamentos e salve; a chave aparece depois de salvar. Segundo a documentação do Mercado Pago (veja "Não prova o webhook", acima), os pagamentos de teste não enviam notificações; a URL só precisa ser pública, não precisa receber nada.
 
 As duas credenciais ficam só no ambiente do shell, sem `export`. Cada `read` espera você colar o valor e teclar Enter; o `make` recebe as duas por atribuição na própria linha, e o `unset` as tira do shell no fim:
 
