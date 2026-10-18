@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 
 # subprocess so roda o script do repositorio, sem shell.
 import subprocess  # nosec B404
@@ -29,6 +30,7 @@ import pytest
 import yaml
 from test_implantar_servicos import (
     ATE_A_FALHA,
+    COMUM,
     KUBECTL_FALSO,
     SEM_RECURSO,
     SERVICOS,
@@ -101,6 +103,7 @@ class Remoto:
             "FALSOS": str(tmp_path),
             "KUBE_CONTEXT": "contexto-do-ambiente",
         }
+        self.script = SCRIPT
 
     def checkout(self, servico: str, overlay: str = "k3s") -> Path:
         """O checkout do servico com o overlay. O caminho leva o namespace: o
@@ -116,7 +119,7 @@ class Remoto:
         self, *args: str, cwd: Path, **ambiente: str
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.run(  # noqa: S603  # nosec B603
-            [str(SCRIPT), *args],
+            [str(self.script), *args],
             cwd=cwd,
             env=self.env | ambiente,
             capture_output=True,
@@ -313,11 +316,16 @@ def com(chave: str, valor: str) -> list[str]:
             "needs <ref>@sha256",
         ),
         (com("imagem", f"pytstop-os-service@{DIGEST[:-1]}"), "needs <ref>@sha256"),
+        (com("imagem", f"pytstop-os-service@{DIGEST}x"), "needs <ref>@sha256"),
         (
             com("imagem", f"pytstop-os-service@sha256:{DIGEST[7:].upper()}"),
             "needs <ref>@sha256",
         ),
         (com("imagem", "pytstop-os-service@sha512:" + "0" * 128), "needs <ref>@sha256"),
+        (
+            com("imagem", f"pytstop-os-service@sha512:{DIGEST[7:]}"),
+            "needs <ref>@sha256",
+        ),
         (
             com("imagem", f"pytstop-os-service\n    newTag: latest@{DIGEST}"),
             "needs <ref>@sha256",
@@ -355,8 +363,10 @@ def com(chave: str, valor: str) -> list[str]:
         "servico-desconhecido",
         "imagem-sem-digest",
         "digest-curto",
+        "digest-com-sobra",
         "digest-em-maiusculas",
         "outro-algoritmo",
+        "sha512-com-64-hex",
         "quebra-de-linha-no-nome",
         "imagem-de-outro-servico",
         "nome-que-so-termina-igual",
@@ -377,16 +387,47 @@ def test_argumentos_recusados_sem_tocar_no_cluster(
     assert not (dir_ / GERADO).exists()
 
 
-def test_fora_do_checkout_do_servico_para_antes_de_tudo(remoto: Remoto) -> None:
-    processo = remoto.do_cd("os-service", remoto.tmp)
+@pytest.mark.parametrize(
+    "overlay_sem_kustomization",
+    [False, True],
+    ids=["fora-do-checkout", "diretorio-do-overlay-sem-kustomization"],
+)
+def test_fora_do_checkout_do_servico_para_antes_de_tudo(
+    remoto: Remoto, overlay_sem_kustomization: bool
+) -> None:
+    cwd = remoto.tmp
+    if overlay_sem_kustomization:
+        cwd = remoto.tmp / "repo"
+        (cwd / "k8s" / "overlays" / "k3s").mkdir(parents=True)
+
+    processo = remoto.do_cd("os-service", cwd)
 
     assert processo.returncode == 1
     assert (
-        f"os-service: no k8s/overlays/k3s/kustomization.yaml in {remoto.tmp.resolve()}"
+        f"os-service: no k8s/overlays/k3s/kustomization.yaml in {cwd.resolve()}"
         " (run from the checkout of os-service)"
     ) in processo.stderr
     assert remoto.chamadas("kustomize") == []
     assert remoto.chamadas("kubectl") == []
+    assert not (cwd / GERADO).exists()
+
+
+def test_sem_o_arquivo_comum_para_antes_de_tudo(remoto: Remoto) -> None:
+    # Uma copia do script sem o scripts/ci/implantacao.sh ao lado: o source
+    # falha e o set -e para ali, em vez de seguir sem as funcoes de cluster.
+    copia = remoto.tmp / "plataforma" / "scripts" / "ci" / SCRIPT.name
+    copia.parent.mkdir(parents=True)
+    shutil.copy(SCRIPT, copia)
+    remoto.script = copia
+    dir_ = remoto.checkout("os-service")
+
+    processo = remoto.do_cd("os-service", dir_)
+
+    assert processo.returncode == 1
+    assert f"{COMUM.name}: No such file or directory" in processo.stderr
+    assert remoto.chamadas("kustomize") == []
+    assert remoto.chamadas("kubectl") == []
+    assert not (dir_ / GERADO).exists()
 
 
 @pytest.mark.parametrize(
