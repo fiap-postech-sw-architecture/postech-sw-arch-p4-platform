@@ -856,7 +856,7 @@ A ferramenta é o `pytest-bdd` 8, com Gherkin em português (`# language: pt`). 
 
 O E2E derruba o Billing com `kubectl scale`, cria usuários, preços, estoque e OS, e não limpa nada. **Rode só num cluster descartável**, uma execução por vez em cada cluster: duas execuções juntas se atropelam, porque a segunda religa o que a primeira acabou de derrubar. A sessão recusa um contexto que não comece por `kind-` e um nó do kind que não publique, no loopback, o host e a porta da `E2E_URL`, a borda que o E2E usa (por padrão a 443 de `https://localhost`; o guarda tira o par da própria URL, então uma `E2E_URL` para outro lugar também é recusada). O mesmo guarda roda no `make e2e` e no `make demo`. O escape é de propósito feio: `E2E_CONTEXTO_NAO_DESCARTAVEL=<o próprio contexto>`.
 
-Precisa do cluster com a plataforma **no overlay `kind-ci`** (o orçamento vence em 72 s, a primeira recusa do provedor encerra a cobrança, o `prazos` do Billing roda a cada 5 s e o rate limit da borda é multiplicado por 10) e das `main` dos três serviços, o OS já com o `notificador`: sem ele o e-mail com o link de decisão nunca chega. A sessão confere esses valores no começo e diz o que mudar, e recusa um cluster com mensagem em alguma das três DLQs: a afirmação de DLQ vazia dos cenários compara com a contagem do início do cenário, e com a sessão exigindo DLQs vazias isso vale como zero num cluster limpo. Também precisa de `uv`, `kubectl` e da porta 443 livre no loopback. Com os repositórios dos serviços ao lado deste:
+Precisa do cluster com a plataforma **no overlay `kind-ci`** (o orçamento vence em 72 s, a primeira recusa do provedor encerra a cobrança, o `prazos` do Billing roda a cada 5 s e o rate limit da borda é multiplicado por 10) e das `main` dos três serviços, o OS já com o `notificador`: sem ele o e-mail com o link de decisão nunca chega. A sessão confere esses valores no começo e diz o que mudar, e recusa um cluster com mensagem em alguma das três DLQs: a afirmação de DLQ vazia dos cenários compara com a contagem do início do cenário, e com a sessão exigindo DLQs vazias isso vale como zero num cluster limpo. Também precisa de `uv`, `kubectl` e da porta 443 livre no loopback. O `make e2e` roda os 14 cenários em cerca de 3 min e escreve os relatórios em `reports/e2e`; o `make demo` roda os cenários `@demo` (demonstrações 1 e 2 do vídeo) em cerca de 2 min e escreve em `reports/demo`. Com os repositórios dos serviços ao lado deste:
 
 ```bash
 make kind-up deploy OVERLAY=kind-ci
@@ -865,8 +865,8 @@ scripts/ci/implantar-servicos.sh --overlay kind-ci \
   billing-service=../postech-sw-arch-p4-billing-service \
   execution-service=../postech-sw-arch-p4-execution-service
 scripts/ci/smoke-servicos.sh
-make e2e      # os 14 cenários, cerca de 3 min; relatórios em reports/e2e
-make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 2 min; relatórios em reports/demo
+make e2e
+make demo
 ```
 
 Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
