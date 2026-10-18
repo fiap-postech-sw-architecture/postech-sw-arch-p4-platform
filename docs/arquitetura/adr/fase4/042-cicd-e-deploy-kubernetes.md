@@ -25,7 +25,7 @@ Em Estrutura de Microsserviços Parte II, cada equipe tem o seu pipeline, com te
 
 ### Workflows e jobs
 
-Três workflows em cada repositório de serviço (OS Service, de ordens de serviço; Billing Service; Execution Service, do contexto Execução), com jobs de nome estável que viram checks obrigatórios; `make check` reproduz o CI na máquina local. O `platform` tem dois, nas duas últimas linhas. Esta é a lista canônica de nomes, a que a gap analysis e a [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md) remetem:
+Três workflows em cada repositório de serviço (OS Service, de ordens de serviço; Billing Service; Execution Service, do contexto Execução; em 18/10/2026 só o OS Service tem o `cd.yml`, e os outros dois têm `ci.yml` e `security.yml`), com jobs de nome estável que viram checks obrigatórios; `make check` reproduz o CI na máquina local. O `platform` tem dois, nas duas últimas linhas. Esta é a lista canônica de nomes, a que a gap analysis e a [RFC-004](../../rfc/fase4/rfc-004-microsservicos-saga.md) remetem:
 
 | Workflow | Gatilho | Jobs |
 |---|---|---|

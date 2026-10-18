@@ -1134,7 +1134,7 @@ Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do
 
 ### 10.2 Pipeline e deploy
 
-A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows, e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
+A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows (em 18/10/2026, só o OS Service tem o `cd.yml`), e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
 
 - `ci.yml`, em todo pull request (PR): `lint`, `type-check`, `security`, `test` (gate de cobertura de 95% e `diff-cover` de 90% no código novo; cada serviço sobe de 90% para 95% no PR de endurecimento dele), `sonarqube` e `build`;
 - `security.yml`, em todo PR e semanal: `pip-audit`, `gitleaks` e `trivy`;
