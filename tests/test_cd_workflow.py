@@ -111,6 +111,9 @@ def test_o_e2e_nao_interpola_expressao_no_script() -> None:
 
 def test_os_shas_dos_servicos_vem_do_ultimo_cd_verde_com_aviso_na_falta() -> None:
     script = passo("ultimo_verde()")["run"]
+    # O runner roda o `run` sem `shell:` com `bash -e`: nounset e pipefail
+    # sao do proprio passo.
+    assert script.startswith("set -euo pipefail\n")
     # A consulta e o fallback do cd.yml de cada servico, palavra por palavra
     # (a continuacao de linha do shell vira um espaco so).
     linhas = re.sub(r" *\\\n\s+", " ", script)
@@ -191,7 +194,7 @@ def api(**por_servico: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def roda_shas(tmp_path: Path, estado: dict[str, Any], **entradas: str) -> Shas:
-    """O `run` do passo shas no bash do runner (`bash -eo pipefail`)."""
+    """O `run` do passo shas como o runner o roda: `bash -e` (sem `shell:`)."""
     binarios = tmp_path / "bin"
     binarios.mkdir(exist_ok=True)
     gh = binarios / "gh"
@@ -217,7 +220,7 @@ def roda_shas(tmp_path: Path, estado: dict[str, Any], **entradas: str) -> Shas:
         "GITHUB_STEP_SUMMARY": str(resumo),
     } | {chave.upper(): valor for chave, valor in entradas.items()}
     processo = subprocess.run(  # noqa: S603  # nosec B603
-        ["/bin/bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
+        ["/bin/bash", "-e", str(script)],
         env=ambiente,
         capture_output=True,
         text=True,
