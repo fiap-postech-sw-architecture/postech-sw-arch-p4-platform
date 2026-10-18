@@ -4,15 +4,23 @@ O workflow so roda no GitHub, e o run do proprio PR e a prova de que ele
 funciona. Aqui se trava o que um run verde nao mostra: se alguem tirar o
 diagnostico, o `if: always()` dos relatorios, o prazo de um passo, o SHA de uma
 action de terceiro ou o commit certo de um servico, o run seguinte continua
-verde e a diferenca so aparece no dia em que o job falha. O actionlint (make
-lint-scripts) confere a sintaxe e o shellcheck dos `run:`.
+verde e a diferenca so aparece no dia em que o job falha. O passo `shas`, que
+decide o commit de cada servico, roda de verdade em `/bin/bash` com um `gh`
+falso no PATH. O actionlint (make lint-scripts) confere a sintaxe e o
+shellcheck dos `run:`.
 """
 
 from __future__ import annotations
 
+import json
+import os
 import re
+
+# subprocess so roda o passo shas do proprio cd.yml, sem shell do usuario.
+import subprocess  # nosec B404
+import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, NamedTuple
 
 import pytest
 import yaml
@@ -132,6 +140,200 @@ def test_os_shas_dos_servicos_vem_do_ultimo_cd_verde_com_aviso_na_falta() -> Non
     )
 
 
+def test_o_token_do_run_so_existe_no_passo_shas() -> None:
+    """Os passos que constroem o codigo dos servicos nao enxergam o token."""
+    assert "env" not in CD
+    assert "env" not in E2E
+    com_token = [p.get("id") for p in PASSOS if "GH_TOKEN" in p.get("env", {})]
+    assert com_token == ["shas"]
+
+
+# gh falso do passo shas: guarda a chamada e responde, por repositorio, o
+# head_sha do ultimo CD verde (vazio, 404 ou 500) ou a main HEAD.
+GH_FALSO = """
+import json
+import os
+import sys
+from pathlib import Path
+
+falsos = Path(os.environ["FALSOS"])
+args = sys.argv[1:]
+with (falsos / "gh.jsonl").open("a") as log:
+    log.write(json.dumps(args) + "\\n")
+estado = json.loads((falsos / "estado.json").read_text())
+caminho = next(a for a in args if a.startswith("repos/"))
+_, _, repo, *resto = caminho.split("/")
+cfg = estado[repo]
+if resto[0] != "actions":
+    print(cfg["main"])
+elif cfg["runs"] in (404, 500):
+    print(f"gh: erro (HTTP {cfg['runs']})", file=sys.stderr)
+    sys.exit(1)
+else:
+    print(cfg["runs"])
+"""
+A, B, C, D = ("a" * 40, "b" * 40, "c" * 40, "d" * 40)
+
+
+class Shas(NamedTuple):
+    processo: subprocess.CompletedProcess[str]
+    saida: dict[str, str]
+    resumo: str
+    chamadas: list[list[str]]
+
+
+def api(**por_servico: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    """Estado do gh falso: sem CD verde e main HEAD D, salvo o que vier."""
+    estado = {f"postech-sw-arch-p4-{s}": {"runs": "", "main": D} for s in SERVICOS}
+    for servico, cfg in por_servico.items():
+        estado[f"postech-sw-arch-p4-{servico.replace('_', '-')}"] = cfg
+    return estado
+
+
+def roda_shas(tmp_path: Path, estado: dict[str, Any], **entradas: str) -> Shas:
+    """O `run` do passo shas no bash do runner (`bash -eo pipefail`)."""
+    binarios = tmp_path / "bin"
+    binarios.mkdir(exist_ok=True)
+    gh = binarios / "gh"
+    gh.write_text(f"#!{sys.executable}\n{GH_FALSO}", encoding="utf-8")
+    gh.chmod(0o755)
+    (tmp_path / "estado.json").write_text(json.dumps(estado), encoding="utf-8")
+    script = tmp_path / "shas.sh"
+    script.write_text(passo("ultimo_verde()")["run"], encoding="utf-8")
+    saida = tmp_path / "output"
+    resumo = tmp_path / "summary"
+    saida.write_text("")
+    resumo.write_text("")
+    ambiente = {
+        "PATH": f"{binarios}{os.pathsep}{os.environ['PATH']}",
+        "FALSOS": str(tmp_path),
+        "DONO": "dono",
+        "SHA_PROPRIO": A,
+        "SHA_PLATFORM": "",
+        "SHA_OS_SERVICE": "",
+        "SHA_BILLING_SERVICE": "",
+        "SHA_EXECUTION_SERVICE": "",
+        "GITHUB_OUTPUT": str(saida),
+        "GITHUB_STEP_SUMMARY": str(resumo),
+    } | {chave.upper(): valor for chave, valor in entradas.items()}
+    processo = subprocess.run(  # noqa: S603  # nosec B603
+        ["/bin/bash", "--noprofile", "--norc", "-eo", "pipefail", str(script)],
+        env=ambiente,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    log = tmp_path / "gh.jsonl"
+    chamadas = (
+        [json.loads(linha) for linha in log.read_text().splitlines()]
+        if log.exists()
+        else []
+    )
+    pares = dict(linha.split("=", 1) for linha in saida.read_text().splitlines())
+    return Shas(processo, pares, resumo.read_text(), chamadas)
+
+
+def test_shas_usa_o_ultimo_cd_verde_de_cada_servico(tmp_path: Path) -> None:
+    estado = api(
+        os_service={"runs": A, "main": D},
+        billing_service={"runs": B, "main": D},
+        execution_service={"runs": C, "main": D},
+    )
+    r = roda_shas(tmp_path, estado)
+    assert r.processo.returncode == 0, r.processo.stderr
+    assert r.saida == {
+        "sha_os_service": A,
+        "sha_billing_service": B,
+        "sha_execution_service": C,
+    }
+    assert r.resumo.count("| last green CD |") == 3
+    assert "::warning::" not in r.processo.stdout
+    # So a consulta do ultimo CD verde de cada um, sem ler a main.
+    assert len(r.chamadas) == 3
+    assert all("actions/workflows/cd.yml/runs" in " ".join(c) for c in r.chamadas)
+
+
+def test_shas_404_cai_na_main_head_com_aviso(tmp_path: Path) -> None:
+    r = roda_shas(tmp_path, api(billing_service={"runs": 404, "main": B}))
+    assert r.processo.returncode == 0, r.processo.stderr
+    assert r.saida["sha_billing_service"] == B
+    assert (
+        "::warning::postech-sw-arch-p4-billing-service has no green CD run on main"
+        f" yet: using main HEAD {B}"
+    ) in r.processo.stdout
+    assert f"| `{B}` | main HEAD, no green CD yet |" in r.resumo
+
+
+def test_shas_erro_da_api_que_nao_e_404_reprova_sem_cair_na_main(
+    tmp_path: Path,
+) -> None:
+    r = roda_shas(tmp_path, api(execution_service={"runs": 500, "main": C}))
+    assert r.processo.returncode != 0
+    assert "HTTP 500" in r.processo.stderr
+    assert r.saida == {}
+    lidas = [" ".join(c) for c in r.chamadas]
+    assert not any("execution-service/commits/main" in c for c in lidas)
+
+
+@pytest.mark.parametrize("sha", ["", "lixo", "ABC"])
+def test_shas_sem_commit_valido_reprova_nomeando_o_repositorio(
+    tmp_path: Path, sha: str
+) -> None:
+    """Run sem head_sha e main sem SHA valido, ou head_sha fora do formato."""
+    estado = api(os_service={"runs": sha, "main": "lixo" if not sha else D})
+    r = roda_shas(tmp_path, estado)
+    assert r.processo.returncode == 1
+    assert (
+        "::error::could not resolve a commit for postech-sw-arch-p4-os-service"
+        in r.processo.stdout
+    )
+    assert r.saida == {}
+
+
+@pytest.mark.parametrize(
+    "valor", ["ABC123", A.upper(), "a" * 39, "a" * 41, f" {A}", "g" * 40]
+)
+def test_shas_input_fora_do_formato_reprova_antes_de_qualquer_consulta(
+    tmp_path: Path, valor: str
+) -> None:
+    r = roda_shas(tmp_path, api(), sha_os_service=valor)
+    assert r.processo.returncode == 1
+    assert (
+        "::error::input sha_os_service must be 40 lowercase hexadecimal characters"
+        in r.processo.stdout
+    )
+    # O valor recusado nao vai para o log.
+    assert valor.strip() not in r.processo.stdout
+    assert r.chamadas == []
+    assert r.saida == {}
+
+
+def test_shas_input_valido_e_usado_sem_consultar_aquele_servico(
+    tmp_path: Path,
+) -> None:
+    r = roda_shas(
+        tmp_path, api(os_service={"runs": A, "main": D}), sha_billing_service=B
+    )
+    assert r.processo.returncode == 0, r.processo.stderr
+    assert r.saida["sha_billing_service"] == B
+    assert r.saida["sha_os_service"] == A
+    assert f"| `{B}` | dispatch input |" in r.resumo
+    assert not any("billing-service" in " ".join(c) for c in r.chamadas)
+
+
+def test_shas_sha_platform_so_aceita_o_commit_do_run(tmp_path: Path) -> None:
+    r = roda_shas(tmp_path, api(), sha_platform=B)
+    assert r.processo.returncode == 1
+    assert "input sha_platform must be empty or the commit of this run" in (
+        r.processo.stdout
+    )
+    assert r.chamadas == []
+    r = roda_shas(tmp_path, api(), sha_platform=A)
+    assert r.processo.returncode == 0, r.processo.stderr
+    assert f"| postech-sw-arch-p4-platform | `{A}` | this run |" in r.resumo
+
+
 def test_checkouts_do_platform_deste_commit_e_dos_servicos_nos_shas() -> None:
     checkouts = [p for p in PASSOS if "actions/checkout" in p.get("uses", "")]
     assert [c["with"]["path"] for c in checkouts] == ["platform", *SERVICOS]
@@ -223,6 +425,31 @@ def test_o_zap_roda_apos_o_e2e_reprovado_mas_nao_sem_o_smoke() -> None:
     # O E2E e o smoke nao tem `if`: o padrao, success(), reprova o job na falha.
     assert "if" not in passo("make -C platform e2e")
     assert "if" not in passo("smoke-servicos.sh")
+
+
+def test_nada_no_job_e2e_engole_a_falha_de_um_passo() -> None:
+    """Um `continue-on-error` ou um `|| true` deixaria o job verde com o E2E,
+    o ZAP ou o smoke vermelhos."""
+    assert "continue-on-error" not in E2E
+    for p in PASSOS:
+        assert "continue-on-error" not in p, p.get("name")
+        for linha in p.get("run", "").splitlines():
+            assert "|| true" not in linha, linha
+            assert "; true" not in linha, linha
+
+
+def test_smoke_e2e_e_zap_rodam_so_a_marca_da_etapa_e_o_comando() -> None:
+    assert passo("smoke-servicos.sh")["run"] == (
+        "platform/scripts/medir-kind.sh etapa smoke\n"
+        "platform/scripts/ci/smoke-servicos.sh\n"
+    )
+    assert passo("make -C platform e2e")["run"] == (
+        "platform/scripts/medir-kind.sh etapa e2e\nmake -C platform e2e\n"
+    )
+    assert passo("scripts/ci/zap-baseline.sh")["run"] == (
+        "platform/scripts/medir-kind.sh etapa zap\n"
+        "platform/scripts/ci/zap-baseline.sh\n"
+    )
 
 
 def test_artefatos_e2e_kind_e_zap_baseline_por_90_dias() -> None:
