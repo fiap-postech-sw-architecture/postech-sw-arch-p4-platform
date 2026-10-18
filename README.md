@@ -730,7 +730,7 @@ scripts/ci/implantar-servicos.sh --overlay kind \
 make mp-sandbox-ensaio
 ```
 
-O ensaio leva cerca de meio minuto num kind sem outra carga e termina com `3 passed, 13 deselected` (e o tempo) e `varredura de reports/mp-sandbox-ensaio: nenhum segredo`, e deixa `reports/mp-sandbox-ensaio/resumo.md`. O Billing continua em `simulado` (`curl -sk https://localhost/billing/api/v1/saude` diz `"modo":"simulado"`), e o Secret `billing-mercadopago` não existe.
+O ensaio leva cerca de meio minuto num kind sem outra carga e termina com `3 passed, 14 deselected` (e o tempo) e `varredura de reports/mp-sandbox-ensaio: nenhum segredo`, e deixa `reports/mp-sandbox-ensaio/resumo.md`. O Billing continua em `simulado` (`curl -sk https://localhost/billing/api/v1/saude` diz `"modo":"simulado"`), e o Secret `billing-mercadopago` não existe.
 
 Se um ensaio foi interrompido ou reprovado, apague o cluster e suba outro (`make kind-down` e o bloco acima de novo) antes do `make mp-sandbox`: um pagamento `SOLICITADO` que sobrou dele seria conciliado no Mercado Pago de verdade. A conferência prévia avisa disso, mas não tem como conferir.
 
@@ -764,7 +764,7 @@ O `make mp-sandbox` leva cerca de 100 s de máquina (a criação da cobrança, a
 [mp-sandbox] 2/3 tirando MP_MODE, SIMULADOR_PERMITIDO e MP_NOTIFICATION_URL dos Deployments
 [mp-sandbox] 3/3 reiniciando os Deployments
 [mp-sandbox] Billing de volta ao simulador
-3 passed, 13 deselected in 114.44s (0:01:54)
+3 passed, 14 deselected in 114.44s (0:01:54)
 varredura de reports/mp-sandbox: nenhum segredo
 ```
 
