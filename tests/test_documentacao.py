@@ -9,6 +9,10 @@
   colados no terminal: no zsh interativo (o padrao do macOS) o ``#`` nao abre
   comentario, e o texto depois dele vira argumento do comando (no make, vira
   alvo). O que o comando faz fica na frase acima do bloco.
+- O leitor entende ``[texto](caminho)``, cercas de tres crases e blocos em
+  minusculas. Nao le link com titulo, definicao de referencia, ``<a href>``,
+  cerca ``~~~`` ou de quatro crases, nem cerca com texto depois das crases:
+  nenhum .md de hoje usa essas formas; se um passar a usar, amplie os regex.
 """
 
 from __future__ import annotations
@@ -21,18 +25,31 @@ from urllib.parse import unquote
 import pytest
 
 RAIZ = Path(__file__).resolve().parents[1]
+# Fora do git, o que nao e documento do repositorio: dependencias e relatorios.
+_FORA_DO_GIT = {".git", ".venv", "node_modules", "reports"}
 
 
 def _documentos() -> list[str]:
-    """Todo .md que o git versiona: um documento novo entra sem mexer aqui."""
-    saida = subprocess.run(  # nosec B603 B607
-        ["git", "ls-files", "-z", "*.md"],  # noqa: S607
-        cwd=RAIZ,
-        capture_output=True,
-        text=True,
-        timeout=30,
-        check=True,
-    ).stdout
+    """Todo .md que o git versiona: um documento novo entra sem mexer aqui.
+
+    Fora de um checkout git (um tarball) ou sem o ``git`` no PATH, vale todo .md
+    da arvore, menos os de ``_FORA_DO_GIT``: a coleta da suite nao para por isso.
+    """
+    try:
+        saida = subprocess.run(  # nosec B603 B607
+            ["git", "ls-files", "-z", "*.md"],  # noqa: S607
+            cwd=RAIZ,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            check=True,
+        ).stdout
+    except (OSError, subprocess.SubprocessError):
+        return sorted(
+            caminho.relative_to(RAIZ).as_posix()
+            for caminho in RAIZ.rglob("*.md")
+            if not _FORA_DO_GIT & set(caminho.relative_to(RAIZ).parts)
+        )
     return list(filter(None, saida.split("\0")))
 
 
@@ -103,6 +120,32 @@ def test_a_conferencia_cobre_o_readme_e_os_documentos_de_docs() -> None:
 
     assert "README.md" in DOCUMENTOS
     assert em_docs <= set(DOCUMENTOS), "documento de docs/ fora do git: git add nele"
+
+
+@pytest.mark.parametrize(
+    "erro",
+    [
+        FileNotFoundError("git"),
+        subprocess.CalledProcessError(128, "git"),
+        subprocess.TimeoutExpired("git", 30),
+    ],
+    ids=["sem-git-no-path", "fora-de-um-checkout-git", "git-pendurado"],
+)
+def test_sem_git_vale_todo_md_da_arvore(
+    monkeypatch: pytest.MonkeyPatch, erro: Exception
+) -> None:
+    def falha(*_args: object, **_kwargs: object) -> None:
+        raise erro
+
+    monkeypatch.setattr(subprocess, "run", falha)
+
+    documentos = _documentos()
+
+    assert set(DOCUMENTOS) <= set(documentos)
+    assert not any(
+        d.startswith((".git/", ".venv/", "node_modules/", "reports/"))
+        for d in documentos
+    )
 
 
 @pytest.mark.parametrize("documento", DOCUMENTOS)
