@@ -400,7 +400,7 @@ Artefatos de CI expiram, e o Jaeger guarda os traces em memória. Por isso, o qu
 - **LGPD.** A anonimização continua no OS (`src/cliente_veiculo/aplicacao/lgpd_use_cases.py:47-76`), com uma extensão: o Execution Service guarda a placa no retrato do veículo, e a eliminação envia `AnonimizarVeiculo` para trocá-la pelo marcador `ANONIMIZADO:{veiculo_id}`. O Billing não guarda dados do pagador: do provedor, só id, status e seu detalhe, valor, moeda e datas. Mensagens entregues saem da outbox em 7 dias, e a DLQ expira em 7 dias (RFC-004, seções 5.3 e 5.4).
 - **Outbox no MongoDB.** Sem `LISTEN/NOTIFY` nem `FOR UPDATE SKIP LOCKED`, o relay do Billing usa polling com claim atômico, e a transação com a outbox exige replica set. É a peça de mensageria sem precedente no p3.
 - **Redis do rate limiter.** O rate limit fica no Kong, com limites por rota e pelo IP do cliente, sem Redis compartilhado entre serviços ([ADR-038](../../arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md)).
-- **Crédito Azure.** O k3s persistente depende do crédito; sem ele, o deploy obrigatório continua no kind do CI, e o vídeo usa o kind local.
+- **Deploy remoto desligado.** Nenhum ambiente fica de pé: o deploy obrigatório é o kind do CI, o vídeo usa o kind local, e o gancho de deploy remoto só se liga se a avaliação pedir um cluster persistente ([nuvem opcional](../../operacao/nuvem-opcional.md)).
 - **Prazo.** Entrega no portal até 17/11/2026, 23h59. Marcos, caminho crítico, ordem de corte, vídeo e submissão estão na seção 12.1.
 
 ### 12.1 Marcos, caminho crítico e ordem de corte
@@ -420,7 +420,7 @@ Artefatos de CI expiram, e o Jaeger guarda os traces em memória. Por isso, o qu
 
 Caminho crítico: plataforma no kind (RabbitMQ e Kong) → mensageria nos três serviços → orquestrador → manifestos e `cd.yml` → E2E verde no `deploy-kind` → evidências e vídeo → PDF → submissão. O E2E depende dos três serviços e do `platform`, então o atraso de qualquer serviço atrasa a evidência do deploy.
 
-Ordem de corte, se o prazo apertar: primeiro o k3s na Azure (o kind cobre o deploy obrigatório), depois os exportadores de PostgreSQL e MongoDB e, por fim, os span links dos passos humanos (o trace segue pelo contexto guardado). Saga com compensações, BDD, SonarQube no CI, Mercado Pago e os entregáveis do enunciado não entram no corte.
+Ordem de corte, se o prazo apertar: primeiro o deploy remoto, que já vem desligado (o kind cobre o deploy obrigatório), depois os exportadores de PostgreSQL e MongoDB e, por fim, os span links dos passos humanos (o trace segue pelo contexto guardado). Saga com compensações, BDD, SonarQube no CI, Mercado Pago e os entregáveis do enunciado não entram no corte.
 
 | Entrega | Responsável | Janela | Plano B |
 |---|---|---|---|
