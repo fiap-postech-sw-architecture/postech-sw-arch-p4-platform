@@ -102,7 +102,7 @@ def test_a_conferencia_cobre_o_readme_e_os_documentos_de_docs() -> None:
     em_docs = {p.relative_to(RAIZ).as_posix() for p in (RAIZ / "docs").rglob("*.md")}
 
     assert "README.md" in DOCUMENTOS
-    assert em_docs <= set(DOCUMENTOS)
+    assert em_docs <= set(DOCUMENTOS), "documento de docs/ fora do git: git add nele"
 
 
 @pytest.mark.parametrize("documento", DOCUMENTOS)
