@@ -1419,9 +1419,9 @@ tests:
             value: 0.09090909090909094
           - labels: '{job="billing-service-api"}'
             value: 0
-  # Serviços 1: so requisicao de cliente conta; o scrape do OS, que o OS registra sem
-  # rota de template, cai em nao_roteada e entra.
-  - name: painel Servicos 1, so requisicao de cliente conta e o scrape do OS entra como nao_roteada
+  # Serviços 1: so requisicao de cliente conta; o scrape (/metrics) fica de fora nos tres
+  # servicos, o OS inclusive, que registra o /metrics com rota de template.
+  - name: painel Servicos 1, so requisicao de cliente conta e o scrape fica de fora nos tres servicos
     interval: 1m
     input_series:
       - series: http_request_duration_seconds_count{job="billing-service-api", method="GET", rota="/api/v1/orcamentos", status="200"}
@@ -1434,7 +1434,9 @@ tests:
         values: 0+10x10
       - series: http_request_duration_seconds_count{job="execution-service-api", method="GET", rota="/metrics", status="200"}
         values: 0+4x10
-      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="nao_roteada", status="200"}
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/api/v1/ordens-de-servico", status="200"}
+        values: 0+4x10
+      - series: http_request_duration_seconds_count{job="os-service-api", method="GET", rota="/metrics", status="200"}
         values: 0+4x10
     promql_expr_test:
       - expr: sum by (job) (rate(http_request_duration_seconds_count{rota!~"/metrics|/api/v1/saude.*"}[5m]))
