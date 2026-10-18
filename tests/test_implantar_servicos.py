@@ -36,6 +36,9 @@ SCRIPT = (
     Path(__file__).resolve().parents[1] / "scripts" / "ci" / "implantar-servicos.sh"
 )
 LEITOR_DO_README = SCRIPT.with_name("imagens-do-readme.sh")
+# As funcoes de cluster (kubectl com prazo, ordem do namespace e mapas), comuns
+# ao deploy-remoto.sh.
+COMUM = SCRIPT.with_name("implantacao.sh")
 GIT = shutil.which("git") or "git"
 SLEEP = shutil.which("sleep") or "/bin/sleep"
 SERVICOS = {
@@ -749,11 +752,13 @@ FORMAS_DA_IMAGEM = pytest.mark.parametrize(
 
 
 def copia_da_plataforma(tmp_path: Path, readme: str) -> Path:
-    """Uma copia do script e dos leitores de imagem ao lado do README dado."""
+    """Uma copia do script, das funcoes comuns e dos leitores de imagem ao lado
+    do README dado."""
     plataforma = tmp_path / "plataforma"
     (plataforma / "scripts" / "ci").mkdir(parents=True)
     copia = plataforma / "scripts" / "ci" / SCRIPT.name
     shutil.copy(SCRIPT, copia)
+    shutil.copy(COMUM, copia.with_name(COMUM.name))
     for leitor in SCRIPT.parent.glob("imagens-*.sh"):
         shutil.copy(leitor, copia.with_name(leitor.name))
     (plataforma / "README.md").write_text(readme, encoding="utf-8")
@@ -1311,10 +1316,11 @@ RAIZ = SCRIPT.parents[2]
 
 
 def test_mapa_servico_namespace_dos_scripts_e_do_makefile_concorda() -> None:
-    # O mapa vive em cada script (e no Makefile): acrescentar um servico muda
-    # todos, e este teste reprova o que ficar para tras.
+    # O mapa vive nas funcoes comuns aos scripts de implantacao, no smoke e no
+    # Makefile: acrescentar um servico muda todos, e este teste reprova o que
+    # ficar para tras.
     implantar = dict(
-        re.findall(r"(\w+-service)\) echo (pytstop-\w+) ;;", SCRIPT.read_text())
+        re.findall(r"(\w+-service)\) echo (pytstop-\w+) ;;", COMUM.read_text())
     )
     smoke = dict(
         re.findall(
@@ -1332,9 +1338,7 @@ def test_mapa_servico_namespace_dos_scripts_e_do_makefile_concorda() -> None:
 
 
 def test_secret_do_banco_de_cada_namespace_e_o_da_tabela_do_readme() -> None:
-    no_script = dict(
-        re.findall(r"(pytstop-\w+)\) echo ([\w-]+) ;;", SCRIPT.read_text())
-    )
+    no_script = dict(re.findall(r"(pytstop-\w+)\) echo ([\w-]+) ;;", COMUM.read_text()))
     linha = next(
         linha
         for linha in (RAIZ / "README.md").read_text().splitlines()
