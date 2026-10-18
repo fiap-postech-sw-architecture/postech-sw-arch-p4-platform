@@ -1221,10 +1221,8 @@ Nomes em maiúsculas são variáveis de ambiente, definidas no ConfigMap ou no S
 | cache e timeout do JWKS | 600 e 2 | s | Billing e Execução | renovação da chave pública do OS |
 | tolerância de relógio do JWT (`leeway`) | 10 | s | todos | folga aceita em `exp` e `iat` |
 | janela dos alertas de 5xx e de outbox parada | 5 | min | `platform` (regras do Grafana) | tempo acima do limite antes de disparar |
-| `DEPLOY_REMOTO_HABILITADO` | sem padrão | | CD (variável do repositório ou da organização) | `true` liga o `deploy-remote`; outro valor, ou a falta dela, roda o `remote-skipped` |
-| `DEPLOY_REMOTO_CONTEXTO`, `DEPLOY_REMOTO_OVERLAY` | sem padrão; `k3s` | | CD (variáveis do repositório ou da organização) | contexto do kubeconfig e overlay dos manifests do deploy remoto |
 
-Os limites de rate limit por rota estão no ADR-038, e os requests e limits por componente, no ADR-042.
+Os limites de rate limit por rota estão no ADR-038, os requests e limits por componente, no ADR-042, e as variáveis do deploy remoto, desligado, em [nuvem opcional](../../../operacao/nuvem-opcional.md#para-ligar).
 
 ## 11. Riscos, limitações e pontos em aberto
 
