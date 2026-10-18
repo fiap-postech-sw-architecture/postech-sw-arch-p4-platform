@@ -273,6 +273,9 @@ def test_borda_no_loopback_dispensa_o_escape(zap: Zap, borda: str) -> None:
         "https://127.0.0.1.nip.io",
         "https://localhost/caminho",
         "ftp://localhost",
+        "https://evil.com/x.localhost",
+        "https://.localhost",
+        "https://127x0y0z1",
     ],
 )
 def test_borda_fora_do_loopback_sai_2_sem_chamar_nada(zap: Zap, borda: str) -> None:
