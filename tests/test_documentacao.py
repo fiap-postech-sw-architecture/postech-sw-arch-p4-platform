@@ -43,7 +43,9 @@ _EM_LINHA = re.compile(r"`[^`\n]*`")
 _BLOCO = re.compile(
     r"^[ \t]*```(?:bash|sh|zsh)\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE
 )
-_COMENTARIO = re.compile(r"(^|\s)#(\s|$)")
+# Um # no comeco da linha ou depois de espaco: `make e2e #texto` tambem passa o
+# texto como argumento. O # no meio de uma palavra (https://x.dev/#y) nao conta.
+_COMENTARIO = re.compile(r"(^|\s)#")
 
 
 def _ancoras(texto: str) -> set[str]:
@@ -160,7 +162,7 @@ def test_blocos_de_comando_dos_documentos_nao_levam_comentario() -> None:
 
 def test_comentario_em_bloco_de_comando_reprova() -> None:
     texto = (
-        "```bash\nmake e2e      # os 14 cenarios\n```\n"
+        "```bash\nmake e2e      # os 14 cenarios\nmake e2e #os 14 cenarios\n```\n"
         "1. Passo:\n\n"
         "   ```sh\n   kubectl get pods  # espera\n   ```\n\n"
         "```zsh\n# so comentario\nmake test\n```\n"
@@ -170,6 +172,7 @@ def test_comentario_em_bloco_de_comando_reprova() -> None:
 
     assert _linhas_com_comentario(texto) == [
         "make e2e      # os 14 cenarios",
+        "make e2e #os 14 cenarios",
         "   kubectl get pods  # espera",
         "# so comentario",
     ]
