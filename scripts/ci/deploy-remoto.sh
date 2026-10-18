@@ -96,8 +96,8 @@ echo "$servico: $EXECUCAO = $overlay with image $nome@$digest"
 # Antes de tocar no cluster, o overlay tem de renderizar com a imagem trocada:
 # no checkout de outro repositorio (o do platform tambem tem um overlay k3s), a
 # troca nao casa nada, e o apply implantaria os manifests dele.
-renderizado=$(kubectl kustomize "$EXECUCAO") \
-  || { echo "$servico: kubectl kustomize $EXECUCAO failed" >&2; exit 1; }
+renderizado=$(prazo "$PRAZO_KUBECTL" kubectl kustomize "$EXECUCAO") \
+  || { echo "$servico: kubectl kustomize $EXECUCAO failed or exceeded ${PRAZO_KUBECTL}s" >&2; exit 1; }
 grep -qF "image: $nome@$digest" <<< "$renderizado" \
   || { echo "$servico: k8s/overlays/$overlay in $PWD does not use the image pytstop-$servico (run from the checkout of $servico)" >&2; exit 1; }
 

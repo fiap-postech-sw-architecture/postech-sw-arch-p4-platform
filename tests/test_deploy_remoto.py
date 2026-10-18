@@ -500,10 +500,15 @@ def test_toda_chamada_ao_cluster_roda_com_prazo(
 
     assert processo.returncode == 0, processo.stderr
     chamadas = remoto.chamadas("timeout")
-    # So o kubectl do cluster: o kustomize renderiza local, sem prazo.
     assert {chamada[1] for chamada in chamadas} == {"kubectl"}
+    # O kustomize renderiza local, mas tambem com prazo: um overlay com base
+    # remota penduraria ate o timeout do job.
+    kustomize = [chamada for chamada in chamadas if chamada[2] == "kustomize"]
+    assert kustomize == [[str(comum), "kubectl", "kustomize", str(GERADO)]]
     esperado = prazos_do_script(banco, deployment, comum)
-    assert sorted(verbo_com_prazo(chamada) for chamada in chamadas) == sorted(
+    assert sorted(
+        verbo_com_prazo(chamada) for chamada in chamadas if chamada not in kustomize
+    ) == sorted(
         [*esperado.items(), ("rollout deployment", esperado["rollout deployment"])]
     )
     job_ = "job.batch/billing-inicializacao"
