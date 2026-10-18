@@ -295,15 +295,20 @@ def test_shas_sem_commit_valido_reprova_nomeando_o_repositorio(
 
 
 @pytest.mark.parametrize(
+    "entrada",
+    ["sha_platform", "sha_os_service", "sha_billing_service", "sha_execution_service"],
+)
+@pytest.mark.parametrize(
     "valor", ["ABC123", A.upper(), "a" * 39, "a" * 41, f" {A}", "g" * 40]
 )
 def test_shas_input_fora_do_formato_reprova_antes_de_qualquer_consulta(
-    tmp_path: Path, valor: str
+    tmp_path: Path, valor: str, entrada: str
 ) -> None:
-    r = roda_shas(tmp_path, api(), sha_os_service=valor)
+    """Cada um dos quatro inputs do dispatch passa pela validacao do formato."""
+    r = roda_shas(tmp_path, api(), **{entrada: valor})
     assert r.processo.returncode == 1
     assert (
-        "::error::input sha_os_service must be 40 lowercase hexadecimal characters"
+        f"::error::input {entrada} must be 40 lowercase hexadecimal characters"
         in r.processo.stdout
     )
     # O valor recusado nao vai para o log.
