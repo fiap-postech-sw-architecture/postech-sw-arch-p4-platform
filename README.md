@@ -963,12 +963,13 @@ zap-baseline.py -t https://localhost/os/openapi.json -c regras.conf -m 1 -I -z "
 ```
 
 - `-I`: aviso não reprova, só regra em `FAIL`. `-m 1`: o spider para em 1 minuto.
-- O spider importa o `openapi.json` e chama cada operação dele uma vez, com dados de exemplo, `POST`, `PUT` e `DELETE` inclusive (no primeiro run, de 24 a 38 URLs por serviço, quase todas com resposta 4xx). Por isso o script só roda num kind descartável, depois do E2E, nunca num ambiente com dados.
+- O spider importa o `openapi.json` e chama cada operação dele uma vez, com dados de exemplo, `POST`, `PUT` e `DELETE` inclusive (de 24 a 38 URLs por serviço, quase todas com resposta 4xx). Por isso o script só roda num kind descartável, depois do E2E: ele recusa, com status 2 e antes de qualquer chamada, uma `BORDA` cujo host não seja o loopback (`localhost`, `127.0.0.1`, `[::1]` ou `*.localhost`), salvo `ZAP_ALVO_DESCARTAVEL` igual à própria `BORDA`, para um alvo descartável fora dele.
 - `-z "-silent"`: sem ele, o `zap-baseline.py` da imagem atualiza e instala add-ons ao iniciar (`-addonupdate -addoninstall`), e o ZAP verifica atualização; com ele, nada disso. A varredura só pede páginas ao Kong do kind.
-- O ZAP aceita o certificado autoassinado do Kong. Como a varredura que não leu página nenhuma (certificado recusado, borda fora) poderia terminar com "nada a reportar", o script exige ao menos uma URL lida, a linha de resumo do ZAP e o status 0, e reprova nomeando o serviço se faltar qualquer um. Um serviço que reprova não impede a varredura dos outros.
+- O ZAP aceita o certificado autoassinado do Kong. Antes de cada scan, o `curl` confere que o `openapi.json` responde 200 (um 404 ou 503 reprova o serviço sem varrer), e depois o script reprova se o ZAP avisar que não leu o alvo, se faltar a linha de resumo, se o status não for 0 ou se nenhuma URL foi lida. O piso de URLs só prova que a borda respondeu (certificado aceito, Kong de pé): o spider conta também os 404 que o Kong gera sozinho. Um serviço que reprova não impede a varredura dos outros.
+- O container sobe com `--init` e com o nome `zap-<serviço>-<pid>`: o processo principal da imagem ignora o SIGTERM, e sem o `--init` o `PRAZO_ZAP` não encerraria um ZAP pendurado.
 - A pasta `reports/zap` (ignorada pelo git) recebe `regras.conf`, `zap-<serviço>.html`, `.json`, `.md` e `.log`. O CI a publica como o artefato `zap-baseline` (90 dias), e a tabela por serviço (FAIL, WARN, URLs lidas) mais o `.md` de cada um vão para o summary do job.
 
-Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_REDE` (rede do container, `host`), `RELATORIOS` (`reports/zap`) e `PRAZO_ZAP` (segundos por serviço, 300) trocam o alvo, a rede, a pasta e o prazo; foi assim que o script foi provado com um Kong avulso do 3.9.3 numa rede Docker sem saída para fora.
+Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_REDE` (rede do container, `host`), `RELATORIOS` (`reports/zap`, relativo à pasta de onde o script roda) e `PRAZO_ZAP` (segundos por serviço, 300) trocam o alvo, a rede, a pasta e o prazo. O `curl` roda na máquina do script, então a `BORDA` tem de responder ali também: um Kong avulso numa rede Docker entra com a porta publicada no loopback (`-p 127.0.0.1:<porta>:8443` e `BORDA=https://localhost:<porta>`).
 
 ### O que o ZAP achou nos primeiros runs
 

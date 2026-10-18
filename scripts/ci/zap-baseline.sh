@@ -1,27 +1,29 @@
 #!/usr/bin/env bash
-# ZAP baseline na borda do kind (job e2e do cd.yml, ADR-041, RNF-049): um scan
-# por servico, no /openapi.json que o Kong publica (o /docs e o HTML do Swagger
-# e nao lista rota), com as regras de e2e/zap/regras.conf. O alvo e a borda
-# como um cliente de fora a ve, https://localhost no runner, onde o Kong
-# responde com o certificado padrao dele: o ZAP tem de aceita-lo, e um scan que
-# nao leu pagina nenhuma (certificado recusado, borda fora) reprova em vez de
-# passar por "nada a reportar".
+# ZAP baseline na borda do kind (job e2e do cd.yml, ADR-041): um scan por
+# servico, no /openapi.json que o Kong publica (o /docs e o HTML do Swagger e
+# nao lista rota), com as regras de e2e/zap/regras.conf. O alvo e a borda como
+# um cliente de fora a ve, https://localhost no runner, onde o Kong responde
+# com o certificado padrao dele.
 #
-# Os alertas sao so de varredura passiva, sem ataque, mas o spider importa o
-# openapi.json e chama cada operacao dele uma vez com dados de exemplo, POST,
-# PUT e DELETE inclusive (a maioria responde 4xx). Por isso o script so roda
-# num kind descartavel, depois do E2E, nunca num ambiente com dados.
+# As regras olham so as respostas, mas o spider importa o openapi.json e chama
+# cada operacao dele uma vez com dados de exemplo, POST, PUT e DELETE
+# inclusive. Por isso o script recusa uma BORDA fora do loopback (status 2),
+# salvo ZAP_ALVO_DESCARTAVEL igual a propria BORDA, e so roda num kind
+# descartavel, depois do E2E.
 #
 #   scripts/ci/zap-baseline.sh [<servico>...]   (sem argumento, os tres)
 #
 # Reprova (status 1, nomeando os servicos) se alguma regra em FAIL do
-# regras.conf disparar ou se o ZAP nao conseguir varrer. Relatorios em
-# reports/zap (html, json e md por servico, mais o log do ZAP); a tabela e o md
-# de cada servico vao para o summary do job. O ZAP sobe com -silent: sem
-# verificar atualizacao, sem baixar add-on e sem telemetria, entao a varredura
-# nao fala com a internet. Variaveis: BORDA (https://localhost), ZAP_REDE (rede
-# do container, host: o localhost do runner), RELATORIOS (reports/zap) e
-# PRAZO_ZAP (segundos por servico, 300).
+# regras.conf disparar ou se o ZAP nao conseguir varrer: o openapi.json que nao
+# responde 200 ao curl antes do scan, o ZAP que nao consegue le-lo, o que sai
+# sem a linha de resumo ou sem URL lida, o que sai com erro e o que estoura o
+# prazo. Relatorios em reports/zap (html, json e md por servico, mais o log do
+# ZAP); a tabela e o md de cada servico vao para o summary do job. O ZAP sobe
+# com -silent: sem verificar atualizacao, sem baixar add-on e sem telemetria,
+# entao a varredura nao fala com a internet. Variaveis: BORDA
+# (https://localhost), ZAP_REDE (rede do container, host: o localhost do
+# runner), RELATORIOS (reports/zap), PRAZO_ZAP (segundos por servico, 300) e
+# ZAP_ALVO_DESCARTAVEL.
 set -euo pipefail
 
 # Versao e digest do indice multi-arquitetura; a mesma imagem esta na tabela
@@ -33,6 +35,14 @@ BORDA="${BORDA:-https://localhost}"
 ZAP_REDE="${ZAP_REDE:-host}"
 destino="${RELATORIOS:-$raiz/reports/zap}"
 PRAZO_ZAP="${PRAZO_ZAP:-300}"
+
+# A BORDA inteira casa o padrao, sem caminho, usuario nem query:
+# localhost.exemplo.com e localhost@exemplo.com nao passam por loopback.
+loopback='^https?://(localhost|127\.0\.0\.1|\[::1\]|[a-z0-9.-]+\.localhost)(:[0-9]+)?$'
+if ! [[ "$BORDA" =~ $loopback ]] && [ "${ZAP_ALVO_DESCARTAVEL:-}" != "$BORDA" ]; then
+  echo "refusing BORDA=$BORDA: the spider calls POST, PUT and DELETE on every operation; set ZAP_ALVO_DESCARTAVEL=$BORDA if the target is throwaway" >&2
+  exit 2
+fi
 
 # prefixo <servico>: onde o Kong publica o servico (o ROOT_PATH dele).
 prefixo() {
@@ -55,6 +65,8 @@ for nome in "$@"; do
 done
 
 mkdir -p "$destino"
+# O -v do docker com caminho relativo vira volume nomeado, e o docker o recusa.
+destino=$(cd "$destino" && pwd)
 # O container roda como o uid 1000 e o runner, como outro: sem isto o ZAP nao
 # grava os relatorios na pasta.
 chmod 777 "$destino"
@@ -66,26 +78,42 @@ for nome in "$@"; do
   alvo="$BORDA$(prefixo "$nome")/openapi.json"
   log="$destino/zap-$nome.log"
   codigo=0
-  # O -t, o -c e os relatorios sao caminhos de dentro do container (/zap/wrk).
-  # -I: aviso nao reprova, so FAIL; -m 1: o spider para em 1 minuto.
-  prazo "$PRAZO_ZAP" docker run --rm --network "$ZAP_REDE" -v "$destino:/zap/wrk" "$ZAP_IMAGE" \
-    zap-baseline.py -t "$alvo" -c regras.conf -m 1 -I -z "-silent" \
-    -r "zap-$nome.html" -J "zap-$nome.json" -w "zap-$nome.md" 2>&1 | tee "$log" || codigo=$?
-  # A linha final do ZAP: FAIL-NEW: 0  FAIL-INPROG: 0  WARN-NEW: 2 ... PASS: 51
-  contagem=$(sed -n 's/^FAIL-NEW: \([0-9]*\).*WARN-NEW: \([0-9]*\).*/fail=\1 warn=\2/p' "$log" | tail -n 1)
-  falhas=$(sed -n 's/.*fail=\([0-9]*\).*/\1/p' <<< "$contagem")
-  avisos=$(sed -n 's/.*warn=\([0-9]*\)/\1/p' <<< "$contagem")
-  # Pagina lida: o relatorio json lista o alvo entre os sites quando ao menos um
-  # alerta saiu; sem alerta algum, o ZAP diz "Total of N URLs" no log.
-  lidas=$(sed -n 's/^Total of \([0-9][0-9]*\) URLs.*/\1/p' "$log" | tail -n 1)
-  if [ "$codigo" -ne 0 ]; then
-    resultado="FAILED (ZAP exit $codigo)"
-  elif [ -z "$contagem" ]; then
-    resultado="FAILED (no summary line from ZAP)"
-  elif [ "${lidas:-0}" -lt 1 ]; then
-    resultado="FAILED (no URL scanned: certificate refused or edge down)"
+  falhas=""
+  avisos=""
+  lidas=""
+  # O spider conta tambem os 404 que o proprio Kong gera, entao um openapi.json
+  # que responde 404 ou 503 ainda deixa URLs lidas: o alvo responde 200 antes
+  # do scan, ou o servico reprova sem ele.
+  if ! curl -fsSk --max-time 10 -o /dev/null "$alvo" 2> "$log"; then
+    cat "$log" >&2
+    resultado="FAILED (target did not answer 200)"
   else
-    resultado=ok
+    # O -t, o -c e os relatorios sao caminhos de dentro do container (/zap/wrk).
+    # -I: aviso nao reprova, so FAIL; -m 1: o spider para em 1 minuto. --init:
+    # o PID 1 da imagem ignora o SIGTERM do prazo, e o tini o repassa ao ZAP;
+    # o nome acha o container de um run pendurado.
+    prazo "$PRAZO_ZAP" docker run --init --rm --name "zap-$nome-$$" --network "$ZAP_REDE" \
+      -v "$destino:/zap/wrk" "$ZAP_IMAGE" \
+      zap-baseline.py -t "$alvo" -c regras.conf -m 1 -I -z "-silent" \
+      -r "zap-$nome.html" -J "zap-$nome.json" -w "zap-$nome.md" 2>&1 | tee "$log" || codigo=$?
+    # A linha final do ZAP: FAIL-NEW: 0  FAIL-INPROG: 0  WARN-NEW: 2 ... PASS: 51
+    contagem=$(sed -n 's/^FAIL-NEW: \([0-9]*\).*WARN-NEW: \([0-9]*\).*/fail=\1 warn=\2/p' "$log" | tail -n 1)
+    falhas=$(sed -n 's/.*fail=\([0-9]*\).*/\1/p' <<< "$contagem")
+    avisos=$(sed -n 's/.*warn=\([0-9]*\)/\1/p' <<< "$contagem")
+    # URLs que o spider pediu, os 404 do Kong inclusive: o piso so prova que a
+    # borda respondeu (certificado aceito, Kong de pe).
+    lidas=$(sed -n 's/^Total of \([0-9][0-9]*\) URLs.*/\1/p' "$log" | tail -n 1)
+    if [ "$codigo" -ne 0 ]; then
+      resultado="FAILED (ZAP exit $codigo)"
+    elif [ -z "$contagem" ]; then
+      resultado="FAILED (no summary line from ZAP)"
+    elif grep -qF -e "error accessing URL $alvo " -e "failed to access URL $alvo " "$log"; then
+      resultado="FAILED (ZAP could not read the target)"
+    elif [ "${lidas:-0}" -lt 1 ]; then
+      resultado="FAILED (no URL scanned: certificate refused or edge down)"
+    else
+      resultado=ok
+    fi
   fi
   case "$resultado" in
     ok) ;;
