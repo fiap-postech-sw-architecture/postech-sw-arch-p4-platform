@@ -1,9 +1,13 @@
-"""Links relativos e ancoras dos documentos que o alinhamento ao construido tocou.
+"""Links, ancoras e blocos de comando dos documentos que o alinhamento tocou.
 
-O titulo de uma secao muda (o do overlay `k3s` no README mudou e levou o link da
-nuvem opcional junto) e o link que apontava para ele fica morto sem ninguem ver.
-Aqui cada link relativo desses documentos cai em arquivo e secao que existem; os
-links para fora do repositorio (``https:``) nao entram.
+- O titulo de uma secao muda (o do overlay `k3s` no README mudou e levou o link
+  da nuvem opcional junto) e o link que apontava para ele fica morto sem ninguem
+  ver. Cada link relativo desses documentos cai em arquivo e secao que existem;
+  os links para fora do repositorio (``https:``) nao entram.
+- Os comandos dos blocos ``bash`` rodam colados no terminal: no zsh interativo (o
+  padrao do macOS) o ``#`` nao abre comentario, e o texto depois dele vira
+  argumento do comando (no make, vira alvo). O que o comando faz fica na frase
+  acima do bloco.
 """
 
 from __future__ import annotations
@@ -26,6 +30,11 @@ DOCUMENTOS = (
 )
 # Bloco de codigo: um # dentro dele nao e titulo, e um [x](y) nao e link.
 _CERCA = re.compile(r"^[ \t]*```.*?^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE)
+# Bloco de comando: a cerca pode vir indentada, no passo numerado de uma lista.
+_BLOCO = re.compile(
+    r"^[ \t]*```(?:bash|sh|zsh)\n(.*?)^[ \t]*```[ \t]*$", re.DOTALL | re.MULTILINE
+)
+_COMENTARIO = re.compile(r"(^|\s)#(\s|$)")
 
 
 def _ancoras(texto: str) -> set[str]:
@@ -114,4 +123,39 @@ def test_link_para_arquivo_ou_secao_que_nao_existe_reprova(tmp_path: Path) -> No
         "docs/b.md",
         "docs/a.md#outra",
         "#fim",
+    ]
+
+
+def _linhas_com_comentario(texto: str) -> list[str]:
+    return [
+        linha
+        for bloco in _BLOCO.findall(texto)
+        for linha in bloco.splitlines()
+        if _COMENTARIO.search(linha)
+    ]
+
+
+def test_blocos_de_comando_dos_documentos_nao_levam_comentario() -> None:
+    textos = [
+        (RAIZ / documento).read_text(encoding="utf-8") for documento in DOCUMENTOS
+    ]
+
+    assert sum(len(_BLOCO.findall(texto)) for texto in textos) > 10
+    assert [linha for texto in textos for linha in _linhas_com_comentario(texto)] == []
+
+
+def test_comentario_em_bloco_de_comando_reprova() -> None:
+    texto = (
+        "```bash\nmake e2e      # os 14 cenarios\n```\n"
+        "1. Passo:\n\n"
+        "   ```sh\n   kubectl get pods  # espera\n   ```\n\n"
+        "```zsh\n# so comentario\nmake test\n```\n"
+        "```text\nsaida # nao e comando\n```\n"
+        "```bash\ncurl https://x.dev/#y\nmake kind-up\n```\n"
+    )
+
+    assert _linhas_com_comentario(texto) == [
+        "make e2e      # os 14 cenarios",
+        "   kubectl get pods  # espera",
+        "# so comentario",
     ]
