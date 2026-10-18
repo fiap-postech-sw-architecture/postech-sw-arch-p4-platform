@@ -54,7 +54,8 @@ KUBECTL_REAL = shutil.which("kubectl")
 # servico e um Deployment nele, com a imagem trocada pelo nome e pelo digest
 # (o namespace sai do caminho do checkout, <tmp>/<namespace>/repo).
 # KUSTOMIZE_FALSO_SEM_A_IMAGEM simula o checkout de outro repositorio (a troca
-# nao casa nada), KUSTOMIZE_FALSO_FALHA, um overlay que nao renderiza, e
+# nao casa nada), KUSTOMIZE_FALSO_SEM_O_DIGEST, a imagem do servico pela tag e
+# nao pelo digest, KUSTOMIZE_FALSO_FALHA, um overlay que nao renderiza, e
 # KUSTOMIZE_FALSO_A_MAIS, documentos acrescentados ao render. O resto das
 # chamadas vai para o kubectl falso do teste do implantar-servicos.sh.
 # Com KUBECTL_REAL, o kustomize e o de verdade, e o render fica tambem em
@@ -86,6 +87,8 @@ if sys.argv[1:2] == ["kustomize"]:
     imagem = gerado["images"][0]
     if os.environ.get("KUSTOMIZE_FALSO_SEM_A_IMAGEM"):
         trocada = "pytstop-outro-servico"
+    elif os.environ.get("KUSTOMIZE_FALSO_SEM_O_DIGEST"):
+        trocada = f"{imagem['newName']}:latest"
     else:
         trocada = f"{imagem['newName']}@{imagem['digest']}"
     ns = Path.cwd().parts[-2]
@@ -323,6 +326,13 @@ def com(chave: str, valor: str) -> list[str]:
         (com("overlay", "k3s\n  - ../../.."), "--overlay needs a plain overlay name"),
         (com("overlay", "../overlays/k3s"), "--overlay needs a plain overlay name"),
         (com("overlay", ".."), "--overlay needs a plain overlay name"),
+        # Cada caractere que a classe nao aceita: a barra, o ponto, o espaco e o
+        # hifen na frente (que o kubectl tomaria por opcao).
+        (com("overlay", "k3s/../k3s"), "--overlay needs a plain overlay name"),
+        (com("overlay", "a/b"), "--overlay needs a plain overlay name"),
+        (com("overlay", "k3s.x"), "--overlay needs a plain overlay name"),
+        (com("overlay", "a b"), "--overlay needs a plain overlay name"),
+        (com("overlay", "-x"), "--overlay needs a plain overlay name"),
         (com("servico", "web-service"), "unknown service web-service"),
         (
             com("imagem", f"{REGISTRY}/pytstop-os-service:{COMMIT}"),
@@ -373,6 +383,11 @@ def com(chave: str, valor: str) -> list[str]:
         "overlay-com-quebra-de-linha",
         "overlay-por-caminho",
         "overlay-ponto-ponto",
+        "overlay-com-barra-e-volta",
+        "overlay-em-subdiretorio",
+        "overlay-com-ponto",
+        "overlay-com-espaco",
+        "overlay-comecando-com-hifen",
         "servico-desconhecido",
         "imagem-sem-digest",
         "digest-curto",
@@ -453,9 +468,20 @@ def test_sem_o_arquivo_comum_para_antes_de_tudo(remoto: Remoto) -> None:
                 " (run from the checkout of os-service)"
             ),
         ),
+        (
+            {"KUSTOMIZE_FALSO_SEM_O_DIGEST": "1"},
+            (
+                "k8s/overlays/k3s in {dir} does not use the image pytstop-os-service"
+                " (run from the checkout of os-service)"
+            ),
+        ),
         ({"KUSTOMIZE_FALSO_FALHA": "1"}, f"kubectl kustomize {GERADO} failed"),
     ],
-    ids=["checkout-de-outro-repositorio", "overlay-que-nao-renderiza"],
+    ids=[
+        "checkout-de-outro-repositorio",
+        "imagem-do-servico-pela-tag-e-sem-o-digest",
+        "overlay-que-nao-renderiza",
+    ],
 )
 def test_overlay_sem_a_imagem_do_servico_para_antes_do_cluster(
     remoto: Remoto, ambiente: dict[str, str], mensagem: str
@@ -570,8 +596,22 @@ INACESSIVEIS = (
             INACESSIVEIS,
         ),
         ("secret", "error: secret failed in pytstop-billing", INACESSIVEIS, AUSENTES),
+        # O "not found" do executavel da credencial nao e o NotFound do Secret.
+        (
+            "secret-sem-credencial",
+            (
+                "Unable to connect to the server: getting credentials: exec: "
+                "executable aws not found"
+            ),
+            INACESSIVEIS,
+            AUSENTES,
+        ),
     ],
-    ids=["ausentes-pedem-o-make-deploy", "inacessiveis-falam-da-credencial"],
+    ids=[
+        "ausentes-pedem-o-make-deploy",
+        "inacessiveis-falam-da-credencial",
+        "credencial-que-falta-nao-e-secret-ausente",
+    ],
 )
 def test_secrets_da_plataforma_ausentes_ou_inacessiveis(
     remoto: Remoto, verbo: str, erro: str, mensagem: str, outra: str

@@ -132,9 +132,10 @@ os.execvp(sys.argv[2], sys.argv[2:])
 # cada namespace tem o banco, o Job de inicializacao e dois Deployments.
 # KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
 # (secret, delete, apply, statefulset, job, deployment; job e o Job que falha,
-# sem-secret, o NotFound do Secret do banco, e sem-statefulset, sem-job e
-# sem-deployment, a lista vazia), e KUBECTL_FALSO_PENDURA=<namespace>:<verbo>,
-# pendurar.
+# sem-secret, o NotFound do Secret do banco, secret-sem-credencial, o erro de
+# uma credencial por exec que falta, com "not found" mas sem o NotFound, e
+# sem-statefulset, sem-job e sem-deployment, a lista vazia), e
+# KUBECTL_FALSO_PENDURA=<namespace>:<verbo>, pendurar.
 # KUBECTL_FALSO_JOB_PENDENTE=<namespace> deixa o Job rodando para sempre.
 # KUSTOMIZE_FALSO_FALHA=1 faz o kustomize falhar.
 KUBECTL_FALSO = r"""
@@ -230,6 +231,11 @@ elif resto[0] == "get" and resto[1].startswith("job.batch/"):
 elif resto[:2] == ["get", "secret"]:
     # Os dois Secrets que o make deploy cria no namespace: o rabbitmq e o do banco.
     assert resto[2:] == ["rabbitmq", SEGREDOS_DO_BANCO[ns], "-o", "name"], resto
+    if falha == f"{ns}:secret-sem-credencial":
+        sys.exit(
+            "Unable to connect to the server: getting credentials: exec: "
+            "executable aws not found"
+        )
     falha_em("secret")
     print("secret/rabbitmq")
     if falha == f"{ns}:sem-secret":
