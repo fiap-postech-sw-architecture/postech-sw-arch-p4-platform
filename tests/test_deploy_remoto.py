@@ -8,8 +8,9 @@ fixa a imagem pelo digest, a ordem do namespace, o contexto do argumento em
 toda chamada (nunca o KUBE_CONTEXT do ambiente), os prazos e o overlay gerado
 apagado no fim; que falha no cluster nomeia o servico; que checkout errado
 (sem o overlay, de outro repositorio, overlay gerado ja existente) e render
-com objeto fora do namespace do servico param antes do cluster; e os
-argumentos recusados.
+com objeto fora do namespace do servico param antes do cluster; os argumentos
+recusados; e, com o kubectl kustomize de verdade, que o render real passa nas
+guardas com a imagem fixada pelo digest.
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ COMMIT = "5f2a9c1e" * 5
 DIGEST = "sha256:" + "0123456789abcdef" * 4
 CONTEXTO = "cluster-remoto"
 GERADO = Path("k8s") / "overlays" / "execucao"
+KUBECTL_REAL = shutil.which("kubectl")
 
 # O kustomize do falso renderiza o overlay gerado como o real: o Namespace do
 # servico e um Deployment nele, com a imagem trocada pelo nome e pelo digest
@@ -55,18 +57,29 @@ GERADO = Path("k8s") / "overlays" / "execucao"
 # nao casa nada), KUSTOMIZE_FALSO_FALHA, um overlay que nao renderiza, e
 # KUSTOMIZE_FALSO_A_MAIS, documentos acrescentados ao render. O resto das
 # chamadas vai para o kubectl falso do teste do implantar-servicos.sh.
+# Com KUBECTL_REAL, o kustomize e o de verdade, e o render fica tambem em
+# render.yaml.
 KUBECTL_REMOTO = (
     r"""
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
 import yaml
 
 if sys.argv[1:2] == ["kustomize"]:
-    with (Path(os.environ["FALSOS"]) / "kustomize.jsonl").open("a") as log:
+    falsos = Path(os.environ["FALSOS"])
+    with (falsos / "kustomize.jsonl").open("a") as log:
         log.write(json.dumps(sys.argv[1:]) + "\n")
+    if os.environ.get("KUBECTL_REAL"):
+        real = subprocess.run([os.environ["KUBECTL_REAL"], *sys.argv[1:]],
+                              capture_output=True, text=True)
+        (falsos / "render.yaml").write_text(real.stdout)
+        sys.stdout.write(real.stdout)
+        sys.stderr.write(real.stderr)
+        sys.exit(real.returncode)
     if os.environ.get("KUSTOMIZE_FALSO_FALHA"):
         sys.exit("error: accumulating resources")
     gerado = yaml.safe_load((Path(sys.argv[2]) / "kustomization.yaml").read_text())
@@ -646,3 +659,80 @@ def test_chamada_pendurada_estoura_o_prazo_e_nomeia_a_chamada(remoto: Remoto) ->
     assert re.search(r"kubectl apply --server-side -k .* exceeded 1s", processo.stderr)
     assert "deploy failed: billing-service" in processo.stderr
     assert not (dir_ / GERADO).exists()
+
+
+# A base minima de um servico: o Namespace e um Deployment nele, a imagem com
+# tag no initContainer e no container, como nos manifests dos servicos.
+BASE_DO_SERVICO = """\
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: pytstop-os
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: os-service-api
+  namespace: pytstop-os
+spec:
+  selector:
+    matchLabels:
+      app: os-service-api
+  template:
+    metadata:
+      labels:
+        app: os-service-api
+    spec:
+      initContainers:
+        - name: espera
+          image: pytstop-os-service:dev
+      containers:
+        - name: api
+          image: pytstop-os-service:dev
+"""
+
+
+@pytest.mark.skipif(KUBECTL_REAL is None, reason="kubectl is not on the PATH")
+@pytest.mark.parametrize(
+    ("imagem", "nome"),
+    [
+        (
+            f"{REGISTRY}/pytstop-os-service:{COMMIT}",
+            f"{REGISTRY}/pytstop-os-service",
+        ),
+        (
+            "localhost:5000/x/pytstop-os-service:v1.2",
+            "localhost:5000/x/pytstop-os-service",
+        ),
+    ],
+    ids=["imagem-do-cd", "registry-com-porta"],
+)
+def test_render_do_kubectl_kustomize_real_passa_nas_guardas_pelo_digest(
+    remoto: Remoto, imagem: str, nome: str
+) -> None:
+    # O falso fabrica a linha que a guarda procura; aqui, o kustomize de
+    # verdade: se o formato do render mudar, este teste avisa antes do deploy.
+    dir_ = remoto.checkout("os-service")
+    base = dir_ / "k8s" / "base"
+    base.mkdir()
+    (base / "kustomization.yaml").write_text("resources: [servico.yaml]\n")
+    (base / "servico.yaml").write_text(BASE_DO_SERVICO)
+
+    processo = remoto.roda(
+        *sem("imagem"),
+        "--imagem",
+        f"{imagem}@{DIGEST}",
+        cwd=dir_,
+        KUBECTL_REAL=str(KUBECTL_REAL),
+    )
+
+    assert processo.returncode == 0, processo.stderr
+    render = list(yaml.safe_load_all((remoto.tmp / "render.yaml").read_text()))
+    assert [(d["kind"], d["metadata"].get("namespace")) for d in render] == [
+        ("Namespace", None),
+        ("Deployment", "pytstop-os"),
+    ]
+    pod = render[1]["spec"]["template"]["spec"]
+    assert [c["image"] for c in pod["initContainers"] + pod["containers"]] == [
+        f"{nome}@{DIGEST}"
+    ] * 2
