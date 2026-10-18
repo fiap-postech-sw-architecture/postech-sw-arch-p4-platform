@@ -1012,7 +1012,7 @@ O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `mai
 
 `make check` roda `lint`, `test`, `prova-retry` e `manifests` localmente.
 
-O `make e2e` precisa do cluster com os três serviços e por isso não está no `make check` nem no `ci.yml`; o job `deploy-kind` do `cd.yml` do próprio `platform` ainda não o executa (o do CD do OS Service roda `make -C platform e2e` depois do smoke).
+O `make e2e` precisa do cluster com os três serviços e por isso não está no `make check` nem no `ci.yml`; o job `deploy-kind` ainda não o executa.
 
 O workflow [`cd.yml`](.github/workflows/cd.yml) tem o job `deploy-kind` ([Kind no CI](#kind-no-ci-overlay-kind-ci)) e, no push na `main`, o job `ci`, que roda o `ci.yml` no commit que entrou; ali o `deploy-kind` só começa com o CI verde. Os jobs dos dois workflows rodam no runner fixo `ubuntu-24.04`: o `ubuntu-latest` passa para o Ubuntu 26.04 a partir de 19/10/2026. O sistema só muda com commit; as ferramentas que vêm no runner (kubectl, Docker, jq) mudam com a imagem semanal dele, e as que precisam de versão certa vêm pinadas: as imagens do Makefile e, no `deploy-kind`, o kind e o kubectl.
 
