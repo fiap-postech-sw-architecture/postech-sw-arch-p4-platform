@@ -4,8 +4,9 @@
 # Execucao) com um servidor de eco no lugar de cada API e confere borda, rate
 # limiting, barra codificada, os cabecalhos do Kong (nenhum Server, Via ou
 # X-Kong-*), mascara de token no Loki, policies, retry por atraso e redrive do
-# RabbitMQ, fallback do Kong, regras do Grafana e o endurecimento dos pods. A prova do retry (scripts/prova_retry.py) roda com o
-# uv, por um port-forward ao broker.
+# RabbitMQ, fallback do Kong, regras do Grafana e o endurecimento dos pods. A
+# prova do retry (scripts/prova_retry.py) roda com o uv, por um port-forward
+# ao broker.
 #
 # A saida e a evidencia: cada linha diz o que foi pedido e o que voltou. Prova
 # que nao vale vira uma linha CHECK FAILED; o script segue ate o fim, para a
