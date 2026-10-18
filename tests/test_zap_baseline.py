@@ -2,13 +2,14 @@
 
 O scripts/ci/zap-baseline.sh roda com um docker falso que escreve os relatorios
 na pasta montada e imprime a saida que o zap-baseline.py imprime (a linha de
-contagem, o "Total of N URLs" e o aviso de alvo inacessivel), e com um curl
-falso para a conferencia do openapi.json antes do scan. O teste confere o
-comando exato de cada servico, a recusa de borda fora do loopback, que FAIL de
-regra, alvo que nao responde 200, scan sem pagina lida, ZAP que pendura e saida
-sem resumo reprovam sem esconder os outros servicos, e a tabela do summary. O
-e2e/zap/regras.conf e lido como o ZAP o le, e cada regra tem de estar no README
-com a mesma acao.
+contagem, o "Total of N URLs", o aviso da raiz da borda em 404, que todo scan
+saudavel traz, e o aviso de alvo inacessivel), e com um curl falso para a
+conferencia do openapi.json antes do scan. O teste confere o comando exato de
+cada servico, a recusa de borda fora do loopback, que FAIL de regra, alvo que
+nao responde 200, scan sem pagina lida, ZAP que pendura e saida sem resumo
+reprovam sem esconder os outros servicos, a saida do script e a tabela do
+summary. O e2e/zap/regras.conf e lido como o ZAP o le, e cada regra tem de estar
+no README com a mesma acao.
 """
 
 from __future__ import annotations
@@ -68,6 +69,11 @@ for extensao in ("html", "json"):
 if not cfg.get("sem_resumo"):
     print("Using the Automation Framework")
     print(f"Total of {{cfg.get('urls', 6)}} URLs")
+    # Todo scan saudavel imprime isto da raiz da borda, que o Kong responde 404:
+    # o aviso do script so vale se casar o alvo inteiro, nao a URL da raiz.
+    raiz = "/".join(alvo.split("/")[:3])
+    erro = "status code returned : 404 expected 200"
+    print(f"\\tJob spider error accessing URL {{raiz}}/ {{erro}}")
     if cfg.get("acesso"):
         print(f"\\tJob spider {{cfg['acesso']}} URL {{alvo}} : detalhe do ZAP")
     if cfg.get("fail"):
@@ -220,6 +226,12 @@ def test_sem_argumento_varre_os_tres_servicos_pela_borda(zap: Zap) -> None:
     assert zap.chamadas() == [comando(zap, s) for s in PREFIXOS]
     assert "ZAP baseline OK: os-service billing-service execution-service" in (
         processo.stdout
+    )
+    # A saida do ZAP chega ao log do job (tee) e cada servico ganha a sua linha.
+    assert processo.stdout.count("Total of 6 URLs") == 3
+    assert (
+        "os-service         https://localhost/os/openapi.json fail=0 warn=1 urls=6: ok"
+        in processo.stdout
     )
 
 
