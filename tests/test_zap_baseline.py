@@ -505,8 +505,9 @@ def test_regras_conf_no_formato_do_zap_com_motivo_em_toda_linha() -> None:
 def test_cabecalhos_reprovam_so_o_hsts_avisa_e_so_o_10015_e_ignorado() -> None:
     acoes = {regra: acao for regra, acao, _ in regras_do_arquivo()}
     # Server e X-Powered-By com versao: o Kong sem headers=off e o servico sem
-    # --no-server-header voltariam a anunciar a pilha. Os cabecalhos de
-    # seguranca nunca dispararam: um servico que os perder reprova.
+    # --no-server-header voltariam a anunciar a pilha. Dos cabecalhos de
+    # seguranca, o 10021 e o guarda da API JSON; o 10020 e o 10038 so avaliam
+    # resposta HTML e ficam em FAIL por valerem se um servico servir HTML.
     assert {r for r, a in acoes.items() if a == "FAIL"} == {
         "10036",
         "10037",

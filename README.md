@@ -989,9 +989,9 @@ Cada regra tem uma linha em `regras.conf` (`id`, ação e motivo, separados por 
 |---|---|---|
 | 10036 | FAIL | HTTP Server Response Header: nome e versão de produto no `Server`. Os serviços sobem sem o `server` do uvicorn e o Kong com `headers=off` ([Gateway](#gateway-como-um-serviço-publica-as-rotas)); sem a regra, qualquer um dos dois voltaria a anunciar a versão em silêncio |
 | 10037 | FAIL | X-Powered-By: o mesmo motivo |
-| 10020 | FAIL | Anti-clickjacking ausente. Os serviços põem o cabeçalho em toda resposta deles, e nenhum run o acusou, nem nos 404 do Kong: um serviço que o perder reprova |
-| 10021 | FAIL | `X-Content-Type-Options` ausente: o mesmo caso do 10020 |
-| 10038 | FAIL | CSP ausente: o mesmo caso do 10020 |
+| 10020 | FAIL | Anti-clickjacking ausente. Os serviços põem o cabeçalho em toda resposta deles, mas o ZAP só avalia esta regra em resposta HTML, e o scan só recebe JSON deles: o `PASS` dela nos runs não prova que o cabeçalho está lá. Fica em `FAIL`, sem custo, e passa a valer se um serviço servir página HTML |
+| 10021 | FAIL | `X-Content-Type-Options` ausente. O ZAP avalia esta regra em resposta JSON, então ela é o guarda de cabeçalho da API: um serviço que perder o cabeçalho reprova |
+| 10038 | FAIL | CSP ausente: o mesmo caso do 10020, só vale em resposta HTML |
 | 10035 | WARN | `Strict-Transport-Security` ausente nos 404 que o Kong gera sozinho (ver acima) |
 | 10015 | IGNORE | Diretivas de `Cache-Control`: os serviços respondem `no-store`, e o JWKS responde `public, max-age=600` de propósito (a chave pública muda pouco); é nele que o alerta dispara |
 
