@@ -43,7 +43,8 @@ permissions:
 
 # Um run por ref. Num PR, push novo cancela o run em curso. Na main o run em
 # curso termina, e o GitHub guarda um so run pendente por grupo: o push
-# seguinte cancela o pendente anterior, e aquele commit fica sem deploy-kind.
+# seguinte cancela o pendente anterior, e aquele commit fica sem deploy-kind
+# e sem e2e.
 # O kind e efemero, entao o commit pulado nao deixa nada no cluster, e o run
 # que roda testa o estado mais novo da main.
 concurrency:
@@ -123,16 +124,18 @@ jobs:
     if: ${{ !cancelled() && (needs.ci.result == 'success' || needs.ci.result == 'skipped') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 50
+    # So leitura do codigo: os quatro repositorios sao publicos, e a consulta
+    # dos runs de CD dos servicos (passo shas) nao pede actions: read.
     permissions:
       contents: read
-      actions: read
     steps:
       # Os quatro inputs do dispatch entram so por env e sao validados antes de
       # qualquer checkout. Sem input, o commit do ultimo run verde do cd.yml do
       # servico na main (push); sem run verde ainda (o cd.yml novo, ou o
       # repositorio sem ele: 404), a main HEAD, com aviso. Qualquer outra falha
       # da API reprova o passo, em vez de cair na main calado. A mesma consulta
-      # do cd.yml de cada servico.
+      # do cd.yml de cada servico. O token do run, so neste passo, vale pelo
+      # limite de requisicoes da API: os repositorios sao publicos.
       - id: shas
         name: Commits do platform e dos servicos
         env:
@@ -272,18 +275,32 @@ jobs:
         run: |
           platform/scripts/medir-kind.sh etapa zap
           platform/scripts/ci/zap-baseline.sh
+      # Os dois passos que rodam script do platform depois de uma falha so
+      # rodam se o checkout dele aconteceu: com um sha_* invalido o passo shas
+      # reprova antes de qualquer checkout e eles dariam mais dois vermelhos.
       - name: Minutos e memoria no summary
-        if: always()
+        if: always() && hashFiles('platform/scripts/medir-kind.sh') != ''
         run: platform/scripts/medir-kind.sh resumo
+      # O E2E mascara segredo no junit, no cucumber e no trace, mas o artefato
+      # fica 90 dias num repositorio publico: a varredura final (a que o make
+      # mp-sandbox usa) apaga o arquivo que ainda tenha segredo, e o passo
+      # reprova. O e2e-kind sobe so a pasta que ela olha. O reports/zap fica
+      # fora dela: os exemplos do openapi.json tem e-mail, e a varredura
+      # apagaria o relatorio.
+      - name: Varredura de segredos nos relatorios do E2E
+        if: always() && hashFiles('platform/reports/e2e/**') != ''
+        working-directory: platform
+        run: uv run --group e2e python -m e2e.varredura reports/e2e
+      # Nome fixo e overwrite: no "Re-run failed jobs" o artefato da tentativa
+      # anterior ainda existe, e sem overwrite o upload falharia.
       - name: Publica os relatorios do E2E
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: e2e-kind
-          path: |
-            platform/reports/
-            !platform/reports/zap/**
+          path: platform/reports/e2e/
           retention-days: 90
+          overwrite: true
       - name: Publica o relatorio do ZAP
         if: always()
         uses: actions/upload-artifact@v7
@@ -291,7 +308,8 @@ jobs:
           name: zap-baseline
           path: platform/reports/zap/
           retention-days: 90
+          overwrite: true
       # Tambem no cancelamento, inclusive o do timeout-minutes.
       - name: Pods, eventos e logs (diagnostico)
-        if: failure() || cancelled()
+        if: (failure() || cancelled()) && hashFiles('platform/scripts/ci/diagnostico.sh') != ''
         run: platform/scripts/ci/diagnostico.sh

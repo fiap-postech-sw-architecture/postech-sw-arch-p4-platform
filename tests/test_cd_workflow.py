@@ -81,8 +81,9 @@ def test_runner_prazo_e_permissoes_minimas() -> None:
     assert E2E["runs-on"] == "ubuntu-24.04"
     assert E2E["timeout-minutes"] == 50
     assert CD["permissions"] == {"contents": "read"}
-    # Ler os runs de CD dos servicos pede actions: read; nada escreve.
-    assert E2E["permissions"] == {"contents": "read", "actions": "read"}
+    # Os repositorios dos servicos sao publicos: ler os runs de CD deles nao
+    # pede actions: read, e nada escreve.
+    assert E2E["permissions"] == {"contents": "read"}
     assert "secrets." not in yaml.dump(E2E)
 
 
@@ -157,7 +158,6 @@ def test_os_tres_servicos_sao_construidos_do_codigo_sem_imagem_pronta() -> None:
         assert f"{servico}={servico}" in implantar
     # Sem job image: nada publica no GHCR nem baixa artefato de imagem.
     assert "actions/download-artifact" not in CD_TEXTO
-    assert "packages" not in E2E["permissions"]
 
 
 def test_ordem_dos_passos_da_plataforma_ao_diagnostico() -> None:
@@ -170,6 +170,7 @@ def test_ordem_dos_passos_da_plataforma_ao_diagnostico() -> None:
         posicao("make -C platform e2e"),
         posicao("scripts/ci/zap-baseline.sh"),
         posicao("medir-kind.sh resumo"),
+        posicao("e2e.varredura"),
         PASSOS.index(com_artefato("e2e-kind")),
         PASSOS.index(com_artefato("zap-baseline")),
         posicao("diagnostico.sh"),
@@ -189,12 +190,30 @@ def test_cada_etapa_e_marcada_para_a_medicao() -> None:
 
 
 def test_resumo_e_artefatos_sempre_e_diagnostico_na_falha_ou_cancelamento() -> None:
-    assert passo("medir-kind.sh resumo")["if"] == "always()"
+    # Os scripts do platform so rodam depois do checkout dele: o passo shas
+    # reprova antes de qualquer checkout com um input invalido.
+    assert passo("medir-kind.sh resumo")["if"] == (
+        "always() && hashFiles('platform/scripts/medir-kind.sh') != ''"
+    )
     assert com_artefato("e2e-kind")["if"] == "always()"
     assert com_artefato("zap-baseline")["if"] == "always()"
     # Tambem no cancelamento, inclusive o do timeout-minutes do job.
-    assert passo("diagnostico.sh")["if"] == "failure() || cancelled()"
+    assert passo("diagnostico.sh")["if"] == (
+        "(failure() || cancelled())"
+        " && hashFiles('platform/scripts/ci/diagnostico.sh') != ''"
+    )
     assert passo("diagnostico.sh")["run"] == "platform/scripts/ci/diagnostico.sh"
+
+
+def test_a_varredura_de_segredos_roda_antes_do_upload_do_e2e_kind() -> None:
+    """O artefato fica 90 dias num repositorio publico: a varredura apaga o
+    arquivo com segredo e reprova, e o upload sobe so a pasta que ela olha."""
+    varredura = passo("e2e.varredura")
+    assert varredura["if"] == "always() && hashFiles('platform/reports/e2e/**') != ''"
+    assert varredura["working-directory"] == "platform"
+    assert varredura["run"] == "uv run --group e2e python -m e2e.varredura reports/e2e"
+    assert posicao("e2e.varredura") < PASSOS.index(com_artefato("e2e-kind"))
+    assert com_artefato("e2e-kind")["with"]["path"] == "platform/reports/e2e/"
 
 
 def test_o_zap_roda_apos_o_e2e_reprovado_mas_nao_sem_o_smoke() -> None:
@@ -212,12 +231,10 @@ def test_artefatos_e2e_kind_e_zap_baseline_por_90_dias() -> None:
     for artefato in (e2e_kind, zap):
         assert artefato["uses"] == "actions/upload-artifact@v7"
         assert artefato["with"]["retention-days"] == 90
-    # reports/e2e (e reports/demo, quando o make demo rodar), sem o do ZAP, que
-    # tem artefato proprio.
-    assert e2e_kind["with"]["path"].split() == [
-        "platform/reports/",
-        "!platform/reports/zap/**",
-    ]
+        # O artefato e do run, nao da tentativa: sem overwrite, o upload do
+        # "Re-run failed jobs" falha com o nome ja usado.
+        assert artefato["with"]["overwrite"] is True
+    assert e2e_kind["with"]["path"] == "platform/reports/e2e/"
     assert zap["with"]["path"] == "platform/reports/zap/"
 
 
