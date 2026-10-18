@@ -292,6 +292,12 @@ def com(chave: str, valor: str) -> list[str]:
         ),
         (com("contexto", ""), "--contexto is empty"),
         (com("overlay", ""), "--overlay is empty"),
+        # O "#" cortaria o nome no YAML e a quebra de linha acrescentaria um
+        # resource; o caminho com ".." existe no checkout e passaria do -f.
+        (com("overlay", "k3s #x"), "--overlay needs a plain overlay name"),
+        (com("overlay", "k3s\n  - ../../.."), "--overlay needs a plain overlay name"),
+        (com("overlay", "../overlays/k3s"), "--overlay needs a plain overlay name"),
+        (com("overlay", ".."), "--overlay needs a plain overlay name"),
         (com("servico", "web-service"), "unknown service web-service"),
         (
             com("imagem", f"{REGISTRY}/pytstop-os-service:{COMMIT}"),
@@ -333,6 +339,10 @@ def com(chave: str, valor: str) -> list[str]:
         "imagem-repetida",
         "contexto-vazio",
         "overlay-vazio",
+        "overlay-com-cerquilha",
+        "overlay-com-quebra-de-linha",
+        "overlay-por-caminho",
+        "overlay-ponto-ponto",
         "servico-desconhecido",
         "imagem-sem-digest",
         "digest-curto",

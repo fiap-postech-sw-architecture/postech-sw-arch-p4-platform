@@ -54,6 +54,10 @@ done
 CONTEXTO=$contexto
 
 ns=$(namespace "$servico") || { echo "unknown service $servico (os-service, billing-service or execution-service)" >&2; exit 2; }
+# O overlay vai para o YAML e para o caminho do overlay gerado: so um nome de
+# diretorio, sem "#", quebra de linha ou "..", que mudariam o YAML ou sairiam
+# de k8s/overlays.
+[[ "$overlay" =~ ^[A-Za-z0-9][A-Za-z0-9_-]*$ ]] || { echo "--overlay needs a plain overlay name (letters, digits, _ and -), got $overlay" >&2; exit 2; }
 # So os caracteres de uma referencia de imagem: o nome vai para o YAML do
 # overlay gerado.
 padrao='^([A-Za-z0-9._/:-]+)@(sha256:[0-9a-f]{64})$'
