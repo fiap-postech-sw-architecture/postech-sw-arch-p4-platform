@@ -62,7 +62,7 @@ O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-s
 | [`compose/`](compose) | Stack docker compose para desenvolver um serviço: RabbitMQ, observabilidade e Mailpit com a configuração do cluster, os bancos de cada serviço e um profile que sobe os três; sem o Kong |
 | [`contratos/`](contratos) | AsyncAPI 3.0 dos comandos e eventos, JSON Schema do envelope e de cada mensagem, exemplos e testes |
 | [`scripts/`](scripts) | Smoke do cluster (com a prova do retry no broker, [`prova_retry.py`](scripts/prova_retry.py), que o [`prova-retry-avulso.sh`](scripts/prova-retry-avulso.sh) roda também num RabbitMQ avulso, e a espera do broker que o smoke reinicia no fim, [`esperar-pod.sh`](scripts/esperar-pod.sh)), checagem do Kong, redrive da DLQ (fila de mensagens mortas, *dead letter queue*), render do Kong, segredos gerados no deploy, medição do kind, checagens do `make manifests` e, em [`scripts/ci/`](scripts/ci), os scripts do CD: deploy da plataforma, implantação e smoke dos serviços e diagnóstico ([Contrato com os serviços](#contrato-com-os-serviços)) |
-| [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md), o [runbook da saga](docs/operacao/runbook-saga.md) (saga parada, falha na compensação, retomada e redrive da DLQ) e o [ensaio integrado](docs/operacao/ensaio-integrado.md) (os três serviços no kind, com tempo, memória e CPU por pod) |
+| [`docs/`](docs) | [Arquitetura da fase 4](docs/arquitetura/README.md) (RFC-004 e ADRs 034 a 043), [requisitos e gap analysis](docs/requisitos/README.md), o [runbook da saga](docs/operacao/runbook-saga.md) (saga parada, falha na compensação, retomada e redrive da DLQ), o [ensaio integrado](docs/operacao/ensaio-integrado.md) (os três serviços no kind, com tempo, memória e CPU por pod) e a [nuvem opcional](docs/operacao/nuvem-opcional.md) (o deploy remoto desligado e as receitas de EKS e k3s, fora do estado entregue) |
 | [`e2e/`](e2e) | O E2E BDD da saga (`make e2e`, que confere também que cada painel de negócio tem série), as demonstrações 1 e 2 do vídeo (`make demo`) e a evidência do Mercado Pago na sandbox (`make mp-sandbox` e `make mp-sandbox-ensaio`): as features em português, os steps, as fixtures e o código auxiliar com testes próprios ([E2E da saga](#e2e-da-saga), [Mercado Pago na sandbox](#mercado-pago-na-sandbox)) |
 | [`tests/`](tests) | Teste de consistência da observabilidade (dashboards, alertas e documentação, e os filtros por fila contra a topologia do RabbitMQ) e testes dos scripts de segredos, de medição do kind e de implantação e smoke dos serviços, e do código auxiliar do E2E (em [`tests/e2e_apoio/`](tests/e2e_apoio)) |
 | [`Makefile`](Makefile) | Atalhos de cluster, deploy, compose e testes (`make` lista os alvos) |
@@ -266,6 +266,8 @@ make deploy OVERLAY=k3s KUBE_CONTEXT=k3s-pytstop
 No lugar de `k3s-pytstop`, use o nome do contexto do k3s no seu kubeconfig (`kubectl config get-contexts` lista os nomes).
 
 A diferença para o kind está no próprio [`kustomization.yaml`](k8s/overlays/k3s/kustomization.yaml): StorageClass `local-path`, volume de 5Gi e mais memória reservada (request) para o RabbitMQ, e limite de memória de 1Gi no Prometheus, que aqui fica de pé por dias. O Prometheus retém 15 dias num PVC de 2Gi nos dois overlays ([Retenção e prazos](observabilidade/README.md#retenção-e-prazos)).
+
+Nenhum k3s faz parte do estado entregue da fase 4, que implanta só no kind. O que o dono de um cluster persistente teria de fazer (as receitas do k3s numa VM da Azure e do EKS no AWS Academy, e como ligar o deploy remoto do CD, que vem desligado) está em [Nuvem opcional](docs/operacao/nuvem-opcional.md).
 
 ### docker compose
 
@@ -613,6 +615,7 @@ O que o repositório de cada serviço precisa ter para o CD dele subir os três 
 | Métricas pelo Prometheus (pod anotado), logs pelo Promtail, traces no Jaeger e SMTP no Mailpit | [Endereços e variáveis](#endereços-e-variáveis) |
 | Versões fixas do PostgreSQL, do MongoDB e dos exporters | [Componentes e versões](#componentes-e-versões) |
 | Scripts do CD: `deploy-kind.sh`, `implantar-servicos.sh`, `smoke-servicos.sh`, `diagnostico.sh` e o [`medir-kind.sh`](scripts/medir-kind.sh) | [`scripts/ci/`](scripts/ci) |
+| O gancho de deploy remoto, desligado: o [`deploy-remoto.sh`](scripts/ci/deploy-remoto.sh), que o job `deploy-remote` do CD chama para implantar um serviço num cluster persistente pelo digest da imagem | [Nuvem opcional](docs/operacao/nuvem-opcional.md) |
 
 ### O que cada serviço precisa ter
 
