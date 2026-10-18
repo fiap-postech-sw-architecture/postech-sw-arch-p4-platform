@@ -62,34 +62,29 @@ O overlay `kind-ci` é enxuto: sem Loki, Promtail e Grafana, uma réplica por De
 
 | Componente | Memória (requests/limits) | Origem | Medido no runner |
 |---|---|---|---|
-| API de cada serviço (3) | 256/512 Mi | p3 | a medir |
-| relay, consumidor e `prazos` (8 processos) | 128/256 Mi cada | relay do p3 | a medir |
-| PostgreSQL (2) | 128/512 Mi | p3 | a medir |
-| MongoDB | 256/1024 Mi | estimativa | a medir |
-| exportadores de banco (3) | 32/64 Mi cada | estimativa | a medir |
-| RabbitMQ | 256/1024 Mi | estimativa | 220 Mi |
-| Kong (proxy e controlador) | 384/768 Mi | estimativa | 299 Mi |
-| Prometheus | 192/512 Mi | p3 | 60 Mi |
-| Jaeger | 128/512 Mi | p3 | 11 Mi |
-| Mailpit e kube-state-metrics | 64/128 Mi cada | p3 | 12 e 13 Mi |
-| Total, sem metrics-server e Jobs | cerca de 3,4/8,7 GiB | | só a plataforma, sem os três serviços e os bancos: nó do kind inteiro, working set de até 1,5 GiB e pico de 3,5 GiB no cgroup |
+| API de cada serviço (3) | 256/512 Mi | p3 | de 76 a 106 Mi |
+| relay, consumidor, `prazos` e `notificador` (9 processos) | 128/256 Mi cada | relay do p3 | de 55 a 84 Mi |
+| PostgreSQL (2) | 128/512 Mi | p3 | 48 e 61 Mi, com o exporter |
+| MongoDB | 256/1024 Mi | estimativa | 143 Mi, com o exporter |
+| exportadores de banco (3) | 32/64 Mi cada | estimativa | no pod do banco |
+| RabbitMQ | 256/1024 Mi | estimativa | 214 Mi |
+| Kong (proxy e controlador) | 384/768 Mi | estimativa | 308 Mi |
+| Prometheus | 192/512 Mi | p3 | 90 Mi |
+| Jaeger | 128/512 Mi | p3 | 28 Mi |
+| Mailpit e kube-state-metrics | 64/128 Mi cada | p3 | 18 e 14 Mi |
+| Total, sem metrics-server e Jobs | cerca de 3,5/8,9 GiB | | nó do kind inteiro, com o próprio Kubernetes: working set de até 3,0 GiB e pico de 7,4 GiB no cgroup |
 
 O Prometheus retém 15 dias, num PVC (volume persistente do Kubernetes) de 2 Gi no lugar do `emptyDir` da fase 3, nos overlays `kind` e `k3s`: o painel de volume diário de OS pede dias de histórico, e com a retenção de 2 dias do kind mostraria no máximo duas barras. O `kind-ci` segue com `emptyDir` e 2 dias, porque o runner é descartável. O limite de tamanho (`retention.size`) fica em 1536MB, três quartos do volume, porque o WAL conta nele. O volume não muda a tabela de memória.
 
 O total estimado fica abaixo de 10 GiB no runner padrão de 16 GB, o que o GitHub dá a repositório público; os quatro repositórios da fase 4 são públicos, e o orçamento depende disso. Cada job tem `timeout-minutes`, cada etapa do deploy tem `kubectl wait --timeout`, e o `deploy-kind` mede minutos e pico de memória e os escreve no summary.
 
-A coluna medida cobre só a plataforma:
+A coluna medida vem do `deploy-kind` do CD do OS Service, com os três serviços:
 
-- O que rodou: o `kind-ci` com o smoke, sem os serviços e os bancos, no runner `ubuntu-24.04` de 16 GB.
-- Execuções: três do `deploy-kind` do `platform`, em 06/10/2026 ([1](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556133536), [2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556562779) e [3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556993602)).
-- Por componente: o maior uso que o `kubectl top` mostrou nas amostras a cada 5 s, nas três execuções.
-- Duração do job: de 3 min 14 s a 3 min 31 s. A criação do kind levou de 39 a 46 s, o deploy de 50 a 54 s e o smoke de 1 min 40 s a 1 min 47 s.
-- Memória do nó do kind: o nó é um container, e a memória dele é a do seu cgroup, o grupo de controle do kernel que limita e conta o que os processos do container usam.
-- Working set do nó: a memória em uso sem o cache de arquivos que o kernel devolve sob pressão, a conta que o kubelet usa para despejar pod. Chegou a 1,5 GiB.
-- Parte do Kubernetes: cerca de 0,5 GiB desse working set é do próprio Kubernetes (apiserver, controller-manager, etcd, scheduler, CoreDNS, kube-proxy, kindnet e metrics-server).
-- Pico do cgroup: 3,5 GiB, porque conta também o cache de arquivos.
-
-Os serviços entram nas linhas que faltam quando o `deploy-kind` de cada um subir os três.
+- O que rodou: o [run 38837346818](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/38837346818), de 16/10/2026, no runner `ubuntu-24.04` de 16 GB: a plataforma no `kind-ci` (`platform` em `22eb797`), os três serviços (OS Service em `e2bf48d`, Billing em `d1003a3` e Execução em `301052a`), o smoke de cada namespace e o E2E.
+- Por componente: o maior uso de cada pod que o `kubectl top` mostrou nas amostras a cada 5 s; o pod do banco conta junto o exporter, sidecar dele.
+- Duração das etapas: a criação do kind levou 45 s, a plataforma 50 s, os três serviços 1 min 13 s, o smoke 21 s e o E2E 3 min 25 s, 6 min 34 s no total.
+- Memória do nó do kind: o nó é um container, e a memória dele é a do seu cgroup, o grupo de controle do kernel que limita e conta o que os processos do container usam. O working set, a memória em uso sem o cache de arquivos que o kernel devolve sob pressão (a conta que o kubelet usa para despejar pod), chegou a 3,0 GiB; o pico do cgroup, que conta também o cache de arquivos, a 7,4 GiB, nos 15,6 GiB do Docker do runner.
+- Só a plataforma: três execuções do `deploy-kind` do `platform`, em 06/10/2026 ([1](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556133536), [2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556562779) e [3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/37556993602)), levaram de 3 min 14 s a 3 min 31 s, com working set de até 1,5 GiB no nó (cerca de 0,5 GiB do próprio Kubernetes) e pico de 3,5 GiB no cgroup.
 
 ### Deploy remoto opcional e desligado
 

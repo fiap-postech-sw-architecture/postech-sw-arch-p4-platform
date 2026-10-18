@@ -1263,7 +1263,7 @@ Também aceitos:
 2. Credenciais de teste do Mercado Pago, passo humano: criar as contas de teste e gravar `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` como segredos da organização, visíveis só ao Billing. São necessárias para a evidência da integração real (risco 1).
 3. `x-signature` na notificação enviada à `notification_url` da preferência: a documentação não diz se ela vem assinada. A primeira execução na sandbox decide; se faltar assinatura, a URL passa a ser cadastrada no painel de Webhooks (ADR-040).
 4. Ambiente persistente: a fase não liga nuvem (emenda do ADR-042); se a avaliação pedir, as receitas de [nuvem opcional](../../../operacao/nuvem-opcional.md) dizem o que o dono do ambiente cria.
-5. Minutos e pico de memória do `kind-ci` no runner com os três serviços, registrados no summary de cada `deploy-kind`. Só com a plataforma, o `deploy-kind` do `platform` levou de 3 min 14 s a 3 min 31 s em três execuções (06/10/2026), com working set de até 1,5 GiB no nó do kind ([ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md)).
+5. Minutos e pico de memória do `kind-ci` no runner com os três serviços, registrados no summary de cada `deploy-kind`: no CD do OS Service de 16/10/2026, 6 min 34 s da criação do kind ao fim do E2E, com working set de até 3,0 GiB e pico de 7,4 GiB no cgroup do nó do kind. Só com a plataforma, o `deploy-kind` do `platform` levou de 3 min 14 s a 3 min 31 s em três execuções (06/10/2026), com working set de até 1,5 GiB ([ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), com o uso de cada componente).
 
 ## Glossário e siglas
 
