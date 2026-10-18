@@ -517,7 +517,7 @@ def test_cabecalhos_reprovam_so_o_hsts_avisa_e_so_o_10015_e_ignorado() -> None:
     }
     # O HSTS falta nos 404 que o Kong gera sozinho, sem rota casada.
     assert {r for r, a in acoes.items() if a == "WARN"} == {"10035"}
-    # Ignorada so a regra que o relatorio mostrou (o JWKS com max-age).
+    # Ignorada so a regra que o relatorio mostrou (o Cache-Control no-store).
     assert {r for r, a in acoes.items() if a == "IGNORE"} == {"10015"}
 
 

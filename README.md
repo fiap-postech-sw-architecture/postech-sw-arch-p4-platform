@@ -993,7 +993,7 @@ Cada regra tem uma linha em `regras.conf` (`id`, ação e motivo, separados por 
 | 10021 | FAIL | `X-Content-Type-Options` ausente. O ZAP avalia esta regra em resposta JSON, então ela é o guarda de cabeçalho da API: um serviço que perder o cabeçalho reprova |
 | 10038 | FAIL | CSP ausente: o mesmo caso do 10020, só vale em resposta HTML |
 | 10035 | WARN | `Strict-Transport-Security` ausente nos 404 que o Kong gera sozinho (ver acima) |
-| 10015 | IGNORE | Diretivas de `Cache-Control`: os serviços respondem `no-store`, e o JWKS responde `public, max-age=600` de propósito (a chave pública muda pouco); é nele que o alerta dispara |
+| 10015 | IGNORE | Diretivas de `Cache-Control`: os serviços respondem `no-store` em toda resposta, e o ZAP quer também `no-cache` e `must-revalidate`; por isso o alerta dispara em `saude`, `saude/pronto` e `openapi.json` dos três serviços. O JWKS do OS responde `public, max-age=600` de propósito (a chave pública muda pouco) |
 
 ## Contratos de mensageria
 
