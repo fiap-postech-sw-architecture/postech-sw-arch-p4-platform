@@ -10,7 +10,7 @@ Para o caso de a avaliação pedir um ambiente que fique de pé, o CD tem um gan
 
 Conferido em 18/10/2026:
 
-- Na `main` dos serviços, só o OS Service tem `cd.yml` (commit `e2bf48d`); o Billing (`d6d2776`) e a Execução (`301052a`) têm `ci.yml` e `security.yml`.
+- Na `main` dos serviços, só o OS Service tem `cd.yml`; o Billing e a Execução têm `ci.yml` e `security.yml`.
 - Nenhum dos quatro repositórios da fase 4 tem variável de Actions. As da organização só um administrador lista.
 - No último CD do OS Service na `main` ([run 38837346818](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/38837346818), 15/10/2026), o `deploy-remote` ficou de fora e o `remote-skipped` passou: `DEPLOY_REMOTO_HABILITADO` não era `true` em nível nenhum.
 - O job `deploy-remote` do `cd.yml` do OS Service não declara segredo, `environment` nem `id-token`, e o arquivo não tem credencial de provedor.

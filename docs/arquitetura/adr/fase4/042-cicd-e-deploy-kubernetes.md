@@ -228,11 +228,8 @@ Descartado pelo enunciado: deploy manual, porque a l. 94 pede deploy automatizad
 
 ## Emenda de 18/10/2026
 
-Decisão do grupo de 14/10/2026, registrada com a implementação do gancho:
+Decisão do grupo de 14/10/2026: a fase 4 não liga nuvem, e o deploy obrigatório e único é o kind efêmero do runner. Saíram o job `deploy-k3s` e o `k3s-skipped`, a variável `K3S_HABILITADO`, o OIDC com a Azure (a credencial federada, as variáveis `AZURE_*` e o environment `producao`) e os segredos do Mercado Pago na organização, com a dependência de um administrador dela.
 
-- A fase 4 não liga nuvem. O enunciado, relido inteiro, pede deploy automatizado em Kubernetes e não cita nuvem nem a infraestrutura AWS da fase 3, que já foi desmontada. O deploy obrigatório e único é o kind efêmero do runner.
-- Saem o job `deploy-k3s` e o `k3s-skipped`, a variável `K3S_HABILITADO`, o OIDC com a Azure (a credencial federada, as variáveis `AZURE_*` e o environment `producao`), os segredos do Mercado Pago na organização e, com eles, a dependência de um administrador da organização.
-- Entram o job `deploy-remote` e o irmão `remote-skipped`, desligados pela variável `DEPLOY_REMOTO_HABILITADO` e neutros de provedor, e o `scripts/ci/deploy-remoto.sh` do `platform`. As receitas de EKS no AWS Academy e de k3s numa VM da Azure ficam em [nuvem opcional](../../../operacao/nuvem-opcional.md), fora do estado entregue.
-- O overlay `k3s` dos manifests permanece, como alvo de um cluster persistente genérico.
+Entraram o gancho desligado e neutro de provedor e as receitas de nuvem, descritos em [Deploy remoto opcional e desligado](#deploy-remoto-opcional-e-desligado); o overlay `k3s` dos manifests permanece, como alvo de um cluster persistente genérico.
 
 > [↑ Raiz do projeto](../../../../README.md) · [↑ Arquitetura](../../README.md)
