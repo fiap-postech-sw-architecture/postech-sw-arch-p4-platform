@@ -7,7 +7,7 @@ Conferência inicial de 19/10/2026. Fontes: requisitos da fase, PRs integrados, 
 | Item | Impacto | Responsável | Condição para fechar |
 |---|---|---|---|
 | CD compartilhado e chamadas dos três serviços | Definição integrada no [Platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22), S=`3f7cca2eb555a038b0d2780058ef0e692f93ee8a`, com CD da main aprovado; adoção pelos serviços em andamento | Plataforma e serviços | Workflow fixado por SHA; CI, segurança, imagem, kind e E2E verdes na `main` de cada serviço |
-| Collection do fluxo completo | Duas provas locais aprovadas; publicação e integração no CI de RNF-052 ainda pendentes | Plataforma | Integrar a collection e comprovar o Newman no workflow final, incluindo as métricas administrativas do OS; [resumos locais](evidencias/newman-resumo.md) |
+| Collection do fluxo completo | Duas provas locais e [execução no CI do PR #24](evidencias/newman-resumo.md#execução-no-ci-do-pr-24) aprovadas; CD da main aprovado; prova do congelamento pendente | Plataforma | Preservar a collection e comprovar o run sobre os commits finais, incluindo as métricas administrativas do OS; [fontes e resumos](evidencias/newman-resumo.md) |
 | Ensaio final de observabilidade | Trace com os três serviços, 600,9 s ociosos, smoke e alerta com recuperação comprovados localmente; RNF-046/RNF-056 continuam parciais | Plataforma e serviços | Preservar capturas com três dias; chamada externa e observação no modo real do Billing dependem da sandbox |
 | Remanescentes de telemetria do Billing | Correções e provas locais revisadas: Host, classe da falha do coletor, deadline e smoke; integração pendente | Billing Service | Integrar a fonte revisada, confirmar o CI e atualizar a tabela de cobertura pelo novo artefato publicado |
 | Evidência real do Mercado Pago | Simulador não comprova acesso à sandbox do provedor | Responsável com credenciais | Cobrança, aprovação e estorno reais, com saída sanitizada |
@@ -48,7 +48,6 @@ A auditoria do dashboard de bancos confirmou consultas restritas às séries dis
 | Redrive manual depois de erasure | O runbook proíbe o procedimento, mas o script não conhece a remoção dos dados nem tem trava automática | Antes de automatizar redrive ou rever esse procedimento; preservar a proibição atual |
 | Mailpit da demonstração | Sem autenticação ou política de ingresso; só o notificador tem restrição de saída, e as APIs podem alcançá-lo | Antes de usar dados reais ou expor esse ambiente; SMTP real exige STARTTLS e credenciais em Secret, conforme ADR-042 |
 | Atualizações automáticas do Platform | Não há catálogo Dependabot no repositório; os pins atuais são atualizados deliberadamente | Quando ampliar a automação de dependências; manter verificação e revisão dos pins atuais |
-| Consolidação de `MEMORY.md` | Histórico preservado; consolidação exige aprovação específica | Após decisão do responsável; não bloqueia execução ou contrato |
 
 Uma dívida aceita não dispensa o gate nem autoriza declarar uma prova inexistente. A revisão final deve confirmar se algum item ganhou impacto maior com as últimas alterações.
 

@@ -13,7 +13,7 @@ Cluster próprio `pytstop-p4-codex`, contexto `kind-pytstop-p4-codex`, criado em
 | Billing Service | `248c4071d357a867db1571081b012ff57753f834` |
 | Execution Service | `605a5e56b297438163cddba2a4f129b334c1699d` |
 
-Esses commits identificam a execução; não constituem congelamento de entrega. Os próximos callers de CD e correções posteriores precisam de seus próprios gates e da atualização das evidências finais. Nenhuma credencial do provedor foi usada.
+Esses commits identificam a execução; não constituem congelamento de entrega. A adoção do workflow de implantação pelos serviços e as correções posteriores exigem novas verificações e atualização das evidências finais. Nenhuma credencial do provedor foi usada.
 
 ## Fluxo e trace
 
@@ -29,7 +29,9 @@ Janela UTC: `2026-10-19T03:31:17Z` a `2026-10-19T03:41:17.872626Z`, duração de
 
 DLQs e outboxes pendentes/dead estavam vazias na coleta posterior. Houve processamento de mensagens de fundo remanescentes dos cenários; ausência de tráfego externo não significa ausência de trabalho dos processos. O coletor da saga indicou disponibilidade na coleta final.
 
-O Loki registrou 1.298 linhas do Billing, 225 da Execução e 226 do OS nessa janela. A conferência posterior por container concentrou o volume do Billing no MongoDB: 1.084 linhas em dez minutos, incluindo 40 mensagens de autorização esperadas do exporter sobre `shardIdentity`; não houve linhas `Connection accepted`/`Connection ended`. A consulta de logs de aplicação com nível error/critical veio vazia. As duas consultas foram feitas em instantes distintos; seus totais não devem ser tratados como a mesma janela.
+Na janela de ociosidade, o Loki registrou 1.298 linhas do Billing, 225 da Execução e 226 do OS.
+
+Uma consulta posterior por container usou um recorte de dez minutos e encontrou 1.084 linhas do MongoDB no Billing. Dessas, 40 eram mensagens de autorização esperadas do exporter sobre `shardIdentity`; não houve linhas `Connection accepted`/`Connection ended`. Os totais inicial e por container foram obtidos em instantes distintos e não são diretamente comparáveis. A consulta de logs da aplicação com nível error/critical retornou vazia.
 
 Após a observação, `scripts/ci/smoke-servicos.sh` passou novamente e a varredura de `reports/e2e` não encontrou segredos.
 

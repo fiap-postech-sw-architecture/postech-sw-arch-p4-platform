@@ -796,7 +796,7 @@ Kong Ingress Controller em modo DB-less, o gateway das Aulas 03 e 04 de Microsse
 
 ### 6.3 Swagger e Postman
 
-Cada serviço publica o Swagger UI em `/docs` e versiona em `docs/api/` o OpenAPI exportado e a collection Postman com exemplos; o README aponta os arquivos e traz um `curl` por endpoint. A [collection do fluxo completo](../../../api/fluxo-completo.postman_collection.json) fica no `platform` e roda com Node 24 e Newman 6.2.3 por `make newman` (RNF-052). Os [pré-requisitos, relatórios sanitizados e resultados locais](../../../../README.md#collection-do-fluxo-completo-make-newman) estão no README; o fluxo usa o simulador do Billing, com histórico de oito status e métricas administrativas dos nove status. A integração no CI ainda está pendente.
+Cada serviço publica o Swagger UI em `/docs` e versiona em `docs/api/` o OpenAPI exportado e a collection Postman com exemplos; o README aponta os arquivos e traz um `curl` por endpoint. A [collection do fluxo completo](../../../api/fluxo-completo.postman_collection.json) fica no `platform` e roda com Node 24 e Newman 6.2.3 por `make newman` (RNF-052). Os [pré-requisitos, relatórios sanitizados e resultados locais](../../../../README.md#collection-do-fluxo-completo-make-newman) estão no README; o fluxo usa o simulador do Billing, com histórico de oito status e métricas administrativas dos nove status. O passo passou no [CI do PR #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573); as [fontes e o resumo sanitizado](../../../entrega/fase4/evidencias/newman-resumo.md#execução-no-ci-do-pr-24) distinguem a prova do PR do CD da main e do congelamento.
 
 ## 7. Dados
 

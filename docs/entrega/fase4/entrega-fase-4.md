@@ -4,11 +4,11 @@ Documento de ensaio da turma 15SOAT, Pós-Graduação em Arquitetura de Software
 
 ## 1. Participantes
 
-Identificação aguardando confirmação do grupo. A lista das fases anteriores não confirma os participantes desta fase.
+Identificação dos participantes pendente de confirmação do grupo.
 
 ## 2. Repositórios e execução
 
-| Componente | Repositório | Documentação | CI/CD |
+| Componente | Repositório | Documentação | Pipelines |
 |---|---|---|---|
 | OS Service | [repositório](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service) | [README](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md) | [pipelines](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions) |
 | Billing Service | [repositório](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service) | [README](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/README.md) | [pipelines](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions) |
@@ -50,7 +50,7 @@ flowchart TB
 
 OS Service mantém cadastro, histórico, identidade e orquestração do atendimento. Billing concentra preços, orçamento, cobrança e Mercado Pago. Execution mantém diagnóstico, estoque, reservas e execução física. Cada serviço grava somente seu banco; a comunicação entre responsáveis usa REST ou mensagens. A [RFC-004, seção 3](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) detalha o recorte do monólito.
 
-PostgreSQL 16 preserva as relações e restrições do OS e da Execução. MongoDB 7 guarda os documentos de orçamento e pagamento do Billing, com replica set para transações locais entre agregado e outbox. RabbitMQ separa comandos e respostas, com confirmação, retry por atraso e filas de mensagens mortas. Kong publica as rotas previstas e aplica limites e correlação. JWT RS256 permite validar a identidade pela chave pública do OS, mantendo a chave privada somente no emissor.
+PostgreSQL 16 preserva as relações e restrições do OS e da Execução. MongoDB 7 guarda os documentos de orçamento e pagamento do Billing, com replica set para transações locais entre agregado e outbox. RabbitMQ separa comandos e respostas, com confirmação, retry por atraso e filas de mensagens mortas. Kong publica as rotas previstas e aplica limites e correlação. JSON Web Token (JWT), assinado com RSA e SHA-256 (RS256), permite validar a identidade pela chave pública do OS, mantendo a chave privada somente no emissor.
 
 Prometheus, Grafana, Loki e Jaeger retomam a observabilidade da fase 3. Os nove dashboards têm JSON e descrição por painel; os de negócio incluem volume diário de OS e tempo médio por status. As decisões estão nos [ADRs 034 a 043](../../arquitetura/adr/fase4/). O ambiente entregue é kind, local e no CI. Nuvem persistente é opcional, conforme o [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md).
 
@@ -60,13 +60,13 @@ O OS persiste a ordem e a instância da saga na mesma transação. Sua outbox pu
 
 O caminho completo passa por diagnóstico, orçamento, decisão, reserva, pagamento, agendamento, início, finalização e entrega. Falha na reserva cancela orçamento e diagnóstico sem cobrar. Cancelamento pago antes do início cancela a execução, estorna o pagamento, libera a reserva e cancela orçamento e diagnóstico, nessa ordem. Após o início físico, o cancelamento responde 409: este é o pivot da saga.
 
-Mensagens repetidas não repetem o efeito. Prazos e reenvios limitados levam uma compensação não resolvida à intervenção manual, com retomada autenticada pelo [runbook](../../operacao/runbook-saga.md). O [BDD integrado](../../../e2e/features/saga_atendimento.feature) verifica caminho feliz, compensações, pivot e recuperação de falhas.
+Mensagens repetidas não repetem o efeito. Prazos e reenvios limitados levam uma compensação não resolvida à intervenção manual, com retomada autenticada pelo [runbook](../../operacao/runbook-saga.md). O [teste integrado orientado por comportamento (BDD)](../../../e2e/features/saga_atendimento.feature) verifica caminho feliz, compensações, pivot e recuperação de falhas.
 
 ## 7. Testes, qualidade e deploy
 
-O enunciado exige cobertura mínima de 80%; o projeto adota gate de 95% nos serviços. Testes unitários, integração com bancos reais, BDD e mutação focal protegem os fluxos. Os pipelines incluem tipos, limites arquiteturais, análise de dependências e segredos, scan de imagem e SonarQube. Relatórios e tabelas de fechamento ficam nas [evidências](evidencias/README.md).
+O enunciado exige cobertura mínima de 80%; o projeto adota gate de 95% nos serviços. Testes unitários, integração com bancos reais, BDD e mutação focal protegem os fluxos. Os pipelines de integração e implantação contínuas (CI/CD) incluem tipos, limites arquiteturais, análise de dependências e segredos, scan de imagem e SonarQube. Relatórios e tabelas de fechamento ficam nas [evidências](evidencias/README.md).
 
-O CD do OS executa testes, imagem por digest, deploy num kind descartável e E2E. O workflow compartilhado e as chamadas equivalentes de Billing e Execution ainda estão em conclusão. Este ensaio não apresenta esse requisito como concluído nos três serviços. A proteção de `main`, os checks e a origem dos commits serão preservados nas evidências finais.
+O workflow compartilhado está integrado na plataforma e aprovado no [CD da main](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39227461810). O CD anterior do OS executa testes e implanta no kind a imagem identificada pelo digest. Ele também executa testes de ponta a ponta (E2E). As chamadas do workflow compartilhado pelos três serviços ainda estão em validação. A [collection do fluxo completo](evidencias/newman-resumo.md) passou no CI do PR #24 e no [CD da main integrada](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39231733886). As evidências finais deverão registrar a proteção de `main`, as verificações obrigatórias e a origem dos commits.
 
 ## 8. Evidências e fechamento
 

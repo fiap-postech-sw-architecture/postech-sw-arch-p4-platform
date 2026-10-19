@@ -10,6 +10,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Recent decisions
 
+- 2026-10-19 - Atualiza as pendências de RNF-052 registradas abaixo: a collection e seu passo foram integrados no Platform #24. O CI do PR 39230026573 e o CD da main 39231733886 passaram; fontes, hashes e limites estão em docs/entrega/fase4/evidencias/newman-resumo.md. Isso comprova essas combinações de commits, sem antecipar o congelamento final.
+
 - 2026-10-19 - Pacote de ensaio da fase 4 em `INDICE-DA-ENTREGA.md` e `docs/entrega/`; coleta read-only e gate final em `scripts/evidencias/`, PDF por `scripts/build-entrega-pdf.sh` sem skill instalada. O overview da RFC/README/documento e conferido por igualdade; o detalhamento original da RFC permanece. As excecoes de origem por PR sao somente os quatro bootstraps sem pais documentados em `docs/entrega/fase4/evidencias/README.md`; provas operacionais, grupo/video/tags seguem pendentes ate evidencia real.
 
 - 2026-10-19 - O job e2e do CD próprio define smoke, BDD, Newman e ZAP nessa ordem; Newman usa Node 24 e actions/setup-node v7, prazo de 12 min e condição !cancelled com smoke success, preservando falha, varredura e e2e-kind. Os dois ensaios locais não substituem a comprovação do passo na HEAD publicada, ainda pendente - .github/workflows/cd.yml; README; ADR-041
@@ -241,6 +243,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 - 2026-10-06 - LOW - Profile `servicos` do compose sobe so a API de cada servico (relay, consumidor e `prazos` rodam no Kubernetes)
 
 ## Review lessons
+
+- 2026-10-19 - O headSha do run não identifica necessariamente o checkout efetivamente testado: no CI de PR do Newman, o Platform usa o merge sintético. As quatro fontes foram extraídas dos registros dos passos checkout, e a equivalência entre a árvore sintética, a ponta revisada e o squash foi demonstrada separadamente. Links existentes também precisam de conferência semântica: títulos repetidos Como rodar levavam o Newman ao procedimento da sandbox, embora a âncora fosse válida.
 
 - 2026-10-19 - Timeout/interrupcao do npx --version tambem deve matar o grupo de processos: subprocess.run mata so o pai; a camada Newman reutiliza start_new_session+killpg com stdout privado, e os negativos reais cobrem filho heartbeat no preflight - e2e/apoio/newman.py; tests/e2e_apoio/test_newman.py
 
