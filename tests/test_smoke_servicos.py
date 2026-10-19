@@ -50,6 +50,11 @@ CONEXAO = {
 # O corpo que o request-termination do fora-da-borda devolve (message em
 # k8s/base/kong/plugins.yaml).
 CORPO_DO_KONG = '{"message":"no Route matched with those values"}'
+BROKER = "rabbitmq.pytstop-plataforma.svc.cluster.local"
+MAILPIT = "mailpit.pytstop-plataforma.svc.cluster.local"
+CONTROLE_BROKER = f"os-service-api pod -> {BROKER}:5672"
+SAIDA_BROKER = f"os-service-notificador pod -> {BROKER}:5672"
+SAIDA_MAILPIT = f"os-service-notificador pod -> {MAILPIT}:1025"
 MENSAGEM_SEM_SENHA = (
     'psql: error: connection to server at "127.0.0.1", port 5432 failed: '
     "fe_sendauth: no password supplied"
@@ -58,7 +63,8 @@ MENSAGEM_SEM_SENHA = (
 
 def etapas(servico: str) -> int:
     """Linhas da tabela de um servico: 11, e uma a mais se o banco e PostgreSQL."""
-    return 11 + (CONEXAO[servico] == "pg_up")
+    # O OS acrescenta controle do broker e as duas saidas do notificador.
+    return 11 + (CONEXAO[servico] == "pg_up") + 3 * (servico == "os-service")
 
 
 def total_de_linhas(*servicos: str) -> int:
@@ -117,6 +123,18 @@ def cluster_saudavel() -> dict[str, Any]:
     estado: dict[str, Any] = {
         ns: namespace_saudavel(servico) for servico, (ns, *_) in SERVICOS.items()
     }
+    # A sonda de saida independe da anotacao do Prometheus.
+    estado["pytstop-os"]["pods"].append(
+        {
+            "nome": "os-service-notificador-1",
+            "app": "os-service-notificador",
+            "anotado": False,
+            "fase": "Running",
+        }
+    )
+    estado["pytstop-os"].update(
+        controle_broker="0", saida_broker="124", saida_mailpit="0"
+    )
     estado["curl"] = {}
     estado["corpo"] = {}
     for _, prefixo, _, _ in SERVICOS.values():
@@ -227,6 +245,9 @@ elif ns == "pytstop-plataforma" and resto[:2] == ["exec", "rabbitmq-0"]:
     host, porta = resto[-2:]
     alvo = host.split(".")[1]
     codigo = estado[alvo]["codigo"]
+    if codigo == "kubectl-com-codigo":
+        print("code=124")
+        sys.exit(1)
     if codigo != "sem-resposta":
         print(f"code={codigo}")
 elif resto[:1] == ["exec"] and resto[2:4] == ["-c", "postgres"]:
@@ -243,6 +264,28 @@ elif resto[:1] == ["exec"] and resto[2:4] == ["-c", "postgres"]:
               "failed: Connection refused\ncode=2")
     elif modo == "so-codigo":
         print("code=137")
+elif resto[:1] == ["exec"] and resto[-2] in {
+    "rabbitmq.pytstop-plataforma.svc.cluster.local",
+    "mailpit.pytstop-plataforma.svc.cluster.local",
+}:
+    host, porta = resto[-2:]
+    assert ns == "pytstop-os", resto
+    assert resto[2:4] in (["-c", "api"], ["-c", "notificador"]), resto
+    assert any(p["nome"] == resto[1] and p["fase"] == "Running"
+               and not p.get("saindo") for p in estado[ns]["pods"]), resto
+    if resto[3] == "api":
+        assert host.startswith("rabbitmq.") and porta == "5672", resto
+        chave = "controle_broker"
+    else:
+        chave = "saida_broker" if porta == "5672" else "saida_mailpit"
+    codigo = estado[ns][chave]
+    if codigo in {"kubectl-com-codigo", "kubectl-124-com-codigo"}:
+        print("code=124" if chave == "saida_broker" else "code=0")
+        sys.exit(124 if codigo == "kubectl-124-com-codigo" else 1)
+    if codigo == "kubectl-124":
+        sys.exit(124)
+    if codigo != "sem-resposta":
+        print(f"code={codigo}")
 elif resto[:1] == ["exec"]:
     # O controle: a sonda do pod da API ao banco, do proprio namespace.
     host, porta = resto[-2:]
@@ -430,7 +473,7 @@ def linhas_saudaveis(servico: str) -> list[tuple[str, str, str]]:
                 "ok: postgres on 127.0.0.1 without a password was refused",
             )
         )
-    return [
+    linhas = [
         *linhas,
         (
             servico,
@@ -443,6 +486,15 @@ def linhas_saudaveis(servico: str) -> list[tuple[str, str, str]]:
             "ok: blocked (connection timed out)",
         ),
     ]
+    if servico == "os-service":
+        linhas.extend(
+            [
+                (servico, CONTROLE_BROKER, "ok: connected"),
+                (servico, SAIDA_MAILPIT, "ok: connected"),
+                (servico, SAIDA_BROKER, "ok: blocked (connection timed out)"),
+            ]
+        )
+    return linhas
 
 
 def test_servicos_saudaveis_passam_em_todas_as_etapas(smoke: Smoke) -> None:
@@ -521,7 +573,9 @@ def test_controle_sai_da_api_e_o_loopback_do_banco_nao_tem_trust(
     assert processo.returncode == 0, processo.stderr
     # O container da API tem de ser nomeado: sem o -c, o kubectl escolhe o
     # primeiro e avisa "Defaulted container" na saida.
-    controles = [e for e in execs(smoke) if e.container == "api"]
+    controles = [
+        e for e in execs(smoke) if e.container == "api" and e.comando[-2] != BROKER
+    ]
     assert [(e.namespace, e.pod) for e in controles] == [
         (ns, f"{servico}-api-1") for servico, (ns, *_) in SERVICOS.items()
     ]
@@ -557,7 +611,7 @@ def test_kubectl_exec_vai_com_prazo_em_volta(smoke: Smoke) -> None:
     prazos = smoke.chamadas("timeout")
     # A prova do loopback sem trust (so os PostgreSQL), o controle e a conexao
     # do rabbitmq-0.
-    assert len(prazos) == 2 + len(SERVICOS) * 2
+    assert len(prazos) == 2 + len(SERVICOS) * 2 + 3
     for chamada in prazos:
         assert chamada[:2] == ["20", "kubectl"]
         assert "exec" in chamada
@@ -724,6 +778,11 @@ FALHAS: dict[
         BILLING,
         [(CONEXAO_BILLING, "FAILED: no answer from rabbitmq-0")],
     ),
+    "rabbitmq-resposta-parcial-antes-do-erro": (
+        lambda e: e["pytstop-billing"].update(codigo="kubectl-com-codigo"),
+        BILLING,
+        [(CONEXAO_BILLING, "FAILED: no answer from rabbitmq-0")],
+    ),
     # O 124 so vale com o controle: sem ele, a sonda pode estar quebrada.
     "controle-recusado": (
         lambda e: e["pytstop-billing"].update(controle="1"),
@@ -882,6 +941,9 @@ def test_erro_do_cluster_vira_failed_e_o_smoke_segue(smoke: Smoke) -> None:
     assert processo.stderr.endswith("services smoke FAILED: os-service\n")
     falharam = {(servico, etapa) for servico, etapa, _ in smoke.reprovadas()}
     assert falharam == {
+        ("os-service", CONTROLE_BROKER),
+        ("os-service", SAIDA_MAILPIT),
+        ("os-service", SAIDA_BROKER),
         ("os-service", "initialization Job"),
         ("os-service", "rollouts"),
         ("os-service", "up = 1 in Prometheus"),
@@ -1181,3 +1243,196 @@ def test_ferramenta_que_falta_para_com_status_2_antes_de_consultar(
     assert processo.returncode == 2
     assert mensagem in processo.stderr
     assert smoke.chamadas("kubectl") == []
+
+
+def test_saida_do_notificador_usa_pods_rotulados_e_destinos_previstos(
+    smoke: Smoke,
+) -> None:
+    estado = cluster_saudavel()
+    estado["pytstop-os"]["pods"].insert(
+        0,
+        {
+            "nome": "os-service-notificador-0",
+            "app": "os-service-notificador",
+            "anotado": False,
+            "fase": "Running",
+            "saindo": True,
+        },
+    )
+
+    processo = smoke.roda(estado, "os-service")
+
+    assert processo.returncode == 0, processo.stderr
+    sondas = [e for e in execs(smoke) if e.comando[-2] in {BROKER, MAILPIT}]
+    assert [(e.namespace, e.pod, e.container, e.comando[-2:]) for e in sondas] == [
+        ("pytstop-os", "os-service-api-1", "api", [BROKER, "5672"]),
+        ("pytstop-os", "os-service-notificador-1", "notificador", [MAILPIT, "1025"]),
+        ("pytstop-os", "os-service-notificador-1", "notificador", [BROKER, "5672"]),
+    ]
+    assert all(e.comando[:2] == ["sh", "-c"] for e in sondas)
+    assert len({e.comando[2] for e in sondas}) == 1
+
+
+@pytest.mark.parametrize(
+    "codigo",
+    [
+        "0",
+        "1",
+        "2",
+        "125",
+        "127",
+        "137",
+        "142",
+        "sem-resposta",
+        "kubectl-124",
+        "kubectl-com-codigo",
+        "kubectl-124-com-codigo",
+        "124\ncode=0",
+    ],
+)
+def test_negativa_do_notificador_so_aprova_timeout_remoto_especifico(
+    smoke: Smoke, codigo: str
+) -> None:
+    estado = cluster_saudavel()
+    estado["pytstop-os"]["saida_broker"] = codigo
+
+    processo = smoke.roda(estado, "os-service")
+
+    assert processo.returncode == 1
+    assert [(servico, etapa) for servico, etapa, _ in smoke.reprovadas()] == [
+        ("os-service", SAIDA_BROKER)
+    ]
+    assert processo.stderr.endswith("services smoke FAILED: os-service\n")
+
+
+@pytest.mark.parametrize("chave", ["controle_broker", "saida_mailpit"])
+@pytest.mark.parametrize(
+    "codigo",
+    ["1", "124", "127", "sem-resposta", "kubectl-124", "kubectl-com-codigo"],
+)
+def test_conexao_positiva_invalida_reprova_sem_aceitar_negativa_sem_controle(
+    smoke: Smoke, chave: str, codigo: str
+) -> None:
+    estado = cluster_saudavel()
+    estado["pytstop-os"][chave] = codigo
+
+    processo = smoke.roda(estado, "os-service")
+
+    assert processo.returncode == 1
+    esperadas = (
+        [CONTROLE_BROKER, SAIDA_BROKER]
+        if chave == "controle_broker"
+        else [SAIDA_MAILPIT]
+    )
+    assert [etapa for _, etapa, _ in smoke.reprovadas()] == esperadas
+    if chave == "controle_broker":
+        assert "the probe proves nothing" in smoke.reprovadas()[-1][2]
+
+
+@pytest.mark.parametrize(
+    "mudanca", ["ausente", "Pending", "Succeeded", "saindo", "outro-rotulo"]
+)
+def test_notificador_sem_pod_rotulado_rodando_reprova_ambas_as_saidas(
+    smoke: Smoke, mudanca: str
+) -> None:
+    estado = cluster_saudavel()
+    pod = estado["pytstop-os"]["pods"][-1]
+    if mudanca == "ausente":
+        estado["pytstop-os"]["pods"].pop()
+    elif mudanca == "saindo":
+        pod["saindo"] = True
+    elif mudanca == "outro-rotulo":
+        pod["app"] = "outro-notificador"
+    else:
+        pod["fase"] = mudanca
+
+    processo = smoke.roda(estado, "os-service")
+
+    assert processo.returncode == 1
+    assert [etapa for _, etapa, _ in smoke.reprovadas()] == [
+        SAIDA_MAILPIT,
+        SAIDA_BROKER,
+    ]
+    assert all(
+        "no running pod labeled app=os-service-notificador" in resultado
+        for _, _, resultado in smoke.reprovadas()
+    )
+    assert all(e.container != "notificador" for e in execs(smoke))
+
+
+@pytest.mark.parametrize("servico", ["billing-service", "execution-service"])
+def test_selecao_parcial_nao_depende_do_notificador_do_os(
+    smoke: Smoke, servico: str
+) -> None:
+    estado = cluster_saudavel()
+    del estado["pytstop-os"]
+
+    processo = smoke.roda(estado, servico)
+
+    assert processo.returncode == 0, processo.stderr
+    assert smoke.linhas() == linhas_saudaveis(servico)
+    assert all(e.comando[-2] not in {BROKER, MAILPIT} for e in execs(smoke))
+
+
+@pytest.mark.parametrize(
+    ("modo", "esperado"),
+    [
+        ("conecta", "0"),
+        ("timeout", "124"),
+        ("recusa", "1"),
+        ("dns", "1"),
+        ("dns-preso", "142"),
+    ],
+)
+def test_sonda_tcp_classifica_excecoes_reais_e_prazo_dns(
+    smoke: Smoke, modo: str, esperado: str
+) -> None:
+    processo = smoke.roda(cluster_saudavel(), "os-service")
+    assert processo.returncode == 0, processo.stderr
+    sondas = [e for e in execs(smoke) if e.comando[-2] == BROKER]
+    assert sondas
+    # Executa o comando remoto capturado; so o socket e o alarm sao controlados.
+    python = smoke.tmp / "bin" / "python"
+    python.write_text(
+        f"#!{sys.executable}\n"
+        r"""
+import signal
+import socket
+import sys
+
+modo = sys.argv.pop()
+def conectar(destino, timeout):
+    assert destino == ("rabbitmq.pytstop-plataforma.svc.cluster.local", 5672)
+    assert timeout == 3
+    assert signal.alarm(0) == 5
+    if modo == "timeout":
+        raise TimeoutError("timed out")
+    if modo == "recusa":
+        raise ConnectionRefusedError("refused")
+    if modo == "dns":
+        raise socket.gaierror("unknown host")
+    if modo == "dns-preso":
+        signal.raise_signal(signal.SIGALRM)
+    return socket.socket()
+socket.create_connection = conectar
+codigo = sys.argv[2]
+sys.argv = ["-c", *sys.argv[3:]]
+exec(codigo)
+""",
+        encoding="utf-8",
+    )
+    python.chmod(0o755)
+    comando = sondas[0].comando.copy()
+    comando[2] = comando[2].replace('"$0" "$1"', f'"$0" "$1" "{modo}"')
+
+    sonda = subprocess.run(  # noqa: S603  # nosec B603
+        comando,
+        env=smoke.env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert sonda.returncode == 0
+    assert sonda.stdout == f"code={esperado}\n"

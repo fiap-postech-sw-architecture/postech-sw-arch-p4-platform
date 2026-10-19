@@ -102,6 +102,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Gotchas
 
+- 2026-10-19 - `no_pod` precisa descartar toda a saida quando `kubectl exec` ou seu prazo externo falha: um `code=124` ja impresso pelo processo remoto pode vir seguido de erro de transporte e nao prova a NetworkPolicy. O smoke testa a saida parcial no banco e no notificador; o bloqueio do notificador so vale com a API conectada ao mesmo broker - scripts/ci/smoke-servicos.sh; tests/test_smoke_servicos.py
+
 - 2026-10-19 - A varredura de evidencia reconhece ferramenta@versao como e-mail; publicar nome e versao em campos separados, sem afrouxar a varredura - e2e/apoio/newman.py
 
 - 2026-10-18 - A imagem do CD no GHCR e so `linux/amd64`: o kind num Mac com Apple Silicon nao a puxa (`no match for platform in manifest: not found`), e o `deploy-remoto.sh` contra o kind local para no Job de migracao. Para provar ali o deploy por digest: `docker build` do mesmo commit, `kind load docker-image` e, no no, `ctr -n k8s.io images tag <ref> <repo>@sha256:<digest do indice>` (o `kind load` deixa vazio o DIGEST do `crictl images`, e sem o nome por digest o kubelet tenta o pull); com `imagePullPolicy: IfNotPresent`, o pod sobe com a imagem local - docs/operacao/nuvem-opcional.md

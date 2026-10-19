@@ -136,7 +136,11 @@ ups() { serie up "$1" | sed -n 's/ 1$//p'; }
 # no_pod <argumento do kubectl>...: a saida de um kubectl exec, com prazo (vazia
 # se ele falhou). $K separa as palavras de proposito (o comando com o contexto).
 # shellcheck disable=SC2086
-no_pod() { prazo 20 $K "$@" || true; }
+no_pod() {
+  local saida
+  saida=$(prazo 20 $K "$@") || return 0
+  printf '%s\n' "$saida"
+}
 
 # codigo <saida>: o "code=" que o sh -c do pod imprime; vazio se nao imprimiu.
 codigo_de() { sed -n 's/^code=//p' <<< "$1"; }
@@ -291,6 +295,66 @@ for nome in "$@"; do
     detalhe="timed out, but the control from $nome-api did not connect: the probe proves nothing"
   fi
   registra "$nome" "rabbitmq-0 -> $banco:$porta" "$detalhe" "$([ "$codigo" = 124 ] && [ "$controle" = 0 ] && echo sim)"
+
+  if [ "$nome" = os-service ]; then
+    notificador=$(jq -r '.items[]
+      | select(.metadata.labels.app == "os-service-notificador" and .status.phase == "Running"
+          and .metadata.deletionTimestamp == null)
+      | .metadata.name' <<< "$pods" | head -n 1 || true)
+    # So o timeout do socket prova o bloqueio. O alarm encerra tambem DNS
+    # preso, com outro codigo; o prazo de fora nao imprime code=.
+    # shellcheck disable=SC2016
+    sonda_tcp='python -c "
+import signal, socket, sys
+signal.alarm(5)
+try:
+    socket.create_connection((sys.argv[1], int(sys.argv[2])), 3).close()
+except TimeoutError:
+    sys.exit(124)
+" "$0" "$1" 2>/dev/null; echo "code=$?"'
+    controle_broker=""
+    for prova in controle smtp bloqueio; do
+      host="rabbitmq.$PLATAFORMA.svc.cluster.local"
+      porta=5672
+      origem=$notificador
+      rotulo=os-service-notificador
+      container=notificador
+      if [ "$prova" = controle ]; then
+        origem=$api
+        rotulo=os-service-api
+        container=api
+      elif [ "$prova" = smtp ]; then
+        host="mailpit.$PLATAFORMA.svc.cluster.local"
+        porta=1025
+      fi
+      codigo=""
+      ok=""
+      if [ -z "$origem" ]; then
+        detalhe="no running pod labeled app=$rotulo"
+      else
+        codigo=$(codigo_de "$(no_pod -n "$ns" exec "$origem" -c "$container" -- sh -c "$sonda_tcp" "$host" "$porta")")
+        case "$codigo" in
+          0) detalhe="connected"; [ "$prova" = bloqueio ] || ok=sim ;;
+          "") detalhe="no answer from $origem" ;;
+          *) detalhe="could not connect (code $(junta <<< "$codigo"))" ;;
+        esac
+      fi
+      if [ "$prova" = controle ]; then controle_broker=$codigo; fi
+      if [ "$prova" = bloqueio ]; then
+        if [ "$codigo" = 0 ]; then
+          detalhe="connected: no NetworkPolicy denies it"
+        elif [ "$codigo" = 124 ]; then
+          if [ "$controle_broker" = 0 ]; then
+            detalhe="blocked (connection timed out)"
+            ok=sim
+          else
+            detalhe="timed out, but the control from os-service-api did not connect: the probe proves nothing"
+          fi
+        fi
+      fi
+      registra "$nome" "$rotulo pod -> $host:$porta" "$detalhe" "$ok"
+    done
+  fi
 done
 
 {
