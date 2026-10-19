@@ -85,6 +85,11 @@ class Portas:
         return self._clientes[nome]
 
     @property
+    def url_do_mailpit(self) -> str:
+        self._pontes["mailpit"].garantir()
+        return self._pontes["mailpit"].url
+
+    @property
     def mailpit(self) -> Mailpit:
         return Mailpit(self._cliente("mailpit"))
 

@@ -41,6 +41,7 @@ RABBITMQ_IMAGE := rabbitmq:4.3.6-management
 TRIVY_IMAGE := aquasec/trivy:0.72.0
 # Valida o asyncapi.yaml contra a especificacao AsyncAPI 3.0 (exige Node 24).
 ASYNCAPI_CLI := @asyncapi/cli@6.2.0
+NEWMAN := newman@6.2.3
 SHELLCHECK_IMAGE := koalaman/shellcheck:v0.11.0
 ACTIONLINT_IMAGE := rhysd/actionlint:1.7.12
 
@@ -62,7 +63,7 @@ TRIVY_CONFIG := docker run --rm -i --entrypoint sh $(TRIVY_IMAGE) -c \
 KONG_RENDER := KONG_CHART_VERSION=$(KONG_CHART_VERSION) HELM_IMAGE=$(HELM_IMAGE) YQ_IMAGE=$(YQ_IMAGE) \
 	NAMESPACE=$(NAMESPACE) scripts/kong-render.sh
 
-.PHONY: help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render e2e paineis demo mp-sandbox mp-sandbox-ensaio
+.PHONY: newman help kind-up kind-down deploy kong-check smoke redrive status port-forward up down test lint lint-scripts prova-retry manifests check kong-render e2e paineis demo mp-sandbox mp-sandbox-ensaio
 
 help:
 	@grep -E '^[a-z0-9-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-17s %s\n", $$1, $$2}'
@@ -238,6 +239,18 @@ e2e: ## E2E BDD da saga contra o kind com os tres servicos, e cada painel de neg
 	if [ $$status -eq 0 ]; then \
 		KUBE_CONTEXT=$(KUBE_CONTEXT) uv run --group e2e python -m e2e.paineis reports/e2e || status=$$?; \
 	fi; \
+	exit $$status
+
+# Collection do caminho feliz: reaproveita as fixtures, sem coleta pelo BDD.
+newman: ## collection do fluxo completo pelo Newman fixado (kind descartavel; simulador)
+	@test -z "$${E2E_MP_MODO:-}" -a -z "$${E2E_CONTEXTO_NAO_DESCARTAVEL:-}" || { echo "Newman exige kind local, sem sandbox nem escape" >&2; exit 2; }
+	$(GUARDA_DE_CONTEXTO)
+	rm -rf reports/e2e/newman && mkdir -p reports/e2e/newman
+	set -uo pipefail; \
+	KUBE_CONTEXT=$(KUBE_CONTEXT) E2E_MP_MODO= NEWMAN=$(NEWMAN) uv run --group e2e pytest -c e2e/pytest.ini e2e/newman.py \
+		--junitxml=reports/e2e/newman/junit.xml; \
+	status=$$?; \
+	uv run --group e2e python -m e2e.varredura reports/e2e/newman || status=$$?; \
 	exit $$status
 
 # Cada consulta de painel de negocio no Prometheus do kind, sem rodar o E2E (por

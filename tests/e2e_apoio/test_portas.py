@@ -37,3 +37,14 @@ def test_portas_que_falha_no_segundo_fecha_o_primeiro(kubectl_falso: Path) -> No
     pids = pids_do_kubectl_falso(kubectl_falso)
     assert len(pids) == 2
     assert not any(processo_vivo(pid) for pid in pids)
+
+
+def test_url_do_mailpit_usa_a_ponte_aberta(kubectl_falso: Path) -> None:
+    portas = Portas(Kubectl("kind-x", binario=str(kubectl_falso)))
+    portas._pontes["jaeger"]._alvo = "svc/outro"
+    try:
+        portas.iniciar()
+        assert portas.url_do_mailpit == portas._pontes["mailpit"].url
+    finally:
+        portas.encerrar()
+    assert not any(processo_vivo(pid) for pid in pids_do_kubectl_falso(kubectl_falso))

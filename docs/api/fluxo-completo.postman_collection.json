@@ -1,0 +1,1223 @@
+{
+  "info": {
+    "name": "PytStop — fluxo completo pela borda (simulador)",
+    "description": "RNF-052: abertura ate entrega com tres papeis, oito status e metricas administrativas. Executar por make newman em kind descartavel; valores sensiveis apenas no runtime privado.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://localhost"
+    },
+    {
+      "key": "mailpitUrl",
+      "value": ""
+    },
+    {
+      "key": "admin_email",
+      "value": ""
+    },
+    {
+      "key": "admin_senha",
+      "value": ""
+    },
+    {
+      "key": "atendente_email",
+      "value": ""
+    },
+    {
+      "key": "atendente_senha",
+      "value": ""
+    },
+    {
+      "key": "mecanico_email",
+      "value": ""
+    },
+    {
+      "key": "mecanico_senha",
+      "value": ""
+    },
+    {
+      "key": "servico",
+      "value": ""
+    },
+    {
+      "key": "peca",
+      "value": ""
+    },
+    {
+      "key": "cpf",
+      "value": ""
+    },
+    {
+      "key": "contato",
+      "value": ""
+    },
+    {
+      "key": "placa",
+      "value": ""
+    }
+  ],
+  "event": [
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "(function () {",
+          "    const nome = pm.info.requestName;",
+          "    const get = k => pm.variables.get(k);",
+          "    const set = (k, v) => pm.variables.set(k, v);",
+          "    const status = ['recebida', 'em_diagnostico', 'aguardando_aprovacao',",
+          "        'aguardando_pagamento', 'aguardando_execucao', 'em_execucao', 'finalizada', 'entregue'];",
+          "    function check(titulo, condicao) {",
+          "        pm.test(titulo, () => { pm.expect(Boolean(condicao)).to.be.true; });",
+          "        if (!condicao) pm.execution.setNextRequest(null);",
+          "        return Boolean(condicao);",
+          "    }",
+          "    function limparPoll() {",
+          "        pm.variables.unset('poll_inicio');",
+          "        pm.variables.unset('poll_tentativas');",
+          "        set('offset', 0);",
+          "    }",
+          "    function poll(pronto) {",
+          "        if (pronto) { limparPoll(); return true; }",
+          "        const inicio = get('poll_inicio') === undefined ? Date.now() : Number(get('poll_inicio'));",
+          "        const tentativas = Number(get('poll_tentativas') || 0) + 1;",
+          "        set('poll_inicio', inicio); set('poll_tentativas', tentativas);",
+          "        if (check('Evento observado dentro do prazo', Date.now() - inicio < 30000 && tentativas <= 60)) {",
+          "            pm.execution.setNextRequest(pm.info.requestId);",
+          "        }",
+          "        return false;",
+          "    }",
+          "    const autenticacao = nome.startsWith('Login ') || nome.startsWith('Registrar ');",
+          "    if (autenticacao && pm.response.code === 429) {",
+          "        const inicio = get('retry_inicio') === undefined ? Date.now() : Number(get('retry_inicio'));",
+          "        set('retry_inicio', inicio);",
+          "        const restante = 70000 - (Date.now() - inicio);",
+          "        if (!check('Autenticacao dentro do prazo de rate limit', restante > 0)) return;",
+          "        const raw = pm.response.headers.get('Retry-After');",
+          "        const segundos = raw !== null && raw !== undefined && String(raw).trim() !== '' && Number.isFinite(Number(raw)) ? Math.max(1, Number(raw)) : 5;",
+          "        setTimeout(() => pm.execution.setNextRequest(pm.info.requestId), Math.min(restante, segundos * 1000));",
+          "        return;",
+          "    }",
+          "    pm.variables.unset('retry_inicio');",
+          "    const criado = ['Registrar atendente', 'Registrar mecanico', 'Preco servico', 'Preco peca', 'Estoque inicial', 'Cliente', 'Veiculo', 'Abrir OS'];",
+          "    const esperado = nome === 'Metricas sem token' ? 401 : ['Metricas atendente', 'Metricas mecanico'].includes(nome) ? 403 : criado.includes(nome) ? 201 : 200;",
+          "    if (!check('HTTP esperado', pm.response.code === esperado)) return;",
+          "    if (esperado === 401 || esperado === 403) return;",
+          "    if (nome === 'Checkout') {",
+          "        check('Pagina HTML do checkout', String(pm.response.headers.get('Content-Type') || '').toLowerCase().includes('text/html'));",
+          "        return;",
+          "    }",
+          "    const b = pm.response.json();",
+          "    function urlLocal(link, caminho) {",
+          "        if (typeof link !== 'string') return false;",
+          "        const parse = require('url').parse;",
+          "        const u = parse(link, true), base = parse(get('baseUrl'));",
+          "        return u.protocol === base.protocol && u.host === base.host && !u.auth && !u.hash && caminho(u);",
+          "    }",
+          "    function mesmaOs() { return check('Mesma OS', b.ordem_id === get('ordem_id')); }",
+          "    function lista(presente) {",
+          "        if (!check('Pagina valida', Array.isArray(b.items) && Number.isInteger(b.total) && b.total >= 0 && Number.isInteger(b.offset) && Number.isInteger(b.limit) && b.limit > 0)) return;",
+          "        const encontrou = b.items.some(x => x.ordem_id === get('ordem_id'));",
+          "        const fim = b.items.length === 0 || b.offset + b.items.length >= b.total;",
+          "        if (encontrou || fim) {",
+          "            set('offset', 0);",
+          "            if (!presente) { check('Fora da fila antes do pagamento', !encontrou); limparPoll(); }",
+          "            else poll(encontrou);",
+          "        } else { set('offset', b.offset + b.items.length); poll(false); }",
+          "    }",
+          "    if (nome.startsWith('Saude ')) {",
+          "        if (nome === 'Saude billing') check('Somente simulador', b.modo === 'simulado');",
+          "    } else if (nome.startsWith('Login ')) {",
+          "        if (check('JWT emitido', b.token_type === 'bearer' && typeof b.access_token === 'string' && b.access_token.length > 0)) set('jwt_' + nome.split(' ')[1], b.access_token);",
+          "    } else if (nome.startsWith('Registrar ')) {",
+          "        check('Papel registrado', b.papel === nome.split(' ')[1] && typeof b.id === 'string' && b.id.length > 0);",
+          "    } else if (nome === 'Preco servico') {",
+          "        check('Preco do servico', b.codigo === get('servico') && b.preco === '120.00');",
+          "    } else if (nome === 'Preco peca') {",
+          "        check('Preco da peca', b.sku === get('peca') && b.preco === '45.00');",
+          "    } else if (nome === 'Estoque inicial') {",
+          "        check('Estoque inicial sem reserva', b.sku === get('peca') && b.quantidade_disponivel === 10 && b.quantidade_reservada === 0);",
+          "    } else if (nome === 'Cliente' || nome === 'Veiculo') {",
+          "        if (check('Identificador criado', typeof b.id === 'string' && b.id.length > 0)) set(nome === 'Cliente' ? 'cliente_id' : 'veiculo_id', b.id);",
+          "    } else if (nome === 'Abrir OS') {",
+          "        if (check('OS recebida para cliente e veiculo', b.status === 'recebida' && b.etapa === 'aguardando_diagnostico' && b.cliente_id === get('cliente_id') && b.veiculo_id === get('veiculo_id') && typeof b.id === 'string' && b.id.length > 0)) set('ordem_id', b.id);",
+          "    } else if (nome === 'Fila diagnostico' || nome === 'Fila execucao' || nome === 'Fora da fila') {",
+          "        lista(nome !== 'Fora da fila');",
+          "    } else if (nome.startsWith('OS ')) {",
+          "        const alvo = nome.slice(3), indice = status.indexOf(b.status), esperado = status.indexOf(alvo);",
+          "        if (!check('OS em estado conhecido sem cancelamento', b.id === get('ordem_id') && indice >= 0 && indice <= esperado)) return;",
+          "        const resumoPronto = alvo !== 'aguardando_pagamento' || Boolean(b.pagamento && b.pagamento.status === 'solicitado');",
+          "        if (poll(b.status === alvo && resumoPronto)) {",
+          "            if (alvo === 'aguardando_aprovacao') {",
+          "                if (check('Orcamento de 210 reais', b.orcamento && b.orcamento.total === '210.00' && typeof b.orcamento.orcamento_id === 'string')) {",
+          "                    set('orcamento_id', b.orcamento.orcamento_id); set('os_link_decisao', b.orcamento.link_decisao);",
+          "                }",
+          "            } else if (alvo === 'aguardando_pagamento') {",
+          "                set('pagamento_id', b.pagamento.pagamento_id);",
+          "            }",
+          "        }",
+          "    } else if (nome === 'Iniciar diagnostico' || nome === 'Concluir diagnostico' || nome === 'Iniciar execucao' || nome === 'Finalizar execucao') {",
+          "        const estados = {'Iniciar diagnostico':'EM_ANDAMENTO', 'Concluir diagnostico':'CONCLUIDO', 'Iniciar execucao':'EM_EXECUCAO', 'Finalizar execucao':'FINALIZADA'};",
+          "        mesmaOs(); check('Estado da Execucao', b.status === estados[nome]);",
+          "    } else if (nome === 'Orcamento') {",
+          "        mesmaOs();",
+          "        check('Orcamento e moeda', b.id === get('orcamento_id') && b.total === '210.00' && b.moeda === 'BRL');",
+          "        check('Linhas do diagnostico precificadas', Array.isArray(b.linhas) && b.linhas.length === 2 &&",
+          "            b.linhas.some(x => x.tipo === 'servico' && x.codigo === get('servico') && x.quantidade === 1 && x.preco_unitario === '120.00' && x.subtotal === '120.00') &&",
+          "            b.linhas.some(x => x.tipo === 'peca' && x.codigo === get('peca') && x.quantidade === 2 && x.preco_unitario === '45.00' && x.subtotal === '90.00'));",
+          "    } else if (nome === 'Buscar email') {",
+          "        const mensagens = b.messages || [];",
+          "        if (!check('Lista de emails valida', Array.isArray(mensagens))) return;",
+          "        const email = mensagens.find(x => typeof x.Subject === 'string' && x.Subject.toLowerCase().includes('orçamento'));",
+          "        if (poll(Boolean(email))) set('message_id', email.ID);",
+          "    } else if (nome === 'Ler email') {",
+          "        const achado = String(b.Text || '').match(/https?:\\/\\/[^\\s\"'<>]+\\/api\\/v1\\/publico\\/orcamentos\\/[A-Za-z0-9_.~-]+/);",
+          "        const link = achado && achado[0];",
+          "        if (check('Link do email na borda e igual ao da OS', link === get('os_link_decisao') && urlLocal(link, u => /^\\/billing\\/api\\/v1\\/publico\\/orcamentos\\/[A-Za-z0-9_.~-]+$/.test(u.pathname) && !u.search))) set('link_decisao', link);",
+          "    } else if (nome === 'Orcamento publico') {",
+          "        check('Orcamento publico correto', b.id === get('orcamento_id') && b.total === '210.00' && b.moeda === 'BRL');",
+          "    } else if (nome === 'Aprovar orcamento') {",
+          "        check('Orcamento aprovado', b.status === 'APROVADO');",
+          "    } else if (nome === 'Estoque reservado' || nome === 'Estoque baixado') {",
+          "        const reservado = nome === 'Estoque reservado';",
+          "        poll(b.sku === get('peca') && b.quantidade_disponivel === (reservado ? 10 : 8) && b.quantidade_reservada === (reservado ? 2 : 0) && b.quantidade_livre === 8);",
+          "    } else if (nome === 'Pagamento solicitado') {",
+          "        if (!mesmaOs()) return;",
+          "        if (!check('Cobranca simulada correta', b.id === get('pagamento_id') && b.orcamento_id === get('orcamento_id') && b.status === 'SOLICITADO' && b.valor === '210.00' && b.moeda === 'BRL' && b.provedor === 'simulado')) return;",
+          "        if (check('Checkout local assinado', urlLocal(b.checkout_url, u => u.pathname === '/billing/simulador/checkout/' + get('pagamento_id') && typeof u.query.token === 'string' && u.query.token.length > 0 && Object.keys(u.query).length === 1))) {",
+          "            set('checkout_url', b.checkout_url); set('checkout_token', require('url').parse(b.checkout_url, true).query.token);",
+          "        }",
+          "    } else if (nome === 'Aprovar pagamento' || nome === 'Pagamento confirmado') {",
+          "        mesmaOs(); check('Pagamento confirmado', b.id === get('pagamento_id') && b.status === 'CONFIRMADO');",
+          "    } else if (nome === 'Entregar') {",
+          "        check('Veiculo entregue', b.id === get('ordem_id') && b.status === 'entregue');",
+          "    } else if (nome === 'Saga concluida') {",
+          "        if (mesmaOs()) poll(b.etapa === 'concluida');",
+          "    } else if (nome === 'Historico') {",
+          "        mesmaOs(); check('Oito status em ordem', Array.isArray(b.mudancas) && JSON.stringify(b.mudancas.map(x => x.para)) === JSON.stringify(status) && b.mudancas[0].de === null);",
+          "    } else if (nome === 'Metricas admin') {",
+          "        const nove = [...status, 'cancelada'].sort();",
+          "        const contagens = b.por_status, medias = b.tempo_medio_por_status_segundos;",
+          "        check('Contrato das metricas', JSON.stringify(Object.keys(b).sort()) === JSON.stringify(['por_status', 'tempo_medio_por_status_segundos', 'total']) && contagens && medias && typeof contagens === 'object' && typeof medias === 'object' && !Array.isArray(medias) &&",
+          "            JSON.stringify(Object.keys(contagens).sort()) === JSON.stringify(nove) && Object.values(contagens).every(x => Number.isInteger(x) && x >= 0) &&",
+          "            Number.isInteger(b.total) && b.total === Object.values(contagens).reduce((a,x) => a+x, 0) && contagens.entregue >= 1 &&",
+          "            Object.keys(medias).every(x => nove.includes(x)) && Object.values(medias).every(x => typeof x === 'number' && Number.isFinite(x) && x >= 0));",
+          "    } else { check('Etapa conhecida', false); }",
+          "})();"
+        ]
+      }
+    },
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const nome = pm.info.requestName;",
+          "const espera = nome.startsWith('OS ') || ['Fila diagnostico', 'Fila execucao',",
+          "    'Fora da fila', 'Estoque reservado', 'Estoque baixado', 'Buscar email',",
+          "    'Saga concluida'].includes(nome);",
+          "if (espera && pm.variables.get('poll_inicio') === undefined) {",
+          "    pm.variables.set('poll_inicio', Date.now());",
+          "    pm.variables.set('poll_tentativas', 0);",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "id": "0ed71824-7be0-58c2-a149-cd624965120b",
+      "name": "Saude os",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/saude"
+      },
+      "response": []
+    },
+    {
+      "id": "1ccfa118-b88c-5bd8-81f1-64efef72b26a",
+      "name": "Saude billing",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{baseUrl}}/billing/api/v1/saude"
+      },
+      "response": []
+    },
+    {
+      "id": "7c3a371d-2826-5232-8cf2-af56f66fa54b",
+      "name": "Saude execucao",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/saude"
+      },
+      "response": []
+    },
+    {
+      "id": "58f2f599-1638-5975-b0f8-4d69d694541a",
+      "name": "Login admin",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/os/api/v1/autenticacao/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{admin_email}}\",\n  \"senha\": \"{{admin_senha}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "79510230-a9b7-523f-9339-58d81c1c8556",
+      "name": "Registrar atendente",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_admin}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/os/api/v1/autenticacao/registrar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{atendente_email}}\",\n  \"senha\": \"{{atendente_senha}}\",\n  \"papel\": \"atendente\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "3d47cef3-2c51-57ae-a830-d3a2fe966396",
+      "name": "Login atendente",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/os/api/v1/autenticacao/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{atendente_email}}\",\n  \"senha\": \"{{atendente_senha}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "81e6de6d-62fd-589d-add9-f9247b406a91",
+      "name": "Registrar mecanico",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_admin}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/os/api/v1/autenticacao/registrar",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{mecanico_email}}\",\n  \"senha\": \"{{mecanico_senha}}\",\n  \"papel\": \"mecanico\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "c35d016e-43cb-5da0-8a7b-bf729092949f",
+      "name": "Login mecanico",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/os/api/v1/autenticacao/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"email\": \"{{mecanico_email}}\",\n  \"senha\": \"{{mecanico_senha}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "b2e18f5e-7f82-571d-a795-fcafe46eb4dc",
+      "name": "Preco servico",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_admin}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/billing/api/v1/precos/servicos",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"codigo\": \"{{servico}}\",\n  \"nome\": \"Servico de teste E2E\",\n  \"descricao\": \"Servico cadastrado pelo teste ponta a ponta\",\n  \"preco\": \"120.00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "e467ac84-9002-50d2-899c-31f16412f99f",
+      "name": "Preco peca",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_admin}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/billing/api/v1/precos/pecas",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"{{peca}}\",\n  \"nome\": \"Peca de teste E2E\",\n  \"preco\": \"45.00\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "abbf64c1-478a-58e6-aec4-31d605f46328",
+      "name": "Estoque inicial",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_admin}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/execucao/api/v1/estoque",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sku\": \"{{peca}}\",\n  \"nome\": \"Peca de teste E2E\",\n  \"quantidade_disponivel\": 10\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "6b666e58-08ad-54ab-a13a-86531db0c81d",
+      "name": "Cliente",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/os/api/v1/clientes",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"nome\": \"Cliente de teste E2E\",\n  \"documento\": \"{{cpf}}\",\n  \"tipo_documento\": \"cpf\",\n  \"contato\": \"{{contato}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "14e6d867-a19e-562f-9d2d-c57054c1b243",
+      "name": "Veiculo",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/os/api/v1/clientes/{{cliente_id}}/veiculos",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"placa\": \"{{placa}}\",\n  \"marca\": \"Fiat\",\n  \"modelo\": \"Uno\",\n  \"ano\": 2020\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "33c78503-8cd2-58e9-a070-36f470af346f",
+      "name": "Abrir OS",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"cliente_id\": \"{{cliente_id}}\",\n  \"veiculo_id\": \"{{veiculo_id}}\",\n  \"descricao_problema\": \"Barulho ao frear\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "2100738b-9abd-5afc-a430-26b8e66afbf5",
+      "name": "Fila diagnostico",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/diagnosticos?status=AGUARDANDO&offset={{offset}}&limit=100"
+      },
+      "response": []
+    },
+    {
+      "id": "9d6946af-8be6-57d2-a9fb-a0f465642f9b",
+      "name": "Iniciar diagnostico",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/diagnosticos/{{ordem_id}}/inicio"
+      },
+      "response": []
+    },
+    {
+      "id": "cff3c41a-b4d1-51d3-a4f7-c76f5dae588c",
+      "name": "OS em_diagnostico",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "56fbc47d-0ea9-57ac-b448-d1a6e23822d4",
+      "name": "Concluir diagnostico",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/execucao/api/v1/diagnosticos/{{ordem_id}}/conclusao",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"itens\": [\n    {\n      \"tipo\": \"servico\",\n      \"codigo\": \"{{servico}}\",\n      \"quantidade\": 1\n    },\n    {\n      \"tipo\": \"peca\",\n      \"codigo\": \"{{peca}}\",\n      \"quantidade\": 2\n    }\n  ],\n  \"observacoes\": \"Diagnostico do teste E2E\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "c0db21f4-d73a-5e65-b942-5cd935e1df51",
+      "name": "OS aguardando_aprovacao",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "7fa7dfa7-60a0-5b2c-a0b7-52f74eca8f7b",
+      "name": "Orcamento",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/billing/api/v1/orcamentos/{{orcamento_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "5b6a2019-771c-58fa-9c60-bfe8e9d3b4f0",
+      "name": "Buscar email",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{mailpitUrl}}/api/v1/search?query=to:{{contato}}"
+      },
+      "response": []
+    },
+    {
+      "id": "24bd774f-8c22-5d43-8c4a-018674f94b3d",
+      "name": "Ler email",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{mailpitUrl}}/api/v1/message/{{message_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "88637064-c3e6-5d9c-b7a1-d7691f273d6e",
+      "name": "Orcamento publico",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{link_decisao}}"
+      },
+      "response": []
+    },
+    {
+      "id": "78f7cb9b-46ea-5924-bb5d-3ef33a6db073",
+      "name": "Aprovar orcamento",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{link_decisao}}/decisao",
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"decisao\": \"aprovar\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "id": "b3c00813-6c69-5551-917d-ade54f2b7d48",
+      "name": "OS aguardando_pagamento",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "9722caf7-106b-599c-b762-7453964dbc7f",
+      "name": "Estoque reservado",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/estoque/{{peca}}"
+      },
+      "response": []
+    },
+    {
+      "id": "9d69e88d-aa7e-5157-9ede-3b725b5a9e36",
+      "name": "Fora da fila",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/fila?offset={{offset}}&limit=100"
+      },
+      "response": []
+    },
+    {
+      "id": "32ede00d-b29f-5987-918d-7820b1ad8333",
+      "name": "Pagamento solicitado",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/billing/api/v1/pagamentos/{{pagamento_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "0fcfd3c9-dee6-587f-aeaf-a2dc68c3a8d9",
+      "name": "Checkout",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{checkout_url}}"
+      },
+      "response": []
+    },
+    {
+      "id": "e867fd29-29da-5d70-9431-4f55ef326ee4",
+      "name": "Aprovar pagamento",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{baseUrl}}/billing/api/v1/simulador/pagamentos/{{pagamento_id}}/aprovar?token={{checkout_token}}"
+      },
+      "response": []
+    },
+    {
+      "id": "171592f9-0cfb-5bd5-8d00-0849f60f3b93",
+      "name": "OS aguardando_execucao",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "3de54796-bda5-537a-a68a-8773c6a1f761",
+      "name": "Pagamento confirmado",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/billing/api/v1/pagamentos/{{pagamento_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "3a236fe2-8556-51f6-b771-a392c9782b44",
+      "name": "Fila execucao",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/fila?offset={{offset}}&limit=100"
+      },
+      "response": []
+    },
+    {
+      "id": "0a290941-45b5-5a76-a99b-a70924b2f92f",
+      "name": "Iniciar execucao",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/execucoes/{{ordem_id}}/inicio"
+      },
+      "response": []
+    },
+    {
+      "id": "edbfdca5-7ed3-56ed-a3c0-d6a6949a2f39",
+      "name": "OS em_execucao",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "4b8a3094-51cd-5cb8-b6a9-74a50f0770a5",
+      "name": "Finalizar execucao",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/execucoes/{{ordem_id}}/finalizacao"
+      },
+      "response": []
+    },
+    {
+      "id": "2e8454d2-e4fc-502c-bf10-79dd1494301f",
+      "name": "OS finalizada",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "f121340b-a687-5569-a50d-3712a46f4135",
+      "name": "Estoque baixado",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/execucao/api/v1/estoque/{{peca}}"
+      },
+      "response": []
+    },
+    {
+      "id": "edb5f228-a2ea-5eab-aefa-4d7ca828dc65",
+      "name": "Entregar",
+      "request": {
+        "method": "POST",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}/entrega"
+      },
+      "response": []
+    },
+    {
+      "id": "acb4d70e-b539-5fe0-98f5-46fce221bc13",
+      "name": "Saga concluida",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_admin}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/sagas/{{ordem_id}}"
+      },
+      "response": []
+    },
+    {
+      "id": "3096d299-7ea2-58af-9724-addeb85ab354",
+      "name": "Historico",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}/historico"
+      },
+      "response": []
+    },
+    {
+      "id": "6025b425-082a-580b-bc09-edf4d7ff4cc1",
+      "name": "Metricas sem token",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "noauth"
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/metricas"
+      },
+      "response": []
+    },
+    {
+      "id": "7332c7f1-fb65-568d-a729-73ac1b17af86",
+      "name": "Metricas atendente",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_atendente}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/metricas"
+      },
+      "response": []
+    },
+    {
+      "id": "da601834-f8f7-5358-a5af-660932422906",
+      "name": "Metricas mecanico",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_mecanico}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/metricas"
+      },
+      "response": []
+    },
+    {
+      "id": "b1e33e23-abfd-51bc-9424-c92f18a7081d",
+      "name": "Metricas admin",
+      "request": {
+        "method": "GET",
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_admin}}",
+              "type": "string"
+            }
+          ]
+        },
+        "header": [],
+        "url": "{{baseUrl}}/os/api/v1/ordens-de-servico/metricas"
+      },
+      "response": []
+    }
+  ]
+}
