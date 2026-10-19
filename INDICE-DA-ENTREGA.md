@@ -25,8 +25,8 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | RNF-031 a RNF-037; RNF-044; RNF-045; RNF-055 | [RFC-004](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), [decisões de arquitetura](docs/arquitetura/adr/fase4/) e [contratos](contratos/asyncapi.yaml) |
 | RNF-038 a RNF-041; RNF-050 | [Workflows dos serviços](docs/entrega/matriz-de-rastreabilidade.md); [evidências de fechamento](docs/entrega/fase4/evidencias/README.md) |
 | RNF-042; RNF-043; RNF-048; RNF-049 | [CI/CD e deploy em Kubernetes](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md); [execuções da plataforma](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions) |
-| RNF-046; RNF-056 | [Dashboards de negócio](observabilidade/negocio.md), [técnicos, alertas e métricas](observabilidade/README.md), [ensaio integrado](docs/operacao/ensaio-integrado.md) |
-| RNF-047; RNF-051; RNF-052 | Código e documentação de cada serviço, nas linhas de [rastreabilidade](docs/entrega/matriz-de-rastreabilidade.md) |
+| RNF-046; RNF-056 | [Dashboards de negócio](observabilidade/negocio.md), [técnicos, alertas e métricas](observabilidade/README.md), [ensaio integrado](docs/operacao/ensaio-integrado.md); [trace e alerta do ensaio local](docs/entrega/fase4/evidencias/observabilidade.md) |
+| RNF-047; RNF-051; RNF-052 | Código e documentação de cada serviço, nas linhas de [rastreabilidade](docs/entrega/matriz-de-rastreabilidade.md); [duas provas locais do Newman](docs/entrega/fase4/evidencias/newman-resumo.md) |
 | RNF-053; RNF-054 | [Documento de entrega](docs/entrega/fase4/entrega-fase-4.md), [roteiro do vídeo](docs/entrega/fase4/roteiro-video.md) e este índice |
 | Feedback da fase 3 | CPF/CNPJ por módulo 11 antes da consulta no OS; cenário `@validacao` no BDD; dashboards e índice versionados |
 
@@ -44,7 +44,7 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | Bancos | [bancos](observabilidade/dashboards/pytstop-bancos.json) | [painéis técnicos](observabilidade/README.md) |
 | Plataforma: broker, borda e alvos | [plataforma](observabilidade/dashboards/pytstop-plataforma.json) | [painéis técnicos](observabilidade/README.md) |
 
-Os JSONs e a documentação estão versionados. As capturas de fechamento, incluindo o alerta e o histórico de três dias, ainda serão coletadas conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
+Os JSONs e a documentação estão versionados. O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As nove capturas finais com três dias de histórico continuam pendentes, conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
 
 ## Conferência
 

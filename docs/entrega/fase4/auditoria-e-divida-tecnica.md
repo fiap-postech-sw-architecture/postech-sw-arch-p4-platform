@@ -9,7 +9,7 @@ Conferência inicial de 19/10/2026. Fontes: requisitos da fase, PRs integrados, 
 | CD compartilhado e chamadas dos três serviços | RNF-042 e RNF-049 exigem deploy independente por serviço | Plataforma e serviços | Workflow fixado por SHA; CI, segurança, imagem, kind e E2E verdes na `main` de cada serviço |
 | Collection do fluxo completo | Duas provas locais aprovadas; publicação e integração no CI de RNF-052 ainda pendentes | Plataforma | Integrar a collection e comprovar o Newman no workflow final, incluindo as métricas administrativas do OS; [resumos locais](evidencias/newman-resumo.md) |
 | Ensaio final de observabilidade | Trace com os três serviços, 600,9 s ociosos, smoke e alerta com recuperação comprovados localmente; RNF-046/RNF-056 continuam parciais | Plataforma e serviços | Preservar capturas com três dias; chamada externa e observação no modo real do Billing dependem da sandbox |
-| Remanescentes de telemetria do Billing | Host livre nos spans SERVER, classe da falha do coletor e provas específicas do deadline/smoke ainda estão em correção local | Billing Service | Revisar o delta, os controles e os gates; integrar antes de atualizar as evidências finais |
+| Remanescentes de telemetria do Billing | Correções e provas locais revisadas: Host, classe da falha do coletor, deadline e smoke; integração pendente | Billing Service | Integrar a fonte revisada, confirmar o CI e atualizar a tabela de cobertura pelo novo artefato publicado |
 | Evidência real do Mercado Pago | Simulador não comprova acesso à sandbox do provedor | Responsável com credenciais | Cobrança, aprovação e estorno reais, com saída sanitizada |
 | Descrição de `EstornoDePagamentoFalhou.motivo` | A mensagem fixa já está no Billing; a descrição da fonte canônica e das cópias ainda precisa ser alinhada | Plataforma e serviços | Atualizar a descrição e sincronizar cópias/ORIGEM, preservando formato, versão e routing key |
 | Grupo, vídeo e submissão | RNF-053/RNF-054 ainda não podem ser encerrados | Grupo | Confirmar identificação; publicar vídeo; conferir acesso do avaliador; submeter o PDF final |
@@ -58,6 +58,8 @@ Uma dívida aceita não dispensa o gate nem autoriza declarar uma prova inexiste
 - Billing: 1.657 testes aprovados, cobertura e diff-cover de 100% na árvore integrada por #17 (`248c407`); nove checks, smoke real e nove mutantes aprovados. OpenAPI e collection regenerados pelo comando oficial.
 - Execução: 1.468 testes aprovados e cobertura de 100% na árvore integrada por #9.
 - Plataforma: 2.539 testes aprovados e cobertura de 100% na árvore integrada por #20; CD [39190581574](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39190581574) aprovado em `91d959b`.
+
+As correções posteriores de observabilidade do Billing passaram localmente com 1.696 testes, cobertura e diff-cover de 100%, nove mutantes detectados, manifests e smoke dos quatro processos aprovados. As revisões independentes de segurança, aderência, qualidade e README estão encerradas. Esses resultados locais não substituem o CI publicado da fonte integrada; a tabela final de cobertura continua pendente desse artefato.
 
 Esses resultados identificam a base do ensaio. Cada alteração posterior exige os gates correspondentes e atualização deste registro antes do congelamento.
 
