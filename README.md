@@ -33,6 +33,29 @@ O único commit da `main` fora de pull request é o `Initial commit` que o GitHu
 
 O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md). Cobertura dos testes deste repositório: acima de 99% de linhas e ramos do código de teste (gate de 90%), que é só um indicador aqui; o que protege os contratos é a bateria de negativos gerados (seção [Contratos de mensageria](#contratos-de-mensageria)).
 
+## Arquitetura da fase 4
+
+```mermaid
+flowchart TB
+    pessoas["Atendente · Mecânico · Cliente"] -->|REST| kong["Kong"]
+    subgraph k8s["Kubernetes · kind local e CI"]
+        kong -->|/os| os["OS Service<br/>orquestrador"]
+        kong -->|/billing| billing["Billing Service"]
+        kong -->|/execucao| execucao["Execution Service"]
+        os --> pg_os[("PostgreSQL<br/>OS")]
+        billing --> mongo[("MongoDB<br/>Billing")]
+        execucao --> pg_execucao[("PostgreSQL<br/>Execução")]
+        os <-->|AMQP| rabbit{{"RabbitMQ<br/>comandos e eventos"}}
+        billing <-->|AMQP| rabbit
+        execucao <-->|AMQP| rabbit
+        execucao -->|REST: preços| billing
+        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger"]
+    end
+    billing <-->|HTTPS| mp["Mercado Pago"]
+```
+
+Fonte: [RFC-004, seção 2](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md). O [índice da entrega](INDICE-DA-ENTREGA.md) reúne o documento, os requisitos e as evidências.
+
 ## Pré-requisitos
 
 | Alvo do `make` | Precisa de |

@@ -91,6 +91,31 @@ As versões fixadas dos componentes ficam numa tabela do README do [`platform`](
 
 ## 2. Diagrama geral da arquitetura
 
+### Visão dos serviços e bancos
+
+O desenho resume os limites dos serviços, seus bancos e os canais de comunicação. O diagrama seguinte detalha processos, roteamento e integrações. Esta visão resumida é a usada no README e no documento de entrega.
+
+```mermaid
+flowchart TB
+    pessoas["Atendente · Mecânico · Cliente"] -->|REST| kong["Kong"]
+    subgraph k8s["Kubernetes · kind local e CI"]
+        kong -->|/os| os["OS Service<br/>orquestrador"]
+        kong -->|/billing| billing["Billing Service"]
+        kong -->|/execucao| execucao["Execution Service"]
+        os --> pg_os[("PostgreSQL<br/>OS")]
+        billing --> mongo[("MongoDB<br/>Billing")]
+        execucao --> pg_execucao[("PostgreSQL<br/>Execução")]
+        os <-->|AMQP| rabbit{{"RabbitMQ<br/>comandos e eventos"}}
+        billing <-->|AMQP| rabbit
+        execucao <-->|AMQP| rabbit
+        execucao -->|REST: preços| billing
+        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger"]
+    end
+    billing <-->|HTTPS| mp["Mercado Pago"]
+```
+
+### Processos e integrações
+
 ```mermaid
 ---
 config:
