@@ -74,7 +74,9 @@ jobs:
       # uv no runner, para o make smoke rodar provas em Python com o Python do
       # .python-version e as dependencias do uv.lock. Action de terceiro por
       # SHA de commit (a tag ao lado); as oficiais, por tag.
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.0"
       # O mesmo script do deploy-kind dos servicos: kind e kubectl fixados,
       # make kind-up e make deploy no overlay kind-ci, com as etapas medidas.
       - name: kind e kubectl fixados, cluster e plataforma no overlay kind-ci
@@ -238,9 +240,13 @@ jobs:
       # uv no runner para o make e2e: o Python vem do .python-version do
       # platform e as dependencias, do uv.lock. Action de terceiro por SHA de
       # commit (a tag ao lado); as oficiais, por tag.
-      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
+          version: "0.13.0"
           enable-cache: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
       # kind e kubectl fixados, make kind-up e make deploy no overlay kind-ci,
       # que tambem gera os Secrets dos servicos. As etapas sao medidas pelo
       # medir-kind.sh e o resumo sai num passo proprio, mesmo com falha. Cada
@@ -266,6 +272,14 @@ jobs:
         run: |
           platform/scripts/medir-kind.sh etapa e2e
           make -C platform e2e
+      # Um BDD reprovado nao esconde a prova da collection no mesmo kind.
+      # O smoke precisa estar verde; cancelamento impede novas escritas.
+      - name: Collection do fluxo completo (make newman)
+        if: ${{ !cancelled() && steps.smoke.conclusion == 'success' }}
+        timeout-minutes: 12
+        run: |
+          platform/scripts/medir-kind.sh etapa newman
+          make -C platform newman
       # Depois do E2E, no mesmo kind. Roda mesmo com o E2E reprovado, para um
       # resultado nao esconder o outro, mas nao sem o smoke verde: sem os
       # servicos de pe nao ha o que varrer.

@@ -6,12 +6,12 @@ Conferência inicial de 19/10/2026. Fontes: requisitos da fase, PRs integrados, 
 
 | Item | Impacto | Responsável | Condição para fechar |
 |---|---|---|---|
-| CD compartilhado e chamadas dos três serviços | RNF-042 e RNF-049 exigem deploy independente por serviço | Plataforma e serviços | Workflow fixado por SHA; CI, segurança, imagem, kind e E2E verdes na `main` de cada serviço |
+| CD compartilhado e chamadas dos três serviços | Definição integrada no [Platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22), S=`3f7cca2eb555a038b0d2780058ef0e692f93ee8a`, com CD da main aprovado; adoção pelos serviços em andamento | Plataforma e serviços | Workflow fixado por SHA; CI, segurança, imagem, kind e E2E verdes na `main` de cada serviço |
 | Collection do fluxo completo | Duas provas locais aprovadas; publicação e integração no CI de RNF-052 ainda pendentes | Plataforma | Integrar a collection e comprovar o Newman no workflow final, incluindo as métricas administrativas do OS; [resumos locais](evidencias/newman-resumo.md) |
 | Ensaio final de observabilidade | Trace com os três serviços, 600,9 s ociosos, smoke e alerta com recuperação comprovados localmente; RNF-046/RNF-056 continuam parciais | Plataforma e serviços | Preservar capturas com três dias; chamada externa e observação no modo real do Billing dependem da sandbox |
 | Remanescentes de telemetria do Billing | Correções e provas locais revisadas: Host, classe da falha do coletor, deadline e smoke; integração pendente | Billing Service | Integrar a fonte revisada, confirmar o CI e atualizar a tabela de cobertura pelo novo artefato publicado |
 | Evidência real do Mercado Pago | Simulador não comprova acesso à sandbox do provedor | Responsável com credenciais | Cobrança, aprovação e estorno reais, com saída sanitizada |
-| Descrição de `EstornoDePagamentoFalhou.motivo` | A mensagem fixa já está no Billing; a descrição da fonte canônica e das cópias ainda precisa ser alinhada | Plataforma e serviços | Atualizar a descrição e sincronizar cópias/ORIGEM, preservando formato, versão e routing key |
+| Descrição de `EstornoDePagamentoFalhou.motivo` | Mensagem fixa alinhada na fonte canônica pelo [Platform #23](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/23), C=`15dd827b95a95d2dd717414fb5104ac9768b32ac`; cópias dos serviços em atualização | Serviços | Sincronizar cópias e ORIGEM em C, preservando formato, versão e routing key |
 | Grupo, vídeo e submissão | RNF-053/RNF-054 ainda não podem ser encerrados | Grupo | Confirmar identificação; publicar vídeo; conferir acesso do avaliador; submeter o PDF final |
 
 ## Correções integradas no Billing

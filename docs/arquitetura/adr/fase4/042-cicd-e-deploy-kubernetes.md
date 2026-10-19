@@ -234,4 +234,12 @@ Decisão do grupo de 14/10/2026: a fase 4 não liga nuvem, e o deploy obrigatór
 
 Entraram o gancho desligado e neutro de provedor e as receitas de nuvem, descritos em [Deploy remoto opcional e desligado](#deploy-remoto-opcional-e-desligado); o overlay `k3s` dos manifests permanece, como alvo de um cluster persistente genérico.
 
+## Emenda de 19/10/2026: CD reutilizável
+
+Os quatro jobs de CD dos serviços passam a ter uma definição única no Platform, em `.github/workflows/cd-servico.yml`, com `workflow_call`. Recebem `servico` e os quatro `sha_*`; cada caller mantém os gatilhos, a concorrência e os gates locais `ci` e `security-scan`, dos quais a chamada depende. A referência do reusable é um SHA literal, atualizado pelo Dependabot `github-actions` de cada serviço; o commit dos scripts Platform selecionado por `sha_platform` é independente desse pin. Os callers só migram depois da integração da definição compartilhada.
+
+A chamada concede a união das permissões; cada job usa somente as suas. O publicador conserva actions e builders fixados, SBOM obrigatório, proveniência `mode=min` e `provenance-add-gha=false`. O artefato E2E é varrido antes do upload restrito a `reports/e2e/`, por 90 dias. O uv fica em `0.13.0` nos dois CDs. O CD próprio do Platform, inclusive seus gates E2E/ZAP, permanece independente.
+
+O remoto continua opcional, desligado e sem credencial de provedor. O job faz checkout do próprio serviço no commit da imagem e executa o script a partir dele, depois de validar o histórico do Platform: isso evita aplicar o overlay do repositório errado. O contrato completo está no [README](../../../../README.md#cd-reutilizável-dos-serviços), e os passos para autenticação futura permanecem no [runbook](../../../operacao/nuvem-opcional.md).
+
 > [↑ Raiz do projeto](../../../../README.md) · [↑ Arquitetura](../../README.md)
