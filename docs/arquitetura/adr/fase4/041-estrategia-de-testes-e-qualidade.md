@@ -50,13 +50,14 @@ Componente, em cada serviço: o serviço inteiro, com as dependências trocadas 
 - Billing: orçamento expirado, pagamento recusado pelo limite de recusas, pagamento aprovado depois de cancelado, expirado ou recusado, com estorno automático, estorno repetido sem segunda chamada ao provedor e compensação que chega antes do comando.
 - Execução: reserva tudo ou nada, liberação que chega antes da reserva e início da execução que vence o cancelamento.
 
-Ponta a ponta (E2E), no `platform`: `e2e/features/saga_atendimento.feature` roda contra os três serviços implantados no kind, com poucas jornadas, como recomenda a Aula 04. Roda no job `deploy-kind` do pipeline de entrega contínua (CD) de cada serviço e no job `e2e` do `cd.yml` do `platform`, a cada pull request e a cada push na `main` do `platform`. Cada cenário cria os próprios clientes, peças e OS, com identificadores únicos, sem depender de estado deixado por outro cenário. O pagamento usa o simulador do Mercado Pago, que percorre o mesmo caso de uso do webhook.
+Ponta a ponta (E2E), no `platform`: `e2e/features/saga_atendimento.feature` roda contra os três serviços implantados no kind, com poucas jornadas, como recomenda a Aula 04. Roda no job `deploy-kind` do pipeline de entrega contínua (CD) do OS Service, o único com `cd.yml` na `main` em 18/10/2026 (o Billing e a Execução têm `ci.yml` e `security.yml`, e o [ADR-042](042-cicd-e-deploy-kubernetes.md) prevê o `cd.yml` nos três), e no job `e2e` do `cd.yml` do `platform`, a cada pull request e a cada push na `main` do `platform`. Cada cenário cria os próprios clientes, peças e OS, com identificadores únicos, sem depender de estado deixado por outro cenário. O pagamento usa o simulador do Mercado Pago, que percorre o mesmo caso de uso do webhook.
 
 - `@caminho-feliz`: os oito status, de `RECEBIDA` a `ENTREGUE`, com consulta à API do Jaeger que exige spans dos três serviços no mesmo trace, e o `X-Request-ID` gerado pelo Kong presente nos logs do serviço.
 - `@compensacao`: recusa do orçamento, falta de peça, pagamento recusado e cancelamento depois do pagamento, com estorno e a ordem das compensações conferida.
 - `@expiracao`: orçamento vencido, com validade curta no overlay do kind.
 - `@ponto-de-nao-retorno`: cancelamento depois do início da execução responde 409.
 - `@resiliencia`: consumidor do Billing parado por 20 s, sem mensagem na DLQ e com a saga seguindo na volta; API do Billing parada na conclusão do diagnóstico, com 503, circuito aberto e conclusão aceita quando o Billing volta. O cenário derruba o componente com `kubectl scale --replicas=0`.
+- `e2e/features/mercadopago_sandbox.feature` (marcador `mp_sandbox`): pagamento no checkout, cancelamento depois do pagamento e cancelamento sem pagar, contra a sandbox do Mercado Pago. Roda à mão, em `make mp-sandbox` (quem paga é uma pessoa, no navegador) e em `make mp-sandbox-ensaio` (o mesmo roteiro, com o simulador do Billing no lugar do comprador e sem falar com o Mercado Pago), e fica fora do `make e2e`, do `make demo` e do CD, porque o CD não tem credencial. Não prova o webhook: segundo a documentação do Mercado Pago ([Checkout Pro, notificações](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/payment-notifications); consultada em 18/10/2026), pagamentos de teste não enviam notificação, e a confirmação vem da conciliação; a execução real na sandbox ainda não foi feita ([README](../../../../README.md#mercado-pago-na-sandbox)).
 - O Swagger (`/docs`) de cada serviço abre através do Kong.
 
 O OWASP ZAP baseline contra o Kong e a collection do fluxo completo, executada com newman, rodam no job `e2e` do `cd.yml` do `platform`, não no CD de cada serviço, para não somar minutos a cada deploy. O job sobe a plataforma do commit e os três serviços, todos construídos do código, num kind do runner e roda, nesta ordem, o smoke por namespace, o `make e2e` e o ZAP.
@@ -69,7 +70,9 @@ O ZAP varre o `/openapi.json` de cada serviço pela borda do kind; o como (coman
 
 ### Teste de mutação
 
-Não é gate de CI nem tem pontuação mínima. Os módulos críticos de cada serviço (a máquina de status, as transições da saga, a idempotência, o objeto de valor do CPF e a validação do JWT) são mutados à mão, e o PR lista cada mutante: o que foi alterado e o teste que falhou. Além deles, o `mutmut` roda nos módulos críticos de cada serviço (consumidor, relay e orquestrador ou saga) quando a execução do módulo couber em 15 minutos; o que passar disso fica só com os mutantes manuais. O resultado vai no corpo do PR e a pontuação, no README do serviço.
+Não é gate de CI nem tem pontuação mínima. Os módulos críticos de cada serviço (a máquina de status, as transições da saga, a idempotência, o objeto de valor do CPF e a validação do JWT, mais o consumidor, o relay e o orquestrador ou a saga) são mutados à mão: cada mutante é um defeito plausível escrito à mão, e o resultado lista o que foi alterado e o teste que falhou.
+
+O `mutmut` 3.8.0 não roda nos serviços. Ele espera o pacote em `src/<pacote>`, e o pacote deles se chama `src` (``AssertionError: Failed trampoline hit. Module name starts with `src.`, which is invalid``, em `mutmut/stats.py`); renomear o pacote ou remendar a ferramenta mudaria o que se mede. O Billing traz a lista de mutantes (`scripts/mutantes.toml`) e o script que aplica um por vez numa cópia do código e para de iniciar mutantes depois de 15 minutos (`scripts/mutacao_manual.py`, `make mutacao`). A seção "Mutação" do README do Billing diz como levar o script a outro serviço, e a pontuação de cada serviço vai no README dele.
 
 ### SonarQube efêmero no CI (RNF-041)
 
@@ -160,7 +163,7 @@ As versões de que os testes e o CI dependem ficam fixadas: `pytest-bdd>=8.0` no
 
 ### Neutras
 
-* A cobertura mede linhas e ramos executados, não a força das asserções; a mutação (manual e com `mutmut` nos módulos críticos) cobre parte do que ela não vê, sem entrar no CI
+* A cobertura mede linhas e ramos executados, não a força das asserções; a mutação (manual, nos módulos críticos) cobre parte do que ela não vê, sem entrar no CI
 
 ## Decisões Relacionadas
 

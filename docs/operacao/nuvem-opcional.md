@@ -2,7 +2,7 @@
 
 > [↑ Raiz do projeto](../../README.md)
 
-Nada deste documento faz parte do estado entregue da fase 4. O deploy automatizado da fase é o kind efêmero do runner: o job `deploy-kind` do CD de cada serviço sobe a plataforma e os três serviços num cluster que some com o job e valida o deploy com o smoke de cada namespace e o E2E da saga ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). O enunciado pede deploy automatizado em Kubernetes e não cita nuvem, e a infraestrutura AWS da fase 3 já foi desmontada.
+Nada deste documento faz parte do estado entregue da fase 4. O deploy automatizado da fase é o kind efêmero do runner: o job `deploy-kind` do CD do OS Service sobe a plataforma e os três serviços num cluster que some com o job e valida o deploy com o smoke de cada namespace e o E2E da saga ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). O enunciado pede deploy automatizado em Kubernetes e não cita nuvem, e a infraestrutura AWS da fase 3 já foi desmontada.
 
 Para o caso de a avaliação pedir um ambiente que fique de pé, o CD tem um gancho neutro de provedor, desligado: o job `deploy-remote`, que chama o [`scripts/ci/deploy-remoto.sh`](../../scripts/ci/deploy-remoto.sh) deste repositório. Este documento diz o que o gancho faz, o que o dono do ambiente teria de criar para ligá-lo e traz duas receitas de cluster. As receitas não foram executadas nesta fase, e cada uma abre com esse aviso.
 
@@ -38,7 +38,7 @@ O [`tests/test_deploy_remoto.py`](../../tests/test_deploy_remoto.py) prova esse 
 
 O dono do ambiente, nesta ordem:
 
-1. Sobe um cluster (uma das receitas abaixo) e implanta a plataforma nele uma vez, da própria máquina, com o contexto do cluster no kubeconfig: `make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto>` ([k3s, no README](../../README.md#k3s-vm-na-azure)). É o `make deploy` que cria os namespaces dos serviços e os Secrets deles; sem os Secrets, o `deploy-remoto.sh` para pedindo o `make deploy`.
+1. Sobe um cluster (uma das receitas abaixo) e implanta a plataforma nele uma vez, da própria máquina, com o contexto do cluster no kubeconfig: `make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto>` ([overlay `k3s`, no README](../../README.md#cluster-persistente-overlay-k3s)). É o `make deploy` que cria os namespaces dos serviços e os Secrets deles; sem os Secrets, o `deploy-remoto.sh` para pedindo o `make deploy`.
 2. Cria as variáveis da tabela abaixo no repositório de cada serviço que vai implantar (ou na organização) e os segredos no `environment` do job, em cada repositório: não existe `environment` de organização.
 3. No job `deploy-remote`, declara o `environment` que guarda o segredo e troca o passo "Acesso ao cluster remoto (a configurar)" pelo acesso real. O passo pronto para um kubeconfig está no [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#deploy-remoto-opcional), seção "Deploy remoto (opcional)".
 4. Acrescenta ao job o checkout do próprio serviço, no commit do run, e roda o script de dentro dele: hoje o job só faz o checkout do platform, e o script para dizendo que não achou o overlay. O checkout do serviço vai antes do checkout do platform, ou num `path:` próprio, com `working-directory:` nele e o script chamado como `../platform/scripts/ci/deploy-remoto.sh`: um checkout na raiz depois do platform apaga o `platform/`.

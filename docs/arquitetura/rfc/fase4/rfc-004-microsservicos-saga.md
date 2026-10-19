@@ -1134,13 +1134,13 @@ Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do
 
 ### 10.2 Pipeline e deploy
 
-A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows, e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
+A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows (em 18/10/2026, só o OS Service tem o `cd.yml`), e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
 
 - `ci.yml`, em todo pull request (PR): `lint`, `type-check`, `security`, `test` (gate de cobertura de 95% e `diff-cover` de 90% no código novo; cada serviço sobe de 90% para 95% no PR de endurecimento dele), `sonarqube` e `build`;
 - `security.yml`, em todo PR e semanal: `pip-audit`, `gitleaks` e `trivy`;
 - `cd.yml`, a cada push na `main`: `ci` e `security-scan`, que chamam os dois anteriores, `image`, `deploy-kind` e, com o deploy remoto ligado, `deploy-remote`, ou, desligado (o estado entregue), `remote-skipped`.
 
-Build único: o `image` constrói a imagem uma vez, publica no GHCR com a tag do SHA e gera o SBOM em SPDX; o `deploy-kind` carrega o tar dessa imagem, e o `deploy-remote`, se ligado, implanta o mesmo digest. No kind, os dois vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, com o overlay enxuto `kind-ci` (sem Loki, Promtail e Grafana, uma réplica), um smoke por namespace e o E2E (teste de ponta a ponta) BDD; o summary nomeia o serviço que falhou.
+Build único: o `image` constrói a imagem uma vez, publica no GHCR com a tag do SHA e gera o SBOM em SPDX; o `deploy-kind` carrega o tar dessa imagem, e o `deploy-remote`, se ligado, implanta o mesmo digest. No kind, os dois vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, ou no último commit da `main` quando o repositório não tem `cd.yml` (em 18/10/2026, só o OS Service tem), com o overlay enxuto `kind-ci` (sem Loki, Promtail e Grafana, uma réplica), um smoke por namespace e o E2E (teste de ponta a ponta) BDD; o summary nomeia o serviço que falhou.
 
 A independência que o enunciado pede (l. 90) está no que é de cada serviço: build, testes, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e o kind é o ambiente de integração.
 
@@ -1259,7 +1259,7 @@ Também aceitos:
 
 1. A disciplina Resiliência em Microsserviços não tinha sido liberada até 06/10/2026. Timeout, retry, circuit breaker e DLQ vêm da Aula 02 de Microsserviços I e da política do relay do p3; a tabela da [seção 10.3](#103-parâmetros-e-variáveis-de-ambiente) e os ADR-036 e ADR-038 são revistos quando o material sair.
 2. Credenciais de teste do Mercado Pago, passo humano: criar as contas de teste e guardar `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` fora do GitHub, no ambiente do shell de quem roda a prova no kind local ([ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), Segredos e configuração). São necessárias para a evidência da integração real (risco 1).
-3. `x-signature` na notificação enviada à `notification_url` da preferência: a documentação não diz se ela vem assinada. A primeira execução na sandbox decide; se faltar assinatura, a URL passa a ser cadastrada no painel de Webhooks (ADR-040).
+3. `x-signature` na notificação enviada à `notification_url` da preferência: a documentação não diz se ela vem assinada, e a sandbox não responde, porque pagamentos de teste não enviam notificação, segundo a documentação do Mercado Pago ([Checkout Pro, notificações](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/payment-notifications); consultada em 18/10/2026). A execução real na sandbox ainda não foi feita ([README](../../../../README.md#mercado-pago-na-sandbox)). Segue em aberto até haver um cluster com URL pública e uma notificação real; se faltar assinatura, o webhook a recusa com 401 e a URL passa a ser cadastrada no painel de Webhooks (ADR-040).
 4. Ambiente persistente: a fase não liga nuvem (emenda do ADR-042); se a avaliação pedir, as receitas de [nuvem opcional](../../../operacao/nuvem-opcional.md) dizem o que o dono do ambiente cria.
 5. Minutos e pico de memória do `kind-ci` no runner com os três serviços, registrados no summary de cada `deploy-kind`: no CD do OS Service de 15/10/2026, 6 min 34 s da criação do kind ao fim do E2E, com working set de até 3,0 GiB e pico de 7,4 GiB no cgroup do nó do kind. Só com a plataforma, o `deploy-kind` do `platform` levou de 3 min 14 s a 3 min 31 s em três execuções (06/10/2026), com working set de até 1,5 GiB ([ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), com o uso de cada componente).
 

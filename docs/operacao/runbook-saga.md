@@ -311,13 +311,14 @@ Os e-mails ao cliente que esgotaram as tentativas ficam na tabela `notificacoes`
 
 ### Motivos de recusa no consumidor do OS Service
 
-O motivo de cada recusa sai em código no log `message rejected to dlq` do consumidor e no status de erro do span do consumo. Cinco pedem uma decisão antes do redrive, porque ele devolve a fila inteira e a mensagem que o consumidor recusar de novo volta à DLQ:
+O motivo de cada recusa sai em código no log `message rejected to dlq` do consumidor e no status de erro do span do consumo. A tabela abaixo traz os motivos da saga que pedem uma decisão antes do redrive, porque ele devolve a fila inteira e a mensagem que o consumidor recusar de novo volta à DLQ. Não é a lista inteira: o consumidor recusa também mensagem inválida e falha do tratador (como o `erro_no_handler` da peça com código fora do formato do Billing), e o [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#evento-fora-de-ordem) descreve esse caso.
 
 | Motivo | O que é | O que fazer |
 |---|---|---|
 | `sem_tratador_nesta_versao` | falha de negócio (por exemplo `OrcamentoRecusado` ou `ReservaDePecasFalhou`) ou resposta de compensação (por exemplo `ExecucaoCancelada`) que uma réplica de versão anterior à das compensações recebeu: consumi-la sem tratador perderia o evento, e por isso ela foi para a DLQ | implante a versão com as compensações em todas as réplicas e só então faça o redrive de `os.eventos`; antes disso a versão antiga a recusa de novo e os 7 dias da DLQ recomeçam |
 | `ordem_id_divergente`, `saga_inexistente` | o `ordem_id` dos dados é diferente do `correlation_id` (mensagem de outra OS), ou a OS não tem saga | o redrive não resolve, a mensagem volta à DLQ: peça o `ordem_id` e o `message_id` a quem mantém o OS Service ([Quando pedir ajuda](#quando-pedir-ajuda)) |
 | `ordem_encerrada` | evento do fluxo para uma OS `cancelada` ou `entregue` com a saga ainda viva, estado que o cancelamento pela API não produz (alguém alterou a OS por fora do serviço) | o redrive não resolve, a mensagem volta à DLQ: corrija o estado da OS ou chame quem mantém o OS Service ([Quando pedir ajuda](#quando-pedir-ajuda)) |
+| `relogio_defasado` | o último registro da saga está mais de 60 s à frente do relógio desta réplica; gravar o passo poria a hora dele e os prazos no futuro | o log `saga clock behind last record` (campo `defasagem_segundos`) mostra a diferença a partir de 1 s; acerte o relógio do nó errado, o desta réplica ou o de quem gravou o registro, e faça o redrive; até lá a mensagem volta à DLQ |
 | `transicao_invalida` | a OS ou a saga recusam o fato, por exemplo `PagamentoSolicitado` com a OS fora de `aguardando_pagamento` | estado e evento não combinam: chame quem mantém o OS Service com o `ordem_id` e o `message_id`; o redrive só adianta se o estado mudar |
 
 ### Comando recusado pelo participante
