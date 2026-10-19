@@ -10,6 +10,10 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Recent decisions
 
+- 2026-10-19 - O job e2e do CD próprio define smoke, BDD, Newman e ZAP nessa ordem; Newman usa Node 24 e actions/setup-node v7, prazo de 12 min e condição !cancelled com smoke success, preservando falha, varredura e e2e-kind. Os dois ensaios locais não substituem a comprovação do passo na HEAD publicada, ainda pendente - .github/workflows/cd.yml; README; ADR-041
+
+- 2026-10-19 - RNF-052: collection v2.1 do fluxo pela borda com Newman6.2.3 em `make newman`; duas provas locais com dados novos passaram, mas integracao no job e2e/CI segue pendente - README (Collection do fluxo completo); ADR-041
+
 - 2026-10-18 - Os paineis, os alertas e o README deixam de tratar o scrape do OS como `nao_roteada`: o OS #15 passa a registrar o `/metrics` com `@app.get`, a rota ganha o template `/metrics` e a exclusao `rota!~"/metrics|/api/v1/saude.*"` vale nos tres servicos; o caso do promtool do painel Servicos 1 tem agora a rota de cliente e o `/metrics` do OS. Este texto so e verdadeiro depois do OS #15 na `main` do OS (antes, o OS implantado ainda conta o scrape em `nao_roteada`); na troca, uma consulta com janela que atravessa o deploy mostra a serie antiga parar e a nova nascer - observabilidade/README.md; OS #15
 - 2026-10-19 - O Billing #17 elimina o texto livre do provedor também no evento EstornoDePagamentoFalhou. O schema, o AsyncAPI e o exemplo passam a descrever a mensagem fixa do produtor, sem mudar versão, campos ou limites de validação; as cópias dos serviços devem apontar para a main que integra esse alinhamento - contratos/schemas/EstornoDePagamentoFalhou.schema.json; contratos/asyncapi.yaml
 - 2026-10-19 - As definições em $defs são compartilhadas e precisam ser idênticas nos schemas; a descrição específica do motivo de EstornoDePagamentoFalhou fica na propriedade motivo, ao lado do $ref, sem alterar a definição genérica - contratos/tests/test_contratos.py; contratos/schemas/EstornoDePagamentoFalhou.schema.json
@@ -93,6 +97,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 - 2026-10-06 - Script shell se testa com um kubectl falso em Python escrito no tmp_path (shebang sys.executable), nao como modulo em tests/: a cobertura mede tests/, e modulo so rodado em subprocesso entraria com 0%
 
 ## Gotchas
+
+- 2026-10-19 - A varredura de evidencia reconhece ferramenta@versao como e-mail; publicar nome e versao em campos separados, sem afrouxar a varredura - e2e/apoio/newman.py
 
 - 2026-10-18 - A imagem do CD no GHCR e so `linux/amd64`: o kind num Mac com Apple Silicon nao a puxa (`no match for platform in manifest: not found`), e o `deploy-remoto.sh` contra o kind local para no Job de migracao. Para provar ali o deploy por digest: `docker build` do mesmo commit, `kind load docker-image` e, no no, `ctr -n k8s.io images tag <ref> <repo>@sha256:<digest do indice>` (o `kind load` deixa vazio o DIGEST do `crictl images`, e sem o nome por digest o kubelet tenta o pull); com `imagePullPolicy: IfNotPresent`, o pod sobe com a imagem local - docs/operacao/nuvem-opcional.md
 - 2026-10-18 - `gh variable list --org` responde 403 sem admin da organizacao: que `DEPLOY_REMOTO_HABILITADO` nao esta ligada em nivel nenhum se prova pelo run do CD (o `deploy-remote` fica de fora e o `remote-skipped` passa), nao pela listagem; por repositorio a listagem funciona, e os quatro vieram sem variavel em 18/10 - docs/operacao/nuvem-opcional.md
@@ -179,6 +185,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Tech debt / TODO
 
+- 2026-10-19 - RESOLVIDO o item de14/10 sobre metricas na collection: `docs/api/fluxo-completo.postman_collection.json` confere GET /os/api/v1/ordens-de-servico/metricas sem token e com os tres papeis, incluindo nove status; RNF-052 ainda depende da integracao/evidencia CI - README (Collection do fluxo completo)
+
 - 2026-10-18 - MEDIUM - Billing e Execucao nao tem `cd.yml` na `main` (so `ci.yml` e `security.yml`, e nenhum PR aberto dos dois o acrescenta): o `deploy-kind` dos servicos e o E2E rodam hoje so no CD do OS Service, que pega os dois vizinhos pelo ultimo commit da `main`, com aviso no run (passo `shas`). Os documentos passaram a dizer "CD do OS Service" (README, ADR-041, ADR-042, RFC-004 10.2, nuvem opcional e ensaio integrado); quando os dois ganharem o `cd.yml`, voltam a "de cada servico". Contradiz a entrada de 2026-10-07 "O CD de cada servico sobe os tres no kind" - docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md; README
 - 2026-10-18 - RESOLVIDO - Das dividas de 18/10 e 14/10 sobre os textos: o titulo "k3s (VM na Azure)" do README e a ancora da nuvem opcional, a frase de que a primeira execucao na sandbox decide o `x-signature` (ADR-040, l.105, e RFC-004 11.2, ponto 3), o ADR-041 (cenario da sandbox e mutacao manual no lugar do `mutmut`), o `relogio_defasado` na secao 4 do runbook e o quinto processo do OS no ADR-037; o README ganhou o `notificador` nas listas de processos e perdeu o `#` dos comandos do `make e2e` e do `make demo` - docs/arquitetura/; README
 - 2026-10-18 - LOW - Ficaram para PR de codigo: (1) trava do `scripts/redrive.sh` para `execucao.comandos.dlq` depois de uma eliminacao de dados, com `--forcar` (hoje so o runbook, l.380, e o README do OS dizem para nao fazer, e o `Makefile`, l.114-115, aceita as tres filas); (2) passo negativo do `scripts/smoke.sh` para o `notificador` (a conexao ao broker falha, a ao Mailpit:1025 abre); (3) NetworkPolicy de entrada do Mailpit (`k8s/base/mailpit.yaml`; o namespace `pytstop-plataforma` nao tem nenhuma, ADR-042); (4) `.github/dependabot.yml` do platform, so com o bloco `github-actions` (as imagens de `k8s/` e do compose ficam fora e sobem a mao com a tabela de versoes) - scripts/redrive.sh; scripts/smoke.sh; k8s/base/mailpit.yaml
@@ -231,6 +239,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 - 2026-10-06 - LOW - Profile `servicos` do compose sobe so a API de cada servico (relay, consumidor e `prazos` rodam no Kubernetes)
 
 ## Review lessons
+
+- 2026-10-19 - Timeout/interrupcao do npx --version tambem deve matar o grupo de processos: subprocess.run mata so o pai; a camada Newman reutiliza start_new_session+killpg com stdout privado, e os negativos reais cobrem filho heartbeat no preflight - e2e/apoio/newman.py; tests/e2e_apoio/test_newman.py
 
 - 2026-10-18 - Receita de comando colada no terminal do dono falha em silencio de duas formas: `cp` e `cp -i` no zsh dele (pergunta e recusa se o destino existe; use `command cp -f`) e `perl -0pi` sem `or die` sai com status 0 quando o padrao deixa de casar. Toda receita de religamento de PR empilhado termina numa conferencia que falha alto (as linhas `+` e `-` dos dois diffs, `git ls-files -u` vazio antes de fundir) e se refaz na HEAD final, em dois cenarios - PR #21
 - 2026-10-18 - Afirmacao que generaliza "cada servico" (aqui, "o CD de cada servico") foi escrita olhando o OS, o unico com `cd.yml`: antes de generalizar, conferir o que cada repositorio tem na `main` (`git ls-tree -r origin/main --name-only` em cada um) e dizer o que so um deles faz - README; docs/arquitetura/

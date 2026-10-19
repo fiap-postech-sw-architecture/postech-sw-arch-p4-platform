@@ -374,10 +374,12 @@ def test_ordem_dos_passos_da_plataforma_ao_diagnostico() -> None:
     ordem = [
         posicao("ultimo_verde()"),
         posicao("astral-sh/setup-uv"),
+        posicao("actions/setup-node"),
         posicao("scripts/ci/deploy-kind.sh"),
         posicao("implantar-servicos.sh"),
         posicao("smoke-servicos.sh"),
         posicao("make -C platform e2e"),
+        posicao("make -C platform newman"),
         posicao("scripts/ci/zap-baseline.sh"),
         posicao("medir-kind.sh resumo"),
         posicao("e2e.varredura"),
@@ -394,6 +396,7 @@ def test_cada_etapa_e_marcada_para_a_medicao() -> None:
         ("implantar-servicos.sh", "servicos"),
         ("smoke-servicos.sh", "smoke"),
         ("make -C platform e2e", "e2e"),
+        ("make -C platform newman", "newman"),
         ("scripts/ci/zap-baseline.sh", "zap"),
     ):
         assert f"platform/scripts/medir-kind.sh etapa {etapa}\n" in passo(trecho)["run"]
@@ -433,6 +436,33 @@ def test_o_zap_roda_apos_o_e2e_reprovado_mas_nao_sem_o_smoke() -> None:
     # O E2E e o smoke nao tem `if`: o padrao, success(), reprova o job na falha.
     assert "if" not in passo("make -C platform e2e")
     assert "if" not in passo("smoke-servicos.sh")
+
+
+def test_o_newman_roda_apos_tentativa_do_bdd_com_smoke_verde_sem_cancelamento() -> None:
+    newman = passo("make -C platform newman")
+    assert newman["if"] == "${{ !cancelled() && steps.smoke.conclusion == 'success' }}"
+    assert posicao("make -C platform e2e") < PASSOS.index(newman)
+    assert PASSOS.index(newman) < posicao("scripts/ci/zap-baseline.sh")
+
+
+def test_o_newman_usa_node_24_e_o_pin_do_makefile_sem_instalacao_global() -> None:
+    node = passo("actions/setup-node")
+    assert node["uses"] == "actions/setup-node@v7"
+    assert node["with"] == {"node-version": "24"}
+    assert PASSOS.index(node) < posicao("make -C platform newman")
+    makefile = (RAIZ / "Makefile").read_text(encoding="utf-8")
+    assert re.search(r"^NEWMAN := newman@6\.2\.3$", makefile, re.MULTILINE)
+    assert passo("make -C platform newman")["run"] == (
+        "platform/scripts/medir-kind.sh etapa newman\nmake -C platform newman\n"
+    )
+
+
+def test_os_relatorios_newman_ficam_na_pasta_varrida_e_publicada_do_e2e() -> None:
+    makefile = (RAIZ / "Makefile").read_text(encoding="utf-8")
+    assert "--junitxml=reports/e2e/newman/junit.xml" in makefile
+    assert posicao("make -C platform newman") < posicao("e2e.varredura")
+    assert posicao("e2e.varredura") < PASSOS.index(com_artefato("e2e-kind"))
+    assert com_artefato("e2e-kind")["with"]["path"] == "platform/reports/e2e/"
 
 
 def test_nada_no_job_e2e_engole_a_falha_de_um_passo() -> None:
@@ -479,6 +509,7 @@ def test_passos_longos_tem_prazo_proprio_dentro_do_do_job() -> None:
         "implantar-servicos.sh": 25,
         "smoke-servicos.sh": 10,
         "make -C platform e2e": 20,
+        "make -C platform newman": 12,
         "scripts/ci/zap-baseline.sh": 20,
     }
     for trecho, minutos in longos.items():

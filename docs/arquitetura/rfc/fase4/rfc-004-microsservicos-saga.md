@@ -771,7 +771,7 @@ Kong Ingress Controller em modo DB-less, o gateway das Aulas 03 e 04 de Microsse
 
 ### 6.3 Swagger e Postman
 
-Cada serviço publica o Swagger UI em `/docs` e versiona em `docs/api/` o OpenAPI exportado e a collection Postman com exemplos; o README aponta os arquivos e traz um `curl` por endpoint. A collection do fluxo completo fica no `platform` e roda com newman (RNF-052).
+Cada serviço publica o Swagger UI em `/docs` e versiona em `docs/api/` o OpenAPI exportado e a collection Postman com exemplos; o README aponta os arquivos e traz um `curl` por endpoint. A [collection do fluxo completo](../../../api/fluxo-completo.postman_collection.json) fica no `platform` e roda com Node 24 e Newman 6.2.3 por `make newman` (RNF-052). Os [pré-requisitos, relatórios sanitizados e resultados locais](../../../../README.md#collection-do-fluxo-completo-make-newman) estão no README; o fluxo usa o simulador do Billing, com histórico de oito status e métricas administrativas dos nove status. A integração no CI ainda está pendente.
 
 ## 7. Dados
 

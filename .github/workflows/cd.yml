@@ -244,6 +244,9 @@ jobs:
         with:
           version: "0.13.0"
           enable-cache: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
       # kind e kubectl fixados, make kind-up e make deploy no overlay kind-ci,
       # que tambem gera os Secrets dos servicos. As etapas sao medidas pelo
       # medir-kind.sh e o resumo sai num passo proprio, mesmo com falha. Cada
@@ -269,6 +272,14 @@ jobs:
         run: |
           platform/scripts/medir-kind.sh etapa e2e
           make -C platform e2e
+      # Um BDD reprovado nao esconde a prova da collection no mesmo kind.
+      # O smoke precisa estar verde; cancelamento impede novas escritas.
+      - name: Collection do fluxo completo (make newman)
+        if: ${{ !cancelled() && steps.smoke.conclusion == 'success' }}
+        timeout-minutes: 12
+        run: |
+          platform/scripts/medir-kind.sh etapa newman
+          make -C platform newman
       # Depois do E2E, no mesmo kind. Roda mesmo com o E2E reprovado, para um
       # resultado nao esconder o outro, mas nao sem o smoke verde: sem os
       # servicos de pe nao ha o que varrer.
