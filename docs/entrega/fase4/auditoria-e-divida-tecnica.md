@@ -8,7 +8,8 @@ Conferência inicial de 19/10/2026. Fontes: requisitos da fase, PRs integrados, 
 |---|---|---|---|
 | CD compartilhado e chamadas dos três serviços | RNF-042 e RNF-049 exigem deploy independente por serviço | Plataforma e serviços | Workflow fixado por SHA; CI, segurança, imagem, kind e E2E verdes na `main` de cada serviço |
 | Collection do fluxo completo | Falta a prova executável integrada de RNF-052 | Plataforma | Collection versionada e newman aprovado, incluindo as métricas administrativas do OS |
-| Ensaio final de observabilidade | Trace com os três serviços e smoke após E2E comprovados localmente; a prova completa de RNF-046/RNF-056 continua parcial | Plataforma e serviços | Concluir dez minutos ociosos, preservar provas e capturas com três dias; chamada externa do Billing depende da sandbox real |
+| Ensaio final de observabilidade | Trace com os três serviços, 600,9 s ociosos, smoke e alerta com recuperação comprovados localmente; RNF-046/RNF-056 continuam parciais | Plataforma e serviços | Preservar capturas com três dias; chamada externa e observação no modo real do Billing dependem da sandbox |
+| Remanescentes de telemetria do Billing | Host livre nos spans SERVER, classe da falha do coletor e provas específicas do deadline/smoke ainda estão em correção local | Billing Service | Revisar o delta, os controles e os gates; integrar antes de atualizar as evidências finais |
 | Evidência real do Mercado Pago | Simulador não comprova acesso à sandbox do provedor | Responsável com credenciais | Cobrança, aprovação e estorno reais, com saída sanitizada |
 | Descrição de `EstornoDePagamentoFalhou.motivo` | A mensagem fixa já está no Billing; a descrição da fonte canônica e das cópias ainda precisa ser alinhada | Plataforma e serviços | Atualizar a descrição e sincronizar cópias/ORIGEM, preservando formato, versão e routing key |
 | Grupo, vídeo e submissão | RNF-053/RNF-054 ainda não podem ser encerrados | Grupo | Confirmar identificação; publicar vídeo; conferir acesso do avaliador; submeter o PDF final |
@@ -29,7 +30,7 @@ Nove checks aprovados e nenhuma thread pendente na integração. O gate final re
 
 Em 19/10/2026, o E2E local passou com 14 testes e três cenários de sandbox não selecionados, seguido de `smoke-servicos` aprovado. O trace `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e o CLIENT Execução → Billing. O simulador não produz chamada HTTP externa; o CLIENT Billing → Mercado Pago permanece pendente da sandbox real.
 
-A auditoria do dashboard de bancos confirmou consultas restritas às séries disponíveis no exporter; ele não usa `mongodb_ss_*`. A dívida anterior sobre essas consultas foi encerrada. Capturas com uma hora de dados e observação ociosa em curso ainda não encerram as provas de três dias e dez minutos. O volume diário antes da primeira meia-noite UTC segue a limitação descrita no JSON.
+A auditoria do dashboard de bancos confirmou consultas restritas às séries disponíveis no exporter; ele não usa `mongodb_ss_*`. A dívida anterior sobre essas consultas foi encerrada. A janela real de 600,9 s terminou sem reinícios, com 18 grupos de alvos disponíveis e três bancos acessíveis. O alerta controlado de fila disparou e recuperou, e o smoke posterior passou. O [relatório parcial](evidencias/observabilidade.md) preserva os commits, timestamps, trace e capturas do alerta. Capturas com uma hora de dados ainda não encerram a prova de três dias. O volume diário antes da primeira meia-noite UTC segue a limitação descrita no JSON.
 
 ## Dívida aceita e acompanhada
 
