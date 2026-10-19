@@ -1,0 +1,916 @@
+{
+  "ferramenta": "newman",
+  "versao": "6.2.3",
+  "modo": "simulado",
+  "resultado": "aprovado",
+  "assertions": {
+    "total": 105,
+    "failed": 0
+  },
+  "requisicoes": [
+    {
+      "etapa": "Saude os",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/saude",
+      "codigo": 200,
+      "duracao_ms": 30,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Saude billing",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/billing/api/v1/saude",
+      "codigo": 200,
+      "duracao_ms": 6,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Somente simulador",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Saude execucao",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/execucao/api/v1/saude",
+      "codigo": 200,
+      "duracao_ms": 6,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Login admin",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/autenticacao/login",
+      "codigo": 200,
+      "duracao_ms": 445,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "JWT emitido",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Registrar atendente",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/autenticacao/registrar",
+      "codigo": 201,
+      "duracao_ms": 444,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Papel registrado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Login atendente",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/autenticacao/login",
+      "codigo": 200,
+      "duracao_ms": 426,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "JWT emitido",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Registrar mecanico",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/autenticacao/registrar",
+      "codigo": 201,
+      "duracao_ms": 456,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Papel registrado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Login mecanico",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/autenticacao/login",
+      "codigo": 200,
+      "duracao_ms": 449,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "JWT emitido",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Preco servico",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/billing/api/v1/precos/servicos",
+      "codigo": 201,
+      "duracao_ms": 10,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Preco do servico",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Preco peca",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/billing/api/v1/precos/pecas",
+      "codigo": 201,
+      "duracao_ms": 8,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Preco da peca",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Estoque inicial",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/execucao/api/v1/estoque",
+      "codigo": 201,
+      "duracao_ms": 9,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Estoque inicial sem reserva",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Cliente",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/clientes",
+      "codigo": 201,
+      "duracao_ms": 10,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Identificador criado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Veiculo",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/clientes/{{cliente_id}}/veiculos",
+      "codigo": 201,
+      "duracao_ms": 11,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Identificador criado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Abrir OS",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico",
+      "codigo": 201,
+      "duracao_ms": 61,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS recebida para cliente e veiculo",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Fila diagnostico",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/execucao/api/v1/diagnosticos?status=AGUARDANDO&offset={{offset}}&limit=100",
+      "codigo": 200,
+      "duracao_ms": 7,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Pagina valida",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Iniciar diagnostico",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/execucao/api/v1/diagnosticos/{{ordem_id}}/inicio",
+      "codigo": 200,
+      "duracao_ms": 12,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Estado da Execucao",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS em_diagnostico",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 8,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Concluir diagnostico",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/execucao/api/v1/diagnosticos/{{ordem_id}}/conclusao",
+      "codigo": 200,
+      "duracao_ms": 32,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Estado da Execucao",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS aguardando_aprovacao",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 10,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        },
+        {
+          "nome": "Evento observado dentro do prazo",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS aguardando_aprovacao",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 9,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        },
+        {
+          "nome": "Orcamento de 210 reais",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Orcamento",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/billing/api/v1/orcamentos/{{orcamento_id}}",
+      "codigo": 200,
+      "duracao_ms": 8,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Orcamento e moeda",
+          "aprovada": true
+        },
+        {
+          "nome": "Linhas do diagnostico precificadas",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Buscar email",
+      "metodo": "GET",
+      "rota": "{{mailpitUrl}}/api/v1/search?query=to:{{contato}}",
+      "codigo": 200,
+      "duracao_ms": 10,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Lista de emails valida",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Ler email",
+      "metodo": "GET",
+      "rota": "{{mailpitUrl}}/api/v1/message/{{message_id}}",
+      "codigo": 200,
+      "duracao_ms": 3,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Link do email na borda e igual ao da OS",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Orcamento publico",
+      "metodo": "GET",
+      "rota": "{{link_decisao}}",
+      "codigo": 200,
+      "duracao_ms": 5,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Orcamento publico correto",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Aprovar orcamento",
+      "metodo": "POST",
+      "rota": "{{link_decisao}}/decisao",
+      "codigo": 200,
+      "duracao_ms": 11,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Orcamento aprovado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS aguardando_pagamento",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 8,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        },
+        {
+          "nome": "Evento observado dentro do prazo",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS aguardando_pagamento",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 10,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        },
+        {
+          "nome": "Evento observado dentro do prazo",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS aguardando_pagamento",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 10,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Estoque reservado",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/execucao/api/v1/estoque/{{peca}}",
+      "codigo": 200,
+      "duracao_ms": 6,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Fora da fila",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/execucao/api/v1/fila?offset={{offset}}&limit=100",
+      "codigo": 200,
+      "duracao_ms": 7,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Pagina valida",
+          "aprovada": true
+        },
+        {
+          "nome": "Fora da fila antes do pagamento",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Pagamento solicitado",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/billing/api/v1/pagamentos/{{pagamento_id}}",
+      "codigo": 200,
+      "duracao_ms": 7,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Cobranca simulada correta",
+          "aprovada": true
+        },
+        {
+          "nome": "Checkout local assinado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Checkout",
+      "metodo": "GET",
+      "rota": "{{checkout_url}}",
+      "codigo": 200,
+      "duracao_ms": 5,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Pagina HTML do checkout",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Aprovar pagamento",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/billing/api/v1/simulador/pagamentos/{{pagamento_id}}/aprovar?token=***",
+      "codigo": 200,
+      "duracao_ms": 13,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Pagamento confirmado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS aguardando_execucao",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 8,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Pagamento confirmado",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/billing/api/v1/pagamentos/{{pagamento_id}}",
+      "codigo": 200,
+      "duracao_ms": 6,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Pagamento confirmado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Fila execucao",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/execucao/api/v1/fila?offset={{offset}}&limit=100",
+      "codigo": 200,
+      "duracao_ms": 7,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Pagina valida",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Iniciar execucao",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/execucao/api/v1/execucoes/{{ordem_id}}/inicio",
+      "codigo": 200,
+      "duracao_ms": 10,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Estado da Execucao",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS em_execucao",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 8,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Finalizar execucao",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/execucao/api/v1/execucoes/{{ordem_id}}/finalizacao",
+      "codigo": 200,
+      "duracao_ms": 10,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Estado da Execucao",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "OS finalizada",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 8,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "OS em estado conhecido sem cancelamento",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Estoque baixado",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/execucao/api/v1/estoque/{{peca}}",
+      "codigo": 200,
+      "duracao_ms": 6,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Entregar",
+      "metodo": "POST",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}/entrega",
+      "codigo": 200,
+      "duracao_ms": 12,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Veiculo entregue",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Saga concluida",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/sagas/{{ordem_id}}",
+      "codigo": 200,
+      "duracao_ms": 7,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Historico",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/{{ordem_id}}/historico",
+      "codigo": 200,
+      "duracao_ms": 9,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Mesma OS",
+          "aprovada": true
+        },
+        {
+          "nome": "Oito status em ordem",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Metricas sem token",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/metricas",
+      "codigo": 401,
+      "duracao_ms": 5,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Metricas atendente",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/metricas",
+      "codigo": 403,
+      "duracao_ms": 6,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Metricas mecanico",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/metricas",
+      "codigo": 403,
+      "duracao_ms": 6,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        }
+      ]
+    },
+    {
+      "etapa": "Metricas admin",
+      "metodo": "GET",
+      "rota": "{{baseUrl}}/os/api/v1/ordens-de-servico/metricas",
+      "codigo": 200,
+      "duracao_ms": 8,
+      "assertions": [
+        {
+          "nome": "HTTP esperado",
+          "aprovada": true
+        },
+        {
+          "nome": "Contrato das metricas",
+          "aprovada": true
+        }
+      ]
+    }
+  ],
+  "evidencias": {
+    "Estoque reservado": {
+      "quantidade_disponivel": 10,
+      "quantidade_reservada": 2,
+      "quantidade_livre": 8
+    },
+    "Pagamento confirmado": {
+      "status": "CONFIRMADO",
+      "valor": "210.00",
+      "moeda": "BRL"
+    },
+    "Estoque baixado": {
+      "quantidade_disponivel": 8,
+      "quantidade_reservada": 0,
+      "quantidade_livre": 8
+    },
+    "Entregar": "entregue",
+    "Saga concluida": "concluida",
+    "Historico": [
+      "recebida",
+      "em_diagnostico",
+      "aguardando_aprovacao",
+      "aguardando_pagamento",
+      "aguardando_execucao",
+      "em_execucao",
+      "finalizada",
+      "entregue"
+    ],
+    "Metricas admin": {
+      "total": 10,
+      "por_status": {
+        "recebida": 0,
+        "em_diagnostico": 0,
+        "aguardando_aprovacao": 1,
+        "aguardando_pagamento": 0,
+        "aguardando_execucao": 0,
+        "em_execucao": 1,
+        "finalizada": 0,
+        "entregue": 2,
+        "cancelada": 6
+      },
+      "tempo_medio_por_status_segundos": {
+        "recebida": 0.6486113,
+        "em_diagnostico": 7.4233948,
+        "aguardando_aprovacao": 17.846684222222223,
+        "aguardando_pagamento": 2.5729876,
+        "aguardando_execucao": 1.250705,
+        "em_execucao": 0.797481,
+        "finalizada": 1.0106605
+      }
+    }
+  }
+}

@@ -22,17 +22,40 @@ O único commit da `main` fora de pull request é o `Initial commit` que o GitHu
 | O que o enunciado pede | Onde está aqui |
 |---|---|
 | Mensageria assíncrona para eventos e integração desacoplada (l. 66) e para a orquestração da saga (l. 101) | RabbitMQ em [`k8s/base/rabbitmq/`](k8s/base/rabbitmq), com topologia, policies e um usuário por serviço ([ADR-036](docs/arquitetura/adr/fase4/036-mensageria-rabbitmq.md)); o contrato das mensagens em [`contratos/`](contratos) |
-| Nenhum serviço acessa o banco de outro (l. 67) | Os serviços trocam só mensagens e chamadas REST pela borda; as permissões do broker limitam o que cada usuário publica e lê |
+| Nenhum serviço acessa o banco de outro (l. 67) | Os serviços trocam mensagens e chamadas REST, sem consultar bancos alheios. A Execução valida preços diretamente na API interna do Billing, e as chamadas externas passam pelo Kong; as permissões do broker limitam o que cada usuário publica e lê |
 | Deploy automatizado em Kubernetes (l. 94 e 100) | `make kind-up deploy` com o overlay `kind-ci`, que o CD do OS Service chama pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh) (`make -C platform kind-up deploy OVERLAY=kind-ci`, [ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md); em 18/10/2026 só ele tem `cd.yml` na `main`, e o Billing e a Execução têm `ci.yml` e `security.yml`); o job `deploy-kind` do [CD](.github/workflows/cd.yml) implanta a plataforma no kind do runner, com o overlay `kind-ci`, em todo PR e push na `main`; os serviços entram em seguida pelo [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) (no CD do OS Service, ou pelo `make kind-deploy` que cada serviço traz), conferidos pelo [`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh) ([Contrato com os serviços](#contrato-com-os-serviços)); o deploy num cluster persistente vem desligado ([Nuvem opcional](docs/operacao/nuvem-opcional.md)) |
 | Ferramentas de monitoramento e observabilidade da fase 3 (l. 102) | Prometheus, Grafana, Loki, Promtail e Jaeger em [`k8s/base/observabilidade/`](k8s/base/observabilidade); quatro dashboards de negócio (com o volume diário de OS e o tempo médio por status, que a banca da fase 3 pediu) documentados painel a painel em [`observabilidade/negocio.md`](observabilidade/negocio.md), e os técnicos (Saga, Mensageria, Serviços, Bancos e a plataforma), os alertas e o catálogo de métricas em [`observabilidade/README.md`](observabilidade/README.md) ([ADR-043](docs/arquitetura/adr/fase4/043-observabilidade-distribuida.md)) |
 | `main` com PR obrigatório e checagens automáticas (l. 95) | Ruleset da `main` com os checks `manifests`, `contratos` e `gitleaks` do CI e `deploy-kind` do CD |
 | Pelo menos um fluxo completo testado com BDD (l. 82) | `make e2e`: a feature em português com a saga inteira e cada compensação, contra os três serviços no kind ([E2E da saga](#e2e-da-saga), [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)) |
-| Swagger ou collection Postman atualizada (l. 113, RNF-052) | OpenAPI e exemplos nos três serviços; a [collection do fluxo completo](docs/api/fluxo-completo.postman_collection.json) roda com `make newman` ([comando, evidência local e limite](#collection-do-fluxo-completo-make-newman)); passo no CD definido, comprovação na HEAD publicada ainda pendente |
+| Swagger ou collection Postman atualizada (l. 113, RNF-052) | OpenAPI e exemplos nos três serviços; a [collection do fluxo completo](docs/api/fluxo-completo.postman_collection.json) roda com `make newman` ([comando, evidência local e limite](#collection-do-fluxo-completo-make-newman)); passo no CD aprovado no [CI do PR #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573), com [fontes e resumo](docs/entrega/fase4/evidencias/newman-resumo.md) |
 | Integração com o Mercado Pago nos pagamentos (l. 47) | O simulador do Billing no CI, no `make e2e` e no `make demo`; a evidência na sandbox do Mercado Pago, com credenciais de teste, em `make mp-sandbox` (e `make mp-sandbox-ensaio`, sem credencial) ([Mercado Pago na sandbox](#mercado-pago-na-sandbox), [ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md)) |
 | Vídeo: fluxo completo de uma OS e saga com falhas (l. 119 e 120) | `make demo`: as demonstrações 1 e 2, com o status da OS depois de cada `Então` ([E2E da saga](#e2e-da-saga)) |
 | Diagrama geral, estratégia da saga e justificativa da divisão (l. 131 a 133) | [RFC-004](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) e ADRs em [`docs/arquitetura/`](docs/arquitetura) |
 
 O gateway segue o [ADR-038](docs/arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md). Cobertura dos testes deste repositório: acima de 99% de linhas e ramos do código de teste (gate de 90%), que é só um indicador aqui; o que protege os contratos é a bateria de negativos gerados (seção [Contratos de mensageria](#contratos-de-mensageria)).
+
+## Arquitetura da fase 4
+
+```mermaid
+flowchart TB
+    pessoas["Atendente · Mecânico · Cliente"] -->|REST| kong["Kong"]
+    subgraph k8s["Kubernetes · kind local e CI"]
+        kong -->|/os| os["OS Service<br/>orquestrador"]
+        kong -->|/billing| billing["Billing Service"]
+        kong -->|/execucao| execucao["Execution Service"]
+        os --> pg_os[("PostgreSQL<br/>OS")]
+        billing --> mongo[("MongoDB<br/>Billing")]
+        execucao --> pg_execucao[("PostgreSQL<br/>Execução")]
+        os <-->|AMQP| rabbit{{"RabbitMQ<br/>comandos e eventos"}}
+        billing <-->|AMQP| rabbit
+        execucao <-->|AMQP| rabbit
+        execucao -->|REST: preços| billing
+        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger"]
+    end
+    billing <-->|HTTPS| mp["Mercado Pago"]
+```
+
+Fonte: [RFC-004, seção 2](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md). O [índice da entrega](INDICE-DA-ENTREGA.md) reúne o documento, os requisitos e as evidências.
 
 ## Pré-requisitos
 
@@ -673,7 +696,8 @@ O smoke confere, por namespace e nesta ordem:
 - a borda: a saúde em 200 (o Kong recebe a rota de um Service novo antes do alvo e responde 503 até lá, então o smoke espera até 1 min), o Swagger em 200, e o `/metrics` e o `/api/v1/admin/outbox` em 404 com o corpo `no Route matched with those values`. Para o `/metrics`, que nenhum Ingress publica, a prova é que não é servido: o Kong sem rota responde o mesmo 404 e a mesma mensagem (a do plugin `request-termination` copia a do Kong de propósito). O corte pelo Ingress `fora-da-borda` só se distingue no `admin/outbox`: ele não existe em nenhum dos três serviços, e sem o Ingress a requisição chegaria ao serviço, que também responderia 404, com o corpo dele (conferido no Kong do kind: com o Ingress, o corpo é `{"message":"no Route matched with those values"}`; sem ele, a requisição segue para o serviço);
 - cada pod anotado em `up = 1` no Prometheus (o pod do Job e o que está saindo de um rollout não contam) e o exporter do banco com `pg_up` (PostgreSQL) ou `mongodb_up` (MongoDB) em 1, as duas esperas juntas por até 45 s. O `up` diz só que o exporter responde ao Prometheus: o `postgres_exporter` serve o `/metrics` mesmo sem entrar no banco (papel inexistente, senha errada ou banco fora: `pg_up 0`), e o `mongodb_exporter`, quando o MongoDB recusa o usuário (`mongodb_up 0`; com o servidor inalcançável na partida do exporter, ele nem serve o `/metrics`, e o `up` cai);
 - no PostgreSQL, o `psql` como `postgres`, sem senha, no `127.0.0.1` do pod do banco, recusado por falta de senha (sem `trust`);
-- a NetworkPolicy do banco: um controle, em que o pod da API (do próprio namespace) conecta à porta do banco, e a prova, em que o `rabbitmq-0` da plataforma não conecta. A conexão do `rabbitmq-0` tem de esgotar o prazo de 3 s, porque o kindnet (a rede do kind) descarta o pacote barrado; conexão aceita, recusada ou nome que não resolve reprovam, e o prazo esgotado só vale se o controle conectou.
+- a NetworkPolicy do banco: um controle, em que o pod da API (do próprio namespace) conecta à porta do banco, e a prova, em que o `rabbitmq-0` da plataforma não conecta. A conexão do `rabbitmq-0` tem de esgotar o prazo de 3 s, porque o kindnet (a rede do kind) descarta o pacote barrado; conexão aceita, recusada ou nome que não resolve reprovam, e o prazo esgotado só vale se o controle conectou;
+- somente no OS, a saída do notificador: a API conecta ao broker em 5672, o notificador conecta ao Mailpit em 1025 e a conexão dele ao mesmo broker esgota 3 s. Esse bloqueio só aprova com o controle da API conectado; erro DNS, recusa, pod ausente e falha do `kubectl` reprovam. O pod Running usa `app: os-service-notificador`, contêiner `notificador` e Python no `PATH`. O prazo remoto adicional é 5 s e o externo é 20 s; saída parcial seguida de erro do transporte não constitui prova.
 
 O smoke escreve a tabela `Service | Stage | Result` na saída e, no GitHub Actions, no summary do job, uma linha por etapa, com `ok: <detalhe>` ou `FAILED: <detalhe>`, e sai com status 1 nomeando os serviços que falharam, ou com 2 se faltar `jq`, `curl` ou `timeout` (no macOS, `perl`). O `BORDA` (padrão `https://localhost`) e o `KUBE_CONTEXT` (padrão `kind-$CLUSTER`) vêm do ambiente; o certificado só deixa de ser verificado para `localhost`, com ou sem porta.
 
@@ -936,7 +960,7 @@ As mensagens de erro de negócio se afirmam pelo código (`TRANSICAO_STATUS_INVA
 
 ### Collection do fluxo completo (`make newman`)
 
-A [collection Postman v2.1](docs/api/fluxo-completo.postman_collection.json) usa Node 24 e o Newman fixado em `6.2.3`. Depois da implantação e do smoke dos serviços descritos em [Como rodar](#como-rodar), execute, uma sessão por cluster:
+A [collection Postman v2.1](docs/api/fluxo-completo.postman_collection.json) usa Node 24 e o Newman fixado em `6.2.3`. Depois da implantação e do smoke dos serviços descritos em [Como rodar](#como-rodar-1), execute, uma sessão por cluster:
 
 ```bash
 make newman KUBE_CONTEXT=kind-pytstop-p4
@@ -948,7 +972,7 @@ Os 45 itens autenticam admin, atendente e mecânico e percorrem abertura, diagn�
 
 O alvo recria apenas `reports/e2e/newman/`, preservando o relatório BDD. `resumo.json` e `resumo.md` guardam nomes/rotas estáticos, códigos HTTP, tempos, assertions e sete provas de negócio com campos permitidos; `junit.xml` guarda o resultado do pytest. JWT, senhas, documentos, links assinados, corpos livres e erros do runtime não entram nos resumos. O ambiente e o JSON bruto do Newman ficam em temporário privado e são removidos; timeout/interrupção encerram também os filhos da consulta de versão. Máscara e varredura precedem a gravação, e a varredura final reprova o alvo se encontrar segredo. A prova é do simulador do Billing; não certifica pagamento, webhook ou estorno no Mercado Pago real.
 
-Ensaio local em 19/10/2026: Node 24.18.0, Newman 6.2.3, plataforma `kind` com PVC e serviços `kind-ci`, nas fontes abaixo. Duas execuções com dados novos passaram em 31,17 s e 41,11 s, cada uma com 49 chamadas, 108 e 104 assertions, zero falhas e varredura limpa. Ambas comprovaram os sete resultados acima; métricas globais passaram de 10 para 11 OS e de 2 para 3 entregues. O workflow define `make newman` no job `e2e`, depois da tentativa do BDD e antes do ZAP: Node 24, prazo de 12 minutos, smoke verde e job não cancelado. Uma falha do Newman reprova o job; seus relatórios entram na varredura e no artefato `e2e-kind`. A comprovação desse passo na HEAD publicada ainda está pendente.
+Ensaio local em 19/10/2026: Node 24.18.0, Newman 6.2.3, plataforma `kind` com PVC e serviços `kind-ci`, nas fontes abaixo. Duas execuções com dados novos passaram em 31,17 s e 41,11 s, cada uma com 49 chamadas, 108 e 104 assertions, zero falhas e varredura limpa. Ambas comprovaram os sete resultados acima; métricas globais passaram de 10 para 11 OS e de 2 para 3 entregues. O workflow define `make newman` no job `e2e`, depois da tentativa do BDD e antes do ZAP: Node 24, prazo de 12 minutos, smoke verde e job não cancelado. Uma falha do Newman reprova o job; seus relatórios entram na varredura e no artefato `e2e-kind`. O passo passou no [CI do PR #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573): 105 assertions, zero falhas e 48 chamadas, com [quatro fontes e resumo sanitizado](docs/entrega/fase4/evidencias/newman-resumo.md#execução-no-ci-do-pr-24). O run do PR usa seu merge sintético; o [CD da main integrada](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39231733886) também passou. A prova sobre os commits do congelamento continua pendente.
 
 | Fonte do ensaio | Revisão |
 |---|---|
@@ -1091,7 +1115,7 @@ O workflow [`cd.yml`](.github/workflows/cd.yml) tem os jobs `deploy-kind` ([Kind
 
 ### CD reutilizável dos serviços
 
-O [`cd-servico.yml`](.github/workflows/cd-servico.yml) oferece os jobs `image`, `deploy-kind`, `deploy-remote` e `remote-skipped` por `workflow_call`. O `cd.yml` próprio do Platform continua com seus gates de plataforma, E2E e ZAP. A adoção pelos serviços depende de integrar este workflow e fixar a chamada no SHA desse commit; até essa migração, o OS conserva seu protótipo e Billing/Execução ainda precisam dos callers.
+O [`cd-servico.yml`](.github/workflows/cd-servico.yml) oferece os jobs `image`, `deploy-kind`, `deploy-remote` e `remote-skipped` por `workflow_call`. O `cd.yml` próprio do Platform continua com seus gates de plataforma, E2E e ZAP. O workflow foi integrado no [PR #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22), em `3f7cca2eb555a038b0d2780058ef0e692f93ee8a`. O OS integrou a chamada no [PR #20](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/pull/20), com [primeiro CD da main aprovado](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39233375064). A Execução integrou a chamada no [PR #15](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/pull/15), com [primeiro CD da main aprovado](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39237570013). Ambos comprovaram CI, segurança, imagem, SBOM, kind, smoke e BDD; o deploy remoto permanece desligado. A chamada do Billing ainda precisa ser integrada e validada. As [evidências](docs/entrega/fase4/evidencias/README.md#cd-compartilhado-dos-serviços) identificam fontes e imagens de cada execução.
 
 O caller mantém gatilhos, concorrência por repositório sem cancelar deploy em curso, `ci` e `security-scan` locais. O job de chamada depende dos dois gates, concede a união `contents: read`, `actions: read` e `packages: write` e chama `fiap-postech-sw-architecture/postech-sw-arch-p4-platform/.github/workflows/cd-servico.yml@<SHA de 40 caracteres>`. O reusable reduz as permissões por job; não recebe `secrets: inherit`. O Dependabot `github-actions` de cada serviço acompanha o pin da chamada.
 
