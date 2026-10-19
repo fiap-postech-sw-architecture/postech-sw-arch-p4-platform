@@ -59,7 +59,7 @@ A API, o banco e as métricas escrevem etapa e status em minúsculas (`falha_na_
 
    Se `$TOKEN` sair `null`, rode o bloco de novo sem o `| jq -r .access_token` do fim e veja a resposta com `echo "$TOKEN"`: 401 é credencial errada, e 429, o limite de tentativas. O mesmo token serve às três APIs, porque o `admin` herda os papéis `atendente` e `mecanico` ([ADR-039](../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)). Ele vale 15 minutos; depois, rode o bloco de novo, e o login aceita 5 tentativas por minuto.
 
-O k3s da Azure é opcional ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)) e fica fora deste runbook: a API do Kubernetes dele não é exposta, e o acesso à VM é por SSH.
+Um cluster persistente fica fora deste runbook: a fase não liga nenhum ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)), e o acesso a ele, pela API do cluster ou por túnel SSH até a VM, está nas receitas de [nuvem opcional](nuvem-opcional.md).
 
 ## 1. Achar a saga parada
 

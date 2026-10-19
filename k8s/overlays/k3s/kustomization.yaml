@@ -1,5 +1,6 @@
-# Overlay do k3s (VM na Azure, ambiente que fica de pe durante a janela de
-# evidencias e do video).
+# Overlay de um cluster persistente com k3s: o alvo opcional do deploy remoto,
+# desligado no estado entregue (docs/operacao/nuvem-opcional.md, com a receita
+# de uma VM da Azure). Nenhum cluster da fase usa este overlay.
 #
 # Pressupoe o k3s instalado com --disable traefik: o Service kong-proxy fica
 # LoadBalancer (como no base) e o ServiceLB do k3s publica as portas 80/443
