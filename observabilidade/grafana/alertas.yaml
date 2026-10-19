@@ -397,8 +397,7 @@ groups:
       # a 500 ms) dispararia com todas as requisicoes em 260 ms. Com 500 ms a
       # estimativa passa do limiar so se o p95 de verdade passou de 500 ms. As sondas
       # (/metrics e /api/v1/saude*) ficam de fora: as rapidas baixariam o p95 e o
-      # /api/v1/saude/pronto, ate 2 s com o banco fora, o subiria. No OS o scrape aparece
-      # como nao_roteada e continua dentro (e rapido, so dilui).
+      # /api/v1/saude/pronto, ate 2 s com o banco fora, o subiria.
       - uid: pytstop-latencia-p95
         title: Latência p95 acima de 500 ms (5min)
         condition: C
