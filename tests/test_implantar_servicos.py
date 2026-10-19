@@ -36,6 +36,9 @@ SCRIPT = (
     Path(__file__).resolve().parents[1] / "scripts" / "ci" / "implantar-servicos.sh"
 )
 LEITOR_DO_README = SCRIPT.with_name("imagens-do-readme.sh")
+# As funcoes de cluster (kubectl com prazo, ordem do namespace e mapas), comuns
+# ao deploy-remoto.sh.
+COMUM = SCRIPT.with_name("implantacao.sh")
 GIT = shutil.which("git") or "git"
 SLEEP = shutil.which("sleep") or "/bin/sleep"
 SERVICOS = {
@@ -128,7 +131,9 @@ os.execvp(sys.argv[2], sys.argv[2:])
 # uma na forma que o prefixo escolhe: "image:", "lista:", "aspas:" ou "volume:");
 # cada namespace tem o banco, o Job de inicializacao e dois Deployments.
 # KUBECTL_FALSO_FALHA=<namespace>:<verbo> faz o verbo falhar naquele namespace
-# (secret, delete, apply, statefulset, job, deployment; job e o Job que falha, e
+# (secret, delete, apply, statefulset, job, deployment; job e o Job que falha,
+# sem-secret, o NotFound do Secret do banco, secret-sem-credencial, o erro de
+# uma credencial por exec que falta, com "not found" mas sem o NotFound, e
 # sem-statefulset, sem-job e sem-deployment, a lista vazia), e
 # KUBECTL_FALSO_PENDURA=<namespace>:<verbo>, pendurar.
 # KUBECTL_FALSO_JOB_PENDENTE=<namespace> deixa o Job rodando para sempre.
@@ -226,8 +231,15 @@ elif resto[0] == "get" and resto[1].startswith("job.batch/"):
 elif resto[:2] == ["get", "secret"]:
     # Os dois Secrets que o make deploy cria no namespace: o rabbitmq e o do banco.
     assert resto[2:] == ["rabbitmq", SEGREDOS_DO_BANCO[ns], "-o", "name"], resto
+    if falha == f"{ns}:secret-sem-credencial":
+        sys.exit(
+            "Unable to connect to the server: getting credentials: exec: "
+            "executable aws not found"
+        )
     falha_em("secret")
     print("secret/rabbitmq")
+    if falha == f"{ns}:sem-secret":
+        sys.exit(f'Error from server (NotFound): secrets "{BANCOS[ns]}" not found')
 elif resto[0] == "logs":
     falha_em("logs")
     print(f"migration log of {resto[1]}")
@@ -304,6 +316,17 @@ def sha(dir_: Path) -> str:
     return git("rev-parse", "HEAD", cwd=dir_)
 
 
+def ambiente_sem_o_que_o_script_le() -> dict[str, str]:
+    """O ambiente de quem roda o teste sem contexto, cluster e prazos: um
+    PRAZO_KUBECTL esquecido no shell mudaria o que os testes conferem."""
+    return {
+        chave: valor
+        for chave, valor in os.environ.items()
+        if chave not in {"KUBE_CONTEXT", "CLUSTER"}
+        and not chave.startswith(("PRAZO_", "ESPERA_"))
+    }
+
+
 def faz_tar(destino: Path, *refs: str) -> Path:
     """Um arquivo no formato do docker save, com o manifest.json das refs."""
     manifest = json.dumps([{"Config": "c.json", "RepoTags": list(refs), "Layers": []}])
@@ -330,11 +353,7 @@ class Implantacao:
             binario = binarios / nome
             binario.write_text(f"#!{sys.executable}\n{codigo}", encoding="utf-8")
             binario.chmod(0o755)
-        self.env = {
-            chave: valor
-            for chave, valor in os.environ.items()
-            if chave not in {"KUBE_CONTEXT", "CLUSTER"}
-        } | {
+        self.env = ambiente_sem_o_que_o_script_le() | {
             "PATH": f"{binarios}{os.pathsep}{os.environ['PATH']}",
             "FALSOS": str(tmp_path),
         }
@@ -344,8 +363,12 @@ class Implantacao:
         self.script = SCRIPT
 
     def roda(self, *args: str, **ambiente: str) -> subprocess.CompletedProcess[str]:
+        # Fora da raiz do repositorio, como no CD (o script chamado por
+        # platform/scripts/ci/ da raiz do workspace): o arquivo comum carregado
+        # por um caminho relativo ao diretorio atual nao seria achado.
         return subprocess.run(  # noqa: S603  # nosec B603
             [str(self.script), *args],
+            cwd=self.tmp,
             env=self.env | ambiente,
             capture_output=True,
             text=True,
@@ -394,6 +417,7 @@ _ANTES_DO_JOB = [*_ANTES_DO_BANCO, "get statefulset", "rollout status", "get job
 _ANTES_DOS_DEPLOYMENTS = [*_ANTES_DO_JOB, "poll job", "get deployment"]
 ATE_A_FALHA = {
     "secret": ["get secret"],
+    "sem-secret": ["get secret"],
     "delete": ["get secret", "delete job"],
     "apply": _ANTES_DO_BANCO,
     "get-statefulset": [*_ANTES_DO_BANCO, "get statefulset"],
@@ -408,8 +432,13 @@ ATE_A_FALHA = {
     "sem-deployment": _ANTES_DOS_DEPLOYMENTS,
     "deployment": [*_ANTES_DOS_DEPLOYMENTS, "rollout status"],
 }
-# A lista vazia que cada verbo "sem-" provoca, e a mensagem do script.
+# A lista vazia (ou o Secret ausente) que cada verbo "sem-" provoca, e a
+# mensagem do script.
 SEM_RECURSO = {
+    "sem-secret": (
+        "Secrets rabbitmq and billing-mongo are missing in pytstop-billing:"
+        " run make deploy first"
+    ),
     "sem-statefulset": "no StatefulSet in pytstop-billing",
     "sem-job": f"no Job labeled {INICIALIZACAO} in pytstop-billing",
     "sem-deployment": "no Deployment in pytstop-billing",
@@ -587,11 +616,18 @@ def test_falha_num_namespace_nomeia_o_servico_e_os_outros_seguem(
     # Lista vazia diz qual; com erro do cluster, so o erro dele.
     for sem, mensagem in SEM_RECURSO.items():
         assert (mensagem in processo.stdout) == (verbo == sem)
+    # Secret que o cluster nao deixa ler nao e Secret ausente: o erro do
+    # kubectl e a credencial, nao o make deploy.
+    inacessivel = (
+        "[billing-service] cannot read the Secrets rabbitmq and billing-mongo in "
+        "pytstop-billing (kubectl error above; the cluster credential may have"
+        " expired)"
+    )
+    assert (inacessivel in processo.stdout) == (verbo == "secret")
     if verbo == "secret":
-        assert (
-            "[billing-service] Secrets rabbitmq and billing-mongo are missing in "
-            "pytstop-billing: run make deploy first"
-        ) in processo.stdout
+        assert "[billing-service] error: secret failed in pytstop-billing" in (
+            processo.stdout
+        )
     for dir_ in implantacao.dirs.values():
         assert not (dir_ / "k8s" / "overlays" / "execucao").exists()
 
@@ -749,11 +785,13 @@ FORMAS_DA_IMAGEM = pytest.mark.parametrize(
 
 
 def copia_da_plataforma(tmp_path: Path, readme: str) -> Path:
-    """Uma copia do script e dos leitores de imagem ao lado do README dado."""
+    """Uma copia do script, das funcoes comuns e dos leitores de imagem ao lado
+    do README dado."""
     plataforma = tmp_path / "plataforma"
     (plataforma / "scripts" / "ci").mkdir(parents=True)
     copia = plataforma / "scripts" / "ci" / SCRIPT.name
     shutil.copy(SCRIPT, copia)
+    shutil.copy(COMUM, copia.with_name(COMUM.name))
     for leitor in SCRIPT.parent.glob("imagens-*.sh"):
         shutil.copy(leitor, copia.with_name(leitor.name))
     (plataforma / "README.md").write_text(readme, encoding="utf-8")
@@ -1311,10 +1349,11 @@ RAIZ = SCRIPT.parents[2]
 
 
 def test_mapa_servico_namespace_dos_scripts_e_do_makefile_concorda() -> None:
-    # O mapa vive em cada script (e no Makefile): acrescentar um servico muda
-    # todos, e este teste reprova o que ficar para tras.
+    # O mapa vive nas funcoes comuns aos scripts de implantacao, no smoke e no
+    # Makefile: acrescentar um servico muda todos, e este teste reprova o que
+    # ficar para tras.
     implantar = dict(
-        re.findall(r"(\w+-service)\) echo (pytstop-\w+) ;;", SCRIPT.read_text())
+        re.findall(r"(\w+-service)\) echo (pytstop-\w+) ;;", COMUM.read_text())
     )
     smoke = dict(
         re.findall(
@@ -1332,9 +1371,7 @@ def test_mapa_servico_namespace_dos_scripts_e_do_makefile_concorda() -> None:
 
 
 def test_secret_do_banco_de_cada_namespace_e_o_da_tabela_do_readme() -> None:
-    no_script = dict(
-        re.findall(r"(pytstop-\w+)\) echo ([\w-]+) ;;", SCRIPT.read_text())
-    )
+    no_script = dict(re.findall(r"(pytstop-\w+)\) echo ([\w-]+) ;;", COMUM.read_text()))
     linha = next(
         linha
         for linha in (RAIZ / "README.md").read_text().splitlines()

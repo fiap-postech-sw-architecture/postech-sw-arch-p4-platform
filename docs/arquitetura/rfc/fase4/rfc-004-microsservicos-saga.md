@@ -83,7 +83,7 @@ Continua da fase 3 o tempo médio por status (RF-027), agora calculado do histó
 | Validação de documentos | BrUtils para CPF e CNPJ, placa por expressão regular | herdado do p3 ([ADR-010](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/010-validacao-documentos-brutils.md)) |
 | Testes e qualidade | pytest, testcontainers, pytest-bdd 8.0 ou superior (Gherkin em português), SonarQube Community, ruff, mypy strict | [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md); do p3, [ADR-005](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/005-estrategia-testes.md) e [ADR-013](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/013-testes-bdd-pytest-bdd.md) |
 | Segurança na cadeia | bandit, pip-audit, gitleaks, trivy, SBOM (inventário de componentes) em SPDX | [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md); do p3, [ADR-011](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/011-pipeline-seguranca-analise-estatica.md) e [ADR-012](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/012-licenciamento-software-sbom.md) |
-| CI/CD (integração e entrega contínuas) e implantação | GitHub Actions, GHCR (GitHub Container Registry), Docker multi-stage, kind, k3s numa máquina virtual (VM) da Azure, OIDC (OpenID Connect), Terraform, metrics-server, cert-manager | [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md) |
+| CI/CD (integração e entrega contínuas) e implantação | GitHub Actions, GHCR (GitHub Container Registry), Docker multi-stage, kind e metrics-server; deploy remoto num cluster persistente, neutro de provedor e desligado | [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md) |
 | Observabilidade | OpenTelemetry, Jaeger, Prometheus, Grafana, Loki com Promtail, exportadores de PostgreSQL e MongoDB | [ADR-043](../../adr/fase4/043-observabilidade-distribuida.md); do p3, [ADR-020](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/020-observabilidade-opentelemetry.md) e [ADR-032](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase3/032-monitoramento-grafana-loki.md) |
 | E-mail ao cliente | SMTP, o protocolo de envio de e-mail, com Mailpit na demonstração | herdado do p3 ([ADR-018](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/018-notificacao-email.md)) |
 
@@ -101,7 +101,7 @@ flowchart TB
     interno(["Atendente · Mecânico · Admin"])
     cliente(["Cliente da oficina"])
 
-    subgraph k8s["Cluster Kubernetes: kind (local e CI) · k3s na Azure"]
+    subgraph k8s["Cluster Kubernetes: kind (local e CI)"]
         kong["Kong Ingress Controller (DB-less)<br/>rotas /os · /billing · /execucao, com lista do que cada uma expõe<br/>plugins correlation-id · rate-limiting · prometheus"]
 
         subgraph os["os-service · orquestrador da saga"]
@@ -1053,7 +1053,7 @@ Dinheiro em `Decimal128`, datas em UTC; exemplos em Extended JSON. As coleções
 
 ## 8. Segurança
 
-Resumo; o detalhe está no [ADR-039](../../adr/fase4/039-autenticacao-entre-servicos.md) (identidade e papéis), no [ADR-040](../../adr/fase4/040-integracao-mercado-pago.md) (Mercado Pago), no [ADR-038](../../adr/fase4/038-borda-e-comunicacao-sincrona.md) (borda) e no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md) (segredos, rede e exposição do k3s).
+Resumo; o detalhe está no [ADR-039](../../adr/fase4/039-autenticacao-entre-servicos.md) (identidade e papéis), no [ADR-040](../../adr/fase4/040-integracao-mercado-pago.md) (Mercado Pago), no [ADR-038](../../adr/fase4/038-borda-e-comunicacao-sincrona.md) (borda) e no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md) (segredos e rede).
 
 - JWT RS256, com chave RSA de 2048 bits e `exp` de 15 minutos, emitido só pelo OS e validado por Billing e Execução pelo JWKS. Falha de credencial responde 401 uniforme; papel insuficiente, 403; JWKS indisponível sem chave em cache, 503 com `Retry-After`. O logout revoga só no OS; nos outros vale a expiração curta, na faixa de "5 a 15 minutos" da Aula 04 de Microsserviços I.
 - Link de decisão assinado com HMAC-SHA256, de uso único, com o mesmo 404 para token inválido, expirado ou já usado e o `{token}` mascarado em logs e spans (evolução do canal assinado do p3, [ADR-021](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/fase2/021-aprovacao-externa-orcamento.md)). Webhook: `x-signature` conferido e estado sempre lido em `GET /v1/payments/{id}`; estorno com `X-Idempotency-Key = estorno-{pagamento_id}`.
@@ -1130,7 +1130,7 @@ Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do
 | compose do serviço | desenvolver um serviço (com banco e RabbitMQ) | `make compose-up` | nenhuma |
 | compose da plataforma | stack completa local, demonstração rápida | `make -C platform up` | nenhuma |
 | kind | Kubernetes local e no CI (deploy obrigatório) | `make -C platform kind-up deploy`; no CI, com o overlay `kind-ci` | nenhuma no CI; credenciais de teste do Mercado Pago para a evidência da integração real no kind local |
-| k3s na Azure | ambiente persistente para evidências e vídeo | Terraform da VM e das credenciais federadas, aplicado uma vez no passo humano; depois, CD por OIDC | OIDC com o environment `producao`, restrito à `main`; crédito da Azure a aprovar |
+| cluster persistente (opcional, desligado) | ambiente que fique de pé, só se a avaliação pedir | receitas de EKS no AWS Academy e de k3s numa VM da Azure em [nuvem opcional](../../../operacao/nuvem-opcional.md), não executadas nesta fase; a plataforma pelo `make -C platform deploy` com o overlay `k3s`, e cada serviço pelo `deploy-remote` do CD, se ligado | a do dono do ambiente, num segredo de `environment` restrito à `main`; nenhuma no estado entregue |
 
 ### 10.2 Pipeline e deploy
 
@@ -1138,9 +1138,9 @@ A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cic
 
 - `ci.yml`, em todo pull request (PR): `lint`, `type-check`, `security`, `test` (gate de cobertura de 95% e `diff-cover` de 90% no código novo; cada serviço sobe de 90% para 95% no PR de endurecimento dele), `sonarqube` e `build`;
 - `security.yml`, em todo PR e semanal: `pip-audit`, `gitleaks` e `trivy`;
-- `cd.yml`, a cada push na `main`: `ci` e `security-scan`, que chamam os dois anteriores, `image`, `deploy-kind`, `deploy-k3s` e `k3s-skipped`.
+- `cd.yml`, a cada push na `main`: `ci` e `security-scan`, que chamam os dois anteriores, `image`, `deploy-kind` e, com o deploy remoto ligado, `deploy-remote`, ou, desligado (o estado entregue), `remote-skipped`.
 
-Build único: o `image` constrói a imagem uma vez, publica no GHCR com a tag do SHA e gera o SBOM em SPDX; o `deploy-kind` carrega o tar dessa imagem, e o `deploy-k3s` implanta o mesmo digest. No kind, os dois vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, com o overlay enxuto `kind-ci` (sem Loki, Promtail e Grafana, uma réplica), um smoke por namespace e o E2E (teste de ponta a ponta) BDD; o summary nomeia o serviço que falhou.
+Build único: o `image` constrói a imagem uma vez, publica no GHCR com a tag do SHA e gera o SBOM em SPDX; o `deploy-kind` carrega o tar dessa imagem, e o `deploy-remote`, se ligado, implanta o mesmo digest. No kind, os dois vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, com o overlay enxuto `kind-ci` (sem Loki, Promtail e Grafana, uma réplica), um smoke por namespace e o E2E (teste de ponta a ponta) BDD; o summary nomeia o serviço que falhou.
 
 A independência que o enunciado pede (l. 90) está no que é de cada serviço: build, testes, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e o kind é o ambiente de integração.
 
@@ -1157,8 +1157,8 @@ flowchart TB
     ghcr[("GHCR<br/>pytstop-&lt;serviço&gt;:SHA")]
     dk["job deploy-kind<br/>kind load do tar; vizinhos e platform<br/>no último SHA verde; overlay kind-ci;<br/>segredos gerados no run; smoke por namespace"]
     e2e["E2E BDD (pytest-bdd) pelo Kong<br/>relatório como artefato"]
-    k3s["job deploy-k3s<br/>OIDC e az vm run-command; mesmo digest,<br/>pull no nó; só com K3S_HABILITADO = true"]
-    skip["job k3s-skipped<br/>aviso no summary"]
+    remote["job deploy-remote<br/>deploy-remoto.sh do platform; mesmo digest,<br/>cluster persistente; só com DEPLOY_REMOTO_HABILITADO = true"]
+    skip["job remote-skipped<br/>aviso no run (o estado entregue)"]
 
     subgraph kind["cluster kind pytstop-p4, efêmero, dentro do runner"]
         subgraph plat["platform · namespace pytstop-plataforma"]
@@ -1180,13 +1180,13 @@ flowchart TB
     image -->|"tar da imagem"| dk
     dk -->|"kind create e kubectl apply"| kind
     dk --> e2e
-    e2e -->|"verde"| k3s
-    ghcr -->|"mesmo digest"| k3s
-    e2e -.->|"K3S_HABILITADO diferente de true"| skip
+    e2e -->|"verde"| remote
+    ghcr -->|"mesmo digest"| remote
+    e2e -.->|"DEPLOY_REMOTO_HABILITADO diferente de true"| skip
 ```
 
-- Rollback: migrações só expand/contract, compatíveis com a versão anterior, e `kubectl rollout undo`, sem rebaixar o schema; E2E vermelho depois do `image` não chega ao k3s, e `main` vermelha se corrige com PR de revert.
-- k3s: o `deploy-k3s` aplica por `az vm run-command`, autenticado por OIDC, sem expor a API do Kubernetes, e faz o pull da imagem no nó; com a VM desligada ou o login recusado, termina verde com aviso. Só 80 e 443 ficam públicas, com hostname da Azure e certificado Let's Encrypt; painéis e consoles, só por túnel SSH. Tamanho da VM, desligamento diário e Terraform estão no ADR-042.
+- Rollback: migrações só expand/contract, compatíveis com a versão anterior, e `kubectl rollout undo`, sem rebaixar o schema; E2E vermelho depois do `image` não chega ao deploy remoto, e `main` vermelha se corrige com PR de revert.
+- Deploy remoto: desligado no estado entregue. Ligado, o `deploy-remote` chama o `scripts/ci/deploy-remoto.sh` do `platform`, que fixa a imagem pelo digest num overlay gerado e implanta com a ordem e os prazos do kind, no contexto que o dono do ambiente configura; passos e receitas em [nuvem opcional](../../../operacao/nuvem-opcional.md) e no ADR-042.
 - Manifestos: cada serviço tem `k8s/` com base e overlays `kind`, `kind-ci` e `k3s`, no próprio namespace. São um Deployment por processo (api, relay, consumidor e, no OS e no Billing, `prazos`; no OS, também o `notificador`), todos com a porta `metrics`; Service, HPA, ConfigMap, NetworkPolicy e Ingress; banco em StatefulSet com PVC (*persistent volume claim*); Job de migração nos serviços SQL e Job de inicialização no Billing, antes do rollout. Os Secrets não são versionados: o deploy os gera no cluster.
 - Encerramento gracioso: o processo para de consumir, conclui a mensagem em curso e fecha as conexões dentro do `terminationGracePeriodSeconds`.
 
@@ -1221,9 +1221,8 @@ Nomes em maiúsculas são variáveis de ambiente, definidas no ConfigMap ou no S
 | cache e timeout do JWKS | 600 e 2 | s | Billing e Execução | renovação da chave pública do OS |
 | tolerância de relógio do JWT (`leeway`) | 10 | s | todos | folga aceita em `exp` e `iat` |
 | janela dos alertas de 5xx e de outbox parada | 5 | min | `platform` (regras do Grafana) | tempo acima do limite antes de disparar |
-| `K3S_HABILITADO` | sem padrão | | CD (variável da organização) | `true` liga o `deploy-k3s`; outro valor roda o `k3s-skipped` |
 
-Os limites de rate limit por rota estão no ADR-038, e os requests e limits por componente, no ADR-042.
+Os limites de rate limit por rota estão no ADR-038, os requests e limits por componente, no ADR-042, e as variáveis do deploy remoto, desligado, em [nuvem opcional](../../../operacao/nuvem-opcional.md#para-ligar).
 
 ## 11. Riscos, limitações e pontos em aberto
 
@@ -1232,7 +1231,7 @@ Os limites de rate limit por rota estão no ADR-038, e os requests e limits por 
 | # | Risco ou limitação | Tratamento |
 |---|---|---|
 | 1 | Sem as credenciais de teste do Mercado Pago, o pagamento real não é exercitado | simulador (`MP_MODE=simulado`) em CI, kind de CI, E2E e compose, pelo mesmo caso de uso do webhook; adapter real com teste de contrato; com as credenciais, a conciliação ativa prova a integração no kind local, e preferência, pagamento aprovado e estorno ficam como evidência em `docs/entrega/fase4/evidencias/`; README e vídeo dizem o que é simulado |
-| 2 | Webhook exige URL pública com HTTPS, que o kind não tem | no k3s, hostname e certificado ([seção 10.2](#102-pipeline-e-deploy)); no kind, a conciliação a cada 30 s cobre a confirmação |
+| 2 | Webhook exige URL pública com HTTPS, que o kind não tem | no kind, a conciliação a cada 30 s cobre a confirmação; hostname e certificado só num cluster persistente, fora do estado entregue ([nuvem opcional](../../../operacao/nuvem-opcional.md)) |
 | 3 | Bancos em StatefulSet: sem backup automatizado nem alta disponibilidade; replica set de um nó só para transações | custo zero e paridade kind/k3s; evoluir para banco gerenciado (DBaaS, banco de dados como serviço, Aula 06 de Data Engineering) troca connection string e manifestos, não código |
 | 4 | Consistência eventual: logo após a decisão no Billing, a OS ainda mostra o status anterior, e os resumos no OS são cópias | a consulta mostra a etapa da saga; E2E e collection esperam o evento antes de afirmar o status |
 | 5 | Orquestrador como ponto único de falha (SAGA Pattern, Aulas 02 e 05) | estado persistido, réplicas e filas duráveis: com o OS fora, as mensagens esperam e a saga segue na volta, porque o `prazos` não reenvia nem esgota prazo com `os.eventos` sem consumidor ([seção 4.6](#46-prazos)) |
@@ -1242,7 +1241,7 @@ Os limites de rate limit por rota estão no ADR-038, e os requests e limits por 
 | 9 | Billing e Execução dependem do JWKS do OS | cache de 10 minutos; acabado o cache com o OS fora, respondem 503 com `Retry-After`, não 401, e `pytstop_jwks_falhas_total` acusa |
 | 10 | O token do link de decisão viaja no caminho da URL | `{token}` mascarado em access log, spans e logs; uso único e validade igual à do orçamento |
 | 11 | Simulador ligado num ambiente com URL pública | boot recusa `simulado` com `ENVIRONMENT=production` sem `SIMULADOR_PERMITIDO=true`; rotas com token HMAC e rate limit |
-| 12 | k3s exposto à internet | só 80 e 443 públicas, TLS, painéis por túnel SSH, API do Kubernetes fechada e dados fictícios |
+| 12 | Cluster persistente exposto à internet, se o deploy remoto for ligado | fora do estado entregue; a receita do k3s ([nuvem opcional](../../../operacao/nuvem-opcional.md)) diz o que fica exposto, inclusive a API do cluster, que o runner do GitHub precisa alcançar, e a decisão fica com o dono do ambiente |
 | 13 | Tráfego interno sem TLS | NetworkPolicy por namespace; risco aceito do ambiente de demonstração |
 | 14 | Placa fora do OS, na Execução | necessária ao mecânico; `AnonimizarVeiculo` na eliminação LGPD e retenção limitada de mensagens |
 | 15 | Promtail em fim de vida desde 02/03/2026 | mantido porque o enunciado exige as ferramentas da fase 3 (l. 102); a saída é o Grafana Alloy (ADR-043) |
@@ -1259,10 +1258,10 @@ Também aceitos:
 ### 11.2 Pontos em aberto
 
 1. A disciplina Resiliência em Microsserviços não tinha sido liberada até 06/10/2026. Timeout, retry, circuit breaker e DLQ vêm da Aula 02 de Microsserviços I e da política do relay do p3; a tabela da [seção 10.3](#103-parâmetros-e-variáveis-de-ambiente) e os ADR-036 e ADR-038 são revistos quando o material sair.
-2. Credenciais de teste do Mercado Pago, passo humano: criar as contas de teste e gravar `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` como segredos da organização, visíveis só ao Billing. São necessárias para a evidência da integração real (risco 1).
+2. Credenciais de teste do Mercado Pago, passo humano: criar as contas de teste e guardar `MP_ACCESS_TOKEN` e `MP_WEBHOOK_SECRET` fora do GitHub, no ambiente do shell de quem roda a prova no kind local ([ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), Segredos e configuração). São necessárias para a evidência da integração real (risco 1).
 3. `x-signature` na notificação enviada à `notification_url` da preferência: a documentação não diz se ela vem assinada. A primeira execução na sandbox decide; se faltar assinatura, a URL passa a ser cadastrada no painel de Webhooks (ADR-040).
-4. Crédito da Azure para o k3s, passo humano: sem ele, o deploy obrigatório continua no kind do CI, e o vídeo usa o kind local.
-5. Minutos e pico de memória do `kind-ci` no runner com os três serviços, registrados no summary de cada `deploy-kind`. Só com a plataforma, o `deploy-kind` do `platform` levou de 3 min 14 s a 3 min 31 s em três execuções (06/10/2026), com working set de até 1,5 GiB no nó do kind ([ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md)).
+4. Ambiente persistente: a fase não liga nuvem (emenda do ADR-042); se a avaliação pedir, as receitas de [nuvem opcional](../../../operacao/nuvem-opcional.md) dizem o que o dono do ambiente cria.
+5. Minutos e pico de memória do `kind-ci` no runner com os três serviços, registrados no summary de cada `deploy-kind`: no CD do OS Service de 15/10/2026, 6 min 34 s da criação do kind ao fim do E2E, com working set de até 3,0 GiB e pico de 7,4 GiB no cgroup do nó do kind. Só com a plataforma, o `deploy-kind` do `platform` levou de 3 min 14 s a 3 min 31 s em três execuções (06/10/2026), com working set de até 1,5 GiB ([ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), com o uso de cada componente).
 
 ## Glossário e siglas
 
@@ -1308,7 +1307,6 @@ Também aceitos:
 | JWKS | conjunto de chaves públicas em JSON (*JSON Web Key Set*) |
 | JWT | token assinado em JSON (*JSON Web Token*) |
 | LGPD | Lei Geral de Proteção de Dados |
-| OIDC | OpenID Connect, usado na federação entre GitHub Actions e Azure |
 | OS | ordem de serviço |
 | OTLP | protocolo de exportação do OpenTelemetry |
 | PII | dado pessoal identificável |
