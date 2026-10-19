@@ -50,7 +50,7 @@ Componente, em cada serviço: o serviço inteiro, com as dependências trocadas 
 - Billing: orçamento expirado, pagamento recusado pelo limite de recusas, pagamento aprovado depois de cancelado, expirado ou recusado, com estorno automático, estorno repetido sem segunda chamada ao provedor e compensação que chega antes do comando.
 - Execução: reserva tudo ou nada, liberação que chega antes da reserva e início da execução que vence o cancelamento.
 
-Ponta a ponta (E2E), no `platform`: `e2e/features/saga_atendimento.feature` roda contra os três serviços implantados no kind, no job `deploy-kind` do pipeline de entrega contínua (CD) do OS Service, com poucas jornadas, como recomenda a Aula 04. Em 18/10/2026 só o OS Service tem `cd.yml` na `main`; o Billing e a Execução têm `ci.yml` e `security.yml`, e o [ADR-042](042-cicd-e-deploy-kubernetes.md) prevê o `cd.yml` nos três. Cada cenário cria os próprios clientes, peças e OS, com identificadores únicos, sem depender de estado deixado por outro cenário. O pagamento usa o simulador do Mercado Pago, que percorre o mesmo caso de uso do webhook.
+Ponta a ponta (E2E), no `platform`: `e2e/features/saga_atendimento.feature` roda contra os três serviços implantados no kind, com poucas jornadas, como recomenda a Aula 04. Roda no job `deploy-kind` do pipeline de entrega contínua (CD) do OS Service, o único com `cd.yml` na `main` em 18/10/2026 (o Billing e a Execução têm `ci.yml` e `security.yml`, e o [ADR-042](042-cicd-e-deploy-kubernetes.md) prevê o `cd.yml` nos três), e no job `e2e` do `cd.yml` do `platform`, a cada pull request e a cada push na `main` do `platform`. Cada cenário cria os próprios clientes, peças e OS, com identificadores únicos, sem depender de estado deixado por outro cenário. O pagamento usa o simulador do Mercado Pago, que percorre o mesmo caso de uso do webhook.
 
 - `@caminho-feliz`: os oito status, de `RECEBIDA` a `ENTREGUE`, com consulta à API do Jaeger que exige spans dos três serviços no mesmo trace, e o `X-Request-ID` gerado pelo Kong presente nos logs do serviço.
 - `@compensacao`: recusa do orçamento, falta de peça, pagamento recusado e cancelamento depois do pagamento, com estorno e a ordem das compensações conferida.
@@ -60,7 +60,9 @@ Ponta a ponta (E2E), no `platform`: `e2e/features/saga_atendimento.feature` roda
 - `e2e/features/mercadopago_sandbox.feature` (marcador `mp_sandbox`): pagamento no checkout, cancelamento depois do pagamento e cancelamento sem pagar, contra a sandbox do Mercado Pago. Roda à mão, em `make mp-sandbox` (quem paga é uma pessoa, no navegador) e em `make mp-sandbox-ensaio` (o mesmo roteiro, com o simulador do Billing no lugar do comprador e sem falar com o Mercado Pago), e fica fora do `make e2e`, do `make demo` e do CD, porque o CD não tem credencial. Não prova o webhook: segundo a documentação do Mercado Pago ([Checkout Pro, notificações](https://www.mercadopago.com.br/developers/pt/docs/checkout-pro-preferences/payment-notifications); consultada em 18/10/2026), pagamentos de teste não enviam notificação, e a confirmação vem da conciliação; a execução real na sandbox ainda não foi feita ([README](../../../../README.md#mercado-pago-na-sandbox)).
 - O Swagger (`/docs`) de cada serviço abre através do Kong.
 
-O OWASP ZAP baseline contra o Kong e a collection do fluxo completo, executada com newman, rodam no job de E2E do pipeline do `platform`, não no CD de cada serviço, para não somar minutos a cada deploy.
+O OWASP ZAP baseline contra o Kong e a collection do fluxo completo, executada com newman, rodam no job `e2e` do `cd.yml` do `platform`, não no CD de cada serviço, para não somar minutos a cada deploy. O job sobe a plataforma do commit e os três serviços, todos construídos do código, num kind do runner e roda, nesta ordem, o smoke por namespace, o `make e2e` e o ZAP.
+
+O ZAP varre o `/openapi.json` de cada serviço pela borda do kind; o como (comando, regras e o que reprova o scan) está no [README](../../../../README.md#zap-baseline-na-borda). O spider chama cada operação do OpenAPI, `POST`, `PUT` e `DELETE` inclusive, e por isso a varredura só roda num kind descartável, depois do E2E. Reprovam o job a versão de produto nos cabeçalhos `Server` e `X-Powered-By` e a falta de `X-Content-Type-Options`. Anti-clickjacking e CSP também estão em `FAIL`, mas o ZAP só os avalia em resposta HTML e o scan só recebe JSON dos serviços: para a API, o guarda de cabeçalho é o `X-Content-Type-Options`, e os dois passam a valer se um serviço servir página HTML. O HSTS fica em aviso, porque falta nos 404 que o próprio Kong gera, e o Kong sobe com `headers=off` ([ADR-038](038-borda-e-comunicacao-sincrona.md)). O scan roda sem credencial: quase toda operação protegida responde 401, e o ZAP vê os cabeçalhos dessas respostas, não o comportamento autenticado. O relatório é o artefato `zap-baseline`, por 90 dias. A collection do newman entra no mesmo job quando existir.
 
 ### Cobertura (RNF-040, RNF-050)
 
@@ -150,14 +152,14 @@ As versões de que os testes e o CI dependem ficam fixadas: `pytest-bdd>=8.0` no
 * Cada repositório atende RNF-038 a RNF-041 e RNF-050, com evidência no summary, em artefato, no README e em `docs/entrega/fase4/evidencias/`
 * Cada compensação da saga e cada caso de borda dos participantes tem cenário executável em português, legível pela banca
 * O quality gate é código, revisado em PR como o resto, e não aprova análise vazia
-* A matriz de papéis e o ZAP da fase 3 continuam, por serviço e contra a borda
+* A matriz de papéis e o ZAP da fase 3 continuam: a matriz por serviço, e o ZAP contra a borda, no job `e2e` do `platform`
 
 ### Negativas
 
 * SonarQube efêmero não guarda histórico nem decora PR, e o gate vale sobre o código total, porque não há baseline de código novo; o `diff-cover` cobre o código novo, e não há painel permanente para linkar
 * Os artefatos expiram em 90 dias (`retention-days`); tabela e prints no README e em `docs/entrega/fase4/evidencias/` são a evidência permanente
 * O teste de contrato confere a estrutura da mensagem: um campo que muda de sentido sem mudar de tipo passa por ele
-* O E2E roda no CD, depois do merge: uma falha de integração entre serviços aparece com a `main` já alterada, e a correção é um PR de revert ([ADR-042](042-cicd-e-deploy-kubernetes.md))
+* O E2E dos serviços roda no CD, depois do merge: uma falha de integração entre serviços aparece com a `main` já alterada, e a correção é um PR de revert ([ADR-042](042-cicd-e-deploy-kubernetes.md)); o `platform` roda o mesmo E2E no pull request dele, contra os serviços no último CD verde
 
 ### Neutras
 
