@@ -515,10 +515,9 @@ def test_action_de_terceiro_por_sha_de_commit_e_oficial_por_tag(
     if uses.startswith("./"):
         return
     dono, _, versao = uses.partition("@")
-    if dono.startswith("actions/"):
-        assert re.fullmatch(r"v\d+", versao), f"{workflow}: {uses}"
-    else:
-        assert re.fullmatch(r"[0-9a-f]{40}", versao), f"{workflow}: {uses}"
+    if dono.startswith("actions/") and re.fullmatch(r"v\d+", versao):
+        return
+    assert re.fullmatch(r"[0-9a-f]{40}", versao), f"{workflow}: {uses}"
 
 
 def test_o_sha_da_action_de_terceiro_leva_a_tag_ao_lado() -> None:
@@ -535,3 +534,16 @@ def test_o_e2e_usa_o_mesmo_setup_uv_do_deploy_kind() -> None:
     ]
     assert usos
     assert passo("astral-sh/setup-uv")["uses"] == usos[0]
+
+
+def test_uv_dos_dois_jobs_do_cd_tem_versao_fixa() -> None:
+    for nome in ("deploy-kind", "e2e"):
+        [uv] = [
+            p
+            for p in JOBS[nome]["steps"]
+            if p.get("uses", "").startswith("astral-sh/setup-uv@")
+        ]
+        assert (
+            uv["uses"] == "astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884"
+        )
+        assert uv["with"]["version"] == "0.13.0"

@@ -15,15 +15,17 @@ Conferido em 18/10/2026:
 - No último CD do OS Service na `main` ([run 38837346818](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/38837346818), 15/10/2026), o `deploy-remote` ficou de fora e o `remote-skipped` passou: `DEPLOY_REMOTO_HABILITADO` não era `true` em nível nenhum.
 - O job `deploy-remote` do `cd.yml` do OS Service não declara segredo, `environment` nem `id-token`, e o arquivo não tem credencial de provedor.
 
+O [`cd-servico.yml`](../../.github/workflows/cd-servico.yml) agora oferece o mesmo gancho aos três serviços, sem ligar o remoto. Os callers precisam migrar para o SHA integrado dele. O protótipo do OS descrito no snapshot acima permanece até essa migração.
+
 ## O que o gancho faz
 
-O job `deploy-remote` do `cd.yml` do OS Service (`e2bf48d`):
+O job `deploy-remote` do workflow reutilizável:
 
 1. Roda depois do `image` e do `deploy-kind`, só na `main` e só com a variável `DEPLOY_REMOTO_HABILITADO` igual a `true`. Com outro valor, ou sem a variável, roda no lugar dele o `remote-skipped`, que só registra um aviso no run.
 2. Tem 20 minutos e só as permissões `contents: read` e `packages: read`.
-3. Confere que o commit do platform usado no kind está na `main` do platform (`compare main...<sha>`, só `identical` ou `behind`) e faz o checkout dele em `platform/`.
+3. Confere que o commit do platform usado no kind está na `main` do platform (`compare main...<sha>`, só `identical` ou `behind`) e faz o checkout dele em `platform/`, seguido do próprio serviço no commit da imagem em `servico/`.
 4. Tem um passo "Acesso ao cluster remoto (a configurar)", que hoje só avisa: é onde entra o kubeconfig ou o login do provedor.
-5. Chama `platform/scripts/ci/deploy-remoto.sh --contexto "$DEPLOY_REMOTO_CONTEXTO" --overlay "$DEPLOY_REMOTO_OVERLAY" --servico os-service --imagem <referência>:<commit>@sha256:<digest>`, com o overlay `k3s` se a variável do overlay não existir, e com a mesma imagem, pelo digest, que passou no kind.
+5. A partir de `servico/`, chama `../platform/scripts/ci/deploy-remoto.sh --contexto "$DEPLOY_REMOTO_CONTEXTO" --overlay "$DEPLOY_REMOTO_OVERLAY" --servico "$SERVICO" --imagem <referência>:<commit>@sha256:<digest>`, com o overlay `k3s` se a variável do overlay não existir, e com a mesma imagem, pelo digest, que passou no kind.
 
 O `deploy-remoto.sh` roda a partir do checkout do serviço e não guarda credencial nem chama nuvem: usa o contexto que o kubeconfig de quem roda já tem.
 
@@ -40,9 +42,9 @@ O dono do ambiente, nesta ordem:
 
 1. Sobe um cluster (uma das receitas abaixo) e implanta a plataforma nele uma vez, da própria máquina, com o contexto do cluster no kubeconfig: `make deploy OVERLAY=k3s KUBE_CONTEXT=<contexto>` ([overlay `k3s`, no README](../../README.md#cluster-persistente-overlay-k3s)). É o `make deploy` que cria os namespaces dos serviços e os Secrets deles; sem os Secrets, o `deploy-remoto.sh` para pedindo o `make deploy`.
 2. Cria as variáveis da tabela abaixo no repositório de cada serviço que vai implantar (ou na organização) e os segredos no `environment` do job, em cada repositório: não existe `environment` de organização.
-3. No job `deploy-remote`, declara o `environment` que guarda o segredo e troca o passo "Acesso ao cluster remoto (a configurar)" pelo acesso real. O passo pronto para um kubeconfig está no [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#deploy-remoto-opcional), seção "Deploy remoto (opcional)".
-4. Acrescenta ao job o checkout do próprio serviço, no commit do run, e roda o script de dentro dele: hoje o job só faz o checkout do platform, e o script para dizendo que não achou o overlay. O checkout do serviço vai antes do checkout do platform, ou num `path:` próprio, com `working-directory:` nele e o script chamado como `../platform/scripts/ci/deploy-remoto.sh`: um checkout na raiz depois do platform apaga o `platform/`.
-5. Relaxa de propósito o teste do OS Service que proíbe segredo, `environment` e `id-token` no `deploy-remote` (`test_deploy_remote_nao_tem_segredo_nem_credencial_de_provedor`): ele guarda o estado desligado.
+3. No job `deploy-remote` do reusable no Platform, declara o `environment` que guarda o segredo e troca o passo "Acesso ao cluster remoto (a configurar)" pelo acesso real. O passo pronto para um kubeconfig está no [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#deploy-remoto-opcional), seção "Deploy remoto (opcional)".
+4. Integra a alteração no Platform e atualiza o SHA da chamada nos serviços. O job caller com `uses` não recebe passos adicionais: o acesso e o `environment` pertencem ao reusable. O checkout em `servico/` e o `working-directory` já estão prontos; não fazer um checkout na raiz depois do Platform, porque apagaria `platform/`.
+5. Relaxa de propósito o teste compartilhado no Platform que proíbe segredo, `environment` e `id-token` no `deploy-remote` (`test_deploy_remote_nao_tem_segredo_nem_credencial_de_provedor`): ele guarda o estado desligado.
 
 | Nome | Tipo | Onde | Para quê |
 |---|---|---|---|
