@@ -1939,6 +1939,8 @@ spec:
           value: "off"
         - name: KONG_DATABASE
           value: "off"
+        - name: KONG_HEADERS
+          value: "off"
         - name: KONG_KIC
           value: "on"
         - name: KONG_LUA_PACKAGE_PATH
@@ -2107,6 +2109,8 @@ spec:
         - name: KONG_CLUSTER_LISTEN
           value: "off"
         - name: KONG_DATABASE
+          value: "off"
+        - name: KONG_HEADERS
           value: "off"
         - name: KONG_KIC
           value: "on"
