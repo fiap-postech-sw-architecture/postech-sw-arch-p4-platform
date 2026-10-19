@@ -84,7 +84,7 @@ make kind-down
 |---|---|
 | `make kind-up` | cria o cluster `pytstop-p4` (contexto `kind-pytstop-p4`) |
 | `make deploy` | segredos gerados, CRDs do Kong, overlay kind, rollouts, Job de usuários do RabbitMQ e kong-check |
-| `make smoke` | borda, barra codificada, rate limit, máscara de token, RabbitMQ, fallback do Kong, dashboards e alertas carregados pelo Grafana (um dashboard por JSON de `observabilidade/dashboards`, uma regra por regra de `observabilidade/grafana`, e só as cinco de serviço fora, de fila sem consumidor e de banco fora disparando, porque ainda não há serviços) e pods endurecidos; sai com status 1 se uma prova não valer |
+| `make smoke` | borda, barra codificada, rate limit, cabeçalhos do Kong (nenhum `Server`, `Via` ou `X-Kong-*`), máscara de token, RabbitMQ, fallback do Kong, dashboards e alertas carregados pelo Grafana (um dashboard por JSON de `observabilidade/dashboards`, uma regra por regra de `observabilidade/grafana`, e só as cinco de serviço fora, de fila sem consumidor e de banco fora disparando, porque ainda não há serviços) e pods endurecidos; sai com status 1 se uma prova não valer |
 | `make status` | pods, serviços, volumes e filas do RabbitMQ |
 | `make port-forward` | Grafana :3000, Jaeger :16686, RabbitMQ :15672, Prometheus :9090, Mailpit :8025 |
 | `make kind-down` | apaga o cluster |
@@ -321,6 +321,7 @@ Todas as imagens têm tag fixa, e a mesma versão roda no kind, no k3s e no comp
 | mongodb_exporter | `percona/mongodb_exporter:0.53.0` | Métricas do MongoDB, sidecar do banco do Billing, porta 9216, que conecta com o usuário `exporter`, com `--collector.dbstats` e `--collector.replicasetstatus` | sidecar do StatefulSet do banco |
 | SonarQube (CI dos serviços) | `sonarqube:26.9.0.129388-community` | Servidor efêmero do job `sonarqube` de cada serviço, que aplica o quality gate ([ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)) | service container do job |
 | SonarScanner (CI dos serviços) | `sonarsource/sonar-scanner-cli:12.2.0.4256_8.1.0` | Análise do código no mesmo job | - |
+| OWASP ZAP (job `e2e` do `platform`) | `ghcr.io/zaproxy/zaproxy:2.17.0@sha256:7aaa659b0d43078febd82e29bad112285c370727e86ab8340444220e17d9f0d2` | Varredura *baseline* da borda do kind, um serviço por vez, com um spider que chama cada operação do `openapi.json` ([ZAP baseline na borda](#zap-baseline-na-borda), [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)); o digest é o do índice da imagem, que serve amd64 e arm64 | container do runner, na rede do host |
 
 Prometheus, Grafana, Loki, Promtail, kube-state-metrics, Mailpit e Jaeger vieram dos manifests da fase 3, ajustados para vários serviços em vários namespaces e com probes de liveness e readiness em todos.
 
@@ -424,6 +425,8 @@ No overlay kind os limites são multiplicados por 10 ([`rate-limit-x10.yaml`](k8
 IP do cliente: o `kong-proxy` usa `externalTrafficPolicy: Local`, que entrega o pacote sem o SNAT (*source NAT*) do kube-proxy. No kind, o tráfego entra pelo mapeamento de porta do Docker, e todo cliente do host chega com o IP do gateway da rede do Docker: um balde só por limite, o que basta para a demonstração. No k3s, o ServiceLB com `externalTrafficPolicy: Local` deve entregar o IP de origem, mas isso ainda não foi conferido com dois clientes: até lá, o limite por IP no k3s é esperado, não verificado. Se um balanceador ou proxy entrar na frente da VM, configure em [`values.yaml`](k8s/base/kong/values.yaml) `env.trusted_ips` com o CIDR exato dele e `env.real_ip_header: X-Forwarded-For` e rode `make kong-render`. Nunca use `0.0.0.0/0`: o cliente escolheria o próprio IP pelo header e escaparia do limite.
 
 O `X-Request-ID` gerado pelo Kong é um UUID simples (`generator: uuid`), aceito como está pelo middleware de request id que os serviços herdaram da fase 3 (`[A-Za-z0-9._=-]{1,128}`); o formato `uuid#counter` seria descartado por ele. Se o cliente mandar um `X-Request-ID`, o Kong o mantém e o devolve na resposta. O FastAPI precisa de `root_path="/os"` fixo para o Swagger em `/os/docs` achar o `/os/openapi.json`; o header `X-Forwarded-Prefix` não serve, porque traz o trecho inteiro que a regra casou.
+
+O Kong não anuncia produto nem versão: `env.headers: "off"` em [`values.yaml`](k8s/base/kong/values.yaml) (`KONG_HEADERS=off`) tira `Server`, `Via` e todos os `X-Kong-*` das respostas, as que o Kong gera sozinho (404 de rota inexistente, o `fora-da-borda`, o 429 do rate limit) e as dos serviços, que já sobem sem o `server` do uvicorn. Sem isso o Kong 3.9.3 responde `Server: kong/3.9.3` e `Via: 1.1 kong/3.9.3`, o que o ZAP acusa ([regra 10036](#zap-baseline-na-borda)). O `make smoke` prova no cluster: pede uma rota publicada, `/os/metrics` (404 do `fora-da-borda`), uma rota que não existe (404 do Kong) e o 429 do login, e reprova se algum desses cabeçalhos aparecer. O `X-Request-ID` e os `X-RateLimit-*` continuam.
 
 ### Filas, exchanges e argumentos
 
@@ -866,7 +869,7 @@ make e2e      # os 14 cenários, cerca de 3 min; relatórios em reports/e2e
 make demo     # os cenários @demo (demonstrações 1 e 2 do vídeo), cerca de 2 min; relatórios em reports/demo
 ```
 
-Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
+No CI quem roda isto é o job `e2e` do `cd.yml`, num kind do runner ([CI](#job-e2e-a-saga-e-a-borda-com-os-três-serviços)). Cada alvo apaga e recria a pasta de relatórios, sai com o status do pytest e escreve o `resumo.md` mesmo com cenário reprovado. Para rodar um cenário só, use a tag dele: `uv run --group e2e pytest -c e2e/pytest.ini e2e -m caminho-feliz`. Se o pytest morrer no meio de um cenário de resiliência (a máquina dormiu, `kill -9`), basta rodar de novo: o início da sessão religa o que ficou em 0 réplicas.
 
 | Variável | Para quê | Padrão |
 |---|---|---|
@@ -948,6 +951,50 @@ O que o E2E tem de crítico e não precisa de cluster está em [`e2e/apoio/`](e2
 
 O `make test` também coleta o E2E sem cluster (`pytest --collect-only` e `--generate-missing`): import quebrado, tag sem marker e step sem definição reprovam no CI, e não no primeiro `make e2e`. O `conftest.py`, os steps e o cliente dos serviços só rodam contra o cluster e ficam fora da cobertura. `ruff`, `mypy` e `bandit` cobrem tudo em `e2e/`.
 
+## ZAP baseline na borda
+
+O OWASP ZAP em modo *baseline* (as regras olham as respostas, sem as injeções do scan ativo, mas o spider chama cada operação do `openapi.json`) roda no job `e2e` do [`cd.yml`](.github/workflows/cd.yml), depois do E2E e no mesmo kind, contra a borda como um cliente de fora a vê: `https://localhost/<prefixo>/openapi.json` de cada serviço, pelo certificado padrão do Kong. É a varredura do [ADR-041](docs/arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md), que roda aqui e não no CD de cada serviço, para não somar minutos a cada deploy. O alvo é o `openapi.json` porque o `/docs` é o HTML do Swagger e não lista rota. O scan roda sem credencial: quase toda operação protegida responde 401, e o ZAP vê os cabeçalhos dessas respostas, não o comportamento autenticado.
+
+O [`scripts/ci/zap-baseline.sh`](scripts/ci/zap-baseline.sh) roda um container por serviço, na rede do host (no runner, o `localhost` é a porta 443 do kind), com a imagem da [tabela de versões](#componentes-e-versões) por digest e as regras de [`e2e/zap/regras.conf`](e2e/zap/regras.conf):
+
+```bash
+zap-baseline.py -t https://localhost/os/openapi.json -c regras.conf -m 1 -I -z "-silent" \
+  -r zap-os-service.html -J zap-os-service.json -w zap-os-service.md
+```
+
+- `-I`: aviso não reprova, só regra em `FAIL`. `-m 1`: o spider para em 1 minuto.
+- O spider importa o `openapi.json` e chama cada operação dele uma vez, com dados de exemplo, `POST`, `PUT` e `DELETE` inclusive (de 24 a 38 URLs por serviço, quase todas com resposta 4xx). Por isso o script só roda num kind descartável, depois do E2E: ele recusa, com status 2 e antes de qualquer chamada, uma `BORDA` que não seja só esquema, host do loopback (`localhost`, `127.0.0.1`, `[::1]` ou `*.localhost`) e porta, salvo `ZAP_ALVO_DESCARTAVEL` igual à própria `BORDA`, para um alvo descartável fora dele.
+- `-z "-silent"`: sem ele, o `zap-baseline.py` da imagem atualiza e instala add-ons ao iniciar (`-addonupdate -addoninstall`), e o ZAP verifica atualização; com ele, nada disso. A varredura só pede páginas ao Kong do kind.
+- O ZAP aceita o certificado autoassinado do Kong. Antes de cada scan, o `curl` confere que o `openapi.json` responde sem erro HTTP (o `-f` aceita 2xx e 3xx, e um 404 ou 503 reprova o serviço sem varrer), e depois o script reprova se o ZAP avisar que não leu o alvo (o aviso `expected 200` do ZAP cobre o que o `curl` deixa passar), se faltar a linha de resumo, se o status não for 0 ou se nenhuma URL foi lida. O piso de URLs só prova que a borda respondeu (certificado aceito, Kong de pé): o spider conta também os 404 que o Kong gera sozinho. Um serviço que reprova não impede a varredura dos outros.
+- O container sobe com `--init` e com o nome `zap-<serviço>-<pid>`: o processo principal da imagem ignora o SIGTERM, e sem o `--init` o `PRAZO_ZAP` não encerraria um ZAP pendurado.
+- A pasta `reports/zap` (ignorada pelo git) recebe `regras.conf`, `zap-<serviço>.html`, `.json`, `.md` e `.log`. O CI a publica como o artefato `zap-baseline` (90 dias), e a tabela por serviço (FAIL, WARN, URLs lidas) mais o `.md` de cada um vão para o summary do job.
+
+Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_REDE` (rede do container, `host`), `RELATORIOS` (`reports/zap` na raiz do repositório, qualquer que seja a pasta de onde o script roda; um caminho relativo passado à mão vale a partir dela) e `PRAZO_ZAP` (segundos por serviço, 300) trocam o alvo, a rede, a pasta e o prazo. O `curl` roda na máquina do script, então a `BORDA` tem de responder ali também: um Kong avulso numa rede Docker entra com a porta publicada no loopback (`-p 127.0.0.1:<porta>:8443` e `BORDA=https://localhost:<porta>`).
+
+### O que o ZAP acusa
+
+Nenhuma regra em `FAIL` dispara com os três serviços na `main`: no run [39098307172](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39098307172) (platform 7b8aff4, OS e2bf48d, Billing d6d2776, Execução 301052a), com as regras da tabela [abaixo](#regras-e-allowlist), o ZAP leu 38 URLs do OS, 38 do Billing e 24 da Execução, com `fail=0` nos três. Ficam os avisos abaixo.
+
+| Achado | Onde | Tratamento |
+|---|---|---|
+| 10035, `Strict-Transport-Security` ausente (`WARN`) | Só nos 404 que o próprio Kong gera: `/`, `/<prefixo>`, `/robots.txt` e `/sitemap.xml`, que o spider pede. Toda resposta de serviço (`openapi.json`, `saude`, JWKS) traz o cabeçalho | Fica em `WARN`: o Kong sem rota casada não executa plugin nenhum. A regra só vira `FAIL` quando o Kong mandar o cabeçalho nesses 404 (dívida no MEMORY); um achado numa resposta de serviço é defeito do serviço e se corrige nele |
+| 10024, informação sensível na URL (`WARN`) | Billing: o checkout do simulador e o `aprovar` e o `recusar` dele levam o `token` na query | Por desenho do simulador do Mercado Pago ([ADR-040](docs/arquitetura/adr/fase4/040-integracao-mercado-pago.md)), que só existe com `MP_MODE=simulado`; o Promtail mascara o `token=` antes de ele chegar ao Loki ([`make smoke`](scripts/smoke.sh)). Fica em `WARN`, visível |
+| Respostas 5xx do Billing | Um `POST /billing/api/v1/webhooks/mercadopago` sem assinatura, que o spider monta do `openapi.json` | É a resposta tratada `503 SERVICO_INDISPONIVEL` do serviço (log `http_exception_handled`, nível `warning`), não um `500` |
+
+### Regras e allowlist
+
+Cada regra tem uma linha em `regras.conf` (`id`, ação e motivo, separados por TAB), e a tabela abaixo é a mesma: um teste compara as duas. `FAIL` reprova o job, `WARN` aparece no relatório e no summary sem reprovar, `IGNORE` some do relatório. Regra que não está no arquivo fica em `WARN`. Regra ignorada só entra quando o relatório mostrar o achado, com o motivo na linha do arquivo e na descrição do PR, e achado real se corrige na causa (um cabeçalho de segurança no Kong, por exemplo), não aqui.
+
+| Regra | Ação | Motivo |
+|---|---|---|
+| 10036 | FAIL | HTTP Server Response Header: nome e versão de produto no `Server`. Os serviços sobem sem o `server` do uvicorn e o Kong com `headers=off` ([Gateway](#gateway-como-um-serviço-publica-as-rotas)); sem a regra, qualquer um dos dois voltaria a anunciar a versão em silêncio |
+| 10037 | FAIL | X-Powered-By: o mesmo motivo |
+| 10020 | FAIL | Anti-clickjacking ausente. Os serviços põem o cabeçalho em toda resposta deles, mas o ZAP só avalia esta regra em resposta HTML, e o scan só recebe JSON deles: o `PASS` dela nos runs não prova que o cabeçalho está lá. Fica em `FAIL`, sem custo, e passa a valer se um serviço servir página HTML |
+| 10021 | FAIL | `X-Content-Type-Options` ausente. O ZAP avalia esta regra em resposta JSON, então ela é o guarda de cabeçalho da API: um serviço que perder o cabeçalho reprova |
+| 10038 | FAIL | CSP ausente: o mesmo caso do 10020, só vale em resposta HTML |
+| 10035 | WARN | `Strict-Transport-Security` ausente nos 404 que o Kong gera sozinho (ver acima) |
+| 10015 | IGNORE | Diretivas de `Cache-Control`: os serviços respondem `no-store` em toda resposta, e o ZAP quer também `no-cache` e `must-revalidate`; por isso o alerta dispara em `saude`, `saude/pronto` e `openapi.json` dos três serviços. O JWKS do OS responde `public, max-age=600` de propósito (a chave pública muda pouco) |
+
 ## Contratos de mensageria
 
 | Arquivo | Conteúdo |
@@ -1009,9 +1056,25 @@ O workflow [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `mai
 
 `make check` roda `lint`, `test`, `prova-retry` e `manifests` localmente.
 
-O `make e2e` precisa do cluster com os três serviços e por isso não está no `make check` nem no `ci.yml`; o job `deploy-kind` ainda não o executa.
+O `make e2e` precisa do cluster com os três serviços e por isso não está no `make check` nem no `ci.yml`: quem o roda é o job `e2e` do `cd.yml`, descrito abaixo.
 
-O workflow [`cd.yml`](.github/workflows/cd.yml) tem o job `deploy-kind` ([Kind no CI](#kind-no-ci-overlay-kind-ci)) e, no push na `main`, o job `ci`, que roda o `ci.yml` no commit que entrou; ali o `deploy-kind` só começa com o CI verde. Os jobs dos dois workflows rodam no runner fixo `ubuntu-24.04`: o `ubuntu-latest` passa para o Ubuntu 26.04 a partir de 19/10/2026. O sistema só muda com commit; as ferramentas que vêm no runner (kubectl, Docker, jq) mudam com a imagem semanal dele, e as que precisam de versão certa vêm pinadas: as imagens do Makefile e, no `deploy-kind`, o kind e o kubectl.
+O workflow [`cd.yml`](.github/workflows/cd.yml) tem os jobs `deploy-kind` ([Kind no CI](#kind-no-ci-overlay-kind-ci)) e `e2e` e, no push na `main`, o job `ci`, que roda o `ci.yml` no commit que entrou; ali o `deploy-kind` e o `e2e` só começam com o CI verde. Os jobs dos dois workflows rodam no runner fixo `ubuntu-24.04`: o `ubuntu-latest` passa para o Ubuntu 26.04 a partir de 19/10/2026. O sistema só muda com commit; as ferramentas que vêm no runner (kubectl, Docker, jq) mudam com a imagem semanal dele, e as que precisam de versão certa vêm pinadas: as imagens do Makefile e, no `deploy-kind`, o kind e o kubectl.
+
+### Job `e2e`: a saga e a borda com os três serviços
+
+O job `e2e` ([ADR-042](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)) roda em todo pull request para a `main`, a cada push na `main` e sob demanda, sem filtro de caminhos, em paralelo com o `deploy-kind`, cada um no próprio runner e no próprio kind. Tem 50 minutos, só a permissão `contents: read` (os quatro repositórios são públicos, e a consulta dos runs de CD dos serviços não pede mais que isso) e nenhum segredo. Ainda não é check obrigatório do ruleset: vira depois de alguns runs verdes na `main`, como o `deploy-kind` virou.
+
+1. **Commits.** O platform é o commit do run (no pull request, o merge dele na `main`). Cada serviço entra no commit do último run verde do `cd.yml` dele na `main` (`branch=main`, `event=push`, pela API do GitHub), o mesmo critério e a mesma consulta que o CD de cada serviço usa para os vizinhos. Serviço sem nenhum run verde ainda usa a `main` HEAD, com um `::warning::` na anotação do run. A tabela dos quatro commits e da origem de cada um sai no summary.
+2. **Checkout** dos quatro repositórios em `platform/`, `os-service/`, `billing-service/` e `execution-service/`, sem guardar a credencial do GitHub.
+3. **Plataforma** no kind, pelo [`deploy-kind.sh`](scripts/ci/deploy-kind.sh), e **os três serviços construídos do código** (nenhuma imagem do GHCR), pelo [`implantar-servicos.sh`](scripts/ci/implantar-servicos.sh) no overlay `kind-ci`.
+4. **Smoke** por namespace ([`smoke-servicos.sh`](scripts/ci/smoke-servicos.sh)), **`make e2e`** (os 14 cenários) e o **ZAP baseline** ([ZAP baseline na borda](#zap-baseline-na-borda)). Com os cenários verdes, o `make e2e` também consulta cada painel de negócio no Prometheus do kind e reprova o que volta sem série ([Painéis de negócio com série](#painéis-de-negócio-com-série)); o resultado vai para `reports/e2e/paineis.md`. O ZAP roda mesmo com o E2E reprovado, para um resultado não esconder o outro, mas não sem o smoke verde: sem os serviços de pé não há o que varrer.
+5. **Resumo e relatórios**, mesmo com falha: minutos e memória no summary ([`medir-kind.sh`](scripts/medir-kind.sh)), a varredura de segredos em `reports/e2e` (a do `make mp-sandbox`, que apaga o arquivo que ainda tenha segredo e reprova o job), o artefato `e2e-kind` (só `reports/e2e`, 90 dias) e o `zap-baseline` (90 dias), os dois com `overwrite`, para o "Re-run failed jobs" subir de novo com o mesmo nome. Em falha ou cancelamento, inclusive o do tempo limite, o [`diagnostico.sh`](scripts/ci/diagnostico.sh).
+
+Medido no run [38844023575](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/38844023575) (runner de 16 GB, os 14 cenários e a conferência dos painéis): o job levou 8 min 46 s, dos quais o kind e a plataforma 1 min 34 s, os três serviços construídos do código 1 min 44 s, o smoke 12 s, o E2E 3 min 37 s (3 min 25 s no pytest) e o ZAP 1 min 23 s. O nó do kind chegou a um working set de 3,5 GiB (3.604 MiB) e a um pico de cgroup de 7,5 GiB (7.645 MiB), com o cache de arquivos, nos 15,6 GiB do Docker do runner. Nos três runs de 14/10/2026, com 13 cenários e sem os painéis, o job levou de 7 min 57 s a 8 min 24 s.
+
+Cada passo longo tem prazo próprio (plataforma 15 min, serviços 25, smoke 10, E2E 20, ZAP 20), dentro dos 50 do job: um que pendura não gasta o job inteiro, e o diagnóstico ainda roda. O [teste do workflow](tests/test_cd_workflow.py) trava essa estrutura (jobs, `needs`, permissões, prazos, ordem dos passos, os checkouts, as condições `if`, os artefatos e os SHAs das actions), que nada engole a falha do smoke, do E2E ou do ZAP, e roda o passo dos commits com um `gh` falso.
+
+Para reexecutar uma combinação de commits, `workflow_dispatch` aceita `sha_os_service`, `sha_billing_service` e `sha_execution_service` (40 hexadecimais minúsculos; vazio usa o do último run verde) e `sha_platform`, que só pode ficar vazio ou ser o commit do run. Dois serviços que mudam um contrato juntos ficam em impasse: o CD de cada um usa o outro no último verde, e nenhum dos dois está verde com a mudança do outro. O caminho é o `workflow_dispatch` do CD de cada um, com o commit novo do outro.
 
 ## Decisões e limites
 
