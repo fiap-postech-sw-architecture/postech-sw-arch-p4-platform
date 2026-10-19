@@ -7,7 +7,7 @@ Conferência inicial de 19/10/2026. Fontes: requisitos da fase, PRs integrados, 
 | Item | Impacto | Responsável | Condição para fechar |
 |---|---|---|---|
 | CD compartilhado e chamadas dos três serviços | RNF-042 e RNF-049 exigem deploy independente por serviço | Plataforma e serviços | Workflow fixado por SHA; CI, segurança, imagem, kind e E2E verdes na `main` de cada serviço |
-| Collection do fluxo completo | Falta a prova executável integrada de RNF-052 | Plataforma | Collection versionada e newman aprovado, incluindo as métricas administrativas do OS |
+| Collection do fluxo completo | Duas provas locais aprovadas; publicação e integração no CI de RNF-052 ainda pendentes | Plataforma | Integrar a collection e comprovar o Newman no workflow final, incluindo as métricas administrativas do OS; [resumos locais](evidencias/newman-resumo.md) |
 | Ensaio final de observabilidade | Trace com os três serviços, 600,9 s ociosos, smoke e alerta com recuperação comprovados localmente; RNF-046/RNF-056 continuam parciais | Plataforma e serviços | Preservar capturas com três dias; chamada externa e observação no modo real do Billing dependem da sandbox |
 | Remanescentes de telemetria do Billing | Host livre nos spans SERVER, classe da falha do coletor e provas específicas do deadline/smoke ainda estão em correção local | Billing Service | Revisar o delta, os controles e os gates; integrar antes de atualizar as evidências finais |
 | Evidência real do Mercado Pago | Simulador não comprova acesso à sandbox do provedor | Responsável com credenciais | Cobrança, aprovação e estorno reais, com saída sanitizada |
@@ -39,12 +39,15 @@ A auditoria do dashboard de bancos confirmou consultas restritas às séries dis
 | Detalhe do cliente retorna CPF/CNPJ completo a atendente e admin | Comportamento herdado; decisão de minimização ainda cabe ao responsável. Listagem usa valor mascarado e rotas de dados pessoais têm auditoria | Antes de mudar o contrato público; atualizar API, OpenAPI e collection juntos |
 | Consultas dos coletores da Execução sem índice por data | Medidas registradas cabem no prazo de 2 s com o volume ensaiado; série indisponível não vira zero | Quando o crescimento aproximar as consultas do prazo ou o volume superar o medido |
 | DNS do driver PostgreSQL não entra no prazo de conexão | A coleta HTTP termina no prazo, mas a thread pode aguardar resolução do nome | Se o DNS do cluster apresentar travamento; medir antes de introduzir resolução paralela |
-| Método HTTP como rótulo aberto na Execução | Métodos inesperados podem criar novas séries | Fechar vocabulário quando revisar o coletor; preservar GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS |
+| Método HTTP como rótulo aberto no Billing e na Execução | Métodos inesperados podem criar novas séries | Fechar vocabulário quando revisar o coletor; preservar GET/POST/PUT/PATCH/DELETE/HEAD/OPTIONS |
 | OpenAPI do OS omite alguns erros HTTP | Login e operações de cliente podem devolver erros não declarados; o envelope permanece uniforme | Completar `responses` na origem e regenerar os dois contratos |
 | Mutação de retenção da Execução | Falta caso entre 30 e 31 dias para separar a retenção correta de 30 dias | Próximo ajuste de retenção; usar um registro de 30,5 dias |
 | Mutação de arredondamento de `Retry-After` no Billing | Testes usam espera inteira e não separam `ceil` de `floor` | Acrescentar espera fracionária e mutante correspondente |
 | Digest do OWASP ZAP atualizado manualmente | Imagem fixada por digest; digest indisponível reprova o job | Atualização deliberada com scan e prova do script |
 | Deploy remoto opcional | Não integra o ambiente kind entregue; requer acesso ao cluster e checkout do próprio serviço no job | Ao habilitar o gancho remoto; provar contexto, overlay e imagem por digest |
+| Redrive manual depois de erasure | O runbook proíbe o procedimento, mas o script não conhece a remoção dos dados nem tem trava automática | Antes de automatizar redrive ou rever esse procedimento; preservar a proibição atual |
+| Mailpit da demonstração | Sem autenticação ou política de ingresso; só o notificador tem restrição de saída, e as APIs podem alcançá-lo | Antes de usar dados reais ou expor esse ambiente; SMTP real exige STARTTLS e credenciais em Secret, conforme ADR-042 |
+| Atualizações automáticas do Platform | Não há catálogo Dependabot no repositório; os pins atuais são atualizados deliberadamente | Quando ampliar a automação de dependências; manter verificação e revisão dos pins atuais |
 | Consolidação de `MEMORY.md` | Histórico preservado; consolidação exige aprovação específica | Após decisão do responsável; não bloqueia execução ou contrato |
 
 Uma dívida aceita não dispensa o gate nem autoriza declarar uma prova inexistente. A revisão final deve confirmar se algum item ganhou impacto maior com as últimas alterações.

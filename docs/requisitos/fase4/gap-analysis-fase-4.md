@@ -422,6 +422,8 @@ Caminho crítico: plataforma no kind (RabbitMQ e Kong) → mensageria nos três 
 
 Ordem de corte, se o prazo apertar: primeiro o deploy remoto, que já vem desligado (o kind cobre o deploy obrigatório), depois os exportadores de PostgreSQL e MongoDB e, por fim, os span links dos passos humanos (o trace segue pelo contexto guardado). Saga com compensações, BDD, SonarQube no CI, Mercado Pago e os entregáveis do enunciado não entram no corte.
 
+Atualização de fechamento (19/10/2026): a ordem acima registra o planejamento inicial; os exportadores e os span links já entregues são preservados. Se o prazo apertar daqui em diante, a ordem restante é adiar o Newman no CI, depois painéis técnicos adicionais e, por fim, uma verificação documental adicional. O deploy remoto opcional continua desligado. Saga com compensações, E2E, CI/CD por serviço, deploy no kind, revisões obrigatórias, gates, índice, documento e vídeo permanecem; os requisitos do enunciado não são retirados por esta previsão.
+
 | Entrega | Responsável | Janela | Plano B |
 |---|---|---|---|
 | Vídeo de até 15 minutos, no YouTube ou no Vimeo (l. 117) | grupo, em passo humano, com o roteiro da seção 10.2 e o `make demo` | 11/11 e 12/11/2026 | trecho de CI/CD gravado antes e editado; sem k3s, tudo no kind local; com o pipeline lento, uma execução já concluída mostrada pelo summary |
