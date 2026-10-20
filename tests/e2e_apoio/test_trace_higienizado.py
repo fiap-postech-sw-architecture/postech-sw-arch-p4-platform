@@ -973,7 +973,12 @@ def test_o_trace_real_da_entrega_passa_inteiro_e_so_com_chaves_do_jaeger() -> No
     assert chaves <= set(TAGS_PERMITIDAS)
     assert {"span.kind", "messaging.destination.name", "http.route"} <= chaves
     assert {t["key"] for s in real["spans"] for t in s["tags"]} - chaves, "algo saiu"
-    _aceito_pelo_upload(arquivo_do_trace("pagamento", limpo)[1])
+    texto = arquivo_do_trace("pagamento", limpo)[1]
+    _aceito_pelo_upload(texto)
+    # A varredura da pasta, no fim do make, apaga o arquivo em que acha segredo: o
+    # trace real nao pode ser um falso positivo, ou a evidencia que so existe uma vez
+    # some depois de gravada.
+    assert varrer(texto) == []
     assert {"os-service", "billing-service", "execution-service"} == {
         p["serviceName"] for p in limpo["processes"].values()
     }
