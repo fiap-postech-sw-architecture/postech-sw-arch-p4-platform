@@ -14,4 +14,4 @@ Identificar quando o pagamento usa o simulador. O trecho da sandbox real deve us
 
 Antes da gravação, conferir `make demo`, a collection integrada, o trace e as capturas com os mesmos commits. Gravar a execução do pipeline com antecedência e condensar a espera na edição, sem mudar a ordem das etapas nem cortar o resultado.
 
-Após editar: duração inferior a 15 minutos, comandos e painéis legíveis, ausência de segredos e link acessível. Inserir o link no documento e no índice, criar as tags finais e regenerar o PDF.
+Após editar: duração de até 15 minutos, comandos e painéis legíveis, ausência de segredos e link acessível. Inserir o link no documento e no índice, criar as tags finais e regenerar o PDF.

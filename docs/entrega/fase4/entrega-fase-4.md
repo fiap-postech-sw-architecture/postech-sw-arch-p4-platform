@@ -52,7 +52,7 @@ No diagrama, REST são chamadas HTTP síncronas, AMQP são as mensagens do Rabbi
 
 ## 5. Divisão dos serviços e tecnologias
 
-O recorte do monólito segue os três critérios do [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md), um dos registros de decisão de arquitetura (ADRs, *architecture decision records*) da fase. As capacidades que o enunciado sugere definem os serviços. Cada contexto delimitado do monólito vai inteiro para o serviço da capacidade que ele sustenta, e cada serviço é o único dono dos seus dados. A regra que precisa de transação local com lock fica num serviço só, para que a reserva de peças não atravesse a rede.
+O recorte do monólito segue os três critérios do [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md), um dos registros de decisão de arquitetura (ADRs, *architecture decision records*) da fase. As capacidades que o enunciado sugere definem os serviços. Cada contexto delimitado do monólito vai inteiro para o serviço da capacidade que ele sustenta, com duas exceções do ADR-034: o contexto Ordem de Serviço, que mistura atendimento, orçamento e execução, se reparte entre os três serviços, e o preço da peça sai do estoque para o Billing. Cada serviço é o único dono dos seus dados. A regra que precisa de transação local com lock fica num serviço só, para que a reserva de peças não atravesse a rede.
 
 - O OS Service guarda a OS, o histórico, os clientes, os veículos e os usuários internos, e orquestra a saga.
 - O Billing Service guarda preços, orçamentos e pagamentos e fala com o Mercado Pago.
@@ -62,7 +62,7 @@ Cada serviço também muda num ritmo próprio: o OS Service com o atendimento e 
 
 Há um desvio deliberado do enunciado, que põe o envio do orçamento no Billing: o Billing gera o orçamento e o link de decisão, e o e-mail sai do OS Service, dono do contato. Assim, nome, documento e contato do cliente não saem do OS Service. A [RFC-004, seção 3](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) detalha o recorte.
 
-PostgreSQL 16 preserva as relações e restrições do OS Service e da Execução. MongoDB 7 guarda os documentos de orçamento e pagamento do Billing, com replica set para gravar na mesma transação o documento e a outbox, a tabela das mensagens a publicar. RabbitMQ separa comandos e respostas, com confirmação, retry por atraso e filas de mensagens mortas. Kong é o gateway de API: publica as rotas `/os`, `/billing` e `/execucao`, limita a taxa de requisições e propaga o identificador de correlação. O JSON Web Token (JWT) é assinado com RSA e SHA-256 (RS256): a identidade se valida pela chave pública do OS Service, e a chave privada fica somente no emissor.
+PostgreSQL 16 preserva as relações e restrições do OS Service e da Execução. MongoDB 7 guarda os documentos de orçamento e pagamento do Billing, com replica set para gravar na mesma transação o documento e a outbox, a coleção das mensagens a publicar. RabbitMQ separa comandos e respostas, com confirmação, retry por atraso e filas de mensagens mortas. Kong é o gateway de API: publica as rotas `/os`, `/billing` e `/execucao`, limita a taxa de requisições e propaga o identificador de correlação. O JSON Web Token (JWT) é assinado com RSA e SHA-256 (RS256): a identidade se valida pela chave pública do OS Service, e a chave privada fica somente no emissor.
 
 Prometheus, Grafana, Loki e Jaeger retomam a observabilidade da fase 3. Os nove dashboards têm JSON e descrição por painel; os de negócio incluem volume diário de OS e tempo médio por status.
 
