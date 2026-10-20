@@ -21,14 +21,17 @@ from e2e.apoio.modo_billing import URL_DE_NOTIFICACAO_PADRAO
 from e2e.apoio.preflight_mp import Sandbox
 from e2e.apoio.prova import (
     PRAZO_DO_ESTORNO,
-    PRAZO_DO_TRACE,
     SEM_CONSULTA,
     DlqDoBillingCresceuError,
     Prova,
     gravar_evidencia_da_sessao,
 )
 from e2e.apoio.segredos import mascarar
-from e2e.apoio.trace_higienizado import TraceDoCenario, higienizar_trace
+from e2e.apoio.trace_higienizado import (
+    PRAZO_DO_TRACE,
+    TraceDoCenario,
+    higienizar_trace,
+)
 from e2e.servicos import Cenario
 from e2e_apoio.falsos import (
     CHAVE_APP_USR,

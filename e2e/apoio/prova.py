@@ -46,12 +46,7 @@ from e2e.apoio.kube import FILA_MORTA_DO_BILLING
 from e2e.apoio.mercadopago import ErroDoMercadoPagoError, registrar_conta
 from e2e.apoio.modo_billing import NAMESPACE_BILLING, sem_consulta
 from e2e.apoio.segredos import mascarar, registrar
-from e2e.apoio.trace_higienizado import (
-    TraceDoCenario,
-    chamada_ao_mercado_pago,
-    escolher_trace,
-    higienizar_trace,
-)
+from e2e.apoio.trace_higienizado import PRAZO_DO_TRACE, TraceDoCenario, esperar_trace
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
@@ -75,11 +70,6 @@ INTERVALO_DO_ESTORNO: Final = 3.0
 # De quanto em quanto tempo as esperas olham a DLQ do Billing: um comando que foi
 # para la nao se resolve esperando mais.
 INTERVALO_DA_DLQ: Final = 10.0
-# O trace da ordem no Jaeger e lido no fim do cenario: os spans chegam em lote, e o
-# Jaeger os guarda so na memoria. O trace que nao aparece nao reprova o cenario (o
-# pagamento e a prova principal): o resumo diz que nao o achou.
-PRAZO_DO_TRACE: Final = 30.0
-INTERVALO_DO_TRACE: Final = 3.0
 # A tag que cada cenario do feature tem de seu; entra no nome do arquivo do trace.
 TAGS_DOS_CENARIOS: Final = ("pagamento", "estorno", "cobranca-aberta")
 PRINTS: Final = (
@@ -551,54 +541,15 @@ class Prova:
             self._avisar(f"[mp-sandbox] {descricao_do_trace(achado, real=self.real)}")
 
     def _trace_da_ordem(self) -> TraceDoCenario:
-        """O trace da ordem no Jaeger, higienizado, quando ele para de crescer.
-
-        Vale o trace que duas leituras seguidas trazem com os mesmos spans; no modo
-        real, so o que tem a chamada do Billing ao Mercado Pago (que o video precisa
-        mostrar). Se ``PRAZO_DO_TRACE`` acaba antes, fica o melhor trace que se viu.
-        Nunca levanta: o Jaeger fora do ar nao reprova o cenario, e o nome do erro
-        (nunca a mensagem) vai para o resumo.
-        """
+        """O trace da ordem (ver ``esperar_trace``), com a chave do cenario."""
         chave = next(
             (tag for tag in TAGS_DOS_CENARIOS if tag in self.cenario.tags),
             f"cenario-{self.cenario.numero}",
         )
-        melhor: Trace | None = None
-        spans = -1
-        erro = ""
-
-        def estavel() -> Trace | None:
-            nonlocal melhor, spans, erro
-            try:
-                lidos = self._traces_da_ordem(self.cenario.ordem_id)
-                traces = [t for bruto in lidos if (t := higienizar_trace(bruto))]
-            except Exception as falha:  # o Jaeger fora do ar nao reprova o cenario
-                erro = type(falha).__name__
-                return None
-            trace = escolher_trace(traces)
-            if trace is None:
-                return None
-            melhor, anterior, spans = trace, spans, len(trace["spans"])
-            tem_a_chamada = chamada_ao_mercado_pago(trace) or not self.real
-            return trace if spans == anterior and tem_a_chamada else None
-
-        achado: Trace | None
-        try:
-            achado = esperar(
-                estavel,
-                prazo=PRAZO_DO_TRACE,
-                intervalo=INTERVALO_DO_TRACE,
-                descricao="trace da ordem no Jaeger",
-                relogio=self._relogio,
-                dormir=self._dormir,
-            )
-        except TempoEsgotadoError:
-            achado = melhor
-        if achado is not None:
-            return TraceDoCenario(chave, achado)
-        motivo = (
-            f"erro ao consultar o Jaeger: {erro}"
-            if erro
-            else f"nenhum trace da ordem no Jaeger em {PRAZO_DO_TRACE:g} s"
+        return esperar_trace(
+            lambda: self._traces_da_ordem(self.cenario.ordem_id),
+            chave=chave,
+            real=self.real,
+            relogio=self._relogio,
+            dormir=self._dormir,
         )
-        return TraceDoCenario(chave, None, motivo)
