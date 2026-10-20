@@ -3,12 +3,19 @@
 O Jaeger guarda tudo o que os servicos poem num span (URL com query, ids de negocio,
 comando do banco, IP e pod). Aqui o trace vira um JSON NOVO, montado so com o que a
 lista deixa: campo que ela nao cita nao existe na saida, e valor de tag permitida
-que nao tem a forma esperada tambem nao (``TAGS_PERMITIDAS``). Nenhum texto livre
-passa, nem como valor de tag, nem como nome de operacao, nem como segmento de URL.
+que nao tem a forma esperada tambem nao (``TAGS_PERMITIDAS``).
 
-A saida mantem as chaves que o "JSON File" da tela de busca do Jaeger le
-(``data[].traceID``, ``spans[]``, ``processes{}``); ``logs`` e ``warnings`` nao
-existem nela (a interface do Jaeger 1.76 trata a falta deles).
+Onde o vocabulario e fechado o valor e uma enumeracao: ``span.kind``, ``db.system``,
+``messaging.system``, ``messaging.operation`` e ``messaging.operation.type``, o
+verbo HTTP, o nome do servico e o host da URL. Onde nao e (segmento de caminho,
+modelo de rota, nome de fila e nome de span), so a FORMA e conferida: digito, simbolo,
+``@``, query e fragmento nao passam, mas uma palavra em letras passa, mesmo que seja
+um nome de pessoa. Esta etapa e a segunda barreira: os servicos ja redigem o dado na
+origem (URL pelo template da rota, ``REDACTED`` no resto, sem o comando do banco).
+
+A saida mantem as chaves que a aba "Upload" da tela de busca do Jaeger 1.76 le (a
+"JSON File" das versoes antigas): ``data[].traceID``, ``spans[]`` e ``processes{}``.
+``logs`` e ``warnings`` nao existem nela (a interface trata a falta deles).
 """
 
 from __future__ import annotations
@@ -20,6 +27,7 @@ from typing import TYPE_CHECKING, Any, Final
 from urllib.parse import urlsplit
 
 from e2e.apoio.jaeger import (
+    SERVICOS,
     TraceIdInvalidoError,
     melhor_trace,
     servicos_do_trace,
@@ -34,28 +42,52 @@ if TYPE_CHECKING:
 HOST_DO_MERCADO_PAGO: Final = "api.mercadopago.com"
 SERVICO_DO_BILLING: Final = "billing-service"
 SEM_ID: Final = "{id}"
+HOST_OCULTO: Final = "REDACTED"
 OPERACAO_OMITIDA: Final = "(operacao omitida)"
 _PALAVRAS_POR_OPERACAO: Final = 4
 _TIPOS_DE_REFERENCIA: Final = ("CHILD_OF", "FOLLOWS_FROM")
+_NAMESPACE_DO_SERVICO: Final = {
+    "os-service": "pytstop-os",
+    "billing-service": "pytstop-billing",
+    "execution-service": "pytstop-execucao",
+}
+# Os unicos hosts que ficam numa URL: o do Mercado Pago e os dos tres servicos, pelo
+# nome curto ou pelo DNS do Service no cluster. Outro (IP de pod, nome de maquina, um
+# CPF num rotulo) vira ``REDACTED``, como os servicos ja gravam na origem.
+HOSTS_VISIVEIS: Final = frozenset(
+    {
+        HOST_DO_MERCADO_PAGO,
+        *_NAMESPACE_DO_SERVICO,
+        *(
+            f"{servico}.{namespace}.svc.cluster.local"
+            for servico, namespace in _NAMESPACE_DO_SERVICO.items()
+        ),
+    }
+)
 
-# Segmento de caminho que fica como esta: palavra fixa da rota (``ordens-de-servico``),
-# a versao (``v1``) e o modelo da rota (``{pagamento_id}``). Tudo o mais (numero,
-# uuid, token, placa, CPF, e-mail, qualquer coisa com maiuscula ou digito) parece id
+# Segmento de caminho que fica como esta: palavra da rota (``ordens-de-servico``), a
+# versao (``v1``) e o modelo da rota (``{pagamento_id}``). Nao ha lista fechada de
+# palavras: qualquer palavra em minusculas passa, inclusive um nome de pessoa. O que
+# tem digito, maiuscula ou simbolo (numero, uuid, token, placa, CPF, e-mail) parece id
 # e vira ``{id}``: o erro vai sempre para o lado de esconder.
 _PALAVRA_DE_ROTA: Final = re.compile(r"[a-z][a-z_-]{0,39}")
 _VERSAO: Final = re.compile(r"v[0-9]{1,2}")
 _MODELO_DE_ROTA: Final = re.compile(r"\{[a-z_]{1,30}\}")
+# So a forma de um host (letras, digitos, ponto e hifen); quem fica e o que a
+# ``HOSTS_VISIVEIS`` cita.
 _HOST: Final = re.compile(r"[a-z0-9.-]{1,253}")
 # Nome de operacao: palavras (``publish``, ``billing.find``) e caminhos, nunca digito.
 _PALAVRA_DE_OPERACAO: Final = re.compile(r"[A-Za-z][A-Za-z_.:-]{0,63}")
 _SPAN_ID: Final = re.compile(r"[0-9a-f]{16}")
-_ID_DO_PROCESSO: Final = re.compile(r"[A-Za-z0-9_-]{1,32}")
-_NOME_DO_SERVICO: Final = re.compile(r"[A-Za-z0-9_.:-]{1,64}")
+# A chave do processo no Jaeger e ``p<numero>``.
+_ID_DO_PROCESSO: Final = re.compile(r"p[0-9]{1,4}")
 # Vira parte do nome do arquivo: so letras minusculas, digitos e hifen.
 _CHAVE_DO_ARQUIVO: Final = re.compile(r"[a-z0-9-]{1,32}")
 
 _METODO_HTTP: Final = r"GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|CONNECT|TRACE|_OTHER"
+_OPERACAO_DE_MENSAGEM: Final = r"publish|send|receive|process|deliver|create|settle"
 # Exchange ou fila: palavras separadas por ponto, e o atraso do retry (``retry.15s``).
+# Sem lista fechada de nomes: passa qualquer sequencia de palavras em minusculas.
 _DESTINO: Final = r"[a-z]{1,30}(?:\.(?:[a-z]{1,30}|[0-9]{1,3}s)){0,5}"
 
 
@@ -64,7 +96,7 @@ class ChaveDeArquivoInvalidaError(ValueError):
 
 
 def _segmento(texto: str) -> str:
-    """``texto`` se for palavra fixa, versao, modelo ou vazio; senao ``{id}``."""
+    """``texto`` se for palavra, versao, modelo ou vazio; senao ``{id}``."""
     fixo = texto == "" or any(
         padrao.fullmatch(texto)
         for padrao in (_PALAVRA_DE_ROTA, _VERSAO, _MODELO_DE_ROTA)
@@ -86,9 +118,10 @@ def _caminho(texto: str) -> str | None:
 def url_reduzida(url: str) -> str | None:
     """``esquema://host[:porta]/caminho``, sem usuario, query nem fragmento.
 
-    Cada segmento do caminho que pareca id vira ``{id}``. Caminho relativo
-    (``/api/v1/ordens``) fica so como caminho. ``None`` se a URL nao e http(s) com um
-    host de letras, digitos, ponto e hifen, ou se nao se le.
+    O host so fica se for um de ``HOSTS_VISIVEIS``; senao vira ``REDACTED``, e a porta
+    sai com ele. Cada segmento do caminho que pareca id vira ``{id}``. Caminho
+    relativo (``/api/v1/ordens``) fica so como caminho. ``None`` se a URL nao e http(s)
+    com um host de letras, digitos, ponto e hifen, ou se nao se le.
     """
     if url.startswith("/"):
         return _caminho(url)
@@ -101,6 +134,8 @@ def url_reduzida(url: str) -> str | None:
         return None
     # Depois de ``//host`` o caminho vazio ou comeca por barra; vazio fica sem caminho.
     caminho = _caminho(partes.path) or ""
+    if host not in HOSTS_VISIVEIS:
+        host, porta = HOST_OCULTO, None
     return f"{partes.scheme}://{host}{'' if porta is None else f':{porta}'}{caminho}"
 
 
@@ -154,11 +189,11 @@ TAGS_PERMITIDAS: Final[dict[str, tuple[str, Callable[[object], object]]]] = {
     "server.address": ("string", _host_do_mercado_pago),
     "otel.status_code": ("string", _texto(r"OK|ERROR|UNSET")),
     "error": ("bool", _verdadeiro),
-    "messaging.system": ("string", _texto(r"[a-z]{1,30}")),
-    "messaging.operation": ("string", _texto(r"[a-z]{1,16}")),
-    "messaging.operation.type": ("string", _texto(r"[a-z]{1,16}")),
+    "messaging.system": ("string", _texto(r"rabbitmq")),
+    "messaging.operation": ("string", _texto(_OPERACAO_DE_MENSAGEM)),
+    "messaging.operation.type": ("string", _texto(_OPERACAO_DE_MENSAGEM)),
     "messaging.destination.name": ("string", _texto(_DESTINO)),
-    "db.system": ("string", _texto(r"[a-z]{1,30}")),
+    "db.system": ("string", _texto(r"postgresql|mongodb")),
 }
 
 
@@ -181,7 +216,8 @@ def _operacao(nome: object) -> str:
 
     Passa so o que tem a forma de um nome de operacao: de 1 a 4 palavras separadas por
     espaco, cada uma uma palavra sem digito ou um caminho. O resto (uma consulta SQL,
-    um texto) vira ``OPERACAO_OMITIDA``.
+    um texto com digito ou simbolo) vira ``OPERACAO_OMITIDA``. Nao ha lista de palavras:
+    "Joao da Silva" passa.
     """
     palavras: list[str] = []
     for parte in nome.split(" ") if isinstance(nome, str) else []:
@@ -262,14 +298,19 @@ def _span(
 
 
 def _processos(processos: object) -> dict[str, dict[str, str]]:
-    """Cada processo so com ``serviceName`` (sem host, IP, pod nem versao)."""
+    """Cada processo so com ``serviceName`` (sem host, IP, pod nem versao).
+
+    So fica o processo de chave ``p<numero>`` e de um dos servicos da saga. O span dos
+    outros sai tambem: a interface do Jaeger recusa o arquivo inteiro se um span aponta
+    para um processo que nao existe.
+    """
     limpos: dict[str, dict[str, str]] = {}
     for chave, processo in processos.items() if isinstance(processos, dict) else []:
         nome = processo.get("serviceName") if isinstance(processo, dict) else None
         if (
             _id_valido(chave, _ID_DO_PROCESSO)
             and isinstance(nome, str)
-            and _NOME_DO_SERVICO.fullmatch(nome)
+            and nome in SERVICOS
         ):
             limpos[chave] = {"serviceName": nome}
     return limpos

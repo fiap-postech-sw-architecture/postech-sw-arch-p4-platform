@@ -10,10 +10,12 @@ import pytest
 
 from e2e.apoio import segredos
 from e2e.apoio.evidencia import varrer
-from e2e.apoio.jaeger import TraceIdInvalidoError
+from e2e.apoio.jaeger import SERVICOS, TraceIdInvalidoError
 from e2e.apoio.mercadopago import URL_DA_API
 from e2e.apoio.trace_higienizado import (
     HOST_DO_MERCADO_PAGO,
+    HOST_OCULTO,
+    HOSTS_VISIVEIS,
     OPERACAO_OMITIDA,
     TAGS_PERMITIDAS,
     ChaveDeArquivoInvalidaError,
@@ -42,6 +44,9 @@ CREDENCIAL_DO_LINK = "kJ8x2Qw9ZlmN3pRt5VbYc7HdFgSaUeI1oXyWqLzP0nM"
 SENHA = "s3nh4-do-comprador"
 INICIO = 1_790_000_000_000_000
 MP = "https://api.mercadopago.com"
+# O DNS de um Service do projeto: host que fica na URL (os testes do caminho o usam).
+HOST_DO_BILLING = "billing-service.pytstop-billing.svc.cluster.local"
+INTERNO = f"https://{HOST_DO_BILLING}"
 
 # Tudo o que o trace de exemplo tem de sensivel; nada disto pode estar na saida.
 SENSIVEIS = (
@@ -388,8 +393,9 @@ def test_o_que_a_evidencia_precisa_mostrar_fica() -> None:
     servidor = spans["0000000000000001"]
     assert servidor["operationName"] == "POST /api/v1/ordens-de-servico"
     assert _tags_de(servidor)["http.route"] == "/api/v1/ordens-de-servico/{ordem_id}"
+    # Host fora da lista (aqui o do edge) vira REDACTED, como os servicos ja gravam.
     assert _tags_de(servidor)["http.url"] == (
-        "https://localhost/os/api/v1/ordens-de-servico/{id}"
+        "https://REDACTED/os/api/v1/ordens-de-servico/{id}"
     )
     mensagem = _tags_de(spans["0000000000000005"])
     assert mensagem == {
@@ -416,7 +422,7 @@ def test_valor_de_tag_permitida_fora_da_forma_esperada_sai_junto_com_a_tag() -> 
         # O texto livre e a URL de outro esquema saem; a rota e a URL perdem o que
         # parece id, o usuario e a senha, a query e o fragmento.
         "http.route": "/clientes/{id}/{id}",
-        "http.url": "https://x.test/x",
+        "http.url": "https://REDACTED/x",
     }
 
 
@@ -443,9 +449,14 @@ def test_valor_de_tag_permitida_fora_da_forma_esperada_sai_junto_com_a_tag() -> 
         pytest.param("error", "true", False, id="erro-em-texto"),
         pytest.param("messaging.system", "rabbitmq", True, id="sistema"),
         pytest.param("messaging.system", "rabbitmq://h", False, id="sistema-url"),
+        pytest.param("messaging.system", "joaodasilva", False, id="sistema-palavra"),
         pytest.param("messaging.operation", "publish", True, id="operacao"),
+        pytest.param("messaging.operation", "mariasouza", False, id="operacao-palavra"),
         pytest.param("messaging.operation.type", "process", True, id="tipo"),
+        pytest.param("messaging.operation.type", "send", True, id="tipo-send"),
+        pytest.param("messaging.operation.type", "settle", True, id="tipo-settle"),
         pytest.param("messaging.operation.type", "process 1", False, id="tipo-numero"),
+        pytest.param("messaging.operation.type", "joao", False, id="tipo-palavra"),
         pytest.param("messaging.destination.name", "os.eventos", True, id="fila"),
         pytest.param(
             "messaging.destination.name", "billing.comandos.retry.15s", True, id="retry"
@@ -457,7 +468,9 @@ def test_valor_de_tag_permitida_fora_da_forma_esperada_sai_junto_com_a_tag() -> 
             "messaging.destination.name", "os.eventos.", False, id="fila-ponto"
         ),
         pytest.param("db.system", "postgresql", True, id="banco"),
+        pytest.param("db.system", "mongodb", True, id="banco-mongo"),
         pytest.param("db.system", "postgresql://u:p@h", False, id="banco-url"),
+        pytest.param("db.system", "mariasouza", False, id="banco-palavra"),
         pytest.param("server.address", "api.mercadopago.com", True, id="host-do-mp"),
         pytest.param("server.address", "API.MercadoPago.com", True, id="host-em-caixa"),
         pytest.param("server.address", "billing-service", False, id="outro-host"),
@@ -592,47 +605,39 @@ def test_tag_com_o_tipo_trocado_sai() -> None:
             id="uuid",
         ),
         pytest.param(
-            f"https://x.test/publico/orcamentos/{CREDENCIAL_DO_LINK}",
-            "https://x.test/publico/orcamentos/{id}",
+            f"{INTERNO}/publico/orcamentos/{CREDENCIAL_DO_LINK}",
+            f"{INTERNO}/publico/orcamentos/{{id}}",
             id="token",
         ),
+        pytest.param(f"{INTERNO}/placa/ABC1D23", f"{INTERNO}/placa/{{id}}", id="placa"),
+        pytest.param(f"{INTERNO}/a/Maria", f"{INTERNO}/a/{{id}}", id="maiuscula"),
+        pytest.param(f"{INTERNO}/a/b%2Fc", f"{INTERNO}/a/{{id}}", id="codificado"),
         pytest.param(
-            "https://x.test/placa/ABC1D23", "https://x.test/placa/{id}", id="placa"
-        ),
-        pytest.param("https://x.test/a/Maria", "https://x.test/a/{id}", id="maiuscula"),
-        pytest.param(
-            "https://x.test/a/b%2Fc", "https://x.test/a/{id}", id="codificado"
-        ),
-        pytest.param(
-            "https://x.test/a;jsessionid=abc",
-            "https://x.test/{id}",
+            f"{INTERNO}/a;jsessionid=abc",
+            f"{INTERNO}/{{id}}",
             id="parametro-de-caminho",
         ),
         pytest.param(
-            "https://x.test/oauth2/token",
-            "https://x.test/{id}/token",
+            f"{INTERNO}/oauth2/token",
+            f"{INTERNO}/{{id}}/token",
             id="digito-na-palavra",
         ),
+        pytest.param(f"{INTERNO}/v1/v123/v2", f"{INTERNO}/v1/{{id}}/v2", id="versao"),
+        pytest.param(f"{INTERNO}/" + "a" * 41, f"{INTERNO}/{{id}}", id="palavra-longa"),
         pytest.param(
-            "https://x.test/v1/v123/v2", "https://x.test/v1/{id}/v2", id="versao"
-        ),
-        pytest.param(
-            "https://x.test/" + "a" * 41, "https://x.test/{id}", id="palavra-longa"
-        ),
-        pytest.param(
-            "https://x.test/api/{pagamento_id}/x",
-            "https://x.test/api/{pagamento_id}/x",
+            f"{INTERNO}/api/{{pagamento_id}}/x",
+            f"{INTERNO}/api/{{pagamento_id}}/x",
             id="modelo",
         ),
-        pytest.param("https://x.test/a/", "https://x.test/a/", id="barra-final"),
-        pytest.param("https://x.test", "https://x.test", id="sem-caminho"),
+        pytest.param(f"{INTERNO}/a/", f"{INTERNO}/a/", id="barra-final"),
+        pytest.param(INTERNO, INTERNO, id="sem-caminho"),
         pytest.param(
-            f"https://joao:{SENHA}@x.test/a", "https://x.test/a", id="usuario"
+            f"https://joao:{SENHA}@{HOST_DO_BILLING}/a", f"{INTERNO}/a", id="usuario"
         ),
         pytest.param("HTTPS://API.MercadoPago.COM/v1", f"{MP}/v1", id="caixa"),
         pytest.param(
-            "http://billing-service.pytstop-billing.svc.cluster.local:8000/api/v1/precos",
-            "http://billing-service.pytstop-billing.svc.cluster.local:8000/api/v1/precos",
+            f"http://{HOST_DO_BILLING}:8000/api/v1/precos",
+            f"http://{HOST_DO_BILLING}:8000/api/v1/precos",
             id="porta",
         ),
         pytest.param(
@@ -649,6 +654,79 @@ def test_tag_com_o_tipo_trocado_sai() -> None:
     ],
 )
 def test_url_reduzida_a_esquema_host_e_caminho_sem_id(url: str, esperada: str) -> None:
+    assert url_reduzida(url) == esperada
+
+
+def test_os_hosts_que_ficam_na_url_sao_o_do_mercado_pago_e_os_dos_servicos() -> None:
+    assert {
+        "api.mercadopago.com",
+        "os-service",
+        "billing-service",
+        "execution-service",
+        "os-service.pytstop-os.svc.cluster.local",
+        "billing-service.pytstop-billing.svc.cluster.local",
+        "execution-service.pytstop-execucao.svc.cluster.local",
+    } == HOSTS_VISIVEIS
+    assert set(SERVICOS) <= HOSTS_VISIVEIS
+
+
+@pytest.mark.parametrize("host", sorted(HOSTS_VISIVEIS))
+def test_host_da_lista_fica_na_url_com_a_porta(host: str) -> None:
+    assert url_reduzida(f"http://{host}:8000/a") == f"http://{host}:8000/a"
+
+
+@pytest.mark.parametrize(
+    ("url", "esperada"),
+    [
+        pytest.param("https://x.test/a", f"https://{HOST_OCULTO}/a", id="outro-host"),
+        pytest.param(
+            "http://10.244.0.31:8000/api/v1/x",
+            f"http://{HOST_OCULTO}/api/v1/x",
+            id="ip-de-pod-sem-a-porta",
+        ),
+        pytest.param(
+            "https://12345678909.exemplo.com/x",
+            f"https://{HOST_OCULTO}/x",
+            id="cpf-no-rotulo",
+        ),
+        pytest.param(
+            f"https://joao-da-silva.exemplo.com/{CPF}",
+            f"https://{HOST_OCULTO}/{{id}}",
+            id="nome-no-rotulo",
+        ),
+        pytest.param(
+            "https://localhost/os/api", f"https://{HOST_OCULTO}/os/api", id="edge"
+        ),
+        pytest.param(
+            "https://api.mercadopago.com.evil.example/x",
+            f"https://{HOST_OCULTO}/x",
+            id="sufixo-do-mp",
+        ),
+        pytest.param(
+            "https://evil-api.mercadopago.com/x",
+            f"https://{HOST_OCULTO}/x",
+            id="prefixo-do-mp",
+        ),
+        pytest.param(
+            "https://billing-service.outro-namespace.svc.cluster.local/x",
+            f"https://{HOST_OCULTO}/x",
+            id="servico-em-outro-namespace",
+        ),
+        pytest.param(
+            f"https://joao:{SENHA}@x.test:8443/x?y=z#{CPF}",
+            f"https://{HOST_OCULTO}/x",
+            id="usuario-porta-query-e-fragmento",
+        ),
+        pytest.param(
+            f"http://{HOST_OCULTO}/api/v1/x",
+            f"http://{HOST_OCULTO}/api/v1/x",
+            id="ja-redigido",
+        ),
+    ],
+)
+def test_host_fora_da_lista_vira_redacted_e_leva_a_porta_junto(
+    url: str, esperada: str
+) -> None:
     assert url_reduzida(url) == esperada
 
 
@@ -1080,6 +1158,46 @@ def test_span_sem_o_que_o_jaeger_exige_sai_e_os_outros_ficam(
     limpo = higienizar_trace(_com_spans([ruim, bom]))
 
     assert limpo is not None
+    assert [s["spanID"] for s in limpo["spans"]] == ["0000000000000002"]
+
+
+@pytest.mark.parametrize(
+    ("chave", "servico"),
+    [
+        pytest.param("p1", "joao.silva.12345678909:8080", id="servico-com-dado"),
+        pytest.param("p1", "12345678909", id="servico-numerico"),
+        pytest.param("p1", "kong", id="servico-que-nao-e-da-saga"),
+        pytest.param("p1", "OS-SERVICE", id="servico-em-maiuscula"),
+        pytest.param("p1", "os-service ", id="servico-com-espaco"),
+        pytest.param("12345678909", "os-service", id="chave-numerica"),
+        pytest.param(
+            "TEST-1234567890123456-101010", "os-service", id="chave-com-token"
+        ),
+        pytest.param("p 1", "os-service", id="chave-com-espaco"),
+        pytest.param("p1;x", "os-service", id="chave-com-simbolo"),
+        pytest.param("P1", "os-service", id="chave-em-maiuscula"),
+        pytest.param("p", "os-service", id="chave-sem-numero"),
+        pytest.param("p12345", "os-service", id="chave-com-numero-longo"),
+    ],
+)
+def test_processo_fora_da_lista_leva_os_spans_dele_e_os_outros_ficam(
+    chave: str, servico: str
+) -> None:
+    bom = _span("0000000000000002", "find", "p2", {"span.kind": "client"})
+    ruim = _span("0000000000000001", "GET", chave, {})
+    bruto = {
+        "traceID": TRACE_ID,
+        "spans": [ruim, bom],
+        "processes": {
+            chave: {"serviceName": servico},
+            "p2": {"serviceName": "billing-service"},
+        },
+    }
+
+    limpo = higienizar_trace(bruto)
+
+    assert limpo is not None
+    assert limpo["processes"] == {"p2": {"serviceName": "billing-service"}}
     assert [s["spanID"] for s in limpo["spans"]] == ["0000000000000002"]
 
 
