@@ -10,6 +10,7 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Recent decisions
 
+- 2026-10-20 - O `verificar --final` reprova texto preliminar (versao preliminar, pendente, aguarda, em coleta, Inserir o link, dependem do grupo...) no documento de entrega, no indice e na matriz; o modo padrao nao muda. No congelamento, o grupo reescreve esses trechos antes do PDF final - scripts/evidencias/verificar.py; tests/test_evidencias_entrega.py
 - 2026-10-19 - O `make mp-sandbox` e o `make mp-sandbox-ensaio` salvam o trace da OS de cada cenario em `trace-<cenario>-<trace_id>.json`, higienizado por lista de permissao: o Jaeger guarda so em memoria, e o trace com a chamada do Billing ao Mercado Pago so existe durante o `make mp-sandbox`, que exige pagar de novo no navegador - README, O trace da saga; e2e/apoio/trace_higienizado.py
 
 - 2026-10-19 - Atualiza as pendências de RNF-052 registradas abaixo: a collection e seu passo foram integrados no Platform #24. O CI do PR 39230026573 e o CD da main 39231733886 passaram; fontes, hashes e limites estão em docs/entrega/fase4/evidencias/newman-resumo.md. Isso comprova essas combinações de commits, sem antecipar o congelamento final.
@@ -83,6 +84,7 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Discovered conventions
 
+- 2026-10-20 - No pacote de entrega: PR sempre com o repositorio ("Billing #19", "platform #24"); "OS Service" e o servico e "OS" a ordem; "versao preliminar" e o documento e "ensaio" so a execucao local; "grupo" e a equipe e "integrante com as credenciais" quem roda a sandbox - docs/entrega/
 - 2026-10-19 - Tag de span nova so entra na evidencia se for para `TAGS_PERMITIDAS` com o tipo do Jaeger e um validador do valor: enumeracao onde o vocabulario e fechado, regex de forma so onde nao e (e a doc diz qual e qual); `test_a_lista_de_tags_permitidas_e_fechada` fixa a lista, e o trace real do Jaeger 1.76 (copia congelada em `tests/e2e_apoio/dados/`, nao a evidencia da entrega) passa inteiro pelo teste do formato - tests/e2e_apoio/test_trace_higienizado.py
 
 - 2026-10-14 - `e2e/zap/regras.conf` segue o `load_config` do ZAP (id TAB acao TAB motivo, uma regra por linha, exatamente dois TAB: com menos o ZAP recusa o arquivo, com dois a mais o scan quebra) e cada regra esta na tabela do README com a mesma acao (`tests/test_zap_baseline.py`); regra ignorada so entra quando o relatorio mostrar o achado, e achado real se corrige na causa
@@ -106,6 +108,7 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Gotchas
 
+- 2026-10-20 - O pin `cd-servico.yml@<sha>` dos tres servicos nao e atualizado pelo Dependabot: o platform nao tem tag nem release, e o Dependabot lista a dependencia sem propor versao. Trocar o SHA a mao, por PR em cada servico, depois do CD do platform verde - README, CD reutilizavel dos servicos; ADR-042
 - 2026-10-19 - A interface do Jaeger 1.76 le o upload em `loadJsonDone` com `payload.data.map(transformTraceData)` e usa `data.processes[processID]` sem valor padrao: o arquivo e `{"data": [trace]}`; um span cujo `processID` falta em `processes` faz a UI recusar o arquivo inteiro (por isso o higienizador descarta o span), e `logs`, `warnings` e as tags do processo podem faltar - README, O trace da saga
 
 - 2026-10-19 - `no_pod` precisa descartar toda a saida quando `kubectl exec` ou seu prazo externo falha: um `code=124` ja impresso pelo processo remoto pode vir seguido de erro de transporte e nao prova a NetworkPolicy. O smoke testa a saida parcial no banco e no notificador; o bloqueio do notificador so vale com a API conectada ao mesmo broker - scripts/ci/smoke-servicos.sh; tests/test_smoke_servicos.py
@@ -256,6 +259,7 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Review lessons
 
+- 2026-10-20 - Frase datada de estado ("em 18/10/2026 so o OS tem cd.yml") envelheceu em nove arquivos quando o Billing integrou o CD; estado atual vai com o link do run, e trocar o titulo de uma evidencia exige rodar `test_documentacao` (as ancoras de README, ADR, RFC e gap analysis apontam para ele) - revisao final da entrega
 - 2026-10-20 - Promessa de seguranca no docstring ou no README vale para o validador mais fraco: `[a-z]{1,30}` deixa passar palavra, e "nenhum texto livre passa" era falso; vocabulario fechado pede enumeracao, e onde nao ha vocabulario a doc diz o que passa. O helper de teste que tira o tipo da tag do valor Python nunca monta "tipo certo, valor com dado" e deixa mutante vivo, e a fixture de teste nao pode ser o artefato de entrega, que vai ser regravado - PR #28
 
 - 2026-10-19 - O headSha do run não identifica necessariamente o checkout efetivamente testado: no CI de PR do Newman, o Platform usa o merge sintético. As quatro fontes foram extraídas dos registros dos passos checkout, e a equivalência entre a árvore sintética, a ponta revisada e o squash foi demonstrada separadamente. Links existentes também precisam de conferência semântica: títulos repetidos Como rodar levavam o Newman ao procedimento da sandbox, embora a âncora fosse válida.
