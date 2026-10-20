@@ -895,6 +895,7 @@ As recusas da conferência prévia começam com `[mp-sandbox] não posso seguir:
 | O pagamento não confirma em 2 min | Conciliação parada | `kubectl --context kind-pytstop-p4 -n pytstop-billing logs deploy/billing-service-prazos` (a linha `deadlines_started` diz `conciliacao: true`) |
 | `o Billing pode ter ficado em modo real` | O desfazer falhou em algum passo | Rode os comandos que a mensagem traz, ou `make mp-sandbox-ensaio` |
 | `a expiração NÃO foi provada` ou `a natureza de teste do pagamento NÃO foi provada` (no `resumo.md`) | A consulta do Mercado Pago não trouxe `expires` e `expiration_date_to`, ou o `live_mode`, no formato esperado | Não reprova: o `resumo.md` registra a observação. Para a expiração, a prova indireta é o log do consumidor e a métrica `pytstop_mercadopago_requisicoes_total{operacao="cancelar_cobranca"}`; para o `live_mode`, o painel do vendedor de teste |
+| `trace não encontrado` (no `resumo.md`) | Em 30 s o Jaeger não trouxe nenhum trace da OS que valesse: não respondeu pelo port-forward (o motivo traz o nome do erro), os spans ainda não tinham chegado ou ele reiniciou (guarda tudo na memória) | Não reprova o cenário, porque o pagamento é a prova principal. O trace ainda pode ser visto no Jaeger (`make port-forward`, busca pela tag `messaging.message.conversation_id` com o `ordem_id` do `resumo.md`) e capturado em print. Não baixe o JSON do Jaeger para a evidência: ele não é higienizado |
 
 ### O que fica fora do `make e2e`, do `make demo` e do CI
 
