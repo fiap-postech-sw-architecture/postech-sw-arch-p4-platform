@@ -24,11 +24,12 @@ def _ids(texto: str) -> set[str]:
 
 
 # Marcas do texto preliminar do pacote; a versão final não pode levar nenhuma.
+# O \b inicial evita falso positivo dentro de palavra ("independente").
 RASCUNHO = re.compile(
-    r"vers[aã]o (?:de ensaio|preliminar)|documento de ensaio|durante o ensaio"
+    r"\b(?:vers[aã]o (?:de ensaio|preliminar)|documento de ensaio|durante o ensaio"
     r"|inserir o link|ainda ser[aá] gravado|n[aã]o serve para submiss[aã]o"
     r"|antes da submiss[aã]o|em coleta|a coletar|aguarda|pendente"
-    r"|dependem do grupo",
+    r"|dependem do grupo)",
     re.IGNORECASE,
 )
 # Documentos que vão para o PDF e a matriz que eles citam.
