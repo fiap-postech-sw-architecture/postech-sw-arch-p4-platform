@@ -57,10 +57,10 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | Bancos | [bancos](observabilidade/dashboards/pytstop-bancos.json) | [painéis técnicos](observabilidade/README.md) |
 | Plataforma: broker, borda e alvos | [plataforma](observabilidade/dashboards/pytstop-plataforma.json) | [painéis técnicos](observabilidade/README.md) |
 
-Os JSONs e a documentação estão versionados. O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As nove capturas finais com três dias de histórico continuam pendentes, conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
+O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As nove capturas finais, com três dias de histórico, continuam pendentes, conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
 
 ## Conferência
 
-[Auditoria pré-entrega e dívida técnica](docs/entrega/fase4/auditoria-e-divida-tecnica.md).
+A [auditoria pré-entrega e dívida técnica](docs/entrega/fase4/auditoria-e-divida-tecnica.md) separa o que já está provado do que falta provar.
 
 Etapas que dependem do grupo: identificação dos participantes, teste real na sandbox do Mercado Pago, gravação e publicação do vídeo e submissão do PDF no portal.
