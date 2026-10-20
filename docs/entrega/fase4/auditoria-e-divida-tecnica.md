@@ -42,6 +42,15 @@ O dashboard de bancos usa apenas as séries disponíveis no exporter; ele não u
 | Redrive manual depois de erasure | O runbook proíbe o procedimento, mas o script não conhece a remoção dos dados nem tem trava automática | Antes de automatizar redrive ou rever esse procedimento; preservar a proibição atual |
 | Mailpit da demonstração | Sem autenticação ou política de ingresso; só o notificador tem restrição de saída, e as APIs podem alcançá-lo | Antes de usar dados reais ou expor esse ambiente; SMTP real exige STARTTLS e credenciais em Secret, conforme ADR-042 |
 | Atualizações automáticas do Platform | Não há catálogo Dependabot no repositório; os pins atuais são atualizados deliberadamente | Quando ampliar a automação de dependências; manter verificação e revisão dos pins atuais |
+| Import-linter do OS Service | A aplicação de dois contextos captura `sqlalchemy.exc.IntegrityError`, e faltam os contratos que o Billing e a Execução têm (domínio e aplicação sem framework; `compartilhado` sem contexto) | Na próxima mudança da aplicação do OS Service; mapear o erro para a exceção de domínio e copiar os dois contratos |
+| Camada `interfaces` com ORM no Billing e na Execução | Routers e `comandos.py` montam repositórios concretos e leem tabelas ORM para retomar o trace | Ao mexer nos handlers de comando; montar tudo em `dependencies.py` ou no caso de uso |
+| Grafia dos estados | O OS Service grava e expõe estados em minúsculas; Billing e Execução, em maiúsculas | Antes de mudar o contrato público das APIs; normalizar com versão nova |
+| Tradução do contrato fora da infraestrutura | A RFC-004 põe a ACL na infraestrutura; o código traduz em `interfaces/comandos.py`, e o orquestrador consome a linguagem publicada sem tradução | Na próxima revisão da RFC-004, seção 3.1 |
+| Base `compartilhado` copiada e divergente | OS e Execução guardam conceitos de domínio (CPF, placa, veículo) na base, e `IntegrationEvent` e o sufixo das exceções divergem entre os serviços | Ao alinhar a base técnica entre os três repositórios |
+| Três estilos de evento | Evento de domínio acoplado ao contrato no Billing, fato de aplicação na Execução e evento de domínio mais comando de saga no OS Service | Ao criar o próximo evento de integração; registrar a regra no ADR-036 |
+| Imports do contexto vizinho na borda | Adapters, routers e o coletor leem constantes e enums do domínio vizinho no mesmo serviço; o núcleo não importa | Quando o import-linter ganhar contrato para a borda |
+| Funções e classes longas | Onze funções acima de 50 linhas no OS Service e três no Billing; agregados com máquina de estados acima de 300 linhas | Ao mexer nesses módulos; começar por `registrar_error_handlers` e `criar_app` |
+| `Any` nos payloads JSON | Uso sem comentário em `dict[str, Any]` de payload nos três serviços | Na próxima mudança de payload; um alias `Json` por serviço |
 
 Uma dívida aceita não dispensa o gate nem autoriza declarar uma prova inexistente. A revisão final deve confirmar se algum item ganhou impacto maior com as últimas alterações.
 
