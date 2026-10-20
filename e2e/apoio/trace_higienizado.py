@@ -494,9 +494,10 @@ def esperar_trace(
 ) -> TraceDoCenario:
     """O trace da ordem, higienizado, quando ele para de crescer.
 
-    Vale o trace que duas leituras seguidas trazem com os mesmos spans; no modo real,
-    so o que tem a chamada do Billing ao Mercado Pago (que o video precisa mostrar).
-    Se ``PRAZO_DO_TRACE`` acaba antes, fica o melhor trace que se viu. Nao levanta por
+    Vale o trace que duas leituras seguidas trazem com o mesmo id e os mesmos spans; no
+    modo real, so o que tem a chamada do Billing ao Mercado Pago (que o video precisa
+    mostrar), e no ensaio, so o que tem os tres servicos. Se ``PRAZO_DO_TRACE`` acaba
+    antes, fica o melhor trace que se viu, mesmo parcial. Nao levanta por
     causa do Jaeger: fora do ar, ele nao reprova o cenario, e o nome do erro (nunca a
     mensagem) vai para o resumo. O ``KeyboardInterrupt`` passa direto, para quem
     chama registrar o ``INTERROMPIDO``.
