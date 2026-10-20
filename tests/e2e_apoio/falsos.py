@@ -23,6 +23,11 @@ CHAVE_APP_USR = (
 ASSINATURA = "assinatura-do-webhook-0123456789abcdef"
 # Sem prefixo de token conhecido: a mascara central so a pega se foi registrada.
 CHAVE_OPACA = "opaco-0123456789-abcdef"
+# O que o trace falso leva de sensivel (na query da URL e no comando do banco): nada
+# disto pode chegar a um arquivo da evidencia.
+DADO_DO_TRACE = "123.456.789-09"
+TRACE_ID_FALSO = "36c945dd0cb1589e33ecc81badd2bd71"
+SERVICOS_DA_SAGA = ("os-service", "billing-service", "execution-service")
 
 
 class Relogio:
@@ -46,6 +51,69 @@ class Relogio:
             msg = "o laco dormiu mais vezes que o limite: regressao no prazo"
             raise AssertionError(msg)
         self.agora += segundos
+
+
+def trace_do_jaeger(
+    *,
+    trace_id: str = TRACE_ID_FALSO,
+    spans: int = 4,
+    chamada_ao_mp: bool = False,
+    servicos: Sequence[str] = SERVICOS_DA_SAGA,
+) -> dict[str, Any]:
+    """Um trace como o ``/api/traces`` do Jaeger o devolve, com dado que nao deve sair.
+
+    ``spans`` conta tambem o da chamada ao Mercado Pago, que o Billing faz com
+    ``chamada_ao_mp``; os spans se repartem entre os ``servicos``.
+    """
+    processos = {
+        f"p{numero}": {
+            "serviceName": servico,
+            "tags": [{"key": "hostname", "type": "string", "value": f"pod-{numero}"}],
+        }
+        for numero, servico in enumerate(servicos, start=1)
+    }
+    do_billing = next(
+        (
+            p
+            for p, dados in processos.items()
+            if dados["serviceName"] == "billing-service"
+        ),
+        "p1",
+    )
+    lista: list[dict[str, Any]] = []
+    for numero in range(1, spans + 1):
+        chamada = chamada_ao_mp and numero == 1
+        url = (
+            "https://api.mercadopago.com/v1/payments/search?external_reference=abc"
+            if chamada
+            else f"https://x.test/a/{DADO_DO_TRACE}?cpf={DADO_DO_TRACE}"
+        )
+        lista.append(
+            {
+                "traceID": trace_id,
+                "spanID": f"{numero:016x}",
+                "operationName": "GET" if chamada else f"find {DADO_DO_TRACE}",
+                "references": [],
+                "startTime": 1_790_000_000_000_000 + numero,
+                "duration": 10,
+                "tags": [
+                    {"key": "span.kind", "type": "string", "value": "client"},
+                    {"key": "http.url", "type": "string", "value": url},
+                    {"key": "db.statement", "type": "string", "value": DADO_DO_TRACE},
+                ],
+                "logs": [{"timestamp": 1, "fields": []}],
+                "processID": do_billing
+                if chamada
+                else f"p{numero % len(processos) + 1}",
+                "warnings": None,
+            }
+        )
+    return {
+        "traceID": trace_id,
+        "spans": lista,
+        "processes": processos,
+        "warnings": None,
+    }
 
 
 class ExecutorFalso:
