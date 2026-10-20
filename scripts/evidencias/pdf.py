@@ -1,16 +1,23 @@
-"""PDF da entrega: receita pandoc/weasyprint/Mermaid das fases anteriores.
+"""PDF da entrega: capa ABNT, sumário, diagramas e anexos, como nas fases 1 a 3.
 
-Adapta scripts/build-entrega-pdf.sh da fase 3 e gerar_pdf_entrega.py da skill
-entrega-tech-challenge. Mantém pendências e anexa o índice, com links por origem.
+Adapta o scripts/build-entrega-pdf.sh da fase 3 e o gerar_pdf_entrega.py da
+skill entrega-tech-challenge: capa sem número de página, sumário logo depois
+dela, rodapé numerado, marcadores por título, links relativos trocados pelos do
+GitHub e cada diagrama Mermaid largo em página paisagem própria. Todo diagrama
+do documento é cópia literal de um da RFC-004 (o geral também está no README),
+e o índice da entrega fecha o PDF como Anexo C. Pendências continuam visíveis
+no ensaio.
 """
 
 from __future__ import annotations
 
 import argparse
 import html
+import itertools
 import json
 import re
 import shutil
+import struct
 
 # Executáveis resolvidos no PATH; argumentos separados, sem shell.
 import subprocess  # nosec B404
@@ -22,8 +29,15 @@ from scripts.evidencias.verificar import verificar
 
 DOCUMENTO = Path("docs/entrega/fase4/entrega-fase-4.md")
 RFC = Path("docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md")
+INDICE = Path("INDICE-DA-ENTREGA.md")
+LOGO = Path("docs/entrega/fase4/logo-pytstop.png")
 MERMAID = re.compile(r"```mermaid\n(.*?)```", re.S)
 REPO = "fiap-postech-sw-architecture/postech-sw-arch-p4-platform"
+MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0"
+# Linha da tabela de participantes do documento: | Nome | RM123456 | Discord |
+PARTICIPANTE = re.compile(r"^\| ([^|\n]+?) \| (RM\d+) \|", re.M)
+# Pontos de quebra dentro de código: camelCase e depois de "_", "/" e ".".
+QUEBRA = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[_/.])(?=[^\W_])")
 
 
 def reescrever_links(
@@ -47,29 +61,92 @@ def reescrever_links(
     return re.sub(r"\[([^\]]+)\]\(([^)]+)\)", trocar, texto)
 
 
-def preparar(raiz: Path, repo: str, branch: str) -> str:
-    """Confere a fonte Mermaid e combina documento e índice sem editar originais."""
-    documento = (raiz / DOCUMENTO).read_text()
+def conferir_diagramas(documento: str, rfc: str, readme: str) -> None:
+    """Todo diagrama do documento vem da RFC; o geral, o primeiro, também do README."""
     blocos = MERMAID.findall(documento)
-    if len(blocos) != 1 or any(
-        blocos[0] not in MERMAID.findall((raiz / fonte).read_text())
-        for fonte in (RFC, Path("README.md"))
+    da_rfc = MERMAID.findall(rfc)
+    if (
+        not blocos
+        or blocos[0] not in MERMAID.findall(readme)
+        or any(bloco not in da_rfc for bloco in blocos)
     ):
         raise ValueError("Mermaid divergente entre documento, RFC e README")
-    documento = reescrever_links(
-        documento, repo, branch, (raiz / DOCUMENTO).parent, raiz
+
+
+def secao_da_rfc(rfc: str, bloco: str) -> str:
+    """Título da seção da RFC que traz o diagrama, usado na legenda."""
+    posicao = rfc.find(f"```mermaid\n{bloco}```")
+    if posicao < 0:
+        raise ValueError("Mermaid divergente entre documento, RFC e README")
+    titulos = re.findall(r"^#{2,4} (.+)$", rfc[:posicao], re.M)
+    return titulos[-1].replace("`", "") if titulos else "RFC-004"
+
+
+def capa(documento: str, logo: Path) -> str:
+    """Capa ABNT, um participante por linha, com a tabela da seção 1."""
+    autores = "\n".join(
+        f"<p>{html.escape(nome)} — {rm}</p>"
+        for nome, rm in PARTICIPANTE.findall(documento)
     )
-    # A arquitetura ocupa página própria; a receita da fase 3 limita a imagem
-    # à área imprimível, pois weasyprint não pagina imagens.
-    documento = documento.replace(
-        "## 4. Arquitetura final",
-        '<div class="arquitetura">\n\n## 4. Arquitetura final',
+    return f"""<div class="capa">
+<div>
+<p><strong>FIAP — Faculdade de Informática e Administração Paulista</strong></p>
+<p>15SOAT — Pós-Graduação em Arquitetura de Software</p>
+</div>
+<div>
+<img class="logo" src="{html.escape(str(logo))}" alt="Logo PytStop"/>
+<p class="titulo">Tech Challenge — Fase 4</p>
+<p class="subtitulo">PytStop — Microsserviços com Saga Orquestrada</p>
+<p><em>Documento de Entrega</em></p>
+</div>
+<div class="autores">
+{autores}
+</div>
+<div>
+<p>São Paulo — 2026</p>
+</div>
+</div>
+
+<div id="pos-capa"></div>
+
+"""
+
+
+def preparar(raiz: Path, repo: str, branch: str) -> str:
+    """Capa, documento e índice num markdown só, sem editar os originais."""
+    documento = (raiz / DOCUMENTO).read_text()
+    conferir_diagramas(
+        documento, (raiz / RFC).read_text(), (raiz / "README.md").read_text()
     )
-    documento = documento.replace("## 5. Divisão", "</div>\n\n## 5. Divisão")
-    indice = reescrever_links(
-        (raiz / "INDICE-DA-ENTREGA.md").read_text(), repo, branch, raiz, raiz
+    corpo = reescrever_links(documento, repo, branch, (raiz / DOCUMENTO).parent, raiz)
+    indice = reescrever_links((raiz / INDICE).read_text(), repo, branch, raiz, raiz)
+    indice = re.sub(r"\A# ", "# Anexo C — ", indice, count=1)
+    return capa(documento, raiz / LOGO) + corpo + "\n\n" + indice
+
+
+def ajustar_html(pagina: str) -> str:
+    """Sumário depois da capa e código inline que quebra entre palavras."""
+    # Fatias iguais do pandoc espremeriam as colunas de texto.
+    pagina = re.sub(r"<colgroup>.*?</colgroup>", "", pagina, flags=re.S)
+    nav = re.search(r'<nav id="TOC".*?</nav>', pagina, flags=re.S)
+    if nav is None:
+        raise ValueError("sumário ausente no HTML do pandoc")
+    pagina = pagina.replace(nav.group(0), "", 1)
+    pagina, trocas = re.subn(
+        r'<div id="pos-capa">\s*</div>',
+        lambda m: m.group(0) + nav.group(0),
+        pagina,
+        count=1,
     )
-    return documento + '\n\n<div class="indice">\n\n' + indice + "\n\n</div>\n"
+    if trocas != 1:
+        raise ValueError("marcador pos-capa ausente: o sumário ficaria antes da capa")
+    # Sem <wbr>, o identificador longo alarga a coluna ou parte em qualquer letra.
+    return re.sub(
+        r"(?<!<pre>)<code>(.*?)</code>",
+        lambda m: f"<code>{QUEBRA.sub('<wbr>', m.group(1))}</code>",
+        pagina,
+        flags=re.S,
+    )
 
 
 def executar(argumentos: list[str]) -> None:
@@ -95,17 +172,25 @@ def main() -> int:
     if erros:
         parser.error("\n".join(erros))
     texto = preparar(raiz, REPO, "entrega-fase-4" if args.final else "main")
+    rfc = (raiz / RFC).read_text()
     with tempfile.TemporaryDirectory(prefix="pytstop-entrega-") as pasta:
         tmp = Path(pasta)
+        numeros = itertools.count(1)
 
         def renderizar(match: re.Match[str]) -> str:
-            fonte, imagem = tmp / "arquitetura.mmd", tmp / "arquitetura.png"
+            # A orientação da página depende da proporção do PNG; weasyprint
+            # não pagina imagem, então max-height evita o corte no rodapé.
+            numero = next(numeros)
+            fonte, imagem = (
+                tmp / f"diagrama-{numero}.mmd",
+                tmp / f"diagrama-{numero}.png",
+            )
             fonte.write_text(match.group(1))
             executar(
                 [
                     "npx",
                     "--yes",
-                    "@mermaid-js/mermaid-cli@11.17.0",
+                    MERMAID_CLI,
                     "-i",
                     str(fonte),
                     "-o",
@@ -118,9 +203,14 @@ def main() -> int:
                     "white",
                 ]
             )
+            largura, altura = struct.unpack(">II", imagem.read_bytes()[16:24])
+            classe = "paisagem" if largura >= altura * 1.25 else "retrato"
+            titulo = html.escape(secao_da_rfc(rfc, match.group(1)))
+            legenda = f"Diagrama {numero} — RFC-004, {titulo}."
             return (
-                f'<img class="diagrama" src="{html.escape(str(imagem))}" '
-                'alt="Arquitetura: serviços, bancos, mensageria e observabilidade"/>\n'
+                f'<div class="{classe}">\n\n'
+                f'<img src="{html.escape(str(imagem))}" alt="Diagrama {numero}"/>\n\n'
+                f'<p class="legenda">{legenda}</p>\n\n</div>\n'
             )
 
         (tmp / "entrega.md").write_text(MERMAID.sub(renderizar, texto))
@@ -128,29 +218,29 @@ def main() -> int:
             [
                 "pandoc",
                 str(tmp / "entrega.md"),
+                # Âncoras como as do GitHub: os links internos do documento
+                # (#7-estratégia-da-saga) valem no repositório e no PDF.
+                "--from",
+                "markdown+gfm_auto_identifiers",
                 "-o",
                 str(tmp / "entrega.html"),
                 "--standalone",
                 "--toc",
-                "--toc-depth=2",
+                "--toc-depth=3",
                 "-V",
                 "lang=pt-BR",
                 "-V",
                 "toc-title=Sumário",
+                # Mantém o CSS padrão do pandoc, a tipografia das fases 1 a 3.
+                "-V",
+                "document-css=true",
                 "--metadata",
-                "pagetitle=PytStop - Tech Challenge Fase 4",
+                "pagetitle=PytStop — Entrega Fase 4",
                 "--css",
                 str(Path(__file__).with_name("pdf.css")),
             ]
         )
-        pagina = (tmp / "entrega.html").read_text()
-        pagina = re.sub(r"<colgroup>.*?</colgroup>", "", pagina, flags=re.S)
-        larguras = {"JSON": "8em", "Como ler": "10em"}
-        pagina = re.sub(
-            r"<th[^>]*>(JSON|Como ler)</th>",
-            lambda m: f'<th style="width:{larguras[m.group(1)]}">{m.group(1)}</th>',
-            pagina,
-        )
+        pagina = ajustar_html((tmp / "entrega.html").read_text())
         (tmp / "entrega.html").write_text(pagina)
         executar(["weasyprint", str(tmp / "entrega.html"), str(destino)])
     print(f"PDF {'final' if args.final else 'de ensaio'} gerado: {destino}")
