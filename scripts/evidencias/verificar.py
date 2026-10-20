@@ -210,7 +210,9 @@ def verificar(
                 erros.append(f"final: evidência ausente: {nome}")
         for relativo in PRELIMINARES:
             arquivo = raiz / relativo
-            marcas = RASCUNHO.findall(arquivo.read_text()) if arquivo.is_file() else []
+            texto = arquivo.read_text() if arquivo.is_file() else ""
+            # Código inline não é marca: `AGUARDANDO_DECISAO` é etapa da saga.
+            marcas = RASCUNHO.findall(re.sub(r"`[^`\n]*`", "", texto))
             for marca in sorted({m.lower() for m in marcas}):
                 erros.append(f"final: texto preliminar em {relativo}: {marca}")
         texto = documento.read_text() if documento.is_file() else ""

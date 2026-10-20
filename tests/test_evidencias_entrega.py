@@ -203,5 +203,6 @@ def test_final_sem_marca_preliminar_nao_acusa_texto(pacote: Path) -> None:
     (pacote / "docs/entrega/fase4/entrega-fase-4.md").write_text(
         "| João | RM123456 |\nEnsaio local de 19/10 com 14 cenários.\n"
         "Pipeline independente de CI/CD; comando para coletar o snapshot.\n"
+        "Etapa `AGUARDANDO_DECISAO`; métrica `outbox_pendentes`.\n"
     )
     assert not any("texto preliminar" in e for e in verificar(pacote, final=True))
