@@ -872,6 +872,9 @@ def test_o_nome_do_arquivo_leva_a_chave_e_o_trace_id_hexadecimal(trace_id: str) 
     "trace_id",
     [
         pytest.param("../../etc/passwd", id="caminho"),
+        # Do tamanho certo e so com barra e ponto: nada alem de hexadecimal passa.
+        pytest.param("../" * 8, id="so-barras-e-pontos"),
+        pytest.param("a" * 16 + "/..", id="hexa-com-barra"),
         pytest.param(f"{TRACE_ID}/../x", id="sufixo"),
         pytest.param(TRACE_ID.upper(), id="maiusculas"),
         pytest.param(f"{TRACE_ID}.json", id="extensao"),
