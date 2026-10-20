@@ -8,6 +8,9 @@ table { display: table; width: 100%; border-collapse: collapse; font-size: 9pt; 
 th, td { padding: 3pt 5pt; vertical-align: top; overflow-wrap: normal; hyphens: manual; }
 th { text-align: left; }
 tr { break-inside: avoid; }
+/* Referência interna numa tabela (o índice dos artefatos, a rastreabilidade)
+   leva a página do destino: "4.1, p. 9". */
+td a[href^="#"]::after { content: ", p. " target-counter(attr(href), page); }
 img { max-width: 100%; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8.5pt; }
 @page { size: A4; @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
@@ -35,22 +38,16 @@ h1 { break-before: page; }
 #TOC a { text-decoration: none; color: inherit; }
 #TOC a::after { content: leader('.') target-counter(attr(href), page); }
 
-/* Diagramas Mermaid: os largos em página paisagem própria; os altos no fluxo
-   do texto, sem partir a figura. O corpo do pandoc tem 36em; a div sai desse
-   limite. */
-@page paisagem { size: A4 landscape; margin: 1.2cm;
-                 @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
-.paisagem { page: paisagem; break-before: page; break-after: page; width: 26cm; margin-left: -5.4cm; }
-.paisagem img { display: block; margin: 0 auto; max-width: 100%; max-height: 16.5cm; }
-.retrato { break-inside: avoid; width: 17cm; margin-left: -1.3cm; }
-.retrato img { display: block; margin: 0 auto; max-width: 100%; max-height: 23cm; }
+/* Diagramas Mermaid no fluxo do texto, sem partir a figura e sem página
+   paisagem. O corpo do pandoc tem 36em; a div usa a largura da página. */
+.diagrama { break-inside: avoid; width: 17cm; margin-left: -1.3cm; }
+.diagrama img { display: block; margin: 0 auto; max-width: 100%; max-height: 19cm; }
 .legenda { font-style: italic; font-size: 9.5pt; text-align: center; margin-top: 3mm; }
 
-/* Galeria de evidências: imagem, legenda e linha de fonte juntas, duas por página. */
+/* Galeria de evidências: imagem, legenda e linha de fonte juntas, duas por
+   página, inclusive as telas altas do Swagger. */
 figure { margin: 4mm 0 0; break-inside: avoid; break-after: avoid; }
-figure img { display: block; max-width: 100%; max-height: 108mm; margin: 0 auto; border: 1px solid #c9d3d8; }
-/* As telas do Swagger são altas: uma por página. */
-figure img[src*="swagger-"] { max-height: 205mm; }
+figure img { display: block; max-width: 100%; max-height: 88mm; margin: 0 auto; border: 1px solid #c9d3d8; }
 figcaption { margin-top: 2mm; font-size: 9.5pt; font-style: italic; }
 figure + p { margin: 1mm 0 4mm; font-size: 8.5pt; color: #555; }
 

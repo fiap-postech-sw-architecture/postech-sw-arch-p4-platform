@@ -77,15 +77,18 @@ def test_legenda_traz_a_secao_da_rfc_que_contem_o_diagrama() -> None:
         pdf.secao_da_rfc(rfc, "flowchart LR\n X --> Y\n")
 
 
-def test_pdf_inclui_indice_com_links_reescritos_por_arquivo(tmp_path: Path) -> None:
+def test_pdf_reescreve_os_links_e_nao_anexa_o_indice_do_repositorio(
+    tmp_path: Path,
+) -> None:
     raiz = _pacote(
         tmp_path, f"{GERAL}\n{SAGA}\nPendências visíveis\n[leia](../../../README.md)"
     )
     texto = pdf.preparar(raiz, "grupo/repo", "main")
     assert "Pendências visíveis" in texto
-    assert "\n# Anexo C — Índice\n" in texto
-    assert "(https://github.com/grupo/repo/blob/main/docs/entrega/matriz.md)" in texto
     assert "(https://github.com/grupo/repo/blob/main/README.md)" in texto
+    # O índice dos artefatos abre o documento; o do repositório fica no link.
+    assert "Índice" not in texto
+    assert "matriz.md" not in texto
 
 
 def test_capa_abnt_abre_o_pdf_com_os_participantes_do_documento(

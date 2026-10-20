@@ -2,11 +2,11 @@
 
 Adapta o scripts/build-entrega-pdf.sh da fase 3 e o gerar_pdf_entrega.py da
 skill entrega-tech-challenge: capa sem número de página, sumário logo depois
-dela, rodapé numerado, marcadores por título, links relativos trocados pelos do
-GitHub e cada diagrama Mermaid largo em página paisagem própria. Todo diagrama
-do documento é cópia literal de um da RFC-004 (o geral também está no README),
-e o índice da entrega fecha o PDF como Anexo C. Pendências continuam visíveis
-no ensaio.
+dela, rodapé numerado, marcadores por título e links relativos trocados pelos
+do GitHub. Todo diagrama do documento é cópia literal de um da RFC-004 (o geral
+também está no README) e fica no fluxo do texto, na largura da página. O índice
+dos artefatos do documento dá a página de cada um. Pendências continuam
+visíveis no ensaio.
 """
 
 from __future__ import annotations
@@ -17,7 +17,6 @@ import itertools
 import json
 import re
 import shutil
-import struct
 
 # Executáveis resolvidos no PATH; argumentos separados, sem shell.
 import subprocess  # nosec B404
@@ -29,7 +28,6 @@ from scripts.evidencias.verificar import verificar
 
 DOCUMENTO = Path("docs/entrega/fase4/entrega-fase-4.md")
 RFC = Path("docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md")
-INDICE = Path("INDICE-DA-ENTREGA.md")
 LOGO = Path("docs/entrega/fase4/logo-pytstop.png")
 MERMAID = re.compile(r"```mermaid\n(.*?)```", re.S)
 REPO = "fiap-postech-sw-architecture/postech-sw-arch-p4-platform"
@@ -113,15 +111,13 @@ def capa(documento: str, logo: Path) -> str:
 
 
 def preparar(raiz: Path, repo: str, branch: str) -> str:
-    """Capa, documento e índice num markdown só, sem editar os originais."""
+    """Capa e documento num markdown só, sem editar os originais."""
     documento = (raiz / DOCUMENTO).read_text()
     conferir_diagramas(
         documento, (raiz / RFC).read_text(), (raiz / "README.md").read_text()
     )
     corpo = reescrever_links(documento, repo, branch, (raiz / DOCUMENTO).parent, raiz)
-    indice = reescrever_links((raiz / INDICE).read_text(), repo, branch, raiz, raiz)
-    indice = re.sub(r"\A# ", "# Anexo C — ", indice, count=1)
-    return capa(documento, raiz / LOGO) + corpo + "\n\n" + indice
+    return capa(documento, raiz / LOGO) + corpo
 
 
 def ajustar_html(pagina: str) -> str:
@@ -178,8 +174,9 @@ def main() -> int:
         numeros = itertools.count(1)
 
         def renderizar(match: re.Match[str]) -> str:
-            # A orientação da página depende da proporção do PNG; weasyprint
-            # não pagina imagem, então max-height evita o corte no rodapé.
+            # Weasyprint não pagina imagem: o max-height do CSS evita o corte
+            # no rodapé. Escala 1 dá cerca de 1.600 px de largura, o bastante
+            # para a impressão e para o zoom na tela.
             numero = next(numeros)
             fonte, imagem = (
                 tmp / f"diagrama-{numero}.mmd",
@@ -198,17 +195,15 @@ def main() -> int:
                     "-w",
                     "1600",
                     "-s",
-                    "2",
+                    "1",
                     "-b",
                     "white",
                 ]
             )
-            largura, altura = struct.unpack(">II", imagem.read_bytes()[16:24])
-            classe = "paisagem" if largura >= altura * 1.25 else "retrato"
             titulo = html.escape(secao_da_rfc(rfc, match.group(1)))
             legenda = f"Diagrama {numero} — RFC-004, {titulo}."
             return (
-                f'<div class="{classe}">\n\n'
+                '<div class="diagrama">\n\n'
                 f'<img src="{html.escape(str(imagem))}" alt="Diagrama {numero}"/>\n\n'
                 f'<p class="legenda">{legenda}</p>\n\n</div>\n'
             )
@@ -226,7 +221,7 @@ def main() -> int:
                 str(tmp / "entrega.html"),
                 "--standalone",
                 "--toc",
-                "--toc-depth=3",
+                "--toc-depth=2",
                 "-V",
                 "lang=pt-BR",
                 "-V",
