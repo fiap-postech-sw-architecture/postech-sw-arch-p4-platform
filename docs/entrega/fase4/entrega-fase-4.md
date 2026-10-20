@@ -88,7 +88,7 @@ Uma mensagem duplicada não repete o efeito. Quando os prazos e os reenvios se e
 
 ## 7. Testes, qualidade e deploy
 
-O enunciado exige cobertura mínima de 80%; o projeto adota gate de 95% nos serviços. Testes unitários, de integração com bancos reais, BDD e de mutação cobrem os fluxos. Os pipelines de CI/CD verificam tipos, limites arquiteturais, dependências e segredos, varrem as imagens e passam pelo SonarQube; o [resumo do SonarQube](evidencias/coverage.md#sonarqube) traz o quality gate de cada serviço. No CD da plataforma, o OWASP ZAP (*Zed Attack Proxy*) varre a borda. Os relatórios e o estado de cada prova ficam nas [evidências](evidencias/README.md).
+O enunciado exige cobertura mínima de 80%; o projeto adota gate de 95% nos serviços. Testes unitários, de integração com bancos reais, BDD e de mutação cobrem os fluxos. Os pipelines de CI/CD verificam tipos, limites arquiteturais, dependências e segredos, varrem as imagens e passam pelo SonarQube; o [resumo do SonarQube](evidencias/coverage.md#sonarqube) traz o quality gate de cada serviço. No CD da plataforma, o OWASP ZAP (*Zed Attack Proxy*) varre a borda. Os relatórios e o estado de cada prova ficam nas [evidências](evidencias/README.md), e as capturas de tela, na seção 9.
 
 O workflow de CD compartilhado fica na plataforma e passou no [CD da `main`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39227461810). Os três serviços o chamam, e o CD da `main` de cada um passou com imagem identificada pelo digest (o hash do conteúdo), lista de componentes da imagem (SBOM, *software bill of materials*), implantação no kind, teste de fumaça (smoke) e testes de ponta a ponta (E2E). As [provas dos serviços](evidencias/README.md#cd-compartilhado-dos-serviços) registram os commits dos quatro repositórios em cada execução.
 
@@ -99,3 +99,91 @@ A [collection do fluxo completo](evidencias/newman-resumo.md) passou no CI do [p
 A [auditoria](auditoria-e-divida-tecnica.md) lista o que ainda precisa ser provado e a dívida técnica aceita. A prova na sandbox real do Mercado Pago exige as credenciais de teste de um integrante do grupo; o simulador e o ensaio sem cobrança não a substituem.
 
 Antes da submissão: confirmar participantes, concluir as provas de CD e observabilidade, conferir links, gravar e publicar o vídeo, congelar os quatro repositórios com a tag `entrega-fase-4` e regenerar o PDF. A submissão no portal cabe ao grupo.
+
+## 9. Evidências visuais
+
+As capturas vêm de páginas públicas do GitHub, do cluster kind do ensaio, `pytstop-p4-codex`, lido sem alterações, e dos artefatos dos mesmos runs. O cluster roda os commits de 19/10/2026 do [relatório do ensaio](evidencias/observabilidade.md#ambiente-e-commits), e o congelamento pede novas capturas. Cada imagem tem a data e a fonte logo abaixo. O [registro de evidências](evidencias/README.md#capturas-de-tela) lista os arquivos e a origem de cada um.
+
+### 9.1 CD da `main`
+
+O CD da `main` de cada repositório passou em 20/10/2026. O grafo mostra os jobs verdes de CI, segurança, SonarQube, imagem e implantação no kind. O job `remote-skipped` registra que o deploy remoto está desligado, porque o deploy entregue é o kind ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). No platform, o grafo tem o CI e os jobs `deploy-kind` e `e2e`.
+
+![CD do OS Service na main: CI, segurança, SonarQube, imagem e implantação no kind verdes, com o remote-skipped.](evidencias/cd-os-service-main-2026-10-20.png)
+
+Fonte: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), commit `3ce582b`, 20/10/2026.
+
+![CD do Billing Service na main: CI, segurança, SonarQube, imagem e implantação no kind verdes, com o remote-skipped.](evidencias/cd-billing-service-main-2026-10-20.png)
+
+Fonte: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), commit `76b5f9b`, 20/10/2026.
+
+![CD do Execution Service na main: CI, segurança, SonarQube, imagem e implantação no kind verdes, com o remote-skipped.](evidencias/cd-execution-service-main-2026-10-20.png)
+
+Fonte: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), commit `5b1bef4`, 20/10/2026.
+
+![CD do platform na main: CI, deploy-kind e e2e verdes.](evidencias/cd-platform-main-2026-10-20.png)
+
+Fonte: [run 39449167465](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39449167465), commit `a12502e`, 20/10/2026.
+
+### 9.2 Trace da saga no Jaeger
+
+O Jaeger do kind guarda os traces só na memória. Os dois primeiros traces são do ensaio de 20/10/2026, às 09:03 (horário de Brasília), no `pytstop-p4-codex`; as capturas saíram no mesmo dia, com o `svc/jaeger` acessado por `kubectl port-forward`. O trace do caminho feliz, de 19/10/2026, já saiu da memória do Jaeger: a cópia higienizada foi aberta na aba Upload de um Jaeger 1.76.0 avulso, em Docker, removido depois da captura. Cada trace atravessa os três serviços.
+
+![Busca no Jaeger por POST /api/v1/ordens-de-servico: três traces da saga, cada um com spans do OS Service, do Billing e da Execução.](evidencias/jaeger-busca-saga-2026-10-20.png)
+
+Fonte: Jaeger 1.76.0, serviço `os-service`, janela de 09:03:10 a 09:03:40 de 20/10/2026.
+
+![Linha do tempo de uma OS paga e cancelada antes do início: 339 spans em 3 serviços, em 7,63 s, com o estorno, a liberação da reserva e o cancelamento do orçamento.](evidencias/jaeger-trace-saga-2026-10-20.png)
+
+Fonte: trace `bfe21ce701ea69d6afc008a870d2ce21`, da mesma busca.
+
+![Trace do caminho feliz de 19/10/2026, aberto pela aba Upload: 245 spans do OS Service, do Billing e da Execução.](evidencias/jaeger-upload-caminho-feliz-2026-10-20.png)
+
+Fonte: arquivo [trace-saga-2026-10-19.json](evidencias/trace-saga-2026-10-19.json), trace `af146ea716424dfc2ac5b25960b8e9ae`, do [ensaio de 19/10/2026](evidencias/observabilidade.md#fluxo-e-trace).
+
+### 9.3 Swagger pela borda
+
+O Swagger de cada serviço abre pelo Kong do kind, em `https://localhost/<prefixo>/docs`, com certificado autoassinado. O campo Servers mostra o prefixo do serviço.
+
+![Swagger do OS Service em /os/docs: rotas públicas, autenticação, ordens de serviço e saga. O grupo de clientes está recolhido.](evidencias/swagger-os-service-2026-10-20.png)
+
+Fonte: `https://localhost/os/docs`, kind `pytstop-p4-codex`, 20/10/2026.
+
+![Swagger do Billing Service em /billing/docs: orçamentos, pagamentos, webhook do Mercado Pago e simulador. O grupo de preços está recolhido.](evidencias/swagger-billing-service-2026-10-20.png)
+
+Fonte: `https://localhost/billing/docs`, kind `pytstop-p4-codex`, 20/10/2026.
+
+![Swagger do Execution Service em /execucao/docs: estoque, diagnósticos e fila de execução.](evidencias/swagger-execution-service-2026-10-20.png)
+
+Fonte: `https://localhost/execucao/docs`, kind `pytstop-p4-codex`, 20/10/2026.
+
+### 9.4 Newman e ZAP no CD do platform
+
+O job `e2e` do CD do platform roda o BDD, o Newman e o ZAP no mesmo kind. Os relatórios saem como artefatos do run.
+
+![Passos do job e2e: smoke, E2E, Newman e ZAP aprovados, e relatórios publicados.](evidencias/cd-platform-e2e-passos-2026-10-20.png)
+
+Fonte: [job e2e do run 39449167465](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39449167465/job/118731446687), 20/10/2026.
+
+![Resumo do Newman no CD do platform: 105 assertions, nenhuma falha e 48 requisições pela borda do Kong, com as provas de negócio da saga.](evidencias/cd-platform-newman-2026-10-20.png)
+
+Fonte: artefato `e2e-kind` do [run 39449167465](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39449167465), arquivo `newman/resumo.json`. A tabela é montada com os números do arquivo.
+
+![Resumo do ZAP baseline no CD do platform: nenhuma regra em FAIL nos três serviços; os alertas são de risco baixo ou informativo.](evidencias/cd-platform-zap-2026-10-20.png)
+
+Fonte: artefato `zap-baseline` do mesmo run, arquivos `zap-<serviço>.log` e `zap-<serviço>.json`. A tabela é montada com os números dos arquivos.
+
+### 9.5 Alerta de fila sem consumidor
+
+No ensaio de 19/10/2026, o consumidor do Billing ficou parado por quatro minutos. A regra `pytstop-fila-sem-consumidor` disparou para a fila `billing.comandos` e voltou ao normal depois da restauração. As outras duas filas ficaram normais. O [relatório do ensaio](evidencias/observabilidade.md#alertas-e-recuperação) traz os horários.
+
+![Alerta de fila sem consumidor em Firing para billing.comandos; as filas execucao.comandos e os.eventos seguem normais.](evidencias/alerta-fila-disparado-2026-10-19.png)
+
+Fonte: Grafana do kind `pytstop-p4-codex`, 19/10/2026, 00:56 (horário de Brasília).
+
+![O mesmo alerta de volta a Normal nas três filas, depois da restauração do consumidor.](evidencias/alerta-fila-recuperado-2026-10-19.png)
+
+Fonte: Grafana do kind `pytstop-p4-codex`, 19/10/2026, 00:58 (horário de Brasília).
+
+### 9.6 Dashboards do Grafana
+
+Os nove dashboards (Atendimento, Orçamentos, Pagamentos, Execução, Saga, Mensageria, Serviços, Bancos e Plataforma) entram aqui depois da captura de 22/10/2026, com três dias de histórico no kind. Captura pendente.
