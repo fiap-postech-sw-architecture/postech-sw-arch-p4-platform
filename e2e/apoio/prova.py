@@ -89,9 +89,8 @@ PRINTS: Final = (
         "aprovado e, depois do cancelamento, o estorno."
     ),
     (
-        'O trace de um cenário aberto no Jaeger (Search, aba "JSON File" ou "Upload", '
-        "arraste o `trace-*.json`), com o span CLIENT do Billing para "
-        "`api.mercadopago.com`."
+        'O trace de um cenário aberto no Jaeger (Search, aba "Upload", arraste o '
+        "`trace-*.json`), com o span CLIENT do Billing para `api.mercadopago.com`."
     ),
     "O `resumo.md` desta pasta (já sem token nem dado do pagador).",
     (
@@ -151,7 +150,8 @@ def gravar_evidencia_da_sessao(
     contexto: str,
     avisar: Callable[[str], None] = print,
 ) -> None:
-    """No fim da sessao: ``resumo.md`` e ``evidencia.json`` com os prints do modo.
+    """No fim da sessao: ``resumo.md``, ``evidencia.json`` e ``trace-*.json`` com os
+    prints do modo.
 
     Sem cenario nenhum (a sessao parou antes do primeiro), nao grava nada.
     """

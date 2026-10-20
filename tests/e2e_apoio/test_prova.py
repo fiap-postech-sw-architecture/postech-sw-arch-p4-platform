@@ -940,7 +940,7 @@ def test_a_evidencia_da_sessao_real_traz_os_prints_do_real_e_a_url_sem_consulta(
     assert (
         "Cuidado com os arquivos: anexe só o `resumo.md`, os `trace-*.json` e" in resumo
     )
-    assert 'aba "JSON File" ou "Upload", arraste o `trace-*.json`' in resumo
+    assert 'aba "Upload", arraste o `trace-*.json`' in resumo
     assert "`notification_url`: `https://meu-tunel.ngrok.app/hook`" in resumo
     assert (
         "segredo-da-consulta" not in resumo + (tmp_path / "evidencia.json").read_text()

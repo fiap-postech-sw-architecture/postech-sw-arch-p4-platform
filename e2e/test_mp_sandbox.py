@@ -78,7 +78,8 @@ def modo_billing(
 def evidencia(
     preflight: Sandbox | None, kubectl: Kubectl
 ) -> Iterator[list[RegistroDoCenario]]:
-    """Os registros dos cenarios; no fim viram ``resumo.md`` e ``evidencia.json``."""
+    """Os registros dos cenarios; no fim viram ``resumo.md``, ``evidencia.json`` e
+    os ``trace-*.json``."""
     assert preflight is not None
     registros: list[RegistroDoCenario] = []
     yield registros
