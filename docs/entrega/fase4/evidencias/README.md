@@ -19,7 +19,7 @@ O [relatório do ensaio local de 19/10/2026](observabilidade.md) reúne os resul
 
 ## Capturas de tela
 
-A [seção 9 do documento de entrega](../entrega-fase-4.md#9-evidências-visuais) mostra as imagens abaixo, uma por item, com legenda e fonte. As novas têm 1400 px de largura. Nenhuma mostra dado pessoal, credencial ou token. As do GitHub são das páginas públicas, sem login. O Jaeger e o Swagger vêm do kind `pytstop-p4-codex`, que roda os commits do ensaio de 19/10 (OS `b81f609`, Billing `248c407` e Execução `605a5e5`), e só receberam leituras: `kubectl port-forward` do `svc/jaeger` (porta 16686) e GET pelo Kong em `https://localhost`, com o certificado autoassinado. O print do caminho feliz vem de um Jaeger 1.76.0 avulso, em Docker, que recebeu o JSON pela aba Upload e foi removido em seguida. Os prints foram feitos com Chrome sem interface, pelo Playwright.
+A [seção 9 do documento de entrega](../entrega-fase-4.md#9-evidências-visuais) mostra as imagens abaixo, uma por item, com legenda e fonte. As novas têm 1400 px de largura. Nenhuma mostra dado pessoal, credencial ou token. As do GitHub são das páginas públicas, sem login. O Jaeger e o Swagger vêm do kind `pytstop-p4-codex`, que roda os commits do ensaio de 19/10 (OS `b81f609`, Billing `248c407` e Execução `605a5e5`). O kind só recebeu leituras: `kubectl port-forward` do `svc/jaeger` (porta 16686) e GET pelo Kong em `https://localhost`, com o certificado autoassinado. O print do caminho feliz vem de um Jaeger 1.76.0 avulso, em Docker, que recebeu o JSON pela aba Upload e foi removido em seguida. Os prints foram feitos com Chrome sem interface, pelo Playwright.
 
 | Arquivo | O que mostra | Fonte |
 |---|---|---|
