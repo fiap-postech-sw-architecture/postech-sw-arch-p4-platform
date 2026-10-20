@@ -538,25 +538,29 @@ class Prova:
         # Interrompido (Ctrl-C): nada mais o interrompe e o desfazer do modo real
         # espera, entao fica sem trace e sem religar o port-forward que o Ctrl-C matou.
         if self.registro.resultado != "interrompido":
-            self._avisar(
-                f"[mp-sandbox] lendo o trace da OS no Jaeger (até {PRAZO_DO_TRACE:g} s)"
+            self._guardar_o_trace()
+
+    def _guardar_o_trace(self) -> None:
+        """Le o trace da ordem (ver ``esperar_trace``) e o poe no registro."""
+        self._avisar(
+            f"[mp-sandbox] lendo o trace da OS no Jaeger (até {PRAZO_DO_TRACE:g} s)"
+        )
+        chave = next(
+            (tag for tag in TAGS_DOS_CENARIOS if tag in self.cenario.tags),
+            f"cenario-{self.cenario.numero}",
+        )
+        try:
+            achado = esperar_trace(
+                lambda: self._traces_da_ordem(self.cenario.ordem_id),
+                chave=chave,
+                real=self.real,
+                relogio=self._relogio,
+                dormir=self._dormir,
             )
-            chave = next(
-                (tag for tag in TAGS_DOS_CENARIOS if tag in self.cenario.tags),
-                f"cenario-{self.cenario.numero}",
-            )
-            try:
-                achado = esperar_trace(
-                    lambda: self._traces_da_ordem(self.cenario.ordem_id),
-                    chave=chave,
-                    real=self.real,
-                    relogio=self._relogio,
-                    dormir=self._dormir,
-                )
-            except KeyboardInterrupt:
-                # O Ctrl-C na espera: o resumo diz que o trace nao foi procurado ate o
-                # fim, e nada mais espera aqui, para o desfazer do modo real vir ja.
-                self.registro.trace = TraceDoCenario(chave, None, INTERROMPIDO)
-                raise
-            self.registro.trace = achado
-            self._avisar(f"[mp-sandbox] {descricao_do_trace(achado, real=self.real)}")
+        except KeyboardInterrupt:
+            # O Ctrl-C na espera: o resumo diz que o trace nao foi procurado ate o fim,
+            # e nada mais espera aqui, para o desfazer do modo real vir ja.
+            self.registro.trace = TraceDoCenario(chave, None, INTERROMPIDO)
+            raise
+        self.registro.trace = achado
+        self._avisar(f"[mp-sandbox] {descricao_do_trace(achado, real=self.real)}")
