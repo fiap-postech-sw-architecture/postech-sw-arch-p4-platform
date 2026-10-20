@@ -18,6 +18,7 @@ from e2e.apoio.trace_higienizado import (
     HOST_OCULTO,
     HOSTS_VISIVEIS,
     OPERACAO_OMITIDA,
+    PRAZO_DO_TRACE,
     TAGS_PERMITIDAS,
     ChaveDeArquivoInvalidaError,
     TraceDoCenario,
@@ -952,10 +953,17 @@ def test_escolher_trace_sem_chamada_fica_com_o_completo_de_mais_spans() -> None:
     assert escolher_trace([pequeno, incompleto, grande]) is grande
 
 
-def test_escolher_trace_sem_trace_completo_nem_chamada_devolve_none() -> None:
-    incompleto = _trace_com("os-service", {"span.kind": "server"}, spans_a_mais=3)
+def test_escolher_trace_sem_trace_completo_nem_chamada_fica_com_o_parcial_maior() -> (
+    None
+):
+    pequeno = _trace_com("os-service", {"span.kind": "server"}, spans_a_mais=3)
+    grande = _trace_com("os-service", {"span.kind": "server"}, spans_a_mais=9)
 
-    assert escolher_trace([incompleto]) is None
+    assert escolher_trace([pequeno, grande]) is grande
+    assert escolher_trace([pequeno]) is pequeno
+
+
+def test_escolher_trace_sem_nenhum_trace_devolve_none() -> None:
     assert escolher_trace([]) is None
 
 
@@ -1450,3 +1458,53 @@ def test_o_motivo_e_o_erro_da_ultima_leitura(relogio: Relogio) -> None:
     assert achado == TraceDoCenario(
         "pagamento", None, "erro ao consultar o Jaeger: ConnectError"
     )
+
+
+def test_no_ensaio_o_trace_parcial_nao_encerra_a_espera_mas_fica_se_o_prazo_acaba(
+    relogio: Relogio,
+) -> None:
+    parcial = [trace_do_jaeger(spans=9, servicos=("os-service", "billing-service"))]
+    leituras = LeiturasDoJaeger(parcial)
+
+    achado = _esperar(leituras, relogio)
+
+    assert achado.trace is not None
+    assert achado.servicos == ["billing-service", "os-service"]
+    assert achado.servicos_ausentes == ["execution-service"]
+    assert leituras.pedidos == 11, "espera o prazo inteiro pelo servico que falta"
+    assert sum(relogio.dormidas) == PRAZO_DO_TRACE
+
+
+def test_no_ensaio_o_trace_completo_encerra_a_espera_quando_a_peca_que_faltava_chega(
+    relogio: Relogio,
+) -> None:
+    parcial = [trace_do_jaeger(spans=5, servicos=("os-service", "billing-service"))]
+    completo = [trace_do_jaeger(spans=8)]
+    leituras = LeiturasDoJaeger(parcial, parcial, completo, completo)
+
+    achado = _esperar(leituras, relogio)
+
+    assert achado.servicos_ausentes == []
+    assert achado.trace is not None
+    assert len(achado.trace["spans"]) == 8
+    assert leituras.pedidos == 4
+    assert relogio.dormidas == [3.0, 3.0, 3.0]
+
+
+def test_no_modo_real_o_trace_parcial_com_a_chamada_ja_basta(relogio: Relogio) -> None:
+    so_o_billing = [
+        trace_do_jaeger(spans=6, chamada_ao_mp=True, servicos=("billing-service",))
+    ]
+    leituras = LeiturasDoJaeger(so_o_billing)
+
+    achado = _esperar(leituras, relogio, real=True)
+
+    assert achado.chamou_o_mercado_pago is True
+    assert achado.servicos_ausentes == ["execution-service", "os-service"]
+    assert leituras.pedidos == 2
+
+
+def test_trace_do_cenario_sem_trace_nao_tem_servico_nenhum_e_todos_ausentes() -> None:
+    achado = TraceDoCenario("pagamento", None, "motivo")
+
+    assert achado.servicos_ausentes == sorted(SERVICOS)

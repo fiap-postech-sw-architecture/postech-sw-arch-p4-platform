@@ -384,12 +384,17 @@ def escolher_trace(traces: Iterable[Trace]) -> Trace | None:
     """O trace da evidencia: entre os com a chamada ao Mercado Pago, o de mais spans.
 
     Sem nenhum deles, o melhor trace das tres pecas (``melhor_trace``); sem este
-    tambem, ``None``. O trace com a chamada vem primeiro porque e ele que o video
-    precisa mostrar, mesmo que lhe falte uma das pecas.
+    tambem, o de mais spans, mesmo que falte um servico (o Jaeger recebe os spans em
+    lote, e um parcial ainda mostra a saga); sem trace nenhum, ``None``. O trace com a
+    chamada vem primeiro porque e ele que o video precisa mostrar, mesmo parcial.
     """
     lista = list(traces)
     com_chamada = [trace for trace in lista if chamada_ao_mercado_pago(trace)]
-    return melhor_trace(com_chamada, obrigatorios=()) or melhor_trace(lista)
+    return (
+        melhor_trace(com_chamada, obrigatorios=())
+        or melhor_trace(lista)
+        or melhor_trace(lista, obrigatorios=())
+    )
 
 
 def nome_do_arquivo(chave: str, trace_id: str) -> str:
@@ -431,6 +436,11 @@ class TraceDoCenario:
         return sorted(servicos_do_trace(self.trace or {}))
 
     @property
+    def servicos_ausentes(self) -> list[str]:
+        """Os servicos da saga que faltam no trace (todos, se nao ha trace)."""
+        return sorted(set(SERVICOS) - set(self.servicos))
+
+    @property
     def chamou_o_mercado_pago(self) -> bool:
         return self.trace is not None and chamada_ao_mercado_pago(self.trace)
 
@@ -448,8 +458,9 @@ class _Leitura:
     def __call__(self) -> Trace | None:
         """O trace, se duas leituras seguidas o trazem com o mesmo id e os mesmos spans.
 
-        No modo real so conta o que tem a chamada do Billing ao Mercado Pago. ``erro``
-        e o da ultima leitura: uma que respondeu o apaga.
+        No modo real so conta o que tem a chamada do Billing ao Mercado Pago, e no
+        ensaio, o que tem os tres servicos: o parcial fica como o melhor visto, se o
+        prazo acabar. ``erro`` e o da ultima leitura: uma que respondeu o apaga.
         """
         try:
             traces = [t for bruto in self._ler() if (t := higienizar_trace(bruto))]
@@ -462,7 +473,9 @@ class _Leitura:
             return None
         visto = (str(trace["traceID"]), len(trace["spans"]))
         pronto = visto == self._anterior and (
-            chamada_ao_mercado_pago(trace) or not self._real
+            chamada_ao_mercado_pago(trace)
+            if self._real
+            else set(SERVICOS) <= servicos_do_trace(trace)
         )
         self._anterior, self.melhor = visto, trace
         return trace if pronto else None

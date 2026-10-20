@@ -1438,16 +1438,22 @@ def test_trace_que_nao_aparece_nao_reprova_e_o_resumo_diz_que_nao_o_achou(
     )
 
 
-def test_trace_sem_as_tres_pecas_e_sem_chamada_conta_como_nao_encontrado(
+def test_trace_sem_uma_das_pecas_fica_como_parcial_e_o_resumo_diz_o_que_faltou(
     relogio: Relogio,
 ) -> None:
     mundo = _jaeger([trace_do_jaeger(spans=9, servicos=("os-service",))])
 
-    prova, _ = _concluida(mundo, relogio, real=False)
+    prova, avisos = _concluida(mundo, relogio, real=False)
 
-    assert prova.registro.trace is not None
-    assert prova.registro.trace.trace is None
+    achado = prova.registro.trace
+    assert achado is not None
+    assert achado.trace is not None
+    assert achado.servicos == ["os-service"]
     assert len(mundo.pedidos_ao_jaeger) == 11
+    assert (
+        "serviços: os-service (trace parcial: faltam billing-service, "
+        "execution-service);" in avisos[-1]
+    )
 
 
 def test_jaeger_fora_do_ar_nao_reprova_e_so_o_nome_do_erro_vai_para_o_resumo(

@@ -251,8 +251,9 @@ def _trace_para_json(achado: TraceDoCenario) -> dict[str, Any]:
 def descricao_do_trace(achado: TraceDoCenario, *, real: bool) -> str:
     """Uma linha sobre o trace do cenario, para o resumo e para o terminal.
 
-    Diz o ``traceID``, o arquivo, os servicos que o trace tem e se ha span CLIENT do
-    Billing para o Mercado Pago: no modo real deve haver, e no ensaio (simulador), nao.
+    Diz o ``traceID``, o arquivo, os servicos que o trace tem (e os que faltam, se for
+    parcial) e se ha span CLIENT do Billing para o Mercado Pago: no modo real deve
+    haver, e no ensaio (simulador), nao.
     Trace que nao apareceu nao reprova o cenario, e a linha diz isso; o cenario que o
     Ctrl-C parou na espera diz que o trace nao foi procurado ate o fim.
     """
@@ -273,9 +274,11 @@ def descricao_do_trace(achado: TraceDoCenario, *, real: bool) -> str:
         chamada = "não (ATENÇÃO: no modo real o Billing deveria chamar o Mercado Pago)"
     else:
         chamada = "não (modo simulador: sem chamada externa)"
+    faltam = achado.servicos_ausentes
+    parcial = f" (trace parcial: faltam {', '.join(faltam)})" if faltam else ""
     return (
         f"Trace no Jaeger: `{achado.trace['traceID']}`, arquivo `{achado.arquivo}`; "
-        f"serviços: {', '.join(achado.servicos)}; "
+        f"serviços: {', '.join(achado.servicos)}{parcial}; "
         f"span CLIENT do Billing para {HOST_DO_MERCADO_PAGO}: {chamada}"
     )
 

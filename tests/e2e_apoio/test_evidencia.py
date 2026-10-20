@@ -1133,6 +1133,20 @@ def test_trace_que_nao_foi_achado_aparece_no_resumo_como_nao_encontrado(
 
 
 @pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])
+def test_trace_sem_um_dos_servicos_diz_no_resumo_quais_faltaram(real: bool) -> None:
+    trace = higienizar_trace(
+        trace_do_jaeger(servicos=("os-service", "billing-service"))
+    )
+    achado = TraceDoCenario("pagamento", trace)
+
+    linha = descricao_do_trace(achado, real=real)
+
+    assert "serviços: billing-service, os-service (trace parcial: faltam " in linha
+    assert "execution-service);" in linha
+    assert "os-service (trace parcial" in linha
+
+
+@pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])
 def test_trace_que_o_ctrl_c_parou_aparece_no_resumo_como_nao_procurado(
     real: bool,
 ) -> None:
