@@ -126,7 +126,7 @@ Fonte: [run 39449167465](https://github.com/fiap-postech-sw-architecture/postech
 
 ### 9.2 Trace da saga no Jaeger
 
-O Jaeger do kind guarda os traces só na memória. Os dois primeiros traces são do ensaio de 20/10/2026, às 09:03 (horário de Brasília), no `pytstop-p4-codex`; as capturas saíram no mesmo dia, com o `svc/jaeger` acessado por `kubectl port-forward`. O trace do caminho feliz, de 19/10/2026, já saiu da memória do Jaeger: a cópia higienizada foi aberta na aba Upload de um Jaeger 1.76.0 avulso, em Docker, removido depois da captura. Cada trace atravessa os três serviços.
+O Jaeger do kind guarda os traces só na memória. Os dois primeiros traces são do ensaio de 20/10/2026, às 09:03 (horário de Brasília), no `pytstop-p4-codex`; as capturas saíram no mesmo dia, com o `svc/jaeger` acessado por `kubectl port-forward`. O trace do caminho feliz, de 19/10/2026, já saiu da memória do Jaeger: a exportação publicada foi aberta na aba Upload de um Jaeger 1.76.0 avulso, em Docker, removido depois da captura. Cada trace atravessa os três serviços.
 
 ![Busca no Jaeger por POST /api/v1/ordens-de-servico: três traces da saga, cada um com spans do OS Service, do Billing e da Execução.](evidencias/jaeger-busca-saga-2026-10-20.png)
 

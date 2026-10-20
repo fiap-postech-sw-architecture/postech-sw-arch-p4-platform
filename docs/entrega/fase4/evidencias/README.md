@@ -39,7 +39,7 @@ A [seção 9 do documento de entrega](../entrega-fase-4.md#9-evidências-visuais
 | [alerta-fila-disparado-2026-10-19.png](alerta-fila-disparado-2026-10-19.png) | Alerta de fila sem consumidor em Firing para `billing.comandos` | Grafana do kind, [relatório do ensaio](observabilidade.md#alertas-e-recuperação) |
 | [alerta-fila-recuperado-2026-10-19.png](alerta-fila-recuperado-2026-10-19.png) | O mesmo alerta de volta a Normal | Grafana do kind, mesmo relatório |
 
-Os resumos do Newman e do ZAP são páginas montadas com os números dos arquivos do artefato; nenhum valor é digitado à mão. O log do passo no GitHub exige login, e o do Newman só traz o resultado do pytest. O Jaeger do kind guarda os traces só na memória e descarta os mais antigos: o trace do caminho feliz de 19/10 (245 spans) já saiu, e a cópia higienizada é a do [trace-saga-2026-10-19.json](trace-saga-2026-10-19.json). Os nove dashboards do Grafana entram na seção 9.6 do documento depois da captura de 22/10/2026, com três dias de histórico.
+Os resumos do Newman e do ZAP são páginas montadas com os números dos arquivos do artefato; nenhum valor é digitado à mão. O log do passo no GitHub exige login, e o do Newman só traz o resultado do pytest. O Jaeger do kind guarda os traces só na memória e descarta os mais antigos: o trace do caminho feliz de 19/10 (245 spans) já saiu, e a exportação publicada é a do [trace-saga-2026-10-19.json](trace-saga-2026-10-19.json). Os nove dashboards do Grafana entram na seção 9.6 do documento depois da captura de 22/10/2026, com três dias de histórico.
 
 ## CD compartilhado dos serviços
 
