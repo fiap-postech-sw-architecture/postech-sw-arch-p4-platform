@@ -81,7 +81,18 @@ TIPOS_DO_JAEGER: dict[type, str] = {bool: "bool", int: "int64", str: "string"}
 
 
 def _tag(chave: str, valor: object) -> dict[str, Any]:
-    return {"key": chave, "type": TIPOS_DO_JAEGER[type(valor)], "value": valor}
+    """A tag como o Jaeger a escreve, com o tipo que a lista espera para a chave.
+
+    Assim o caso hostil "tipo certo e valor com dado" (``error`` bool com um texto,
+    ``http.status_code`` int64 com um CPF) chega ao validador do valor, em vez de
+    morrer antes na conferencia do tipo. Chave fora da lista leva o tipo do valor.
+    """
+    tipo = (
+        TAGS_PERMITIDAS[chave][0]
+        if chave in TAGS_PERMITIDAS
+        else TIPOS_DO_JAEGER[type(valor)]
+    )
+    return {"key": chave, "type": tipo, "value": valor}
 
 
 def _span(
@@ -447,6 +458,9 @@ def test_valor_de_tag_permitida_fora_da_forma_esperada_sai_junto_com_a_tag() -> 
         pytest.param("otel.status_code", "ERROR: cpf", False, id="otel-com-texto"),
         pytest.param("error", True, True, id="erro"),
         pytest.param("error", "true", False, id="erro-em-texto"),
+        pytest.param("error", f"cpf {CPF}", False, id="erro-com-dado"),
+        pytest.param("error", False, False, id="erro-falso"),
+        pytest.param("http.status_code", CPF, False, id="status-com-dado"),
         pytest.param("messaging.system", "rabbitmq", True, id="sistema"),
         pytest.param("messaging.system", "rabbitmq://h", False, id="sistema-url"),
         pytest.param("messaging.system", "joaodasilva", False, id="sistema-palavra"),
@@ -525,6 +539,18 @@ def test_valor_de_cada_tag_so_passa_na_forma_esperada(
         ),
         pytest.param(
             "http.route", "/clientes/12345678909", "/clientes/{id}", id="rota-com-cpf"
+        ),
+        pytest.param(
+            "http.route",
+            "/clientes/{12345678909}",
+            "/clientes/{id}",
+            id="modelo-com-cpf",
+        ),
+        pytest.param(
+            "http.route",
+            "/clientes/{pagamento_1}",
+            "/clientes/{id}",
+            id="modelo-com-digito",
         ),
         pytest.param(
             "http.route", "/a#12345678909/b", "/a", id="rota-com-fragmento-no-meio"
@@ -1304,6 +1330,11 @@ def test_referencias_fora_do_formato_do_jaeger_sao_descartadas(
         pytest.param("GET /a?x=1 b", "GET /a b", id="query-no-meio"),
         pytest.param("GET /a#CPF123", "GET /a", id="fragmento"),
         pytest.param("find 123", OPERACAO_OMITIDA, id="numero"),
+        pytest.param("TEST-123", OPERACAO_OMITIDA, id="letra-e-digito"),
+        pytest.param("APP_USR-1-2-3", OPERACAO_OMITIDA, id="token-com-digitos"),
+        pytest.param(
+            "publish TEST-1234567890123456-101010", OPERACAO_OMITIDA, id="token"
+        ),
         pytest.param("SELECT cpf FROM c WHERE e = 'a@b.c'", OPERACAO_OMITIDA, id="sql"),
         pytest.param("a" * 65, OPERACAO_OMITIDA, id="palavra-longa"),
         pytest.param("joao@exemplo.com", OPERACAO_OMITIDA, id="email"),
