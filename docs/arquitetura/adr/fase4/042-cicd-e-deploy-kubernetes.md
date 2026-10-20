@@ -43,7 +43,7 @@ Os testes seguem o [ADR-041](041-estrategia-de-testes-e-qualidade.md). Os nomes 
 
 Cada repositório nasce com `auto_init`, o único commit fora de PR, e recebe em seguida a proteção da `main`: PR obrigatório, administradores incluídos, histórico linear, conversas resolvidas, sem force push nem exclusão, só squash merge. Não se exige aprovação de revisor, mas toda thread de revisão, inclusive do Copilot, precisa ser resolvida. Os checks viram obrigatórios assim que o primeiro workflow existe, e a entrega confere que todo commit first-parent da `main` referencia um PR.
 
-Além da proteção clássica, cada repositório tem um ruleset na `main` com PR obrigatório, os checks obrigatórios pelos nomes exatos dos jobs, histórico linear e bloqueio de force push e de exclusão. Ruleset ativo é visível a quem tem leitura no repositório, ao contrário da proteção clássica. A evidência para a banca é o link do ruleset no índice da entrega e a saída de `gh api` versionada em `docs/entrega/fase4/evidencias/`.
+Além da proteção clássica, cada repositório tem um ruleset na `main` com PR obrigatório, os checks obrigatórios pelos nomes exatos dos jobs, histórico linear e bloqueio de force push e de exclusão. Ruleset ativo é visível a quem tem leitura no repositório, ao contrário da proteção clássica. A evidência para a banca é o link do ruleset no índice da entrega e o resumo da saída de `gh api` em [`protecao-da-main.md`](../../../entrega/fase4/evidencias/protecao-da-main.md).
 
 ### CD a cada commit na `main` (RNF-042)
 

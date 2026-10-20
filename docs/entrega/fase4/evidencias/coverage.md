@@ -88,6 +88,18 @@ Fonte declarada pelo run: `c33824f801280a115e07e64b93185a64e9f700c1`. [Execuçã
 | `src/execucao/interfaces` | 84 | 84 | 100.0% |
 | **total** | 3681 | 3681 | 100.0% |
 
+## SonarQube
+
+Cada CI sobe um SonarQube efêmero no runner, analisa o código com o `coverage.xml` do job `test` e reprova o run se o quality gate falhar. O gate versionado em `.sonar/quality-gate.json` é o mesmo nos três serviços: cobertura de pelo menos 80%, no máximo 3% de linhas duplicadas e nota A em confiabilidade, segurança e manutenibilidade. Resultado no último CD da `main` de cada serviço, tirado do log do job `ci / sonarqube`:
+
+| Serviço | Run | Commit | Arquivos indexados | Quality gate |
+|---|---|---|---:|---|
+| OS Service | [39357871773](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39357871773) | `ffcc2c12645642410a748fa73a5c2a807c8a0a9b` | 352 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 02:24 UTC) |
+| Billing Service | [39358245264](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39358245264) | `f99e1646398f18b68e3e65b2633cea8b1976bac8` | 166 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 02:33 UTC) |
+| Execution Service | [39357862805](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39357862805) | `a1ede8551f50a34ac9228f36c38d5f1a6da6d581` | 186 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 02:20 UTC) |
+
+As medidas de cada análise (bugs, vulnerabilidades, code smells, duplicação e cobertura) ficam no summary do job e no artefato `sonarqube` do run, que expira em 90 dias.
+
 ## Reprodução
 
 Baixar `relatorios-de-teste` com `gh run download <run> --repo <organização/repositório> --name relatorios-de-teste --dir <destino>`. Conferir o SHA256 do XML. Nos checkouts dos SHAs indicados, OS e Billing geram o trecho oficial com `python scripts/cobertura_resumo.py coverage.xml --readme README.md --run <URL>`; a Execução usa `python scripts/cobertura_resumo.py coverage.xml README.md <URL>`. As tabelas deste relatório são saídas literais desses geradores, sem atualizar outros READMEs por este arquivo.

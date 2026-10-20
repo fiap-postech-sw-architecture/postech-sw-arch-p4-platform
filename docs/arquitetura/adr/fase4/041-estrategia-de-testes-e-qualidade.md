@@ -70,7 +70,7 @@ O ZAP varre o `/openapi.json` de cada serviço pela borda do kind; o como (coman
 
 ### Cobertura (RNF-040, RNF-050)
 
-`.coveragerc` com `fail_under = 95`, `branch = True`, `source = src` e `relative_files = True`, mais `diff-cover --fail-under=90` no job `test`, para que um PR sem teste não passe só porque o total absorveu o código novo. Os três serviços estão com `fail_under = 95` e o `diff-cover` no job `test`, ligados pelo PR de endurecimento de cada um (Billing, OS Service e Execução); o `make diff-cover` recusa um `coverage.xml` mais velho que o `src/` e mede também o arquivo novo ainda fora do git. O job `test` escreve no summary a tabela por contexto e camada (`scripts/cobertura_resumo.py`) e publica `coverage.xml`, `htmlcov/` e `reports/` no artefato `relatorios-de-teste`, com retenção de 90 dias. O README de cada serviço repete a tabela, com print do relatório e link para a execução do CI, e os prints do quality gate e do relatório do E2E ficam versionados em `docs/entrega/fase4/evidencias/`.
+`.coveragerc` com `fail_under = 95`, `branch = True`, `source = src` e `relative_files = True`, mais `diff-cover --fail-under=90` no job `test`, para que um PR sem teste não passe só porque o total absorveu o código novo. Os três serviços estão com `fail_under = 95` e o `diff-cover` no job `test`, ligados pelo PR de endurecimento de cada um (Billing, OS Service e Execução); o `make diff-cover` recusa um `coverage.xml` mais velho que o `src/` e mede também o arquivo novo ainda fora do git. O job `test` escreve no summary a tabela por contexto e camada (`scripts/cobertura_resumo.py`) e publica `coverage.xml`, `htmlcov/` e `reports/` no artefato `relatorios-de-teste`, com retenção de 90 dias. O README de cada serviço repete a tabela, gerada do `coverage.xml` do run, com o link da execução do CI (RNF-050 aceita prints ou links). O resumo do quality gate e o do E2E ficam versionados em `docs/entrega/fase4/evidencias/`, no `coverage.md` e no `bdd-resumo.md`.
 
 ### Teste de mutação
 
@@ -161,7 +161,7 @@ As versões de que os testes e o CI dependem ficam fixadas: `pytest-bdd>=8.0` no
 ### Negativas
 
 * SonarQube efêmero não guarda histórico nem decora PR, e o gate vale sobre o código total, porque não há baseline de código novo; o `diff-cover` cobre o código novo, e não há painel permanente para linkar
-* Os artefatos expiram em 90 dias (`retention-days`); tabela e prints no README e em `docs/entrega/fase4/evidencias/` são a evidência permanente
+* Os artefatos expiram em 90 dias (`retention-days`); as tabelas dos READMEs, os links dos runs e os resumos em `docs/entrega/fase4/evidencias/` são a evidência permanente
 * O teste de contrato confere a estrutura da mensagem: um campo que muda de sentido sem mudar de tipo passa por ele
 * O E2E dos serviços roda no CD, depois do merge: uma falha de integração entre serviços aparece com a `main` já alterada, e a correção é um PR de revert ([ADR-042](042-cicd-e-deploy-kubernetes.md)); o `platform` roda o mesmo E2E no pull request dele, contra os serviços no último CD verde
 
