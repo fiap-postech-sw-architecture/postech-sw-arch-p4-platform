@@ -57,7 +57,7 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | Bancos | [bancos](observabilidade/dashboards/pytstop-bancos.json) | [painéis técnicos](observabilidade/README.md) |
 | Plataforma: broker, borda e alvos | [plataforma](observabilidade/dashboards/pytstop-plataforma.json) | [painéis técnicos](observabilidade/README.md) |
 
-O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As nove capturas finais, com três dias de histórico, continuam pendentes, conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
+O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As capturas do CD, do trace no Jaeger, do Swagger, do Newman e do ZAP estão na [seção 9 do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#9-evidências-visuais). As nove capturas finais, com três dias de histórico, continuam pendentes, conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
 
 ## Conferência
 
