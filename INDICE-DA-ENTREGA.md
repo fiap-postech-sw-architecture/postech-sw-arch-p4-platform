@@ -63,4 +63,4 @@ O trace local e as capturas do alerta disparado e recuperado estão preservados 
 
 A [auditoria pré-entrega e dívida técnica](docs/entrega/fase4/auditoria-e-divida-tecnica.md) separa o que já está provado do que falta provar.
 
-Etapas que dependem do grupo: identificação dos participantes, teste real na sandbox do Mercado Pago, gravação e publicação do vídeo e submissão do PDF no portal.
+Etapas que dependem do grupo: teste real na sandbox do Mercado Pago, gravação e publicação do vídeo e submissão do PDF no portal.
