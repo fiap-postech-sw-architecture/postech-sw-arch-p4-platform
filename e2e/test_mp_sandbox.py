@@ -92,6 +92,7 @@ def prova(
     request: FixtureRequest,
     api: Api,
     kubectl: Kubectl,
+    portas: Portas,
     preflight: Sandbox | None,
     cenario: Cenario,
     evidencia: list[RegistroDoCenario],
@@ -106,6 +107,7 @@ def prova(
         cenario=cenario,
         esperar_status=saga.esperar_status,
         descrever_estado=saga.descrever_estado,
+        traces_da_ordem=lambda ordem_id: portas.jaeger.traces_da_ordem(ordem_id),
         avisar=falar,
         numeros=_NUMEROS_DO_PAGAMENTO,
     )
