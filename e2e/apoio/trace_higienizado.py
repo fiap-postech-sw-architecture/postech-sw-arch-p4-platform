@@ -332,7 +332,8 @@ def higienizar_trace(trace: object) -> Trace | None:
 
     Nao presta o que nao e um trace, tem ``traceID`` fora do formato ou fica sem
     nenhum span. Nunca levanta por causa do conteudo: o que o Jaeger devolve e
-    desconhecido, e a evidencia do H1 nao se repete.
+    desconhecido, e a evidencia do ``make mp-sandbox`` nao se repete (exige pagar de
+    novo no navegador).
     """
     if not isinstance(trace, dict):
         return None
