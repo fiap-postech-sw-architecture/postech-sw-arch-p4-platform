@@ -10,7 +10,7 @@ Duração prevista: 14 minutos. Gravar sobre os quatro commits congelados e most
 | 08:30–11:00 | Pipeline de um serviço | PR/checks obrigatórios; testes e cobertura; SonarQube; build; digest; deploy kind; smoke e E2E na mesma execução | RNF-038 a RNF-043; RNF-048 a RNF-050 |
 | 11:00–14:00 | Observabilidade e encerramento | Trace dos três serviços e chamada ao provedor; correlação no Loki; latência p95, erro 5xx e sucesso; volume diário de OS e tempo médio por status; alerta e runbook; índice | RNF-046; RNF-053; RNF-054; RNF-056 |
 
-Identificar quando o pagamento usa o simulador. O trecho da sandbox real deve usar a prova criada no Mercado Pago pelo integrante com as credenciais da sandbox; uma simulação não comprova aprovação real.
+Identificar quando o pagamento usa o simulador. O trecho da sandbox real deve usar a prova que o integrante com as credenciais criou no Mercado Pago; uma simulação não comprova aprovação real.
 
 Antes da gravação, conferir `make demo`, a collection integrada, o trace e as capturas com os mesmos commits. Gravar o pipeline antes e condensar a espera na edição, preservando a ordem das etapas e o resultado completo.
 

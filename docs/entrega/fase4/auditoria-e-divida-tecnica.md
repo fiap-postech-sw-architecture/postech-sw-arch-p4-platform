@@ -6,7 +6,7 @@ Revisão de 20/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais
 
 | Item | Situação | Quem fecha | Condição para fechar |
 |---|---|---|---|
-| Collection do fluxo completo | Duas provas locais e [execução no CI do platform #24](evidencias/newman-resumo.md#execução-no-ci-do-platform-24) aprovadas; CD da main aprovado; prova do congelamento pendente | Plataforma | Preservar a collection e comprovar o run sobre os commits finais, incluindo as métricas administrativas do OS; [fontes e resumos](evidencias/newman-resumo.md) |
+| Collection do fluxo completo | Duas provas locais e [execução no CI do platform #24](evidencias/newman-resumo.md#execução-no-ci-do-platform-24) aprovadas; CD da `main` aprovado; prova do congelamento pendente | Plataforma | Preservar a collection e comprovar o run sobre os commits finais, incluindo as métricas administrativas do OS; [fontes e resumos](evidencias/newman-resumo.md) |
 | Ensaio final de observabilidade | Trace com os três serviços, 600,9 s sem tráfego, smoke e alerta com recuperação comprovados localmente; RNF-046/RNF-056 continuam parciais | Plataforma e serviços | Preservar capturas com três dias; chamada externa e observação no modo real do Billing dependem da sandbox |
 | Evidência real do Mercado Pago | Simulador não comprova acesso à sandbox do provedor | Integrante com as credenciais da sandbox | Cobrança, aprovação e estorno reais, com saída sanitizada |
 | Grupo, vídeo e submissão | RNF-053/RNF-054 ainda não podem ser encerrados | Grupo | Confirmar identificação; publicar vídeo; conferir acesso do avaliador; submeter o PDF final |
@@ -24,7 +24,7 @@ Revisão de 20/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais
 
 Em 19/10/2026, o E2E local passou com 14 testes e três cenários de sandbox não selecionados, seguido de `smoke-servicos` aprovado. O trace `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e o CLIENT Execução → Billing. O simulador não produz chamada HTTP externa; o CLIENT Billing → Mercado Pago permanece pendente da sandbox real.
 
-O dashboard de bancos usa apenas as séries disponíveis no exporter; ele não usa `mongodb_ss_*`. A janela real de 600,9 s terminou sem reinícios, com 18 grupos de alvos disponíveis e três bancos acessíveis. O alerta controlado de fila disparou e recuperou, e o smoke posterior passou. O [relatório parcial](evidencias/observabilidade.md) preserva os commits, timestamps, trace e capturas do alerta. Capturas com uma hora de dados ainda não encerram a prova de três dias. O volume diário antes da primeira meia-noite UTC segue a limitação descrita no JSON.
+O dashboard de bancos usa apenas as séries disponíveis no exporter, sem as `mongodb_ss_*`. A janela real de 600,9 s terminou sem reinícios, com 18 grupos de alvos disponíveis e três bancos acessíveis. O alerta controlado de fila disparou e recuperou, e o smoke posterior passou. O [relatório parcial](evidencias/observabilidade.md) preserva os commits, timestamps, trace e capturas do alerta. Capturas com uma hora de dados ainda não encerram a prova de três dias. O volume diário antes da primeira meia-noite UTC segue a limitação descrita no JSON.
 
 ## Dívida aceita e acompanhada
 
@@ -52,17 +52,19 @@ O dashboard de bancos usa apenas as séries disponíveis no exporter; ele não u
 | Funções e classes longas | Onze funções acima de 50 linhas no OS Service e três no Billing; agregados com máquina de estados acima de 300 linhas | Ao mexer nesses módulos; começar por `registrar_error_handlers` e `criar_app` |
 | `Any` nos payloads JSON | Uso sem comentário em `dict[str, Any]` de payload nos três serviços | Na próxima mudança de payload; um alias `Json` por serviço |
 
-Uma dívida aceita não dispensa o gate nem autoriza declarar uma prova inexistente. A revisão final deve confirmar se algum item ganhou impacto maior com as últimas alterações.
+Dívida aceita não dispensa o gate nem vale como prova. A revisão final deve confirmar se algum item ganhou impacto maior com as últimas alterações.
 
 ## Provas disponíveis
 
-- OS Service: CD da `main` aprovado no [run 39357871773](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39357871773), em `ffcc2c1`.
-- Billing: CD da `main` aprovado no [run 39358245264](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39358245264), em `f99e164`.
-- Execução: CD da `main` aprovado no [run 39357862805](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39357862805), em `a1ede85`.
-- Plataforma: CD da `main` aprovado no [run 39418143511](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39418143511), em `e74e41c`.
+CD da `main` aprovado nos quatro repositórios:
+
+- OS Service: [run 39357871773](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39357871773), em `ffcc2c1`.
+- Billing: [run 39358245264](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39358245264), em `f99e164`.
+- Execução: [run 39357862805](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39357862805), em `a1ede85`.
+- Plataforma: [run 39418143511](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39418143511), em `e74e41c`.
 
 Cada CD de serviço roda os testes com o gate de cobertura de 95%, o SonarQube, a imagem, o kind e o E2E. A cobertura por camada está no [registro de cobertura](evidencias/coverage.md). Cada alteração posterior exige os mesmos gates e a atualização deste registro antes do congelamento.
 
 ## Origem dos repositórios
 
-Todo commit da `main` entrou por pull request, exceto o commit inicial de cada repositório, criado pelo GitHub junto com ele. A [proteção da `main`](evidencias/protecao-da-main.md) traz o ruleset de cada repositório e a contagem de commits, e o [registro de evidências](evidencias/README.md#coleta-e-conferência-reproduzíveis) traz os quatro commits iniciais. O congelamento repete a conferência.
+Todo commit da `main` entrou por pull request, exceto o commit inicial de cada repositório, criado pelo GitHub junto com ele. A [proteção da `main`](evidencias/protecao-da-main.md) traz o ruleset de cada repositório e a contagem de commits, e o [registro de evidências](evidencias/README.md#coleta-e-conferência-reproduzíveis) lista os quatro commits iniciais. O congelamento repete a conferência.

@@ -7,16 +7,15 @@ Este diretório reúne as provas que precisam continuar acessíveis após a expi
 | Repositórios públicos, regras da `main` e commits associados a PR | [Proteção da `main` conferida em 20/10/2026](protecao-da-main.md); coletor versionado; repetir no congelamento | Metadados públicos do GitHub; percorrer o primeiro pai e conferir o PR de cada commit |
 | CD verde e SBOM dos três serviços na `main` final | [Três serviços com o CD compartilhado aprovado na `main`](#cd-compartilhado-dos-serviços); repetir no congelamento | Guardar serviço, SHA, URL da execução, digest da imagem e resultado de cada job |
 | Cobertura por camada e quality gate | [XMLs publicados e tabelas por camada](coverage.md): OS 99,62%, Billing 100%, Execução 100%, um run por serviço; repetir no congelamento | Tabelas geradas do XML do CI; guardar o run correspondente e o [resumo do SonarQube](coverage.md#sonarqube) |
-| BDD completo | [14 cenários no CD da main](bdd-resumo.md), run 39231733886 aprovado em `bfa8c72` | Preservar junit, cucumber e resumo após a varredura de segredos; repetir sobre os commits finais |
+| BDD completo | [14 cenários no CD da `main`](bdd-resumo.md), run 39231733886 aprovado em `bfa8c72` | Preservar junit, cucumber e resumo após a varredura de segredos; repetir sobre os commits finais |
 | Trace da saga e correlação | Ensaio local de 19/10: `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e CLIENT Execução → Billing; chamada Billing → Mercado Pago depende da sandbox real | Copiar o `trace-<cenário>-<trace_id>.json` que o `make mp-sandbox` salva já higienizado (README da plataforma, "O trace da saga"), em vez de exportar o JSON do Jaeger, que não é higienizado; capturar Jaeger e correlação do `X-Request-ID` no Loki |
 | Nove dashboards e alerta disparado | Alerta de fila disparou e recuperou; capturas locais com 1 h de dados, histórico de três dias pendente | Ambiente kind com PVC por pelo menos três dias, alimentado por `make demo` diariamente; uma captura por dashboard e uma do alerta |
 | Dez minutos sem tráfego | 600,9 s reais no simulador, sem reinícios; saúde e smoke aprovados | [Relatório parcial de observabilidade](observabilidade.md); repetir também no modo real do Mercado Pago |
 | Mercado Pago real: cobrança, aprovação e estorno | Ação do integrante com as credenciais de teste | `make mp-sandbox`; preservar só o `resumo.md` e os `trace-*.json`, já higienizados, sem dados do pagador ou credenciais |
-| Collection integrada com newman | [Duas provas locais e CI do platform #24 aprovados](newman-resumo.md); CD da main aprovado; prova do congelamento pendente | Fluxo completo pela borda, incluindo métricas administrativas dos nove status; repetir no workflow sobre os commits finais |
+| Collection integrada com newman | [Duas provas locais e CI do platform #24 aprovados](newman-resumo.md); CD da `main` aprovado; prova do congelamento pendente | Fluxo completo pela borda, incluindo métricas administrativas dos nove status; repetir no workflow sobre os commits finais |
 | Vídeo, identificação e tags | Aguardam o grupo e o congelamento | Vídeo público ou não listado de até 15 min; identificar participantes e tags `entrega-fase-4` nos quatro repositórios |
 
 O [relatório do ensaio local de 19/10/2026](observabilidade.md) reúne os resultados e as limitações de cada etapa. O painel de volume diário fica sem dados antes da primeira meia-noite UTC, conforme a descrição do seu JSON. A primeira execução diária de `make demo` passou com seis cenários em 111,11 s.
-
 
 ## CD compartilhado dos serviços
 
@@ -68,11 +67,11 @@ Os quatro commits abaixo criaram os repositórios antes do primeiro PR. São as 
 
 ## Gerar o PDF
 
-Instale `pandoc`, `weasyprint`, Node/npx e Python 3.14. A receita está versionada e usa `@mermaid-js/mermaid-cli@11.17.0`; o primeiro uso pode baixar o CLI/Chromium. A receita utiliza somente os arquivos versionados e não exige credenciais. A paginação também depende das versões de pandoc/weasyprint e das fontes instaladas; conferir as páginas após regenerar.
+Instale `pandoc`, `weasyprint`, Node/npx e Python 3.14. A receita está versionada, usa o `@mermaid-js/mermaid-cli@11.17.0`, lê somente arquivos versionados e não exige credenciais; o primeiro uso pode baixar o CLI/Chromium. A paginação também depende das versões de pandoc/weasyprint e das fontes instaladas; conferir as páginas após regenerar.
 
 ```bash
 scripts/build-entrega-pdf.sh --output /tmp/entrega-fase-4-ensaio.pdf
 scripts/build-entrega-pdf.sh --final --github /tmp/github-fase4.json --output /tmp/entrega-fase-4.pdf
 ```
 
-O destino deve ficar fora do repositório. O build confere a igualdade do Mermaid entre RFC, README e documento, renderiza a arquitetura em página própria, reescreve os links por arquivo e anexa integralmente o índice da raiz. A versão preliminar mantém participantes, vídeo e demais pendências visíveis. O build final usa links locais na tag; antes dele, atualize também os links explícitos dos quatro repositórios na documentação para a mesma tag. O PDF não substitui os relatórios e capturas versionados.
+O destino deve ficar fora do repositório. O build confere a igualdade do Mermaid entre RFC, README e documento, renderiza a arquitetura em página própria, reescreve os links por arquivo e anexa integralmente o índice da raiz. A versão preliminar mantém participantes, vídeo e demais pendências visíveis. O build final usa links locais na tag; antes dele, atualize também os links explícitos dos quatro repositórios na documentação para a mesma tag.

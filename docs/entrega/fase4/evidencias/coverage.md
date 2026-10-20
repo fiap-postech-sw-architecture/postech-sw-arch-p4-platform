@@ -97,6 +97,6 @@ As medidas de cada análise (bugs, vulnerabilidades, code smells, duplicação e
 
 ## Reprodução
 
-Baixar `relatorios-de-teste` com `gh run download <run> --repo <organização/repositório> --name relatorios-de-teste --dir <destino>`. Nos checkouts dos SHAs indicados, OS e Billing geram o trecho oficial com `python scripts/cobertura_resumo.py coverage.xml --readme README.md --run <URL>`; a Execução usa `python scripts/cobertura_resumo.py coverage.xml README.md <URL>`. As tabelas deste relatório são saídas literais desses geradores, sem atualizar outros READMEs por este arquivo.
+Baixar `relatorios-de-teste` com `gh run download <run> --repo <organização/repositório> --name relatorios-de-teste --dir <destino>`. Nos checkouts dos SHAs indicados, OS e Billing geram o trecho oficial com `python scripts/cobertura_resumo.py coverage.xml --readme README.md --run <URL>`; a Execução usa `python scripts/cobertura_resumo.py coverage.xml README.md <URL>`. As tabelas deste relatório são saídas literais desses geradores.
 
-Cobertura não substitui sandbox real do Mercado Pago, prova de histórico, vídeo ou auditoria dos quatro commits finais. Os limites de medição e os módulos omitidos estão no README e na configuração de cobertura de cada serviço.
+Os limites de medição e os módulos omitidos estão no README e na configuração de cobertura de cada serviço.
