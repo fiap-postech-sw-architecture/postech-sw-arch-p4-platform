@@ -211,8 +211,10 @@ def verificar(
         for relativo in PRELIMINARES:
             arquivo = raiz / relativo
             texto = arquivo.read_text() if arquivo.is_file() else ""
-            # Código inline não é marca: `AGUARDANDO_DECISAO` é etapa da saga.
-            marcas = RASCUNHO.findall(re.sub(r"`[^`\n]*`", "", texto))
+            # Código não é marca: `AGUARDANDO_DECISAO` é etapa da saga, e o
+            # Mermaid copiado da RFC traz etapas e a situação "pendente".
+            sem_blocos = re.sub(r"```.*?```", "", texto, flags=re.S)
+            marcas = RASCUNHO.findall(re.sub(r"`[^`\n]*`", "", sem_blocos))
             for marca in sorted({m.lower() for m in marcas}):
                 erros.append(f"final: texto preliminar em {relativo}: {marca}")
         texto = documento.read_text() if documento.is_file() else ""
