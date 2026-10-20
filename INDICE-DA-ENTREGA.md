@@ -6,7 +6,7 @@ Versão preliminar. Os links de código apontam para `main`; a tag `entrega-fase
 
 ## Participantes e vídeo
 
-A identificação dos participantes e o link do vídeo aguardam a confirmação do grupo. Esta versão não serve para submissão no portal.
+Integrantes do grupo 158, turma 15SOAT: João Amaral, Allan Aurélio, Carlos Silva, Guilherme Sousa e Nicolas Gerbi (RM e Discord na [seção 1 do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#1-participantes)). O link do vídeo aguarda a gravação. Esta versão não serve para submissão no portal.
 
 ## Repositórios
 
