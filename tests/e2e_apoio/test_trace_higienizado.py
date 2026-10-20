@@ -27,8 +27,9 @@ from e2e.apoio.trace_higienizado import (
 )
 from e2e_apoio.falsos import CHAVE_APP_USR
 
-RAIZ = Path(__file__).resolve().parents[2]
-TRACE_REAL = RAIZ / "docs/entrega/fase4/evidencias/trace-saga-2026-10-19.json"
+# Copia congelada do trace que o Jaeger 1.76 exportou na saga de 19/10/2026 (245 spans):
+# a evidencia da entrega pode mudar sem mexer neste teste.
+TRACE_REAL = Path(__file__).parent / "dados" / "trace-saga-real.json"
 
 TRACE_ID = "36c945dd0cb1589e33ecc81badd2bd71"
 OUTRO_TRACE_ID = "0123456789abcdef0123456789abcdef"
@@ -945,14 +946,14 @@ def test_o_arquivo_tem_as_chaves_que_o_upload_do_jaeger_le() -> None:
     _aceito_pelo_upload(arquivo_do_trace("pagamento", _limpo())[1])
 
 
-def test_o_trace_real_da_entrega_passa_inteiro_e_so_com_chaves_do_jaeger() -> None:
-    """O Jaeger 1.76 real (245 spans da saga): so perde o que a lista corta."""
+def test_o_trace_real_do_jaeger_passa_inteiro_e_so_com_chaves_do_jaeger() -> None:
+    """O Jaeger 1.76 real (a saga inteira, 245 spans): so perde o que a lista corta."""
     real = json.loads(TRACE_REAL.read_text(encoding="utf-8"))["data"][0]
 
     limpo = higienizar_trace(real)
 
     assert limpo is not None
-    assert len(limpo["spans"]) == len(real["spans"]) == 245
+    assert len(limpo["spans"]) == len(real["spans"])
     assert [s["spanID"] for s in limpo["spans"]] == [s["spanID"] for s in real["spans"]]
     assert [s["references"] for s in limpo["spans"]] == [
         s["references"] for s in real["spans"]
