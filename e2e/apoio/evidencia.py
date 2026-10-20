@@ -29,6 +29,7 @@ from e2e.apoio.mercadopago import sem_id_da_conta
 from e2e.apoio.segredos import registrados
 from e2e.apoio.trace_higienizado import (
     HOST_DO_MERCADO_PAGO,
+    INTERROMPIDO,
     TraceDoCenario,
     arquivo_do_trace,
 )
@@ -252,12 +253,14 @@ def descricao_do_trace(achado: TraceDoCenario, *, real: bool) -> str:
 
     Diz o ``traceID``, o arquivo, os servicos que o trace tem e se ha span CLIENT do
     Billing para o Mercado Pago: no modo real deve haver, e no ensaio (simulador), nao.
-    Trace que nao apareceu nao reprova o cenario, e a linha diz isso.
+    Trace que nao apareceu nao reprova o cenario, e a linha diz isso; o cenario que o
+    Ctrl-C parou na espera diz que o trace nao foi procurado ate o fim.
     """
     if achado.trace is None:
         causa = f" ({achado.motivo})" if achado.motivo else ""
+        situacao = "procurado" if achado.motivo == INTERROMPIDO else "encontrado"
         return (
-            f"Trace no Jaeger: trace não encontrado{causa}. "
+            f"Trace no Jaeger: trace não {situacao}{causa}. "
             "O pagamento é a prova principal."
         )
     if achado.chamou_o_mercado_pago:

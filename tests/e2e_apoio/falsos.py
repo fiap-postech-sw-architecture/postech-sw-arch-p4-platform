@@ -116,6 +116,21 @@ def trace_do_jaeger(
     }
 
 
+class LeiturasDoJaeger:
+    """O que o Jaeger devolve a cada leitura (a ultima se repete); excecao levanta."""
+
+    def __init__(self, *leituras: list[Any] | BaseException) -> None:
+        self._leituras = leituras
+        self.pedidos = 0
+
+    def __call__(self) -> list[Any]:
+        leitura = self._leituras[min(self.pedidos, len(self._leituras) - 1)]
+        self.pedidos += 1
+        if isinstance(leitura, BaseException):
+            raise leitura
+        return leitura
+
+
 class ExecutorFalso:
     """Registra os comandos e responde por um trecho do comando."""
 

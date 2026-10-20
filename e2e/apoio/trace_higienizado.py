@@ -46,6 +46,8 @@ if TYPE_CHECKING:
 # pagamento e a prova principal): o resumo diz que nao o achou.
 PRAZO_DO_TRACE: Final = 30.0
 INTERVALO_DO_TRACE: Final = 3.0
+# Motivo do cenario que o Ctrl-C parou no meio da espera pelo trace.
+INTERROMPIDO: Final = "interrompido"
 HOST_DO_MERCADO_PAGO: Final = "api.mercadopago.com"
 SERVICO_DO_BILLING: Final = "billing-service"
 SEM_ID: Final = "{id}"
@@ -439,27 +441,31 @@ class _Leitura:
     def __init__(self, ler: Callable[[], Iterable[object]], *, real: bool) -> None:
         self._ler = ler
         self._real = real
-        self._spans = -1
+        self._anterior: tuple[str, int] | None = None
         self.melhor: Trace | None = None
         self.erro = ""
 
     def __call__(self) -> Trace | None:
-        """O trace, se duas leituras seguidas o trazem com os mesmos spans.
+        """O trace, se duas leituras seguidas o trazem com o mesmo id e os mesmos spans.
 
-        No modo real so conta o que tem a chamada do Billing ao Mercado Pago.
+        No modo real so conta o que tem a chamada do Billing ao Mercado Pago. ``erro``
+        e o da ultima leitura: uma que respondeu o apaga.
         """
         try:
             traces = [t for bruto in self._ler() if (t := higienizar_trace(bruto))]
         except Exception as falha:  # o Jaeger fora do ar nao reprova o cenario
             self.erro = type(falha).__name__
             return None
+        self.erro = ""
         trace = escolher_trace(traces)
         if trace is None:
             return None
-        anterior, self._spans = self._spans, len(trace["spans"])
-        self.melhor = trace
-        tem_a_chamada = chamada_ao_mercado_pago(trace) or not self._real
-        return trace if self._spans == anterior and tem_a_chamada else None
+        visto = (str(trace["traceID"]), len(trace["spans"]))
+        pronto = visto == self._anterior and (
+            chamada_ao_mercado_pago(trace) or not self._real
+        )
+        self._anterior, self.melhor = visto, trace
+        return trace if pronto else None
 
 
 def esperar_trace(
@@ -476,7 +482,8 @@ def esperar_trace(
     so o que tem a chamada do Billing ao Mercado Pago (que o video precisa mostrar).
     Se ``PRAZO_DO_TRACE`` acaba antes, fica o melhor trace que se viu. Nao levanta por
     causa do Jaeger: fora do ar, ele nao reprova o cenario, e o nome do erro (nunca a
-    mensagem) vai para o resumo.
+    mensagem) vai para o resumo. O ``KeyboardInterrupt`` passa direto, para quem
+    chama registrar o ``INTERROMPIDO``.
     """
     leitura = _Leitura(ler, real=real)
     achado: Trace | None

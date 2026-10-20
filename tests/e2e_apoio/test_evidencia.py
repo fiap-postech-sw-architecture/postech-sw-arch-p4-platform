@@ -37,6 +37,7 @@ from e2e.apoio.evidencia import (
     varrer_pasta,
 )
 from e2e.apoio.trace_higienizado import (
+    INTERROMPIDO,
     ChaveDeArquivoInvalidaError,
     TraceDoCenario,
     higienizar_trace,
@@ -1129,6 +1130,34 @@ def test_trace_que_nao_foi_achado_aparece_no_resumo_como_nao_encontrado(
         prints=[],
     )
     assert f"- {esperada}" in texto.splitlines()
+
+
+@pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])
+def test_trace_que_o_ctrl_c_parou_aparece_no_resumo_como_nao_procurado(
+    real: bool,
+) -> None:
+    achado = TraceDoCenario("pagamento", None, INTERROMPIDO)
+    esperada = (
+        "Trace no Jaeger: trace não procurado (interrompido). "
+        "O pagamento é a prova principal."
+    )
+    registro = RegistroDoCenario(nome="Pagamento")
+    registro.trace = achado
+
+    texto = gerar_resumo(
+        [registro],
+        modo="real" if real else "ensaio",
+        contexto="kind-x",
+        quando=QUANDO,
+        prints=[],
+    )
+
+    assert descricao_do_trace(achado, real=real) == esperada
+    assert f"- {esperada}" in texto.splitlines()
+    assert registro.para_json()["trace"] == {
+        "encontrado": False,
+        "motivo": "interrompido",
+    }
 
 
 def test_json_do_registro_resume_o_trace_e_deixa_o_trace_inteiro_para_o_arquivo() -> (

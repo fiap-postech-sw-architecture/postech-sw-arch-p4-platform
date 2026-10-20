@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import httpx
 import pytest
 
 from e2e.apoio import segredos
@@ -23,11 +24,15 @@ from e2e.apoio.trace_higienizado import (
     arquivo_do_trace,
     chamada_ao_mercado_pago,
     escolher_trace,
+    esperar_trace,
     higienizar_trace,
     nome_do_arquivo,
     url_reduzida,
 )
-from e2e_apoio.falsos import CHAVE_APP_USR
+from e2e_apoio.falsos import CHAVE_APP_USR, LeiturasDoJaeger, trace_do_jaeger
+
+if TYPE_CHECKING:
+    from e2e_apoio.falsos import Relogio
 
 # Copia congelada do trace que o Jaeger 1.76 exportou na saga de 19/10/2026 (245 spans):
 # a evidencia da entrega pode mudar sem mexer neste teste.
@@ -1375,3 +1380,73 @@ def test_trace_do_cenario_sem_trace_nao_tem_arquivo_nem_servicos_nem_chamada() -
     assert achado.servicos == []
     assert achado.chamou_o_mercado_pago is False
     assert achado.motivo == "motivo"
+
+
+# --- a espera pelo trace da ordem -----------------------------------------------------
+
+
+def _esperar(
+    leituras: LeiturasDoJaeger, relogio: Relogio, *, real: bool = False
+) -> TraceDoCenario:
+    return esperar_trace(
+        leituras,
+        chave="pagamento",
+        real=real,
+        relogio=relogio,
+        dormir=relogio.dormir,
+    )
+
+
+def test_a_espera_vale_o_trace_que_duas_leituras_seguidas_trazem_iguais(
+    relogio: Relogio,
+) -> None:
+    leituras = LeiturasDoJaeger(
+        [trace_do_jaeger(spans=4)],
+        [trace_do_jaeger(spans=6)],
+        [trace_do_jaeger(spans=6)],
+    )
+
+    achado = _esperar(leituras, relogio)
+
+    assert achado.trace is not None
+    assert len(achado.trace["spans"]) == 6
+    assert achado.motivo == ""
+    assert leituras.pedidos == 3
+    assert relogio.dormidas == [3.0, 3.0]
+
+
+def test_a_espera_nao_confunde_dois_traces_do_mesmo_tamanho(relogio: Relogio) -> None:
+    um = [trace_do_jaeger(trace_id=TRACE_ID, spans=5)]
+    outro = [trace_do_jaeger(trace_id=OUTRO_TRACE_ID, spans=5)]
+    leituras = LeiturasDoJaeger(um, outro, outro)
+
+    achado = _esperar(leituras, relogio)
+
+    assert achado.trace is not None
+    assert achado.trace["traceID"] == OUTRO_TRACE_ID
+    assert leituras.pedidos == 3, "a troca de trace entre as leituras nao conta"
+    assert relogio.dormidas == [3.0, 3.0]
+
+
+def test_erro_de_uma_leitura_que_depois_respondeu_nao_vira_o_motivo(
+    relogio: Relogio,
+) -> None:
+    leituras = LeiturasDoJaeger(httpx.ReadTimeout("x"), [])
+
+    achado = _esperar(leituras, relogio, real=True)
+
+    assert achado == TraceDoCenario(
+        "pagamento", None, "nenhum trace da ordem no Jaeger em 30 s"
+    )
+
+
+def test_o_motivo_e_o_erro_da_ultima_leitura(relogio: Relogio) -> None:
+    leituras = LeiturasDoJaeger(
+        [], httpx.ConnectError(f"sem rota para {CHAVE_APP_USR}")
+    )
+
+    achado = _esperar(leituras, relogio, real=True)
+
+    assert achado == TraceDoCenario(
+        "pagamento", None, "erro ao consultar o Jaeger: ConnectError"
+    )

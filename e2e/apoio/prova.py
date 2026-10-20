@@ -46,7 +46,12 @@ from e2e.apoio.kube import FILA_MORTA_DO_BILLING
 from e2e.apoio.mercadopago import ErroDoMercadoPagoError, registrar_conta
 from e2e.apoio.modo_billing import NAMESPACE_BILLING, sem_consulta
 from e2e.apoio.segredos import mascarar, registrar
-from e2e.apoio.trace_higienizado import PRAZO_DO_TRACE, TraceDoCenario, esperar_trace
+from e2e.apoio.trace_higienizado import (
+    INTERROMPIDO,
+    PRAZO_DO_TRACE,
+    TraceDoCenario,
+    esperar_trace,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
@@ -536,20 +541,22 @@ class Prova:
             self._avisar(
                 f"[mp-sandbox] lendo o trace da OS no Jaeger (até {PRAZO_DO_TRACE:g} s)"
             )
-            achado = self._trace_da_ordem()
+            chave = next(
+                (tag for tag in TAGS_DOS_CENARIOS if tag in self.cenario.tags),
+                f"cenario-{self.cenario.numero}",
+            )
+            try:
+                achado = esperar_trace(
+                    lambda: self._traces_da_ordem(self.cenario.ordem_id),
+                    chave=chave,
+                    real=self.real,
+                    relogio=self._relogio,
+                    dormir=self._dormir,
+                )
+            except KeyboardInterrupt:
+                # O Ctrl-C na espera: o resumo diz que o trace nao foi procurado ate o
+                # fim, e nada mais espera aqui, para o desfazer do modo real vir ja.
+                self.registro.trace = TraceDoCenario(chave, None, INTERROMPIDO)
+                raise
             self.registro.trace = achado
             self._avisar(f"[mp-sandbox] {descricao_do_trace(achado, real=self.real)}")
-
-    def _trace_da_ordem(self) -> TraceDoCenario:
-        """O trace da ordem (ver ``esperar_trace``), com a chave do cenario."""
-        chave = next(
-            (tag for tag in TAGS_DOS_CENARIOS if tag in self.cenario.tags),
-            f"cenario-{self.cenario.numero}",
-        )
-        return esperar_trace(
-            lambda: self._traces_da_ordem(self.cenario.ordem_id),
-            chave=chave,
-            real=self.real,
-            relogio=self._relogio,
-            dormir=self._dormir,
-        )

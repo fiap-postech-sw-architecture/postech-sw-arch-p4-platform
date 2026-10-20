@@ -28,6 +28,7 @@ from e2e.apoio.prova import (
 )
 from e2e.apoio.segredos import mascarar
 from e2e.apoio.trace_higienizado import (
+    INTERROMPIDO,
     PRAZO_DO_TRACE,
     TraceDoCenario,
     higienizar_trace,
@@ -111,14 +112,14 @@ class Mundo:
         self.mp_status = 200
         self._leituras = 0
         # O que o Jaeger devolve a cada leitura (a ultima se repete); excecao levanta.
-        self.leituras_do_jaeger: list[list[Any] | Exception] = [[]]
+        self.leituras_do_jaeger: list[list[Any] | BaseException] = [[]]
         self.pedidos_ao_jaeger: list[str] = []
 
     def traces_da_ordem(self, ordem_id: str) -> list[Any]:
         self.pedidos_ao_jaeger.append(ordem_id)
         numero = min(len(self.pedidos_ao_jaeger), len(self.leituras_do_jaeger)) - 1
         leitura = self.leituras_do_jaeger[numero]
-        if isinstance(leitura, Exception):
+        if isinstance(leitura, BaseException):
             raise leitura
         return leitura
 
@@ -1304,7 +1305,7 @@ def test_concluir_com_os_servicos_fora_do_ar_nao_levanta(relogio: Relogio) -> No
 # --- o trace da ordem no Jaeger ------------------------------------------------------
 
 
-def _jaeger(*leituras: list[Any] | Exception) -> Mundo:
+def _jaeger(*leituras: list[Any] | BaseException) -> Mundo:
     mundo = Mundo()
     mundo.leituras_do_jaeger = list(leituras)
     return mundo
@@ -1500,6 +1501,34 @@ def test_cenario_interrompido_nao_procura_o_trace(relogio: Relogio) -> None:
     assert mundo.pedidos_ao_jaeger == []
     assert relogio.dormidas == []
     assert not any("Trace no Jaeger" in aviso for aviso in avisos)
+
+
+@pytest.mark.parametrize("onde", ["dormindo", "lendo"])
+def test_ctrl_c_na_espera_do_trace_fica_no_resumo_e_a_interrupcao_passa(
+    onde: str, relogio: Relogio
+) -> None:
+    mundo = _jaeger([trace_do_jaeger(spans=5)])
+    prova, avisos, _ = _prova(mundo, relogio, real=True)
+    prova.cenario.tags = frozenset(("mp_sandbox", "pagamento"))
+    if onde == "lendo":
+        mundo.leituras_do_jaeger = [KeyboardInterrupt()]
+    else:
+
+        def interrompe(_segundos: float) -> None:
+            raise KeyboardInterrupt
+
+        prova._dormir = interrompe
+
+    with pytest.raises(KeyboardInterrupt):
+        prova.concluir("passed")
+
+    # A espera para na hora: nenhuma leitura nem pausa depois do Ctrl-C, para o
+    # desfazer do modo real nao esperar.
+    assert prova.registro.trace == TraceDoCenario("pagamento", None, INTERROMPIDO)
+    assert prova.registro.resultado == "passou"
+    assert mundo.pedidos_ao_jaeger == ["o-1"]
+    assert relogio.dormidas == []
+    assert avisos[-1] == "[mp-sandbox] lendo o trace da OS no Jaeger (até 30 s)"
 
 
 def test_cenario_sem_ordem_nao_procura_o_trace(relogio: Relogio) -> None:
