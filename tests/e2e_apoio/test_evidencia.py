@@ -1254,6 +1254,12 @@ def _trace_com_texto(texto: str) -> TraceDoCenario:
     return TraceDoCenario("pagamento", trace)
 
 
+DESCARTADO_NO_RESUMO = (
+    "Trace no Jaeger: trace não gravado (descartado pela varredura de segredos). "
+    "O pagamento é a prova principal."
+)
+
+
 @pytest.mark.parametrize(
     "texto",
     [
@@ -1263,38 +1269,91 @@ def _trace_com_texto(texto: str) -> TraceDoCenario:
         pytest.param("registrado-0123456789", id="segredo-registrado"),
     ],
 )
-def test_trace_com_segredo_nao_grava_nenhum_arquivo_nem_repete_o_valor(
+def test_trace_com_segredo_e_descartado_e_o_resto_da_evidencia_e_gravado(
     texto: str, tmp_path: Path
 ) -> None:
     segredos.registrar("registrado-0123456789")
     registro = RegistroDoCenario(nome="C")
     registro.trace = _trace_com_texto(texto)
+    original = registro.trace
 
-    with pytest.raises(EvidenciaComSegredoError) as erro:
-        gravar_evidencia(
-            tmp_path, [registro], modo="real", contexto="kind-x", prints=[]
-        )
+    gravar_evidencia(tmp_path, [registro], modo="real", contexto="kind-x", prints=[])
 
-    assert ARQUIVO_DO_TRACE in str(erro.value)
-    assert "Nada foi gravado" in str(erro.value)
-    assert texto not in str(erro.value)
-    assert list(tmp_path.iterdir()) == []
+    assert sorted(arquivo.name for arquivo in tmp_path.iterdir()) == [
+        "evidencia.json",
+        "resumo.md",
+    ]
+    assert (
+        f"- {DESCARTADO_NO_RESUMO}" in (tmp_path / "resumo.md").read_text().splitlines()
+    )
+    cenarios = json.loads((tmp_path / "evidencia.json").read_text())["cenarios"]
+    assert cenarios[0]["trace"] == {
+        "encontrado": False,
+        "motivo": "descartado pela varredura de segredos",
+    }
+    for arquivo in tmp_path.iterdir():
+        assert texto not in arquivo.read_text(), arquivo.name
+    assert varrer_pasta(tmp_path) == {}
+    assert registro.trace is original, "o registro do chamador nao muda"
+    assert original is not None
+    assert original.trace is not None
 
 
-def test_trace_com_o_que_o_chamador_passa_como_extra_nao_grava_nada(
+def test_trace_com_o_que_o_chamador_passa_como_extra_e_descartado(
     tmp_path: Path,
 ) -> None:
     registro = RegistroDoCenario(nome="C")
     registro.trace = _trace_com_texto(ASSINATURA)
 
-    with pytest.raises(EvidenciaComSegredoError):
+    gravar_evidencia(
+        tmp_path,
+        [registro],
+        modo="real",
+        contexto="kind-x",
+        prints=[],
+        extras=[ASSINATURA],
+    )
+
+    assert sorted(arquivo.name for arquivo in tmp_path.iterdir()) == [
+        "evidencia.json",
+        "resumo.md",
+    ]
+    assert varrer_pasta(tmp_path, [ASSINATURA]) == {}
+
+
+def test_so_o_trace_com_segredo_e_descartado_o_de_outro_cenario_e_gravado(
+    tmp_path: Path,
+) -> None:
+    sujo = RegistroDoCenario(nome="Um")
+    sujo.trace = _trace_com_texto("joao@exemplo.com.br")
+    limpo = _com_trace(
+        RegistroDoCenario(nome="Dois"), chamada_ao_mp=True, chave="estorno"
+    )
+
+    gravar_evidencia(tmp_path, [sujo, limpo], modo="real", contexto="kind-x", prints=[])
+
+    assert sorted(arquivo.name for arquivo in tmp_path.iterdir()) == [
+        "evidencia.json",
+        "resumo.md",
+        f"trace-estorno-{TRACE_ID_FALSO}.json",
+    ]
+    linhas = (tmp_path / "resumo.md").read_text().splitlines()
+    assert f"- {DESCARTADO_NO_RESUMO}" in linhas
+    assert any(
+        linha.startswith("- Trace no Jaeger: `") and "trace-estorno-" in linha
+        for linha in linhas
+    )
+
+
+def test_segredo_no_resumo_ainda_recusa_gravar_tudo_inclusive_o_trace_limpo(
+    tmp_path: Path,
+) -> None:
+    registro = _com_trace(RegistroDoCenario(nome="C"), chamada_ao_mp=True)
+    registro.observacoes.append("joao@exemplo.com.br")
+
+    with pytest.raises(EvidenciaComSegredoError, match="Nada foi gravado"):
         gravar_evidencia(
-            tmp_path,
-            [registro],
-            modo="real",
-            contexto="kind-x",
-            prints=[],
-            extras=[ASSINATURA],
+            tmp_path, [registro], modo="real", contexto="kind-x", prints=[]
         )
 
     assert list(tmp_path.iterdir()) == []

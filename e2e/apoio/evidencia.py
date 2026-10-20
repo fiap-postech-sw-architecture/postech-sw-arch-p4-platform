@@ -7,10 +7,12 @@ segredo registrado, de ``Bearer``, de ``TEST-``/``APP_USR-`` e de e-mail
 (``varrer``). Por fim, achado recusa a gravacao e diz onde esta (arquivo e
 linha), sem repetir o valor (``gravar_evidencia``).
 
-A sanitizacao e a varredura sao duas barreiras diferentes de proposito: a
+A higienizacao e a varredura sao duas barreiras diferentes de proposito: a
 primeira impede o campo de entrar, a segunda pega o que passou por engano. O trace
 da saga no Jaeger segue as mesmas tres regras (``trace_higienizado.py``): vai para
-um ``trace-<cenario>-<traceID>.json`` ao lado do resumo, varrido como ele.
+um ``trace-<cenario>-<traceID>.json`` ao lado do resumo, varrido como ele. Mas o
+trace e acessorio (o pagamento e a prova principal): achado nele descarta so o
+trace, e o resumo diz por que.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ import contextlib
 import json
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
@@ -28,6 +30,7 @@ from typing import TYPE_CHECKING, Any, Final
 from e2e.apoio.mercadopago import sem_id_da_conta
 from e2e.apoio.segredos import registrados
 from e2e.apoio.trace_higienizado import (
+    DESCARTADO,
     HOST_DO_MERCADO_PAGO,
     INTERROMPIDO,
     TraceDoCenario,
@@ -107,6 +110,10 @@ _PADROES_DA_VARREDURA: Final = {
         r"\b\d{6,}-[0-9a-f]{8}-[0-9a-f]{4}"
     ),
 }
+
+
+# Do trace que falta, o que a linha do resumo diz que nao aconteceu com ele.
+_SITUACAO_SEM_TRACE: Final = {INTERROMPIDO: "procurado", DESCARTADO: "gravado"}
 
 
 class EvidenciaComSegredoError(AssertionError):
@@ -255,11 +262,12 @@ def descricao_do_trace(achado: TraceDoCenario, *, real: bool) -> str:
     parcial) e se ha span CLIENT do Billing para o Mercado Pago: no modo real deve
     haver, e no ensaio (simulador), nao.
     Trace que nao apareceu nao reprova o cenario, e a linha diz isso; o cenario que o
-    Ctrl-C parou na espera diz que o trace nao foi procurado ate o fim.
+    Ctrl-C parou na espera diz que o trace nao foi procurado ate o fim, e o trace que a
+    varredura de segredos descartou diz que nao foi gravado.
     """
     if achado.trace is None:
         causa = f" ({achado.motivo})" if achado.motivo else ""
-        situacao = "procurado" if achado.motivo == INTERROMPIDO else "encontrado"
+        situacao = _SITUACAO_SEM_TRACE.get(achado.motivo, "encontrado")
         return (
             f"Trace no Jaeger: trace não {situacao}{causa}. "
             "O pagamento é a prova principal."
@@ -450,6 +458,31 @@ def varrer_pasta(pasta: Path, extras: Iterable[str] = ()) -> dict[str, list[Acha
     }
 
 
+def _separar_traces(
+    registros: Iterable[RegistroDoCenario], extras: Iterable[str]
+) -> tuple[list[RegistroDoCenario], list[tuple[str, str]]]:
+    """Os registros e os arquivos de trace que a varredura deixa gravar.
+
+    O trace com achado fica de fora, e o registro (uma copia: o do chamador nao muda)
+    passa a dizer que ele foi descartado. O trace e acessorio, e nao pode levar junto o
+    ``resumo.md`` e o ``evidencia.json``, que trazem o pagamento.
+    """
+    __tracebackhide__ = True  # o texto do trace e o que a varredura acabou de achar
+    lista: list[RegistroDoCenario] = []
+    arquivos: list[tuple[str, str]] = []
+    for registro in registros:
+        achado = registro.trace
+        if achado is not None and achado.trace is not None:
+            nome, texto = arquivo_do_trace(achado.chave, achado.trace)
+            if varrer(texto, extras):
+                descartado = TraceDoCenario(achado.chave, None, DESCARTADO)
+                registro = replace(registro, trace=descartado)
+            else:
+                arquivos.append((nome, texto))
+        lista.append(registro)
+    return lista, arquivos
+
+
 def gravar_evidencia(
     pasta: Path,
     registros: Iterable[RegistroDoCenario],
@@ -461,11 +494,15 @@ def gravar_evidencia(
     quando: datetime | None = None,
     extras: Iterable[str] = (),
 ) -> None:
-    """``resumo.md``, ``evidencia.json`` e ``trace-*.json`` em ``pasta``, varridos."""
+    """``resumo.md``, ``evidencia.json`` e ``trace-*.json`` em ``pasta``, varridos.
+
+    Achado no resumo ou no JSON recusa gravar qualquer arquivo. Achado num trace so
+    o descarta: o resto e gravado e o resumo diz por que o trace falta.
+    """
     __tracebackhide__ = (
         True  # ``registros`` leva as observacoes, que podem ter o achado
     )
-    lista = list(registros)
+    lista, traces = _separar_traces(registros, extras)
     resumo = gerar_resumo(
         lista,
         modo=modo,
@@ -483,16 +520,9 @@ def gravar_evidencia(
         indent=2,
         ensure_ascii=False,
     )
-    traces = [
-        arquivo_do_trace(r.trace.chave, r.trace.trace)
-        for r in lista
-        if r.trace is not None and r.trace.trace is not None
-    ]
     # As varreduras antes de gravar qualquer um: nao fica um sem o outro.
     _conferir("resumo.md", resumo, extras)
     _conferir("evidencia.json", dados, extras)
-    for nome, texto in traces:
-        _conferir(nome, texto, extras)
     pasta.mkdir(parents=True, exist_ok=True)
     (pasta / "resumo.md").write_text(resumo, encoding="utf-8")
     (pasta / "evidencia.json").write_text(dados + "\n", encoding="utf-8")

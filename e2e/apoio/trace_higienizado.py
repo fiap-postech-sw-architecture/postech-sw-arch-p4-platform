@@ -48,6 +48,8 @@ PRAZO_DO_TRACE: Final = 30.0
 INTERVALO_DO_TRACE: Final = 3.0
 # Motivo do cenario que o Ctrl-C parou no meio da espera pelo trace.
 INTERROMPIDO: Final = "interrompido"
+# Motivo do trace que a varredura de segredos achou algo e por isso nao foi gravado.
+DESCARTADO: Final = "descartado pela varredura de segredos"
 HOST_DO_MERCADO_PAGO: Final = "api.mercadopago.com"
 SERVICO_DO_BILLING: Final = "billing-service"
 SEM_ID: Final = "{id}"
