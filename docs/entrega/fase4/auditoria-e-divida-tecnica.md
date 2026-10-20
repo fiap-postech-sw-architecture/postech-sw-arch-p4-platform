@@ -47,15 +47,12 @@ Uma dívida aceita não dispensa o gate nem autoriza declarar uma prova inexiste
 
 ## Provas disponíveis
 
-- OS: 10.398 testes aprovados, cobertura de 99,62% na árvore integrada por #17; gates estáticos e de documentação aprovados.
-- Billing: 1.657 testes aprovados, cobertura e diff-cover de 100% na árvore integrada por #17 (`248c407`); nove checks, smoke real e nove mutantes aprovados. OpenAPI e collection regenerados pelo comando oficial.
-- Execução: 1.468 testes aprovados e cobertura de 100% na árvore integrada por #9.
-- Plataforma: 2.539 testes aprovados e cobertura de 100% na árvore integrada por #20; CD [39190581574](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39190581574) aprovado em `91d959b`.
+- OS Service: CD da `main` aprovado no [run 39357871773](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39357871773), em `ffcc2c1`.
+- Billing: CD da `main` aprovado no [run 39358245264](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39358245264), em `f99e164`.
+- Execução: CD da `main` aprovado no [run 39357862805](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39357862805), em `a1ede85`.
+- Plataforma: CD da `main` aprovado no [run 39418143511](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39418143511), em `e74e41c`.
 
-As correções de observabilidade do Billing entraram no [Billing #18](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/18). A cobertura dessa fonte está no [registro de cobertura](evidencias/coverage.md#billing-service).
-
-Esses resultados identificam a base do ensaio. Cada alteração posterior exige os gates correspondentes e atualização deste registro antes do congelamento.
-
+Cada CD de serviço roda os testes com o gate de cobertura de 95%, o SonarQube, a imagem, o kind e o E2E. A cobertura por camada está no [registro de cobertura](evidencias/coverage.md). Cada alteração posterior exige os mesmos gates e a atualização deste registro antes do congelamento.
 
 ## Origem dos repositórios
 

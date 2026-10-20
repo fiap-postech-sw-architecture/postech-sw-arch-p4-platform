@@ -27,7 +27,7 @@ O vídeo de até 15 minutos ainda será gravado e publicado. O [roteiro](roteiro
 
 ## 4. Arquitetura final
 
-A fonte deste diagrama é a proposta técnica da arquitetura (RFC, *request for comments*), na [RFC-004, seção 2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md); o mesmo bloco aparece no README.
+A fonte deste diagrama é a proposta técnica da arquitetura (RFC, *request for comments*), na [RFC-004, seção 2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md).
 
 ```mermaid
 flowchart TB
@@ -48,6 +48,8 @@ flowchart TB
     billing <-->|HTTPS| mp["Mercado Pago"]
 ```
 
+No diagrama, REST são chamadas HTTP síncronas, AMQP são as mensagens do RabbitMQ e kind é um cluster Kubernetes em contêineres Docker. Na integração contínua (CI), o overlay `kind-ci` roda Prometheus e Jaeger; Grafana e Loki ficam só no kind local.
+
 ## 5. Divisão dos serviços e tecnologias
 
 O recorte do monólito segue três critérios do [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md). As capacidades que o enunciado sugere definem os serviços. Cada contexto delimitado do monólito vai inteiro para o serviço cuja capacidade sustenta, e cada serviço é o único dono dos seus dados. A regra que precisa de transação local com lock fica num serviço só, para que a reserva de peças não atravesse a rede.
@@ -60,7 +62,7 @@ Cada serviço também muda num ritmo próprio: o OS Service com o atendimento e 
 
 PostgreSQL 16 preserva as relações e restrições do OS Service e da Execução. MongoDB 7 guarda os documentos de orçamento e pagamento do Billing, com replica set para gravar na mesma transação o documento e a outbox, a tabela das mensagens a publicar. RabbitMQ separa comandos e respostas, com confirmação, retry por atraso e filas de mensagens mortas. Kong é o gateway de API: publica as rotas `/os`, `/billing` e `/execucao`, limita a taxa de requisições e propaga o identificador de correlação. JSON Web Token (JWT), assinado com RSA e SHA-256 (RS256), permite validar a identidade pela chave pública do OS Service, mantendo a chave privada somente no emissor.
 
-Prometheus, Grafana, Loki e Jaeger retomam a observabilidade da fase 3. Os nove dashboards têm JSON e descrição por painel; os de negócio incluem volume diário de OS e tempo médio por status. As decisões estão nos registros de decisão de arquitetura (ADRs, *architecture decision records*) [034 a 043](../../arquitetura/adr/fase4/). O ambiente entregue é um cluster Kubernetes em contêineres Docker (kind), executado localmente e na integração contínua (CI). Nuvem persistente é opcional, conforme o [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md).
+Prometheus, Grafana, Loki e Jaeger retomam a observabilidade da fase 3. Os nove dashboards têm JSON e descrição por painel; os de negócio incluem volume diário de OS e tempo médio por status. As decisões estão nos registros de decisão de arquitetura (ADRs, *architecture decision records*) [034 a 043](../../arquitetura/adr/fase4/). O ambiente entregue é o kind, executado localmente e no CI. Nuvem persistente é opcional, conforme o [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md).
 
 ## 6. Saga e compensações
 

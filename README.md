@@ -55,7 +55,7 @@ flowchart TB
     billing <-->|HTTPS| mp["Mercado Pago"]
 ```
 
-Fonte: [RFC-004, seção 2](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md). O [índice da entrega](INDICE-DA-ENTREGA.md) reúne o documento, os requisitos e as evidências.
+Fonte: [RFC-004, seção 2](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md). No CI, o overlay `kind-ci` roda Prometheus e Jaeger; Grafana e Loki ficam só no kind local. O [índice da entrega](INDICE-DA-ENTREGA.md) reúne o documento, os requisitos e as evidências.
 
 ## Pré-requisitos
 
