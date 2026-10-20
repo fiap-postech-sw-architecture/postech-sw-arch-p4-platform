@@ -6,7 +6,15 @@ Versão preliminar do documento da turma 15SOAT, Pós-Graduação em Arquitetura
 
 ## 1. Participantes
 
-Identificação dos participantes pendente de confirmação do grupo.
+Grupo 158, turma 15SOAT. Os mesmos integrantes das fases 1 a 3:
+
+| Nome | RM | Discord |
+|---|---|---|
+| João Amaral | RM373448 | joao_13997 |
+| Allan Aurélio | RM372116 | all66_ |
+| Carlos Silva | RM374191 | carlossilva156 |
+| Guilherme Sousa | RM373609 | romen0 |
+| Nicolas Gerbi | RM372644 | sethiiz_gerbi |
 
 ## 2. Repositórios e execução
 
