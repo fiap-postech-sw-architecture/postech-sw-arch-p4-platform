@@ -194,7 +194,7 @@ flowchart TB
 
 ## 3. Divisão dos serviços
 
-No formato da Aula 01 de Microsserviços I (serviço, operações, integrações), com o banco. "Execution Service" é o nome do serviço; "Execução", o contexto que ele hospeda.
+No formato da Aula 01 de Microsserviços I (serviço, operações, integrações), com o banco. "Execution Service" é o nome do serviço, e "Execução", o nome curto dele no texto. Ele hospeda três contextos, Diagnóstico, Execução e Estoque, um por pasta de `src/`.
 
 | Serviço | Operações | Integrações | Banco |
 |---|---|---|---|
@@ -229,23 +229,28 @@ flowchart TB
     end
     subgraph EXS["Execution Service"]
         direction LR
-        DE["Diagnóstico e Execução<br/>(Principal)"]
+        DI["Diagnóstico<br/>(Principal)"]
+        EX["Execução<br/>(Principal)"]
         ES["Estoque<br/>(Principal)"]
     end
     MP["Mercado Pago<br/>(externo)"]
 
     OR -->|"Customer-Supplier,<br/>Published Language"| OS
     PG -->|"Customer-Supplier,<br/>Published Language"| OS
-    DE -->|"Customer-Supplier,<br/>Published Language"| OS
+    DI -->|"Customer-Supplier,<br/>Published Language"| OS
+    EX -->|"Customer-Supplier,<br/>Published Language"| OS
     ES -->|"Customer-Supplier,<br/>Published Language"| OS
     CV -->|"porta local"| OS
-    PR -->|"Open Host Service<br/>(REST de preços)"| DE
+    PR -->|"Open Host Service<br/>(REST de preços)"| DI
+    ES -->|"porta local"| DI
+    ES -->|"porta local"| EX
+    DI -->|"porta local"| EX
     AU -.->|"Open Host Service (JWKS)"| BIS
     AU -.->|"Open Host Service (JWKS)"| EXS
     MP -->|"ACL<br/>(GatewayPagamento)"| PG
 ```
 
-A ACL fica nos consumidores de mensagens dos três serviços, no cliente HTTP da validação de preços na Execução e no port `GatewayPagamento` do Billing; Cliente e Veículo segue ligado à Ordem de Serviço pela porta local do p3. A saga não é um contexto à parte: é um *process manager* da camada de aplicação do OS ([seção 4](#4-saga-de-atendimento)). Orçamento e decisão eram parte do contexto Principal do p3 e continuam no núcleo do negócio; preço e pagamento sustentam a cobrança.
+A ACL fica nos consumidores de mensagens dos três serviços, no cliente HTTP da validação de preços na Execução e no port `GatewayPagamento` do Billing; Cliente e Veículo segue ligado à Ordem de Serviço pela porta local do p3. No Execution Service, os três contextos se ligam por portas locais: o Diagnóstico consulta o catálogo de peças do Estoque, e a Execução lê o retrato do veículo do Diagnóstico e baixa a reserva no Estoque. A saga não é um contexto à parte: é um *process manager* da camada de aplicação do OS ([seção 4](#4-saga-de-atendimento)). Orçamento e decisão eram parte do contexto Principal do p3 e continuam no núcleo do negócio; preço e pagamento sustentam a cobrança.
 
 ## 4. Saga de atendimento
 
@@ -1259,7 +1264,7 @@ Os limites de rate limit por rota estão no ADR-038, os requests e limits por co
 | 2 | Webhook exige URL pública com HTTPS, que o kind não tem | no kind, a conciliação a cada 30 s cobre a confirmação; hostname e certificado só num cluster persistente, fora do estado entregue ([nuvem opcional](../../../operacao/nuvem-opcional.md)) |
 | 3 | Bancos em StatefulSet: sem backup automatizado nem alta disponibilidade; replica set de um nó só para transações | custo zero e paridade kind/k3s; evoluir para banco gerenciado (DBaaS, banco de dados como serviço, Aula 06 de Data Engineering) troca connection string e manifestos, não código |
 | 4 | Consistência eventual: logo após a decisão no Billing, a OS ainda mostra o status anterior, e os resumos no OS são cópias | a consulta mostra a etapa da saga; E2E e collection esperam o evento antes de afirmar o status |
-| 5 | Orquestrador como ponto único de falha (SAGA Pattern, Aulas 02 e 05) | estado persistido, réplicas e filas duráveis: com o OS fora, as mensagens esperam e a saga segue na volta, porque o `prazos` não reenvia nem esgota prazo com `os.eventos` sem consumidor ([seção 4.6](#46-prazos)) |
+| 5 | Orquestrador como ponto único de falha (SAGA Pattern, Aulas 02 e 05) | estado persistido, filas duráveis e reinício do pod pelo Kubernetes (uma réplica por processo), com reentrega idempotente: com o OS fora, as mensagens esperam e a saga segue na volta, porque o `prazos` não reenvia nem esgota prazo com `os.eventos` sem consumidor ([seção 4.6](#46-prazos)) |
 | 6 | Pagamento aprovado no provedor depois do cancelamento, da expiração ou da recusa | o Billing estorna sozinho e publica `PagamentoEstornado` com motivo `pagamento_apos_encerramento`; a saga não muda de etapa por ele, só atualiza o resumo do pagamento na OS ([seção 4.4](#44-pivot-e-plano-de-compensação)), e o caso aparece em `pytstop_pagamentos_estornados_total{motivo}` |
 | 7 | TTL só expira na cabeça da fila: numa fila de retry única, uma espera de 300 s atrasaria as de 1 s atrás dela | uma fila de retry por atraso, com o TTL fixo na fila ([seção 5.1](#51-topologia)); mudar um atraso é criar outra fila |
 | 8 | Um serviço com acesso ao broker poderia forjar mensagem de outro | usuário por serviço, permissão só nas próprias routing keys e `user_id` conferido pelo consumidor ([seção 5.1](#51-topologia)) |

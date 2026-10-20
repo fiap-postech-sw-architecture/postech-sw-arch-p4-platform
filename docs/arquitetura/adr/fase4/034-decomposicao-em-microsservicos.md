@@ -7,7 +7,7 @@
 
 ## Contexto e Problema
 
-O enunciado da fase 4 pede "no mínimo, 3 microsserviços independentes, cada um com seu próprio repositório, infraestrutura e banco de dados" (l. 27) e sugere três (l. 31-55): o OS Service, de ordens de serviço (OS); o Billing Service, de orçamento e pagamento; e um serviço de execução e produção, que aqui se chama Execution Service e cujo contexto é Execução ([desafio-tech-fase-4.md](../../../requisitos/fase4/desafio-tech-fase-4.md)).
+O enunciado da fase 4 pede "no mínimo, 3 microsserviços independentes, cada um com seu próprio repositório, infraestrutura e banco de dados" (l. 27) e sugere três (l. 31-55): o OS Service, de ordens de serviço (OS); o Billing Service, de orçamento e pagamento; e um serviço de execução e produção, que aqui se chama Execution Service (Execução, no texto) e hospeda três contextos, Diagnóstico, Execução e Estoque ([desafio-tech-fase-4.md](../../../requisitos/fase4/desafio-tech-fase-4.md)).
 
 A [gap analysis](../../../requisitos/fase4/gap-analysis-fase-4.md) registra a exigência nos requisitos não funcionais (RNF) RNF-031 (repositório, infraestrutura e banco por serviço), RNF-044 (um repositório por serviço), RNF-036 (nenhum serviço acessa o banco de outro) e RNF-047 (código-fonte em cada repositório), além dos requisitos funcionais (RF) de cada serviço: RF-028 a RF-030 no OS Service, RF-031 a RF-034 no Billing, RF-035 a RF-037 na Execução.
 
