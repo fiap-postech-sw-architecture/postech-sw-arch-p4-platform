@@ -8,10 +8,11 @@ que nao tem a forma esperada tambem nao (``TAGS_PERMITIDAS``).
 Onde o vocabulario e fechado o valor e uma enumeracao: ``span.kind``, ``db.system``,
 ``messaging.system``, ``messaging.operation`` e ``messaging.operation.type``, o
 verbo HTTP, o nome do servico e o host da URL. Onde nao e (segmento de caminho,
-modelo de rota, nome de fila e nome de span), so a FORMA e conferida: digito, simbolo,
-``@``, query e fragmento nao passam, mas uma palavra em letras passa, mesmo que seja
-um nome de pessoa. Esta etapa e a segunda barreira: os servicos ja redigem o dado na
-origem (URL pelo template da rota, ``REDACTED`` no resto, sem o comando do banco).
+modelo de rota, nome de fila e nome de span), so a FORMA e conferida: digito, ``@``,
+query, fragmento e simbolo fora de ``.``, ``_``, ``:`` e ``-`` nao passam, mas palavras
+em letras passam, mesmo que formem um nome de pessoa. Esta etapa e a segunda
+barreira: os servicos ja redigem o dado na origem (URL pelo template da rota,
+``REDACTED`` no resto, sem o comando do banco).
 
 A saida mantem as chaves que a aba "Upload" da tela de busca do Jaeger 1.76 le (a
 "JSON File" das versoes antigas): ``data[].traceID``, ``spans[]`` e ``processes{}``.
@@ -226,9 +227,10 @@ def _operacao(nome: object) -> str:
     """O nome do span (``POST /api/v1/{id}``, ``publish PagamentoConfirmado``).
 
     Passa so o que tem a forma de um nome de operacao: de 1 a 4 palavras separadas por
-    espaco, cada uma uma palavra sem digito ou um caminho. O resto (uma consulta SQL,
-    um texto com digito ou simbolo) vira ``OPERACAO_OMITIDA``. Nao ha lista de palavras:
-    "Joao da Silva" passa.
+    espaco, cada uma uma palavra sem digito ou um caminho, com maiuscula ou nao. O resto
+    (mais de 4 palavras, digito ou simbolo fora de ``.``, ``_``, ``:``, ``-`` e ``/``)
+    vira ``OPERACAO_OMITIDA``. Nao ha lista de palavras: "Joao da Silva" e
+    "DELETE FROM users" passam.
     """
     palavras: list[str] = []
     for parte in nome.split(" ") if isinstance(nome, str) else []:
