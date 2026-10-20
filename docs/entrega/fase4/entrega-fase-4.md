@@ -2,7 +2,7 @@
 
 O PytStop é o sistema de gestão de uma oficina mecânica. Nas fases 1 a 3 ele foi um monólito; na fase 4 virou três microsserviços ligados por uma saga. Uma ordem de serviço (OS) registra um atendimento, da abertura à entrega do veículo. O OS Service cuida da OS e do cliente, o Billing Service do orçamento e do pagamento, e o Execution Service do diagnóstico, do estoque e do reparo.
 
-Documento de ensaio da turma 15SOAT, Pós-Graduação em Arquitetura de Software da FIAP. A versão final depende das provas operacionais e da gravação do vídeo. Prazo do portal: 17/11/2026 às 23:59.
+Versão preliminar do documento da turma 15SOAT, Pós-Graduação em Arquitetura de Software da FIAP. A versão final depende das provas operacionais e da gravação do vídeo. Prazo do portal: 17/11/2026 às 23:59.
 
 ## 1. Participantes
 
@@ -17,7 +17,7 @@ Identificação dos participantes pendente de confirmação do grupo.
 | Execution Service | [https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service) | [README](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/README.md) | [pipelines](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions) |
 | Plataforma | [https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform) | [README](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/blob/main/README.md) | [pipelines](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions) |
 
-O [índice da entrega](../../../INDICE-DA-ENTREGA.md) concentra os artefatos exigidos. A [matriz](../matriz-de-rastreabilidade.md) liga os 44 requisitos aos serviços, pull requests (PRs), código e trechos previstos do vídeo. Durante o ensaio, os links apontam para `main`; a versão final usará a tag `entrega-fase-4` dos quatro repositórios.
+O [índice da entrega](../../../INDICE-DA-ENTREGA.md) concentra os artefatos exigidos. A [matriz](../matriz-de-rastreabilidade.md) liga os 44 requisitos aos serviços, pull requests (PRs), código e trechos previstos do vídeo. Nesta versão preliminar, os links apontam para `main`; a versão final usará a tag `entrega-fase-4` dos quatro repositórios.
 
 Cada serviço contém código, Dockerfile, manifestos Kubernetes, pipeline, testes, documentação de arquitetura, OpenAPI e collection Postman próprios. A plataforma é o complemento com infraestrutura compartilhada e provas integradas. Para reproduzir o ambiente, siga o [README da plataforma](../../../README.md#e2e-da-saga) e o `make kind-deploy` de cada serviço.
 
@@ -68,7 +68,7 @@ A saga é orquestrada, e não coreografada: o OS Service é o orquestrador e com
 
 O orquestrador fica no OS Service, que inicia a saga, e não num quarto serviço: o fluxo fica num lugar só, e a etapa da saga e o status da OS mudam na mesma transação. A outbox do OS Service publica os comandos, e cada participante grava o efeito e a resposta na própria transação. O orquestrador conhece só a ordem dos passos, as compensações e os prazos; preço, validade e pagamento ficam com os participantes. Se o OS Service cai, as mensagens esperam nas filas duráveis, e a saga segue do ponto gravado quando o Kubernetes recria o pod.
 
-O caminho completo passa por diagnóstico, orçamento, decisão, reserva, pagamento, agendamento, início, finalização e entrega. Falha na reserva cancela orçamento e diagnóstico sem cobrar. Cancelamento pago antes do início cancela a execução, estorna o pagamento, libera a reserva e cancela orçamento e diagnóstico, nessa ordem. Após o início físico, o cancelamento responde 409: este é o pivot da saga, o ponto sem retorno.
+O caminho completo passa por diagnóstico, orçamento, decisão, reserva, pagamento, agendamento, início, finalização e entrega. Falha na reserva cancela o orçamento e descarta o diagnóstico, sem cobrar. Cancelamento pago antes do início cancela a execução, estorna o pagamento, libera a reserva, cancela o orçamento e descarta o diagnóstico, nessa ordem. Após o início físico, o cancelamento responde 409: este é o pivot da saga, o ponto sem retorno.
 
 Mensagens repetidas não repetem o efeito. Prazos e reenvios limitados levam uma compensação não resolvida à intervenção manual, com retomada autenticada pelo [runbook](../../operacao/runbook-saga.md). O [teste integrado orientado por comportamento (BDD)](../../../e2e/features/saga_atendimento.feature) verifica caminho feliz, compensações, pivot e recuperação de falhas.
 
@@ -82,6 +82,6 @@ A [collection do fluxo completo](evidencias/newman-resumo.md) passou no CI do [p
 
 ## 8. Evidências e fechamento
 
-A [auditoria](auditoria-e-divida-tecnica.md) registra o que precisa ser provado. A sandbox real do Mercado Pago requer credenciais de teste do responsável; simulador e ensaio sem cobrança não substituem essa evidência.
+A [auditoria](auditoria-e-divida-tecnica.md) registra o que precisa ser provado. A sandbox real do Mercado Pago requer as credenciais de teste de um integrante do grupo; simulador e ensaio sem cobrança não substituem essa evidência.
 
 Antes da submissão: confirmar participantes, concluir as provas de CD e observabilidade, conferir links, gravar/publicar o vídeo, congelar os quatro repositórios com a tag `entrega-fase-4` e regenerar o PDF. A submissão no portal cabe ao grupo.

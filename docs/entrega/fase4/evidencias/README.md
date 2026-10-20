@@ -2,7 +2,7 @@
 
 Este diretório reúne as provas que precisam continuar acessíveis após a expiração dos artefatos do CI e da memória do Jaeger. As capturas finais devem registrar data, ambiente e commits dos quatro repositórios. Relatórios não podem conter credenciais, documentos pessoais, tokens ou dados de cartão.
 
-| Evidência | Estado no ensaio | Como produzir ou conferir |
+| Evidência | Estado na versão preliminar | Como produzir ou conferir |
 |---|---|---|
 | Repositórios públicos, regras da `main` e commits associados a PR | [Proteção da `main` conferida em 20/10/2026](protecao-da-main.md); coletor versionado; repetir no congelamento | Metadados públicos do GitHub; percorrer o primeiro pai e conferir o PR de cada commit |
 | CD verde e SBOM dos três serviços na `main` final | [Três serviços com o CD compartilhado aprovado na `main`](#cd-compartilhado-dos-serviços); repetir no congelamento | Guardar serviço, SHA, URL da execução, digest da imagem e resultado de cada job |
@@ -11,9 +11,9 @@ Este diretório reúne as provas que precisam continuar acessíveis após a expi
 | Trace da saga e correlação | Ensaio local de 19/10: `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e CLIENT Execução → Billing; chamada Billing → Mercado Pago depende da sandbox real | Copiar o `trace-<cenário>-<trace_id>.json` que o `make mp-sandbox` salva já higienizado (README da plataforma, "O trace da saga"), em vez de exportar o JSON do Jaeger, que não é higienizado; capturar Jaeger e correlação do `X-Request-ID` no Loki |
 | Nove dashboards e alerta disparado | Alerta de fila disparou e recuperou; capturas locais com 1 h de dados, histórico de três dias pendente | Ambiente kind com PVC por pelo menos três dias, alimentado por `make demo` diariamente; uma captura por dashboard e uma do alerta |
 | Dez minutos sem tráfego | 600,9 s reais no simulador, sem reinícios; saúde e smoke aprovados | [Relatório parcial de observabilidade](observabilidade.md); repetir também no modo real do Mercado Pago |
-| Mercado Pago real: cobrança, aprovação e estorno | Ação do responsável com credenciais de teste | `make mp-sandbox`; preservar só o `resumo.md` e os `trace-*.json`, já higienizados, sem dados do pagador ou credenciais |
+| Mercado Pago real: cobrança, aprovação e estorno | Ação do integrante com as credenciais de teste | `make mp-sandbox`; preservar só o `resumo.md` e os `trace-*.json`, já higienizados, sem dados do pagador ou credenciais |
 | Collection integrada com newman | [Duas provas locais e CI do platform #24 aprovados](newman-resumo.md); CD da main aprovado; prova do congelamento pendente | Fluxo completo pela borda, incluindo métricas administrativas dos nove status; repetir no workflow sobre os commits finais |
-| Vídeo, identificação e tags | Aguardam responsáveis e congelamento | Vídeo público ou não listado de até 15 min; identificar participantes e tags `entrega-fase-4` nos quatro repositórios |
+| Vídeo, identificação e tags | Aguardam o grupo e o congelamento | Vídeo público ou não listado de até 15 min; identificar participantes e tags `entrega-fase-4` nos quatro repositórios |
 
 O [relatório do ensaio local de 19/10/2026](observabilidade.md) reúne os resultados e as limitações de cada etapa. O painel de volume diário fica sem dados antes da primeira meia-noite UTC, conforme a descrição do seu JSON. A primeira execução diária de `make demo` passou com seis cenários em 111,11 s.
 
@@ -51,7 +51,7 @@ uv run python -m scripts.evidencias.verificar --github /tmp/github-fase4.json
 
 O coletor faz somente consultas GET. Guarda visibilidade, SHA da `main`, regras efetivas, árvore de caminhos, SHAs e PRs do primeiro pai, tag, último CD e resultados dos jobs. Não guarda autores, mensagens de commit, eventos, logs, credenciais ou dados de negócio. Falha de acesso e árvore truncada interrompem a coleta; workflow ou tag ausente ficam como lacuna. O snapshot identifica os commits da coleta; precisa ser refeito após qualquer integração antes do fechamento.
 
-A conferência de ensaio valida os 44 IDs e os links locais/GitHub. O modo final acrescenta visibilidade pública, PR/checks obrigatórios, CD verde no HEAD, origem dos commits e tag `entrega-fase-4` no mesmo SHA em cada repositório. Exige participantes, vídeo e os relatórios higienizados `bdd-resumo.md`, `coverage.md`, `observabilidade.md`, `mp-sandbox.md` e `newman-resumo.md` neste diretório. Esses relatórios devem trazer data, ambiente, quatro SHAs, comando e resultado, além dos links das provas. O modo final também reprova o documento de entrega, o índice e a matriz enquanto tiverem texto preliminar, como "versão preliminar", "pendente", "aguarda" ou "em coleta" (a lista está em `scripts/evidencias/verificar.py`). Arquivo presente não comprova seu conteúdo: a auditoria final confere as capturas, relatórios e qualidade das provas.
+A conferência padrão valida os 44 IDs e os links locais/GitHub. O modo final acrescenta visibilidade pública, PR/checks obrigatórios, CD verde no HEAD, origem dos commits e tag `entrega-fase-4` no mesmo SHA em cada repositório. Exige participantes, vídeo e os relatórios higienizados `bdd-resumo.md`, `coverage.md`, `observabilidade.md`, `mp-sandbox.md` e `newman-resumo.md` neste diretório. Esses relatórios devem trazer data, ambiente, quatro SHAs, comando e resultado, além dos links das provas. O modo final também reprova o documento de entrega, o índice e a matriz enquanto tiverem texto preliminar, como "versão preliminar", "pendente", "aguarda" ou "em coleta" (a lista está em `scripts/evidencias/verificar.py`). Arquivo presente não comprova seu conteúdo: a auditoria final confere as capturas, relatórios e qualidade das provas.
 
 ```bash
 uv run python -m scripts.evidencias.verificar --final --github /tmp/github-fase4.json
@@ -75,4 +75,4 @@ scripts/build-entrega-pdf.sh --output /tmp/entrega-fase-4-ensaio.pdf
 scripts/build-entrega-pdf.sh --final --github /tmp/github-fase4.json --output /tmp/entrega-fase-4.pdf
 ```
 
-O destino deve ficar fora do repositório. O build confere a igualdade do Mermaid entre RFC, README e documento, renderiza a arquitetura em página própria, reescreve os links por arquivo e anexa integralmente o índice da raiz. O ensaio mantém participantes, vídeo e demais pendências visíveis. O build final usa links locais na tag; antes dele, atualize também os links explícitos dos quatro repositórios na documentação para a mesma tag. O PDF não substitui os relatórios e capturas versionados.
+O destino deve ficar fora do repositório. O build confere a igualdade do Mermaid entre RFC, README e documento, renderiza a arquitetura em página própria, reescreve os links por arquivo e anexa integralmente o índice da raiz. A versão preliminar mantém participantes, vídeo e demais pendências visíveis. O build final usa links locais na tag; antes dele, atualize também os links explícitos dos quatro repositórios na documentação para a mesma tag. O PDF não substitui os relatórios e capturas versionados.
