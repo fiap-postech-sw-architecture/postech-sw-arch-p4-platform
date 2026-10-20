@@ -1,5 +1,7 @@
 # Índice da entrega: fase 4
 
+O PytStop é o sistema de gestão de uma oficina mecânica. Na fase 4 ele virou três microsserviços ligados por uma saga, que acompanha cada ordem de serviço (OS) da abertura à entrega do veículo. Nas tabelas, RF é requisito funcional, RNF é requisito não funcional e RN é regra de negócio. A numeração vem da [gap analysis](docs/requisitos/fase4/gap-analysis-fase-4.md), o levantamento que liga cada requisito à linha do enunciado.
+
 Versão de ensaio. Os links de código apontam para `main`; a tag `entrega-fase-4` será criada após o congelamento e a gravação. Este índice acompanha o [documento](docs/entrega/fase4/entrega-fase-4.md), a [matriz dos 44 requisitos](docs/entrega/matriz-de-rastreabilidade.md) e o [roteiro de 14 minutos](docs/entrega/fase4/roteiro-video.md).
 
 ## Participantes e vídeo

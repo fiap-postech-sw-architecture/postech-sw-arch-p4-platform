@@ -25,6 +25,8 @@ Três microsserviços (`os-service`, `billing-service` e `execution-service`, ab
 2. cada contexto delimitado do p3 vai inteiro para o serviço cuja capacidade sustenta, com duas exceções. O contexto Ordem de Serviço mistura três subdomínios (atendimento da OS, orçamento com a decisão do cliente, diagnóstico com a execução) e é repartido entre os três serviços. O `ItemEstoque` perde o preço para o Billing, porque preço e saldo têm donos diferentes;
 3. regra que depende de transação local com lock fica num serviço só, de modo que a reserva de peças não atravessa a rede.
 
+Os três também mudam por motivos diferentes. O OS Service muda com o atendimento e a identidade; o Billing, com a regra de preço e com o provedor de pagamento; a Execução, com o trabalho da oficina, e concentra o lock da reserva. Juntar dois deles misturaria esses ritmos num deploy só, e separar mais poria passos locais da saga na rede, como mostram as alternativas abaixo.
+
 A tabela Serviço/Operação/Integração da Aula 01 de Microsserviços I fecha o corte: cada operação do enunciado tem um dono e cada integração fica explícita.
 
 | Serviço | Operação | Integração |
