@@ -1,6 +1,6 @@
 # Execuções da collection — 19/10/2026
 
-Estado: duas provas locais, a execução no CI do PR #24 e o CD da main integrada aprovados. A collection foi integrada em `bfa8c72f1f8bf4c7af2994b73421137f00d02d64`; as provas do congelamento continuam pendentes. As duas execuções usaram Newman 6.2.3 e Node 24.18.0 contra o simulador do Billing, pela borda do kind. Não foram usados Mercado Pago real nem credenciais do provedor.
+Estado: duas provas locais, a execução no CI do platform #24 e o CD da main integrada aprovados. A collection foi integrada em `bfa8c72f1f8bf4c7af2994b73421137f00d02d64`; as provas do congelamento continuam pendentes. As duas execuções usaram Newman 6.2.3 e Node 24.18.0 contra o simulador do Billing, pela borda do kind. Não foram usados Mercado Pago real nem credenciais do provedor.
 
 Comando, executado duas vezes com dados novos: `make newman KUBE_CONTEXT=kind-pytstop-p4-codex`.
 
@@ -21,7 +21,7 @@ Os JSONs são cópias exatas dos resumos sanitizados do runner: nomes e rotas es
 
 O passo integrado preserva smoke, BDD, ZAP, varredura e artefatos. A prova real do provedor e a atualização dos commits do congelamento continuam pendentes.
 
-## Execução no CI do PR #24
+## Execução no CI do platform #24
 
 O [run 39230026573](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573), [job e2e](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573/job/117985474670), aprovou o passo `Collection do fluxo completo (make newman)` entre `2026-10-19T09:33:48Z` e `09:34:25Z`. Comando: `make -C platform newman`. O pytest registrou um teste aprovado em 37,23 s. Newman 6.2.3 e Node 24.21.0 executaram 105 assertions, nenhuma falha e 48 chamadas HTTP, com as sete provas de negócio aprovadas. BDD, ZAP, varredura e uploads do mesmo job também passaram.
 

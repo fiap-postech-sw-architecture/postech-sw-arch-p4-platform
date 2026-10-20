@@ -157,3 +157,51 @@ def test_github_reprova_pr_citado_inexistente(pacote: Path) -> None:
         },
     )
     assert any("link GitHub ausente" in erro for erro in erros)
+
+
+@pytest.mark.parametrize(
+    "trecho",
+    [
+        "Versão de ensaio.",
+        "Documento de ensaio da turma",
+        "Versão preliminar do pacote",
+        "Durante o ensaio, os links apontam para main",
+        "Inserir o link público após a gravação",
+        "O vídeo ainda será gravado",
+        "Esta versão não serve para submissão no portal",
+        "Antes da submissão: confirmar participantes",
+        "Implementado; evidência final em coleta",
+        "aguardam confirmação do grupo",
+        "Identificação pendente de confirmação",
+        "Etapas que dependem do grupo",
+    ],
+)
+def test_final_reprova_texto_preliminar(pacote: Path, trecho: str) -> None:
+    (pacote / "docs/entrega/matriz-de-rastreabilidade.md").write_text(
+        f"| RF-028 | código |\n| RF-029 | {trecho} |\n"
+    )
+    erros = [e for e in verificar(pacote, final=True) if "texto preliminar" in e]
+    assert len(erros) == 1
+    assert erros[0].startswith(
+        "final: texto preliminar em docs/entrega/matriz-de-rastreabilidade.md: "
+    )
+    assert not any("texto preliminar" in e for e in verificar(pacote))
+
+
+def test_final_confere_documento_e_indice(pacote: Path) -> None:
+    (pacote / "docs/entrega/fase4/entrega-fase-4.md").write_text("Versão preliminar\n")
+    (pacote / "INDICE-DA-ENTREGA.md").write_text("RF-028 a RF-029; vídeo pendente\n")
+    erros = verificar(pacote, final=True)
+    assert (
+        "final: texto preliminar em docs/entrega/fase4/entrega-fase-4.md: "
+        "versão preliminar"
+    ) in erros
+    assert "final: texto preliminar em INDICE-DA-ENTREGA.md: pendente" in erros
+
+
+def test_final_sem_marca_preliminar_nao_acusa_texto(pacote: Path) -> None:
+    (pacote / "docs/entrega/fase4/entrega-fase-4.md").write_text(
+        "| João | RM123456 |\nEnsaio local de 19/10 com 14 cenários.\n"
+        "Pipeline independente de CI/CD; comando para coletar o snapshot.\n"
+    )
+    assert not any("texto preliminar" in e for e in verificar(pacote, final=True))

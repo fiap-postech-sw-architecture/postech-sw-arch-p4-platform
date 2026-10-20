@@ -78,7 +78,8 @@ def modo_billing(
 def evidencia(
     preflight: Sandbox | None, kubectl: Kubectl
 ) -> Iterator[list[RegistroDoCenario]]:
-    """Os registros dos cenarios; no fim viram ``resumo.md`` e ``evidencia.json``."""
+    """Os registros dos cenarios; no fim viram ``resumo.md``, ``evidencia.json`` e
+    os ``trace-*.json``."""
     assert preflight is not None
     registros: list[RegistroDoCenario] = []
     yield registros
@@ -92,6 +93,7 @@ def prova(
     request: FixtureRequest,
     api: Api,
     kubectl: Kubectl,
+    portas: Portas,
     preflight: Sandbox | None,
     cenario: Cenario,
     evidencia: list[RegistroDoCenario],
@@ -106,6 +108,7 @@ def prova(
         cenario=cenario,
         esperar_status=saga.esperar_status,
         descrever_estado=saga.descrever_estado,
+        traces_da_ordem=lambda ordem_id: portas.jaeger.traces_da_ordem(ordem_id),
         avisar=falar,
         numeros=_NUMEROS_DO_PAGAMENTO,
     )

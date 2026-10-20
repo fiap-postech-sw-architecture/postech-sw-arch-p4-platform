@@ -83,7 +83,7 @@ A intervenção manual segue o [runbook da saga](../../../operacao/runbook-saga.
 
 ### Contras da orquestração na Aula 02
 
-A Aula 02 aponta dois contras (p. 10). O primeiro é o orquestrador acumular regra de negócio; aqui ele só conhece ordem, compensações e prazos, e preço, validade, verificação do pagamento e saldo ficam nos participantes, que respondem a comandos sem conhecer a saga. O segundo, que a Aula 05 repete (p. 18), é o ponto único de falha: o consumidor roda em réplicas e o estado fica no banco, então, se um pod cai, a mensagem sem confirmação volta à fila e outra réplica segue do ponto gravado.
+A Aula 02 aponta dois contras (p. 10). O primeiro é o orquestrador acumular regra de negócio; aqui ele só conhece ordem, compensações e prazos, e preço, validade, verificação do pagamento e saldo ficam nos participantes, que respondem a comandos sem conhecer a saga. O segundo, que a Aula 05 repete (p. 18), é o ponto único de falha: o estado fica no banco e as mensagens, em filas duráveis. O consumidor roda com uma réplica; se o pod cai, o Kubernetes o recria, a mensagem sem confirmação volta à fila e o consumidor segue do ponto gravado, e a reentrega não repete efeito (RN-028).
 
 ## Alternativas Consideradas
 

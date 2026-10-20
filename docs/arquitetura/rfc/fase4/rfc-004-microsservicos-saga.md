@@ -194,7 +194,7 @@ flowchart TB
 
 ## 3. Divisão dos serviços
 
-No formato da Aula 01 de Microsserviços I (serviço, operações, integrações), com o banco. "Execution Service" é o nome do serviço; "Execução", o contexto que ele hospeda.
+No formato da Aula 01 de Microsserviços I (serviço, operações, integrações), com o banco. "Execution Service" é o nome do serviço, e "Execução", o nome curto dele no texto. Ele hospeda três contextos, Diagnóstico, Execução e Estoque, um por pasta de `src/`.
 
 | Serviço | Operações | Integrações | Banco |
 |---|---|---|---|
@@ -229,23 +229,28 @@ flowchart TB
     end
     subgraph EXS["Execution Service"]
         direction LR
-        DE["Diagnóstico e Execução<br/>(Principal)"]
+        DI["Diagnóstico<br/>(Principal)"]
+        EX["Execução<br/>(Principal)"]
         ES["Estoque<br/>(Principal)"]
     end
     MP["Mercado Pago<br/>(externo)"]
 
     OR -->|"Customer-Supplier,<br/>Published Language"| OS
     PG -->|"Customer-Supplier,<br/>Published Language"| OS
-    DE -->|"Customer-Supplier,<br/>Published Language"| OS
+    DI -->|"Customer-Supplier,<br/>Published Language"| OS
+    EX -->|"Customer-Supplier,<br/>Published Language"| OS
     ES -->|"Customer-Supplier,<br/>Published Language"| OS
     CV -->|"porta local"| OS
-    PR -->|"Open Host Service<br/>(REST de preços)"| DE
+    PR -->|"Open Host Service<br/>(REST de preços)"| DI
+    ES -->|"porta local"| DI
+    ES -->|"porta local"| EX
+    DI -->|"porta local"| EX
     AU -.->|"Open Host Service (JWKS)"| BIS
     AU -.->|"Open Host Service (JWKS)"| EXS
     MP -->|"ACL<br/>(GatewayPagamento)"| PG
 ```
 
-A ACL fica nos consumidores de mensagens dos três serviços, no cliente HTTP da validação de preços na Execução e no port `GatewayPagamento` do Billing; Cliente e Veículo segue ligado à Ordem de Serviço pela porta local do p3. A saga não é um contexto à parte: é um *process manager* da camada de aplicação do OS ([seção 4](#4-saga-de-atendimento)). Orçamento e decisão eram parte do contexto Principal do p3 e continuam no núcleo do negócio; preço e pagamento sustentam a cobrança.
+A ACL fica nos consumidores de mensagens dos três serviços, no cliente HTTP da validação de preços na Execução e no port `GatewayPagamento` do Billing; Cliente e Veículo segue ligado à Ordem de Serviço pela porta local do p3. No Execution Service, os três contextos se ligam por portas locais: o Diagnóstico consulta o catálogo de peças do Estoque, e a Execução lê o retrato do veículo do Diagnóstico e baixa a reserva no Estoque. A saga não é um contexto à parte: é um *process manager* da camada de aplicação do OS ([seção 4](#4-saga-de-atendimento)). Orçamento e decisão eram parte do contexto Principal do p3 e continuam no núcleo do negócio; preço e pagamento sustentam a cobrança.
 
 ## 4. Saga de atendimento
 
@@ -796,7 +801,7 @@ Kong Ingress Controller em modo DB-less, o gateway das Aulas 03 e 04 de Microsse
 
 ### 6.3 Swagger e Postman
 
-Cada serviço publica o Swagger UI em `/docs` e versiona em `docs/api/` o OpenAPI exportado e a collection Postman com exemplos; o README aponta os arquivos e traz um `curl` por endpoint. A [collection do fluxo completo](../../../api/fluxo-completo.postman_collection.json) fica no `platform` e roda com Node 24 e Newman 6.2.3 por `make newman` (RNF-052). Os [pré-requisitos, relatórios sanitizados e resultados locais](../../../../README.md#collection-do-fluxo-completo-make-newman) estão no README; o fluxo usa o simulador do Billing, com histórico de oito status e métricas administrativas dos nove status. O passo passou no [CI do PR #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573); as [fontes e o resumo sanitizado](../../../entrega/fase4/evidencias/newman-resumo.md#execução-no-ci-do-pr-24) distinguem a prova do PR do CD da main e do congelamento.
+Cada serviço publica o Swagger UI em `/docs` e versiona em `docs/api/` o OpenAPI exportado e a collection Postman com exemplos; o README aponta os arquivos e traz um `curl` por endpoint. A [collection do fluxo completo](../../../api/fluxo-completo.postman_collection.json) fica no `platform` e roda com Node 24 e Newman 6.2.3 por `make newman` (RNF-052). Os [pré-requisitos, relatórios sanitizados e resultados locais](../../../../README.md#collection-do-fluxo-completo-make-newman) estão no README; o fluxo usa o simulador do Billing, com histórico de oito status e métricas administrativas dos nove status. O passo passou no [CI do PR #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573); as [fontes e o resumo sanitizado](../../../entrega/fase4/evidencias/newman-resumo.md#execução-no-ci-do-platform-24) distinguem a prova do PR do CD da main e do congelamento.
 
 ## 7. Dados
 
@@ -1159,13 +1164,13 @@ Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do
 
 ### 10.2 Pipeline e deploy
 
-A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows (em 18/10/2026, só o OS Service tem o `cd.yml`), e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
+A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows, e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
 
 - `ci.yml`, em todo pull request (PR): `lint`, `type-check`, `security`, `test` (gate de cobertura de 95% e `diff-cover` de 90% no código novo; cada serviço sobe de 90% para 95% no PR de endurecimento dele), `sonarqube` e `build`;
 - `security.yml`, em todo PR e semanal: `pip-audit`, `gitleaks` e `trivy`;
 - `cd.yml`, a cada push na `main`: `ci` e `security-scan`, que chamam os dois anteriores, `image`, `deploy-kind` e, com o deploy remoto ligado, `deploy-remote`, ou, desligado (o estado entregue), `remote-skipped`.
 
-Build único: o `image` constrói a imagem uma vez, publica no GHCR com a tag do SHA e gera o SBOM em SPDX; o `deploy-kind` carrega o tar dessa imagem, e o `deploy-remote`, se ligado, implanta o mesmo digest. No kind, os dois vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, ou no último commit da `main` quando o repositório não tem `cd.yml` (em 18/10/2026, só o OS Service tem), com o overlay enxuto `kind-ci` (sem Loki, Promtail e Grafana, uma réplica), um smoke por namespace e o E2E (teste de ponta a ponta) BDD; o summary nomeia o serviço que falhou.
+Build único: o `image` constrói a imagem uma vez, publica no GHCR com a tag do SHA e gera o SBOM em SPDX; o `deploy-kind` carrega o tar dessa imagem, e o `deploy-remote`, se ligado, implanta o mesmo digest. No kind, os dois vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, ou, como contingência, no último commit da `main` quando o repositório ainda não tem CD verde, com o overlay enxuto `kind-ci` (sem Loki, Promtail e Grafana, uma réplica), um smoke por namespace e o E2E (teste de ponta a ponta) BDD; o summary nomeia o serviço que falhou.
 
 A independência que o enunciado pede (l. 90) está no que é de cada serviço: build, testes, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e o kind é o ambiente de integração.
 
@@ -1259,7 +1264,7 @@ Os limites de rate limit por rota estão no ADR-038, os requests e limits por co
 | 2 | Webhook exige URL pública com HTTPS, que o kind não tem | no kind, a conciliação a cada 30 s cobre a confirmação; hostname e certificado só num cluster persistente, fora do estado entregue ([nuvem opcional](../../../operacao/nuvem-opcional.md)) |
 | 3 | Bancos em StatefulSet: sem backup automatizado nem alta disponibilidade; replica set de um nó só para transações | custo zero e paridade kind/k3s; evoluir para banco gerenciado (DBaaS, banco de dados como serviço, Aula 06 de Data Engineering) troca connection string e manifestos, não código |
 | 4 | Consistência eventual: logo após a decisão no Billing, a OS ainda mostra o status anterior, e os resumos no OS são cópias | a consulta mostra a etapa da saga; E2E e collection esperam o evento antes de afirmar o status |
-| 5 | Orquestrador como ponto único de falha (SAGA Pattern, Aulas 02 e 05) | estado persistido, réplicas e filas duráveis: com o OS fora, as mensagens esperam e a saga segue na volta, porque o `prazos` não reenvia nem esgota prazo com `os.eventos` sem consumidor ([seção 4.6](#46-prazos)) |
+| 5 | Orquestrador como ponto único de falha (SAGA Pattern, Aulas 02 e 05) | estado persistido, filas duráveis e reinício do pod pelo Kubernetes (uma réplica por processo), com reentrega idempotente: com o OS fora, as mensagens esperam e a saga segue na volta, porque o `prazos` não reenvia nem esgota prazo com `os.eventos` sem consumidor ([seção 4.6](#46-prazos)) |
 | 6 | Pagamento aprovado no provedor depois do cancelamento, da expiração ou da recusa | o Billing estorna sozinho e publica `PagamentoEstornado` com motivo `pagamento_apos_encerramento`; a saga não muda de etapa por ele, só atualiza o resumo do pagamento na OS ([seção 4.4](#44-pivot-e-plano-de-compensação)), e o caso aparece em `pytstop_pagamentos_estornados_total{motivo}` |
 | 7 | TTL só expira na cabeça da fila: numa fila de retry única, uma espera de 300 s atrasaria as de 1 s atrás dela | uma fila de retry por atraso, com o TTL fixo na fila ([seção 5.1](#51-topologia)); mudar um atraso é criar outra fila |
 | 8 | Um serviço com acesso ao broker poderia forjar mensagem de outro | usuário por serviço, permissão só nas próprias routing keys e `user_id` conferido pelo consumidor ([seção 5.1](#51-topologia)) |

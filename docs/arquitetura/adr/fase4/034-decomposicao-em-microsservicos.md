@@ -7,7 +7,7 @@
 
 ## Contexto e Problema
 
-O enunciado da fase 4 pede "no mínimo, 3 microsserviços independentes, cada um com seu próprio repositório, infraestrutura e banco de dados" (l. 27) e sugere três (l. 31-55): o OS Service, de ordens de serviço (OS); o Billing Service, de orçamento e pagamento; e um serviço de execução e produção, que aqui se chama Execution Service e cujo contexto é Execução ([desafio-tech-fase-4.md](../../../requisitos/fase4/desafio-tech-fase-4.md)).
+O enunciado da fase 4 pede "no mínimo, 3 microsserviços independentes, cada um com seu próprio repositório, infraestrutura e banco de dados" (l. 27) e sugere três (l. 31-55): o OS Service, de ordens de serviço (OS); o Billing Service, de orçamento e pagamento; e um serviço de execução e produção, que aqui se chama Execution Service (Execução, no texto) e hospeda três contextos, Diagnóstico, Execução e Estoque ([desafio-tech-fase-4.md](../../../requisitos/fase4/desafio-tech-fase-4.md)).
 
 A [gap analysis](../../../requisitos/fase4/gap-analysis-fase-4.md) registra a exigência nos requisitos não funcionais (RNF) RNF-031 (repositório, infraestrutura e banco por serviço), RNF-044 (um repositório por serviço), RNF-036 (nenhum serviço acessa o banco de outro) e RNF-047 (código-fonte em cada repositório), além dos requisitos funcionais (RF) de cada serviço: RF-028 a RF-030 no OS Service, RF-031 a RF-034 no Billing, RF-035 a RF-037 na Execução.
 
@@ -24,6 +24,8 @@ Três microsserviços (`os-service`, `billing-service` e `execution-service`, ab
 1. as capacidades sugeridas pelo enunciado definem os serviços;
 2. cada contexto delimitado do p3 vai inteiro para o serviço cuja capacidade sustenta, com duas exceções. O contexto Ordem de Serviço mistura três subdomínios (atendimento da OS, orçamento com a decisão do cliente, diagnóstico com a execução) e é repartido entre os três serviços. O `ItemEstoque` perde o preço para o Billing, porque preço e saldo têm donos diferentes;
 3. regra que depende de transação local com lock fica num serviço só, de modo que a reserva de peças não atravessa a rede.
+
+Os três também mudam por motivos diferentes. O OS Service muda com o atendimento e a identidade; o Billing, com a regra de preço e com o provedor de pagamento; a Execução, com o trabalho da oficina, e concentra o lock da reserva. Juntar dois deles misturaria esses ritmos num deploy só, e separar mais poria passos locais da saga na rede, como mostram as alternativas abaixo.
 
 A tabela Serviço/Operação/Integração da Aula 01 de Microsserviços I fecha o corte: cada operação do enunciado tem um dono e cada integração fica explícita.
 
