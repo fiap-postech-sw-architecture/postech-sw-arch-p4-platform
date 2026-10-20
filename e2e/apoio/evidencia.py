@@ -7,8 +7,12 @@ segredo registrado, de ``Bearer``, de ``TEST-``/``APP_USR-`` e de e-mail
 (``varrer``). Por fim, achado recusa a gravacao e diz onde esta (arquivo e
 linha), sem repetir o valor (``gravar_evidencia``).
 
-A sanitizacao e a varredura sao duas barreiras diferentes de proposito: a
-primeira impede o campo de entrar, a segunda pega o que passou por engano.
+A higienizacao e a varredura sao duas barreiras diferentes de proposito: a
+primeira impede o campo de entrar, a segunda pega o que passou por engano. O trace
+da saga no Jaeger segue as mesmas tres regras (``trace_higienizado.py``): vai para
+um ``trace-<cenario>-<traceID>.json`` ao lado do resumo, varrido como ele. Mas o
+trace e acessorio (o pagamento e a prova principal): achado nele descarta so o
+trace, e o resumo diz por que.
 """
 
 from __future__ import annotations
@@ -18,13 +22,20 @@ import contextlib
 import json
 import re
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Final
 
 from e2e.apoio.mercadopago import sem_id_da_conta
 from e2e.apoio.segredos import registrados
+from e2e.apoio.trace_higienizado import (
+    DESCARTADO,
+    HOST_DO_MERCADO_PAGO,
+    INTERROMPIDO,
+    TraceDoCenario,
+    arquivo_do_trace,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
@@ -99,6 +110,10 @@ _PADROES_DA_VARREDURA: Final = {
         r"\b\d{6,}-[0-9a-f]{8}-[0-9a-f]{4}"
     ),
 }
+
+
+# Do trace que falta, o que a linha do resumo diz que nao aconteceu com ele.
+_SITUACAO_SEM_TRACE: Final = {INTERROMPIDO: "procurado", DESCARTADO: "gravado"}
 
 
 class EvidenciaComSegredoError(AssertionError):
@@ -196,6 +211,8 @@ class RegistroDoCenario:
     preferencia: dict[str, Any] = field(default_factory=dict)
     saga: dict[str, Any] = field(default_factory=dict)
     observacoes: list[str] = field(default_factory=list)
+    # O trace da ordem no Jaeger; ``None`` se o cenario nao chegou a procura-lo.
+    trace: TraceDoCenario | None = None
 
     def anotar(self, texto: str, *, agora: datetime | None = None) -> None:
         """Uma observacao do script, com a hora em que ele a fez."""
@@ -203,7 +220,7 @@ class RegistroDoCenario:
 
     def para_json(self) -> dict[str, Any]:
         """O registro no formato do ``evidencia.json``, com as transicoes em ordem."""
-        return {
+        dados: dict[str, Any] = {
             "cenario": self.nome,
             "resultado": self.resultado,
             "duracao_s": round(self.duracao, 1),
@@ -220,6 +237,58 @@ class RegistroDoCenario:
             "saga": self.saga,
             "observacoes": self.observacoes,
         }
+        if self.trace is not None:
+            dados["trace"] = _trace_para_json(self.trace)
+        return dados
+
+
+def _trace_para_json(achado: TraceDoCenario) -> dict[str, Any]:
+    """Do trace, o ``evidencia.json`` leva so o resumo; o inteiro tem arquivo."""
+    if achado.trace is None:
+        return {"encontrado": False, "motivo": achado.motivo}
+    return {
+        "encontrado": True,
+        "trace_id": achado.trace["traceID"],
+        "arquivo": achado.arquivo,
+        "servicos": achado.servicos,
+        "span_client_do_billing_para_mercadopago": achado.chamou_o_mercado_pago,
+    }
+
+
+def descricao_do_trace(achado: TraceDoCenario, *, real: bool) -> str:
+    """Uma linha sobre o trace do cenario, para o resumo e para o terminal.
+
+    Diz o ``traceID``, o arquivo, os servicos que o trace tem (e os que faltam, se for
+    parcial) e se ha span CLIENT do Billing para o Mercado Pago: no modo real deve
+    haver, e no ensaio (simulador), nao.
+    Trace que nao apareceu nao reprova o cenario, e a linha diz isso; o cenario que o
+    Ctrl-C parou na espera diz que o trace nao foi procurado ate o fim, e o trace que a
+    varredura de segredos descartou diz que nao foi gravado.
+    """
+    if achado.trace is None:
+        causa = f" ({achado.motivo})" if achado.motivo else ""
+        situacao = _SITUACAO_SEM_TRACE.get(achado.motivo, "encontrado")
+        return (
+            f"Trace no Jaeger: trace não {situacao}{causa}. "
+            "O pagamento é a prova principal."
+        )
+    if achado.chamou_o_mercado_pago:
+        chamada = (
+            "sim"
+            if real
+            else "sim (ATENÇÃO: o simulador não deveria chamar o Mercado Pago)"
+        )
+    elif real:
+        chamada = "não (ATENÇÃO: no modo real o Billing deveria chamar o Mercado Pago)"
+    else:
+        chamada = "não (modo simulador: sem chamada externa)"
+    faltam = achado.servicos_ausentes
+    parcial = f" (trace parcial: faltam {', '.join(faltam)})" if faltam else ""
+    return (
+        f"Trace no Jaeger: `{achado.trace['traceID']}`, arquivo `{achado.arquivo}`; "
+        f"serviços: {', '.join(achado.servicos)}{parcial}; "
+        f"span CLIENT do Billing para {HOST_DO_MERCADO_PAGO}: {chamada}"
+    )
 
 
 def _horario(hora: datetime) -> str:
@@ -245,6 +314,8 @@ def _secao(registro: RegistroDoCenario, *, real: bool) -> list[str]:
         f"| {_horario(hora)} | {texto} |"
         for hora, texto in sorted(registro.transicoes, key=lambda t: t[0])
     )
+    if registro.trace is not None:
+        linhas += ["", f"- {descricao_do_trace(registro.trace, real=real)}"]
     if registro.mercadopago:
         linhas += ["", "Do Mercado Pago (só estes campos):", ""]
         linhas += [
@@ -387,6 +458,31 @@ def varrer_pasta(pasta: Path, extras: Iterable[str] = ()) -> dict[str, list[Acha
     }
 
 
+def _separar_traces(
+    registros: Iterable[RegistroDoCenario], extras: Iterable[str]
+) -> tuple[list[RegistroDoCenario], list[tuple[str, str]]]:
+    """Os registros e os arquivos de trace que a varredura deixa gravar.
+
+    O trace com achado fica de fora, e o registro (uma copia: o do chamador nao muda)
+    passa a dizer que ele foi descartado. O trace e acessorio, e nao pode levar junto o
+    ``resumo.md`` e o ``evidencia.json``, que trazem o pagamento.
+    """
+    __tracebackhide__ = True  # o texto do trace e o que a varredura acabou de achar
+    lista: list[RegistroDoCenario] = []
+    arquivos: list[tuple[str, str]] = []
+    for registro in registros:
+        achado = registro.trace
+        if achado is not None and achado.trace is not None:
+            nome, texto = arquivo_do_trace(achado.chave, achado.trace)
+            if varrer(texto, extras):
+                descartado = TraceDoCenario(achado.chave, None, DESCARTADO)
+                registro = replace(registro, trace=descartado)
+            else:
+                arquivos.append((nome, texto))
+        lista.append(registro)
+    return lista, arquivos
+
+
 def gravar_evidencia(
     pasta: Path,
     registros: Iterable[RegistroDoCenario],
@@ -398,11 +494,15 @@ def gravar_evidencia(
     quando: datetime | None = None,
     extras: Iterable[str] = (),
 ) -> None:
-    """``resumo.md`` e ``evidencia.json`` em ``pasta``, os dois varridos antes."""
+    """``resumo.md``, ``evidencia.json`` e ``trace-*.json`` em ``pasta``, varridos.
+
+    Achado no resumo ou no JSON recusa gravar qualquer arquivo. Achado num trace so
+    o descarta: o resto e gravado e o resumo diz por que o trace falta.
+    """
     __tracebackhide__ = (
         True  # ``registros`` leva as observacoes, que podem ter o achado
     )
-    lista = list(registros)
+    lista, traces = _separar_traces(registros, extras)
     resumo = gerar_resumo(
         lista,
         modo=modo,
@@ -420,12 +520,14 @@ def gravar_evidencia(
         indent=2,
         ensure_ascii=False,
     )
-    # As duas varreduras antes de gravar qualquer um: nao fica um sem o outro.
+    # As varreduras antes de gravar qualquer um: nao fica um sem o outro.
     _conferir("resumo.md", resumo, extras)
     _conferir("evidencia.json", dados, extras)
     pasta.mkdir(parents=True, exist_ok=True)
     (pasta / "resumo.md").write_text(resumo, encoding="utf-8")
     (pasta / "evidencia.json").write_text(dados + "\n", encoding="utf-8")
+    for nome, texto in traces:
+        (pasta / nome).write_text(texto, encoding="utf-8")
 
 
 def _dizer(texto: str, *, erro: bool = False) -> None:

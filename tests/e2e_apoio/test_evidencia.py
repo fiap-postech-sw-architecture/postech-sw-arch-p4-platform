@@ -25,6 +25,7 @@ from e2e.apoio.evidencia import (
     FRASE_SEM_CONFIRMACAO,
     EvidenciaComSegredoError,
     RegistroDoCenario,
+    descricao_do_trace,
     gerar_resumo,
     gravar_evidencia,
     pagamento_do_billing,
@@ -35,7 +36,19 @@ from e2e.apoio.evidencia import (
     varrer,
     varrer_pasta,
 )
-from e2e_apoio.falsos import ASSINATURA, CHAVE_APP_USR
+from e2e.apoio.trace_higienizado import (
+    INTERROMPIDO,
+    ChaveDeArquivoInvalidaError,
+    TraceDoCenario,
+    higienizar_trace,
+)
+from e2e_apoio.falsos import (
+    ASSINATURA,
+    CHAVE_APP_USR,
+    DADO_DO_TRACE,
+    TRACE_ID_FALSO,
+    trace_do_jaeger,
+)
 
 RAIZ = Path(__file__).resolve().parents[2]
 QUANDO = datetime(2026, 10, 20, 12, 30, tzinfo=UTC)
@@ -269,7 +282,7 @@ def test_registro_para_json_ordena_as_transicoes_e_nao_perde_campo() -> None:
         "preferencia",
         "saga",
         "observacoes",
-    }
+    }, "sem trace buscado, a chave trace nem existe"
 
 
 # --- o resumo.md ---------------------------------------------------------------------
@@ -1003,3 +1016,357 @@ def test_email_achado_na_evidencia_nao_vaza_pelo_traceback_nem_pelo_junit(
     assert "recusei gravar resumo.md" in escrito, "a mensagem aparece sem o valor"
     assert email not in escrito
     assert not saida.exists(), "nada foi gravado"
+
+
+# --- o trace da saga no Jaeger -------------------------------------------------------
+
+ARQUIVO_DO_TRACE = f"trace-pagamento-{TRACE_ID_FALSO}.json"
+SERVICOS_DO_TRACE = "billing-service, execution-service, os-service"
+
+
+def _com_trace(
+    registro: RegistroDoCenario, *, chamada_ao_mp: bool, chave: str = "pagamento"
+) -> RegistroDoCenario:
+    trace = higienizar_trace(trace_do_jaeger(chamada_ao_mp=chamada_ao_mp))
+    registro.trace = TraceDoCenario(chave, trace)
+    return registro
+
+
+def _linha_do_trace(chamada: str) -> str:
+    return (
+        f"- Trace no Jaeger: `{TRACE_ID_FALSO}`, arquivo `{ARQUIVO_DO_TRACE}`; "
+        f"serviços: {SERVICOS_DO_TRACE}; "
+        f"span CLIENT do Billing para api.mercadopago.com: {chamada}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("modo", "chamou", "chamada"),
+    [
+        pytest.param("real", True, "sim", id="real-com-a-chamada"),
+        pytest.param(
+            "real",
+            False,
+            "não (ATENÇÃO: no modo real o Billing deveria chamar o Mercado Pago)",
+            id="real-sem-a-chamada",
+        ),
+        pytest.param(
+            "ensaio",
+            False,
+            "não (modo simulador: sem chamada externa)",
+            id="ensaio-sem-a-chamada",
+        ),
+        pytest.param(
+            "ensaio",
+            True,
+            "sim (ATENÇÃO: o simulador não deveria chamar o Mercado Pago)",
+            id="ensaio-com-a-chamada",
+        ),
+    ],
+)
+def test_resumo_tem_uma_linha_por_trace_nos_dois_modos(
+    modo: str, chamou: bool, chamada: str
+) -> None:
+    registro = _com_trace(RegistroDoCenario(nome="Pagamento"), chamada_ao_mp=chamou)
+
+    texto = gerar_resumo(
+        [registro], modo=modo, contexto="kind-x", quando=QUANDO, prints=[]
+    )
+
+    assert _linha_do_trace(chamada) in texto.splitlines()
+    assert texto.count("Trace no Jaeger:") == 1
+
+
+def test_resumo_com_dois_cenarios_tem_a_linha_do_trace_em_cada_secao() -> None:
+    primeiro = _com_trace(RegistroDoCenario(nome="Um"), chamada_ao_mp=True)
+    segundo = RegistroDoCenario(nome="Dois")
+    segundo.trace = TraceDoCenario("estorno", None)
+    terceiro = RegistroDoCenario(nome="Tres")
+
+    texto = gerar_resumo(
+        [primeiro, segundo, terceiro],
+        modo="real",
+        contexto="kind-x",
+        quando=QUANDO,
+        prints=[],
+    )
+
+    secoes = texto.split("\n## ")
+    assert [s.count("Trace no Jaeger:") for s in secoes if s.startswith("Um")] == [1]
+    assert [s.count("Trace no Jaeger:") for s in secoes if s.startswith("Dois")] == [1]
+    assert [s.count("Trace no Jaeger:") for s in secoes if s.startswith("Tres")] == [0]
+
+
+@pytest.mark.parametrize(
+    ("motivo", "esperada"),
+    [
+        pytest.param(
+            "",
+            "Trace no Jaeger: trace não encontrado. O pagamento é a prova principal.",
+            id="sem-motivo",
+        ),
+        pytest.param(
+            "nenhum trace da ordem no Jaeger em 30 s",
+            "Trace no Jaeger: trace não encontrado (nenhum trace da ordem no Jaeger "
+            "em 30 s). O pagamento é a prova principal.",
+            id="com-motivo",
+        ),
+    ],
+)
+@pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])
+def test_trace_que_nao_foi_achado_aparece_no_resumo_como_nao_encontrado(
+    motivo: str, esperada: str, real: bool
+) -> None:
+    achado = TraceDoCenario("pagamento", None, motivo)
+
+    assert descricao_do_trace(achado, real=real) == esperada
+    registro = RegistroDoCenario(nome="Pagamento")
+    registro.trace = achado
+    texto = gerar_resumo(
+        [registro],
+        modo="real" if real else "ensaio",
+        contexto="kind-x",
+        quando=QUANDO,
+        prints=[],
+    )
+    assert f"- {esperada}" in texto.splitlines()
+
+
+@pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])
+def test_trace_sem_um_dos_servicos_diz_no_resumo_quais_faltaram(real: bool) -> None:
+    trace = higienizar_trace(
+        trace_do_jaeger(servicos=("os-service", "billing-service"))
+    )
+    achado = TraceDoCenario("pagamento", trace)
+
+    linha = descricao_do_trace(achado, real=real)
+
+    assert "serviços: billing-service, os-service (trace parcial: faltam " in linha
+    assert "execution-service);" in linha
+    assert "os-service (trace parcial" in linha
+
+
+@pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])
+def test_trace_que_o_ctrl_c_parou_aparece_no_resumo_como_nao_procurado(
+    real: bool,
+) -> None:
+    achado = TraceDoCenario("pagamento", None, INTERROMPIDO)
+    esperada = (
+        "Trace no Jaeger: trace não procurado (interrompido). "
+        "O pagamento é a prova principal."
+    )
+    registro = RegistroDoCenario(nome="Pagamento")
+    registro.trace = achado
+
+    texto = gerar_resumo(
+        [registro],
+        modo="real" if real else "ensaio",
+        contexto="kind-x",
+        quando=QUANDO,
+        prints=[],
+    )
+
+    assert descricao_do_trace(achado, real=real) == esperada
+    assert f"- {esperada}" in texto.splitlines()
+    assert registro.para_json()["trace"] == {
+        "encontrado": False,
+        "motivo": "interrompido",
+    }
+
+
+def test_json_do_registro_resume_o_trace_e_deixa_o_trace_inteiro_para_o_arquivo() -> (
+    None
+):
+    registro = _com_trace(RegistroDoCenario(nome="C"), chamada_ao_mp=True)
+
+    dados = registro.para_json()
+
+    assert dados["trace"] == {
+        "encontrado": True,
+        "trace_id": TRACE_ID_FALSO,
+        "arquivo": ARQUIVO_DO_TRACE,
+        "servicos": ["billing-service", "execution-service", "os-service"],
+        "span_client_do_billing_para_mercadopago": True,
+    }
+
+
+def test_json_do_registro_diz_que_o_trace_nao_foi_encontrado() -> None:
+    registro = RegistroDoCenario(nome="C")
+    registro.trace = TraceDoCenario("pagamento", None, "motivo")
+
+    assert registro.para_json()["trace"] == {"encontrado": False, "motivo": "motivo"}
+
+
+def test_gravar_evidencia_escreve_um_arquivo_de_trace_por_cenario_ao_lado_do_resumo(
+    tmp_path: Path,
+) -> None:
+    primeiro = _com_trace(RegistroDoCenario(nome="Um"), chamada_ao_mp=True)
+    outro_id = "0123456789abcdef0123456789abcdef"
+    segundo = RegistroDoCenario(nome="Dois")
+    segundo.trace = TraceDoCenario(
+        "estorno", higienizar_trace(trace_do_jaeger(trace_id=outro_id))
+    )
+    sem_achar = RegistroDoCenario(nome="Tres")
+    sem_achar.trace = TraceDoCenario("cobranca-aberta", None, "motivo")
+
+    gravar_evidencia(
+        tmp_path / "reports" / "mp-sandbox",
+        [primeiro, segundo, sem_achar, RegistroDoCenario(nome="Quatro")],
+        modo="real",
+        contexto="kind-x",
+        prints=[],
+        quando=QUANDO,
+    )
+
+    pasta = tmp_path / "reports" / "mp-sandbox"
+    assert sorted(arquivo.name for arquivo in pasta.iterdir()) == [
+        "evidencia.json",
+        "resumo.md",
+        f"trace-estorno-{outro_id}.json",
+        ARQUIVO_DO_TRACE,
+    ]
+    escrito = json.loads((pasta / ARQUIVO_DO_TRACE).read_text(encoding="utf-8"))
+    assert list(escrito) == ["data"]
+    assert escrito["data"][0]["traceID"] == TRACE_ID_FALSO
+    assert len(escrito["data"][0]["spans"]) == 4
+    assert '\n  "data": [' in (pasta / ARQUIVO_DO_TRACE).read_text(), "indentado"
+    assert (pasta / ARQUIVO_DO_TRACE).read_text().endswith("}\n")
+    assert DADO_DO_TRACE not in (pasta / ARQUIVO_DO_TRACE).read_text()
+    resumo = (pasta / "resumo.md").read_text()
+    assert f"arquivo `{ARQUIVO_DO_TRACE}`" in resumo
+    assert f"arquivo `trace-estorno-{outro_id}.json`" in resumo
+    assert "trace não encontrado (motivo)" in resumo
+    traces = [
+        c["trace"]
+        for c in json.loads((pasta / "evidencia.json").read_text())["cenarios"]
+        if "trace" in c
+    ]
+    assert [t["encontrado"] for t in traces] == [True, True, False]
+    assert varrer_pasta(pasta) == {}, (
+        "a varredura da pasta, depois do pytest, nada acha"
+    )
+
+
+def _trace_com_texto(texto: str) -> TraceDoCenario:
+    trace = higienizar_trace(trace_do_jaeger())
+    assert trace is not None
+    trace["spans"][0]["operationName"] = texto
+    return TraceDoCenario("pagamento", trace)
+
+
+DESCARTADO_NO_RESUMO = (
+    "Trace no Jaeger: trace não gravado (descartado pela varredura de segredos). "
+    "O pagamento é a prova principal."
+)
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        pytest.param(f"APP_USR-{'1234567890' * 3}", id="token-do-mercado-pago"),
+        pytest.param("Bearer abcdefghijklmnop", id="bearer"),
+        pytest.param("joao@exemplo.com.br", id="email"),
+        pytest.param("registrado-0123456789", id="segredo-registrado"),
+    ],
+)
+def test_trace_com_segredo_e_descartado_e_o_resto_da_evidencia_e_gravado(
+    texto: str, tmp_path: Path
+) -> None:
+    segredos.registrar("registrado-0123456789")
+    registro = RegistroDoCenario(nome="C")
+    registro.trace = _trace_com_texto(texto)
+    original = registro.trace
+
+    gravar_evidencia(tmp_path, [registro], modo="real", contexto="kind-x", prints=[])
+
+    assert sorted(arquivo.name for arquivo in tmp_path.iterdir()) == [
+        "evidencia.json",
+        "resumo.md",
+    ]
+    assert (
+        f"- {DESCARTADO_NO_RESUMO}" in (tmp_path / "resumo.md").read_text().splitlines()
+    )
+    cenarios = json.loads((tmp_path / "evidencia.json").read_text())["cenarios"]
+    assert cenarios[0]["trace"] == {
+        "encontrado": False,
+        "motivo": "descartado pela varredura de segredos",
+    }
+    for arquivo in tmp_path.iterdir():
+        assert texto not in arquivo.read_text(), arquivo.name
+    assert varrer_pasta(tmp_path) == {}
+    assert registro.trace is original, "o registro do chamador nao muda"
+    assert original is not None
+    assert original.trace is not None
+
+
+def test_trace_com_o_que_o_chamador_passa_como_extra_e_descartado(
+    tmp_path: Path,
+) -> None:
+    registro = RegistroDoCenario(nome="C")
+    registro.trace = _trace_com_texto(ASSINATURA)
+
+    gravar_evidencia(
+        tmp_path,
+        [registro],
+        modo="real",
+        contexto="kind-x",
+        prints=[],
+        extras=[ASSINATURA],
+    )
+
+    assert sorted(arquivo.name for arquivo in tmp_path.iterdir()) == [
+        "evidencia.json",
+        "resumo.md",
+    ]
+    assert varrer_pasta(tmp_path, [ASSINATURA]) == {}
+
+
+def test_so_o_trace_com_segredo_e_descartado_o_de_outro_cenario_e_gravado(
+    tmp_path: Path,
+) -> None:
+    sujo = RegistroDoCenario(nome="Um")
+    sujo.trace = _trace_com_texto("joao@exemplo.com.br")
+    limpo = _com_trace(
+        RegistroDoCenario(nome="Dois"), chamada_ao_mp=True, chave="estorno"
+    )
+
+    gravar_evidencia(tmp_path, [sujo, limpo], modo="real", contexto="kind-x", prints=[])
+
+    assert sorted(arquivo.name for arquivo in tmp_path.iterdir()) == [
+        "evidencia.json",
+        "resumo.md",
+        f"trace-estorno-{TRACE_ID_FALSO}.json",
+    ]
+    linhas = (tmp_path / "resumo.md").read_text().splitlines()
+    assert f"- {DESCARTADO_NO_RESUMO}" in linhas
+    assert any(
+        linha.startswith("- Trace no Jaeger: `") and "trace-estorno-" in linha
+        for linha in linhas
+    )
+
+
+def test_segredo_no_resumo_ainda_recusa_gravar_tudo_inclusive_o_trace_limpo(
+    tmp_path: Path,
+) -> None:
+    registro = _com_trace(RegistroDoCenario(nome="C"), chamada_ao_mp=True)
+    registro.observacoes.append("joao@exemplo.com.br")
+
+    with pytest.raises(EvidenciaComSegredoError, match="Nada foi gravado"):
+        gravar_evidencia(
+            tmp_path, [registro], modo="real", contexto="kind-x", prints=[]
+        )
+
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_trace_com_chave_de_arquivo_invalida_nao_grava_nada(tmp_path: Path) -> None:
+    registro = _com_trace(
+        RegistroDoCenario(nome="C"), chamada_ao_mp=False, chave="../pagamento"
+    )
+
+    with pytest.raises(ChaveDeArquivoInvalidaError):
+        gravar_evidencia(
+            tmp_path, [registro], modo="real", contexto="kind-x", prints=[]
+        )
+
+    assert list(tmp_path.iterdir()) == []

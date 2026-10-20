@@ -120,6 +120,9 @@ def test_validar_trace_id_aceita_hexadecimal(valido: str) -> None:
     "invalido",
     [
         pytest.param("../../etc/passwd", id="caminho"),
+        # Do tamanho certo e so com barra e ponto: nada alem de hexadecimal passa.
+        pytest.param("../" * 8, id="so-barras-e-pontos"),
+        pytest.param("a" * 16 + "/..", id="hexa-com-barra"),
         pytest.param("882c4f49b09d3f41a2d7f57c7493014c/../x", id="sufixo"),
         pytest.param("882C4F49B09D3F41A2D7F57C7493014C", id="maiusculas"),
         pytest.param("abc123", id="curto"),

@@ -10,6 +10,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Recent decisions
 
+- 2026-10-19 - O `make mp-sandbox` e o `make mp-sandbox-ensaio` salvam o trace da OS de cada cenario em `trace-<cenario>-<trace_id>.json`, higienizado por lista de permissao: o Jaeger guarda so em memoria, e o trace com a chamada do Billing ao Mercado Pago so existe durante o `make mp-sandbox`, que exige pagar de novo no navegador - README, O trace da saga; e2e/apoio/trace_higienizado.py
+
 - 2026-10-19 - Atualiza as pendências de RNF-052 registradas abaixo: a collection e seu passo foram integrados no Platform #24. O CI do PR 39230026573 e o CD da main 39231733886 passaram; fontes, hashes e limites estão em docs/entrega/fase4/evidencias/newman-resumo.md. Isso comprova essas combinações de commits, sem antecipar o congelamento final.
 
 - 2026-10-19 - Pacote de ensaio da fase 4 em `INDICE-DA-ENTREGA.md` e `docs/entrega/`; coleta read-only e gate final em `scripts/evidencias/`, PDF por `scripts/build-entrega-pdf.sh` sem skill instalada. O overview da RFC/README/documento e conferido por igualdade; o detalhamento original da RFC permanece. As excecoes de origem por PR sao somente os quatro bootstraps sem pais documentados em `docs/entrega/fase4/evidencias/README.md`; provas operacionais, grupo/video/tags seguem pendentes ate evidencia real.
@@ -81,6 +83,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Discovered conventions
 
+- 2026-10-19 - Tag de span nova so entra na evidencia se for para `TAGS_PERMITIDAS` com o tipo do Jaeger e um validador do valor: enumeracao onde o vocabulario e fechado, regex de forma so onde nao e (e a doc diz qual e qual); `test_a_lista_de_tags_permitidas_e_fechada` fixa a lista, e o trace real do Jaeger 1.76 (copia congelada em `tests/e2e_apoio/dados/`, nao a evidencia da entrega) passa inteiro pelo teste do formato - tests/e2e_apoio/test_trace_higienizado.py
+
 - 2026-10-14 - `e2e/zap/regras.conf` segue o `load_config` do ZAP (id TAB acao TAB motivo, uma regra por linha, exatamente dois TAB: com menos o ZAP recusa o arquivo, com dois a mais o scan quebra) e cada regra esta na tabela do README com a mesma acao (`tests/test_zap_baseline.py`); regra ignorada so entra quando o relatorio mostrar o achado, e achado real se corrige na causa
 - 2026-10-14 - `tests/test_cd_workflow.py` le o `cd.yml` com PyYAML (a chave `on` vira `True`) e roda o `run` do passo `shas` em `/bin/bash -e` (o que o runner usa para `run` sem `shell:`, conferido no log do job) com um `gh` falso no PATH: passo de workflow com logica se prova executando-o, porque o teste por substring deixava passar a validacao invertida e o erro da API que caia na `main` calado - PR #14
 - 2026-10-15 - O `scripts/smoke.sh` nao tem teste proprio: o `tests/test_smoke_servicos.py` cobre o `scripts/ci/smoke-servicos.sh`, e o smoke da plataforma so se prova no kind, sabotando o alvo. Trecho dele que precisa de teste sai para um script em `scripts/` e ganha `kubectl` falso, como o `esperar-pod.sh`, e o teste do smoke so confere a chamada. - tests/test_esperar_pod.py
@@ -101,6 +105,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 - 2026-10-06 - Script shell se testa com um kubectl falso em Python escrito no tmp_path (shebang sys.executable), nao como modulo em tests/: a cobertura mede tests/, e modulo so rodado em subprocesso entraria com 0%
 
 ## Gotchas
+
+- 2026-10-19 - A interface do Jaeger 1.76 le o upload em `loadJsonDone` com `payload.data.map(transformTraceData)` e usa `data.processes[processID]` sem valor padrao: o arquivo e `{"data": [trace]}`; um span cujo `processID` falta em `processes` faz a UI recusar o arquivo inteiro (por isso o higienizador descarta o span), e `logs`, `warnings` e as tags do processo podem faltar - README, O trace da saga
 
 - 2026-10-19 - `no_pod` precisa descartar toda a saida quando `kubectl exec` ou seu prazo externo falha: um `code=124` ja impresso pelo processo remoto pode vir seguido de erro de transporte e nao prova a NetworkPolicy. O smoke testa a saida parcial no banco e no notificador; o bloqueio do notificador so vale com a API conectada ao mesmo broker - scripts/ci/smoke-servicos.sh; tests/test_smoke_servicos.py
 
@@ -191,6 +197,10 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 
 ## Tech debt / TODO
 
+- 2026-10-20 - LOW - `tests/e2e_apoio/dados/trace-saga-real.json` e copia do JSON cru da entrega (com `http.host`, `net.peer.name` e `correlation_id`): se a evidencia da entrega for trocada pelo trace higienizado, a copia continua no repo; recortar para os campos que o teste usa, ou higienizar, quando isso importar - tests/e2e_apoio/test_trace_higienizado.py
+
+- 2026-10-19 - LOW - A escolha do trace (o de mais spans entre os que tem a chamada do Billing ao Mercado Pago) so foi vista contra o trace do simulador e a fonte da UI, nunca contra um Jaeger do modo real: no primeiro `make mp-sandbox`, conferir a linha do trace no `resumo.md`; se faltar a chamada, listar os traces da OS no Jaeger (um por `traceID`) e ajustar `escolher_trace` - e2e/apoio/trace_higienizado.py
+
 - 2026-10-19 - RESOLVIDO o item de14/10 sobre metricas na collection: `docs/api/fluxo-completo.postman_collection.json` confere GET /os/api/v1/ordens-de-servico/metricas sem token e com os tres papeis, incluindo nove status; RNF-052 ainda depende da integracao/evidencia CI - README (Collection do fluxo completo)
 
 - 2026-10-18 - MEDIUM - Billing e Execucao nao tem `cd.yml` na `main` (so `ci.yml` e `security.yml`, e nenhum PR aberto dos dois o acrescenta): o `deploy-kind` dos servicos e o E2E rodam hoje so no CD do OS Service, que pega os dois vizinhos pelo ultimo commit da `main`, com aviso no run (passo `shas`). Os documentos passaram a dizer "CD do OS Service" (README, ADR-041, ADR-042, RFC-004 10.2, nuvem opcional e ensaio integrado); quando os dois ganharem o `cd.yml`, voltam a "de cada servico". Contradiz a entrada de 2026-10-07 "O CD de cada servico sobe os tres no kind" - docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md; README
@@ -245,6 +255,8 @@ Consolidado em 2026-10-07: as 98 entradas que sairam (repetidas, superadas por u
 - 2026-10-06 - LOW - Profile `servicos` do compose sobe so a API de cada servico (relay, consumidor e `prazos` rodam no Kubernetes)
 
 ## Review lessons
+
+- 2026-10-20 - Promessa de seguranca no docstring ou no README vale para o validador mais fraco: `[a-z]{1,30}` deixa passar palavra, e "nenhum texto livre passa" era falso; vocabulario fechado pede enumeracao, e onde nao ha vocabulario a doc diz o que passa. O helper de teste que tira o tipo da tag do valor Python nunca monta "tipo certo, valor com dado" e deixa mutante vivo, e a fixture de teste nao pode ser o artefato de entrega, que vai ser regravado - PR #28
 
 - 2026-10-19 - O headSha do run não identifica necessariamente o checkout efetivamente testado: no CI de PR do Newman, o Platform usa o merge sintético. As quatro fontes foram extraídas dos registros dos passos checkout, e a equivalência entre a árvore sintética, a ponta revisada e o squash foi demonstrada separadamente. Links existentes também precisam de conferência semântica: títulos repetidos Como rodar levavam o Newman ao procedimento da sandbox, embora a âncora fosse válida.
 

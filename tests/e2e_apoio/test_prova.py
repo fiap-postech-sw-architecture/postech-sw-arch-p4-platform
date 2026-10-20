@@ -14,7 +14,7 @@ import pytest
 from e2e.apoio import segredos
 from e2e.apoio.conferencias import DivergenciaComOMercadoPagoError
 from e2e.apoio.espera import TempoEsgotadoError
-from e2e.apoio.evidencia import RegistroDoCenario
+from e2e.apoio.evidencia import RegistroDoCenario, descricao_do_trace
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
 from e2e.apoio.mercadopago import ClienteMercadoPago, ErroDoMercadoPagoError
 from e2e.apoio.modo_billing import URL_DE_NOTIFICACAO_PADRAO
@@ -27,8 +27,20 @@ from e2e.apoio.prova import (
     gravar_evidencia_da_sessao,
 )
 from e2e.apoio.segredos import mascarar
+from e2e.apoio.trace_higienizado import (
+    INTERROMPIDO,
+    PRAZO_DO_TRACE,
+    TraceDoCenario,
+    higienizar_trace,
+)
 from e2e.servicos import Cenario
-from e2e_apoio.falsos import CHAVE_APP_USR, ExecutorFalso
+from e2e_apoio.falsos import (
+    CHAVE_APP_USR,
+    DADO_DO_TRACE,
+    TRACE_ID_FALSO,
+    ExecutorFalso,
+    trace_do_jaeger,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -99,6 +111,17 @@ class Mundo:
         self.mp_preferencia: dict[str, Any] = {"id": "pref-1"}
         self.mp_status = 200
         self._leituras = 0
+        # O que o Jaeger devolve a cada leitura (a ultima se repete); excecao levanta.
+        self.leituras_do_jaeger: list[list[Any] | BaseException] = [[]]
+        self.pedidos_ao_jaeger: list[str] = []
+
+    def traces_da_ordem(self, ordem_id: str) -> list[Any]:
+        self.pedidos_ao_jaeger.append(ordem_id)
+        numero = min(len(self.pedidos_ao_jaeger), len(self.leituras_do_jaeger)) - 1
+        leitura = self.leituras_do_jaeger[numero]
+        if isinstance(leitura, BaseException):
+            raise leitura
+        return leitura
 
     def api(self) -> Api:
         def pagamento(_pagamento_id: str) -> dict[str, Any]:
@@ -173,6 +196,7 @@ def _prova(
         esperar_status=esperar_status,
         descrever_estado=descrever
         or (lambda _api, _cenario: "OS o-1: status=x etapa=y"),
+        traces_da_ordem=mundo.traces_da_ordem,
         filas_mortas_antes=filas_mortas_antes,
         avisar=avisos.append,
         numeros=numeros,
@@ -852,6 +876,7 @@ def _abrir(
         cenario=Cenario(numero=1, execucao="ABC123", ordem_id="o-1"),
         esperar_status=lambda _api, _cenario, status: {"status": status},
         descrever_estado=lambda _api, _cenario: "OS o-1: status=x etapa=y",
+        traces_da_ordem=mundo.traces_da_ordem,
         avisar=lambda _: None,
     )
     return prova, registros
@@ -912,7 +937,10 @@ def test_a_evidencia_da_sessao_real_traz_os_prints_do_real_e_a_url_sem_consulta(
     resumo = (tmp_path / "resumo.md").read_text()
     assert "Modo: **real (credenciais de teste do Mercado Pago)**" in resumo
     assert "Cuidado com os prints: cubra e-mail, nome, User ID e CPF" in resumo
-    assert "Cuidado com os arquivos: anexe só o `resumo.md`" in resumo
+    assert (
+        "Cuidado com os arquivos: anexe só o `resumo.md`, os `trace-*.json` e" in resumo
+    )
+    assert 'aba "Upload", arraste o `trace-*.json`' in resumo
     assert "`notification_url`: `https://meu-tunel.ngrok.app/hook`" in resumo
     assert (
         "segredo-da-consulta" not in resumo + (tmp_path / "evidencia.json").read_text()
@@ -1272,3 +1300,319 @@ def test_concluir_com_os_servicos_fora_do_ar_nao_levanta(relogio: Relogio) -> No
 
     assert prova.registro.saga == {"passos": []}
     assert prova.registro.transicoes == []
+
+
+# --- o trace da ordem no Jaeger ------------------------------------------------------
+
+
+def _jaeger(*leituras: list[Any] | BaseException) -> Mundo:
+    mundo = Mundo()
+    mundo.leituras_do_jaeger = list(leituras)
+    return mundo
+
+
+def _concluida(
+    mundo: Mundo,
+    relogio: Relogio,
+    *,
+    real: bool,
+    desfecho: str | None = "passed",
+    tags: tuple[str, ...] = (),
+) -> tuple[Prova, list[str]]:
+    prova, avisos, _ = _prova(mundo, relogio, real=real)
+    prova.cenario.tags = frozenset(tags)
+
+    prova.concluir(desfecho)
+
+    return prova, avisos
+
+
+def test_concluir_guarda_o_trace_higienizado_quando_os_spans_param_de_crescer(
+    relogio: Relogio,
+) -> None:
+    mundo = _jaeger(
+        [trace_do_jaeger(spans=4)],
+        [trace_do_jaeger(spans=6)],
+        [trace_do_jaeger(spans=6)],
+    )
+
+    prova, avisos = _concluida(
+        mundo, relogio, real=False, tags=("mp_sandbox", "pagamento")
+    )
+
+    achado = prova.registro.trace
+    assert achado is not None
+    assert achado.chave == "pagamento"
+    assert achado.trace is not None
+    assert len(achado.trace["spans"]) == 6
+    assert achado.servicos == ["billing-service", "execution-service", "os-service"]
+    assert achado.chamou_o_mercado_pago is False
+    assert mundo.pedidos_ao_jaeger == ["o-1", "o-1", "o-1"]
+    assert relogio.dormidas == [3.0, 3.0]
+    escrito = json.dumps(achado.trace)
+    assert DADO_DO_TRACE not in escrito
+    assert "pod-" not in escrito
+    assert avisos[-2:] == [
+        "[mp-sandbox] lendo o trace da OS no Jaeger (até 30 s)",
+        f"[mp-sandbox] {descricao_do_trace(achado, real=False)}",
+    ]
+    assert "modo simulador: sem chamada externa" in avisos[-1]
+
+
+def test_no_modo_real_so_vale_o_trace_com_a_chamada_do_billing_ao_mercado_pago(
+    relogio: Relogio,
+) -> None:
+    sem_a_chamada = [trace_do_jaeger(spans=5)]
+    com_a_chamada = [trace_do_jaeger(spans=7, chamada_ao_mp=True)]
+    # O trace sem a chamada ja esta estavel na 2a leitura, e mesmo assim se espera.
+    mundo = _jaeger(sem_a_chamada, sem_a_chamada, com_a_chamada, com_a_chamada)
+
+    prova, avisos = _concluida(mundo, relogio, real=True)
+
+    achado = prova.registro.trace
+    assert achado is not None
+    assert achado.trace is not None
+    assert len(achado.trace["spans"]) == 7
+    assert achado.chamou_o_mercado_pago is True
+    assert len(mundo.pedidos_ao_jaeger) == 4
+    assert relogio.dormidas == [3.0, 3.0, 3.0]
+    assert avisos[-1].endswith("span CLIENT do Billing para api.mercadopago.com: sim")
+
+
+def test_no_ensaio_o_trace_sem_chamada_ao_mercado_pago_ja_basta(
+    relogio: Relogio,
+) -> None:
+    mundo = _jaeger([trace_do_jaeger(spans=5)])
+
+    prova, _ = _concluida(mundo, relogio, real=False)
+
+    assert prova.registro.trace is not None
+    assert prova.registro.trace.trace is not None
+    assert len(mundo.pedidos_ao_jaeger) == 2
+
+
+def test_no_modo_real_sem_a_chamada_o_prazo_acaba_e_fica_o_melhor_trace_visto(
+    relogio: Relogio,
+) -> None:
+    mundo = _jaeger([trace_do_jaeger(spans=5)])
+
+    prova, avisos = _concluida(mundo, relogio, real=True)
+
+    achado = prova.registro.trace
+    assert achado is not None
+    assert achado.trace is not None
+    assert achado.chamou_o_mercado_pago is False
+    assert sum(relogio.dormidas) == PRAZO_DO_TRACE
+    assert prova.registro.resultado == "passou"
+    assert "ATENÇÃO: no modo real o Billing deveria chamar" in avisos[-1]
+
+
+def test_trace_que_nao_para_de_crescer_fica_como_o_ultimo_visto(
+    relogio: Relogio,
+) -> None:
+    mundo = _jaeger(*[[trace_do_jaeger(spans=n)] for n in range(3, 40)])
+
+    prova, _ = _concluida(mundo, relogio, real=False)
+
+    achado = prova.registro.trace
+    assert achado is not None
+    assert achado.trace is not None
+    assert len(mundo.pedidos_ao_jaeger) == 11
+    assert len(achado.trace["spans"]) == 13
+    assert sum(relogio.dormidas) == PRAZO_DO_TRACE
+
+
+def test_trace_que_nao_aparece_nao_reprova_e_o_resumo_diz_que_nao_o_achou(
+    relogio: Relogio,
+) -> None:
+    prova, avisos = _concluida(Mundo(), relogio, real=True)
+
+    assert prova.registro.resultado == "passou"
+    assert prova.registro.trace == TraceDoCenario(
+        "cenario-1", None, "nenhum trace da ordem no Jaeger em 30 s"
+    )
+    assert sum(relogio.dormidas) == PRAZO_DO_TRACE
+    assert avisos[-1] == (
+        "[mp-sandbox] Trace no Jaeger: trace não encontrado (nenhum trace da ordem "
+        "no Jaeger em 30 s). O pagamento é a prova principal."
+    )
+
+
+def test_trace_sem_uma_das_pecas_fica_como_parcial_e_o_resumo_diz_o_que_faltou(
+    relogio: Relogio,
+) -> None:
+    mundo = _jaeger([trace_do_jaeger(spans=9, servicos=("os-service",))])
+
+    prova, avisos = _concluida(mundo, relogio, real=False)
+
+    achado = prova.registro.trace
+    assert achado is not None
+    assert achado.trace is not None
+    assert achado.servicos == ["os-service"]
+    assert len(mundo.pedidos_ao_jaeger) == 11
+    assert (
+        "serviços: os-service (trace parcial: faltam billing-service, "
+        "execution-service);" in avisos[-1]
+    )
+
+
+def test_jaeger_fora_do_ar_nao_reprova_e_so_o_nome_do_erro_vai_para_o_resumo(
+    relogio: Relogio,
+) -> None:
+    mundo = _jaeger(httpx.ConnectError(f"sem rota para {CHAVE_APP_USR}"))
+
+    prova, avisos = _concluida(mundo, relogio, real=True)
+
+    assert prova.registro.resultado == "passou"
+    assert prova.registro.trace == TraceDoCenario(
+        "cenario-1", None, "erro ao consultar o Jaeger: ConnectError"
+    )
+    assert CHAVE_APP_USR not in "".join(avisos)
+    assert (
+        "trace não encontrado (erro ao consultar o Jaeger: ConnectError)" in avisos[-1]
+    )
+
+
+def test_erro_do_jaeger_numa_leitura_nao_impede_o_trace_das_seguintes(
+    relogio: Relogio,
+) -> None:
+    mundo = _jaeger(httpx.ReadTimeout("x"), [trace_do_jaeger()], [trace_do_jaeger()])
+
+    prova, _ = _concluida(mundo, relogio, real=False)
+
+    assert prova.registro.trace is not None
+    assert prova.registro.trace.trace is not None
+    assert prova.registro.trace.motivo == ""
+    assert relogio.dormidas == [3.0, 3.0]
+
+
+def test_o_que_o_jaeger_devolve_fora_do_formato_e_ignorado(relogio: Relogio) -> None:
+    leitura = [None, "x", {"traceID": "../x"}, trace_do_jaeger()]
+    mundo = _jaeger(leitura, leitura)
+
+    prova, _ = _concluida(mundo, relogio, real=False)
+
+    assert prova.registro.trace is not None
+    assert prova.registro.trace.trace is not None
+    assert prova.registro.trace.trace["traceID"] == TRACE_ID_FALSO
+
+
+def test_cenario_interrompido_nao_procura_o_trace(relogio: Relogio) -> None:
+    mundo = _jaeger([trace_do_jaeger()])
+
+    prova, avisos = _concluida(mundo, relogio, real=True, desfecho=None)
+
+    assert prova.registro.resultado == "interrompido"
+    assert prova.registro.trace is None
+    assert mundo.pedidos_ao_jaeger == []
+    assert relogio.dormidas == []
+    assert not any("Trace no Jaeger" in aviso for aviso in avisos)
+
+
+@pytest.mark.parametrize("onde", ["dormindo", "lendo"])
+def test_ctrl_c_na_espera_do_trace_fica_no_resumo_e_a_interrupcao_passa(
+    onde: str, relogio: Relogio
+) -> None:
+    mundo = _jaeger([trace_do_jaeger(spans=5)])
+    prova, avisos, _ = _prova(mundo, relogio, real=True)
+    prova.cenario.tags = frozenset(("mp_sandbox", "pagamento"))
+    if onde == "lendo":
+        mundo.leituras_do_jaeger = [KeyboardInterrupt()]
+    else:
+
+        def interrompe(_segundos: float) -> None:
+            raise KeyboardInterrupt
+
+        prova._dormir = interrompe
+
+    with pytest.raises(KeyboardInterrupt):
+        prova.concluir("passed")
+
+    # A espera para na hora: nenhuma leitura nem pausa depois do Ctrl-C, para o
+    # desfazer do modo real nao esperar.
+    assert prova.registro.trace == TraceDoCenario("pagamento", None, INTERROMPIDO)
+    assert prova.registro.resultado == "passou"
+    assert mundo.pedidos_ao_jaeger == ["o-1"]
+    assert relogio.dormidas == []
+    assert avisos[-1] == "[mp-sandbox] lendo o trace da OS no Jaeger (até 30 s)"
+
+
+def test_cenario_sem_ordem_nao_procura_o_trace(relogio: Relogio) -> None:
+    mundo = _jaeger([trace_do_jaeger()])
+    prova, _, _ = _prova(mundo, relogio, real=False)
+    prova.cenario.ordem_id = ""
+
+    prova.concluir("passed")
+
+    assert prova.registro.trace is None
+    assert mundo.pedidos_ao_jaeger == []
+
+
+def test_cenario_que_falhou_tambem_guarda_o_trace(relogio: Relogio) -> None:
+    mundo = _jaeger([trace_do_jaeger()])
+    prova, _, _ = _prova(mundo, relogio, real=False)
+    prova.falhou = "Então o Billing confirma o pagamento"
+
+    prova.concluir("failed")
+
+    assert prova.registro.resultado == "falhou"
+    assert prova.registro.trace is not None
+    assert prova.registro.trace.trace is not None
+
+
+@pytest.mark.parametrize(
+    ("tags", "chave"),
+    [
+        pytest.param(("mp_sandbox", "pagamento"), "pagamento", id="pagamento"),
+        pytest.param(("estorno", "mp_sandbox"), "estorno", id="estorno"),
+        pytest.param(("cobranca-aberta",), "cobranca-aberta", id="cobranca-aberta"),
+        pytest.param((), "cenario-1", id="sem-tag"),
+        pytest.param(("mp_sandbox", "outra"), "cenario-1", id="tag-desconhecida"),
+    ],
+)
+def test_a_chave_do_trace_vem_da_tag_do_cenario_ou_do_numero_dele(
+    tags: tuple[str, ...], chave: str, relogio: Relogio
+) -> None:
+    mundo = _jaeger([trace_do_jaeger()])
+
+    prova, _ = _concluida(mundo, relogio, real=False, tags=tags)
+
+    assert prova.registro.trace is not None
+    assert prova.registro.trace.chave == chave
+
+
+def test_abrir_liga_a_leitura_do_jaeger_ao_fim_do_cenario(relogio: Relogio) -> None:
+    mundo = _jaeger([trace_do_jaeger()])
+    prova, registros = _abrir(mundo, relogio, real=False)
+
+    prova.concluir("passed")
+
+    assert registros[0].trace is not None
+    assert registros[0].trace.trace is not None
+    assert mundo.pedidos_ao_jaeger[0] == "o-1"
+
+
+def test_a_evidencia_da_sessao_grava_o_arquivo_do_trace_ao_lado_do_resumo(
+    tmp_path: Path,
+) -> None:
+    registro = _registro_da_sessao()
+    registro.trace = TraceDoCenario("pagamento", higienizar_trace(trace_do_jaeger()))
+
+    gravar_evidencia_da_sessao(
+        tmp_path,
+        [registro],
+        Sandbox(modo="ensaio"),
+        contexto="kind-x",
+        avisar=lambda _: None,
+    )
+
+    nome = f"trace-pagamento-{TRACE_ID_FALSO}.json"
+    assert sorted(arquivo.name for arquivo in tmp_path.iterdir()) == [
+        "evidencia.json",
+        "resumo.md",
+        nome,
+    ]
+    escrito = (tmp_path / nome).read_text()
+    assert json.loads(escrito)["data"][0]["traceID"] == TRACE_ID_FALSO
+    assert DADO_DO_TRACE not in escrito
+    assert f"arquivo `{nome}`" in (tmp_path / "resumo.md").read_text()

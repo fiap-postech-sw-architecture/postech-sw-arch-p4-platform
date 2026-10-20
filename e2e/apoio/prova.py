@@ -28,6 +28,7 @@ from e2e.apoio.conferencias import (
 from e2e.apoio.espera import TempoEsgotadoError, esperar
 from e2e.apoio.evidencia import (
     RegistroDoCenario,
+    descricao_do_trace,
     gravar_evidencia,
     pagamento_do_billing,
     saga_resumida,
@@ -45,11 +46,18 @@ from e2e.apoio.kube import FILA_MORTA_DO_BILLING
 from e2e.apoio.mercadopago import ErroDoMercadoPagoError, registrar_conta
 from e2e.apoio.modo_billing import NAMESPACE_BILLING, sem_consulta
 from e2e.apoio.segredos import mascarar, registrar
+from e2e.apoio.trace_higienizado import (
+    INTERROMPIDO,
+    PRAZO_DO_TRACE,
+    TraceDoCenario,
+    esperar_trace,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping
     from pathlib import Path
 
+    from e2e.apoio.jaeger import Trace
     from e2e.apoio.kube import Kubectl
     from e2e.apoio.preflight_mp import Sandbox
     from e2e.servicos import Api, Cenario, Json
@@ -67,6 +75,8 @@ INTERVALO_DO_ESTORNO: Final = 3.0
 # De quanto em quanto tempo as esperas olham a DLQ do Billing: um comando que foi
 # para la nao se resolve esperando mais.
 INTERVALO_DA_DLQ: Final = 10.0
+# A tag que cada cenario do feature tem de seu; entra no nome do arquivo do trace.
+TAGS_DOS_CENARIOS: Final = ("pagamento", "estorno", "cobranca-aberta")
 PRINTS: Final = (
     (
         "O checkout do Mercado Pago aberto na janela anônima, com o valor da cobrança "
@@ -78,15 +88,19 @@ PRINTS: Final = (
         "No painel do Mercado Pago, na conta do Vendedor de teste: o pagamento "
         "aprovado e, depois do cancelamento, o estorno."
     ),
+    (
+        'O trace de um cenário aberto no Jaeger (Search, aba "Upload", arraste o '
+        "`trace-*.json`), com o span CLIENT do Billing para `api.mercadopago.com`."
+    ),
     "O `resumo.md` desta pasta (já sem token nem dado do pagador).",
     (
         "Cuidado com os prints: cubra e-mail, nome, User ID e CPF das contas de "
         "teste, e nunca mostre a tela de Credenciais nem a de Webhooks."
     ),
     (
-        "Cuidado com os arquivos: anexe só o `resumo.md` e os prints, nunca o "
-        "`junit.xml` (leva o nome da máquina), o `cucumber.json`, o `cenarios.json` "
-        "nem a pasta inteira; antes de commitar, rode "
+        "Cuidado com os arquivos: anexe só o `resumo.md`, os `trace-*.json` e os "
+        "prints, nunca o `junit.xml` (leva o nome da máquina), o `cucumber.json`, o "
+        "`cenarios.json` nem a pasta inteira; antes de commitar, rode "
         "`python -m e2e.varredura <pasta>` e `gitleaks dir <pasta>`."
     ),
 )
@@ -136,7 +150,8 @@ def gravar_evidencia_da_sessao(
     contexto: str,
     avisar: Callable[[str], None] = print,
 ) -> None:
-    """No fim da sessao: ``resumo.md`` e ``evidencia.json`` com os prints do modo.
+    """No fim da sessao: ``resumo.md``, ``evidencia.json`` e ``trace-*.json`` com os
+    prints do modo.
 
     Sem cenario nenhum (a sessao parou antes do primeiro), nao grava nada.
     """
@@ -169,6 +184,7 @@ class Prova:
         registro: RegistroDoCenario,
         esperar_status: Callable[[Api, Cenario, str], Json],
         descrever_estado: Callable[[Api, Cenario], str],
+        traces_da_ordem: Callable[[str], list[Trace]],
         filas_mortas_antes: Mapping[str, int] | None = None,
         avisar: Callable[[str], None] = print,
         numeros: Iterator[int] | None = None,
@@ -184,6 +200,7 @@ class Prova:
         self.falhou = ""
         self._esperar_status = esperar_status
         self._descrever_estado = descrever_estado
+        self._traces_da_ordem = traces_da_ordem
         self._mortas_antes = filas_mortas_antes
         self._leitura_da_dlq = float("-inf")
         self._avisar = avisar
@@ -204,6 +221,7 @@ class Prova:
         cenario: Cenario,
         esperar_status: Callable[[Api, Cenario, str], Json],
         descrever_estado: Callable[[Api, Cenario], str],
+        traces_da_ordem: Callable[[str], list[Trace]],
         avisar: Callable[[str], None] = print,
         numeros: Iterator[int] | None = None,
     ) -> Prova:
@@ -222,6 +240,7 @@ class Prova:
             registro=registro,
             esperar_status=esperar_status,
             descrever_estado=descrever_estado,
+            traces_da_ordem=traces_da_ordem,
             filas_mortas_antes=diagnostico.coletar(kubectl.filas_mortas),
             avisar=avisar,
             numeros=numeros,
@@ -516,3 +535,32 @@ class Prova:
         self.registro.billing = pagamento_do_billing(pagamento)
         self.registro.saga = saga_resumida(saga)
         self.registro.transicoes += transicoes_da_os(historico, saga, pagamento)
+        # Interrompido (Ctrl-C): nada mais o interrompe e o desfazer do modo real
+        # espera, entao fica sem trace e sem religar o port-forward que o Ctrl-C matou.
+        if self.registro.resultado != "interrompido":
+            self._guardar_o_trace()
+
+    def _guardar_o_trace(self) -> None:
+        """Le o trace da ordem (ver ``esperar_trace``) e o poe no registro."""
+        self._avisar(
+            f"[mp-sandbox] lendo o trace da OS no Jaeger (até {PRAZO_DO_TRACE:g} s)"
+        )
+        chave = next(
+            (tag for tag in TAGS_DOS_CENARIOS if tag in self.cenario.tags),
+            f"cenario-{self.cenario.numero}",
+        )
+        try:
+            achado = esperar_trace(
+                lambda: self._traces_da_ordem(self.cenario.ordem_id),
+                chave=chave,
+                real=self.real,
+                relogio=self._relogio,
+                dormir=self._dormir,
+            )
+        except KeyboardInterrupt:
+            # O Ctrl-C na espera: o resumo diz que o trace nao foi procurado ate o fim,
+            # e nada mais espera aqui, para o desfazer do modo real vir ja.
+            self.registro.trace = TraceDoCenario(chave, None, INTERROMPIDO)
+            raise
+        self.registro.trace = achado
+        self._avisar(f"[mp-sandbox] {descricao_do_trace(achado, real=self.real)}")
