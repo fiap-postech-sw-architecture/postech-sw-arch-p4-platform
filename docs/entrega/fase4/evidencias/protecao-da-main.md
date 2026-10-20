@@ -11,7 +11,7 @@ Conferido em 20/10/2026 com a API do GitHub, nos quatro repositórios da fase 4.
 
 Os quatro rulesets estão ativos, valem para a branch padrão e não têm exceção (nenhum ator pode ignorá-los). Todos têm as mesmas regras: pull request obrigatório, merge só por squash, conversas resolvidas antes do merge, histórico linear, sem force push e sem exclusão da branch.
 
-Na mesma data, a `main` tinha 28 commits na plataforma, 24 no OS Service, 22 no Billing e 18 na Execução. Todos entraram por pull request, exceto o commit inicial de cada repositório, que o GitHub cria junto com ele. Os quatro commits iniciais estão no [registro de evidências](README.md#coleta-e-conferência-reproduzíveis), e o `verificar --final` só aceita esses.
+Nos commits dos CDs de 20/10/2026 que o documento de entrega cita (plataforma `d703200`, OS Service `3ce582b`, Billing `76b5f9b` e Execução `5b1bef4`), a `main` tinha 32 commits na plataforma, 26 no OS Service, 24 no Billing e 20 na Execução. Todos entraram por pull request, exceto o commit inicial de cada repositório, que o GitHub cria junto com ele. Os quatro commits iniciais estão no [registro de evidências](README.md#coleta-e-conferência-reproduzíveis), e o `verificar --final` só aceita esses.
 
 Para repetir a conferência de um repositório, com o número do ruleset da tabela:
 
