@@ -6,13 +6,18 @@ Conferência inicial de 19/10/2026. Fontes: requisitos da fase, PRs integrados, 
 
 | Item | Impacto | Responsável | Condição para fechar |
 |---|---|---|---|
-| CD compartilhado e chamadas dos três serviços | Definição integrada no [Platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22), S=`3f7cca2eb555a038b0d2780058ef0e692f93ee8a`, com CD da main aprovado; adoção do OS e da Execução aprovada nos CDs da main; Billing aguarda integração | Plataforma e serviços | Workflow fixado por SHA; CI, segurança, imagem, kind e E2E verdes na `main` de cada serviço |
 | Collection do fluxo completo | Duas provas locais e [execução no CI do PR #24](evidencias/newman-resumo.md#execução-no-ci-do-pr-24) aprovadas; CD da main aprovado; prova do congelamento pendente | Plataforma | Preservar a collection e comprovar o run sobre os commits finais, incluindo as métricas administrativas do OS; [fontes e resumos](evidencias/newman-resumo.md) |
 | Ensaio final de observabilidade | Trace com os três serviços, 600,9 s ociosos, smoke e alerta com recuperação comprovados localmente; RNF-046/RNF-056 continuam parciais | Plataforma e serviços | Preservar capturas com três dias; chamada externa e observação no modo real do Billing dependem da sandbox |
-| Remanescentes de telemetria do Billing | Correções e provas locais revisadas: Host, classe da falha do coletor, deadline e smoke; integração pendente | Billing Service | Integrar a fonte revisada, confirmar o CI e atualizar a tabela de cobertura pelo novo artefato publicado |
 | Evidência real do Mercado Pago | Simulador não comprova acesso à sandbox do provedor | Responsável com credenciais | Cobrança, aprovação e estorno reais, com saída sanitizada |
-| Descrição de `EstornoDePagamentoFalhou.motivo` | Mensagem fixa alinhada na fonte canônica pelo [Platform #23](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/23), C=`15dd827b95a95d2dd717414fb5104ac9768b32ac`; cópias do OS e da Execução sincronizadas; cópia do Billing preparada, ainda sem integração | Serviços | Sincronizar cópias e ORIGEM em C, preservando formato, versão e routing key |
 | Grupo, vídeo e submissão | RNF-053/RNF-054 ainda não podem ser encerrados | Grupo | Confirmar identificação; publicar vídeo; conferir acesso do avaliador; submeter o PDF final |
+
+## Itens resolvidos
+
+| Item | Como fechou |
+|---|---|
+| CD compartilhado dos três serviços | Definição no [platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22), no commit `3f7cca2eb555a038b0d2780058ef0e692f93ee8a`. Chamadas no [OS #20](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/pull/20), na [Execução #15](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/pull/15) e no [Billing #19](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/19), com CD da `main` aprovado nos três ([provas](evidencias/README.md#cd-compartilhado-dos-serviços)) |
+| Telemetria do Billing | Host do chamador, classe da falha do coletor, prazo e smoke integrados no [Billing #18](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/18) |
+| Descrição de `EstornoDePagamentoFalhou.motivo` | Mensagem fixa na fonte canônica pelo [platform #23](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/23); o `contratos/ORIGEM` dos três serviços aponta para o commit `15dd827b95a95d2dd717414fb5104ac9768b32ac` |
 
 ## Correções integradas no Billing
 
@@ -58,7 +63,7 @@ Uma dívida aceita não dispensa o gate nem autoriza declarar uma prova inexiste
 - Execução: 1.468 testes aprovados e cobertura de 100% na árvore integrada por #9.
 - Plataforma: 2.539 testes aprovados e cobertura de 100% na árvore integrada por #20; CD [39190581574](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39190581574) aprovado em `91d959b`.
 
-As correções posteriores de observabilidade do Billing passaram localmente com 1.696 testes, cobertura e diff-cover de 100%, nove mutantes detectados, manifests e smoke dos quatro processos aprovados. As revisões independentes de segurança, aderência, qualidade e README estão encerradas. Esses resultados locais não substituem o CI publicado da fonte integrada; a tabela final de cobertura continua pendente desse artefato.
+As correções de observabilidade do Billing entraram no [Billing #18](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/18). A cobertura dessa fonte está no [registro de cobertura](evidencias/coverage.md#billing-service).
 
 Esses resultados identificam a base do ensaio. Cada alteração posterior exige os gates correspondentes e atualização deste registro antes do congelamento.
 

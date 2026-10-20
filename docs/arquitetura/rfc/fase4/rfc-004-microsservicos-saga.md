@@ -1159,13 +1159,13 @@ Dashboards em JSON, um arquivo por dashboard em `observabilidade/dashboards/` do
 
 ### 10.2 Pipeline e deploy
 
-A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows (em 18/10/2026, só o OS Service tem o `cd.yml`), e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
+A lista canônica de workflows e jobs está no [ADR-042](../../adr/fase4/042-cicd-e-deploy-kubernetes.md), e a de testes e qualidade, no [ADR-041](../../adr/fase4/041-estrategia-de-testes-e-qualidade.md). Cada serviço tem três workflows, e os nomes dos jobs são os checks obrigatórios da proteção e do ruleset da `main`:
 
 - `ci.yml`, em todo pull request (PR): `lint`, `type-check`, `security`, `test` (gate de cobertura de 95% e `diff-cover` de 90% no código novo; cada serviço sobe de 90% para 95% no PR de endurecimento dele), `sonarqube` e `build`;
 - `security.yml`, em todo PR e semanal: `pip-audit`, `gitleaks` e `trivy`;
 - `cd.yml`, a cada push na `main`: `ci` e `security-scan`, que chamam os dois anteriores, `image`, `deploy-kind` e, com o deploy remoto ligado, `deploy-remote`, ou, desligado (o estado entregue), `remote-skipped`.
 
-Build único: o `image` constrói a imagem uma vez, publica no GHCR com a tag do SHA e gera o SBOM em SPDX; o `deploy-kind` carrega o tar dessa imagem, e o `deploy-remote`, se ligado, implanta o mesmo digest. No kind, os dois vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, ou no último commit da `main` quando o repositório não tem `cd.yml` (em 18/10/2026, só o OS Service tem), com o overlay enxuto `kind-ci` (sem Loki, Promtail e Grafana, uma réplica), um smoke por namespace e o E2E (teste de ponta a ponta) BDD; o summary nomeia o serviço que falhou.
+Build único: o `image` constrói a imagem uma vez, publica no GHCR com a tag do SHA e gera o SBOM em SPDX; o `deploy-kind` carrega o tar dessa imagem, e o `deploy-remote`, se ligado, implanta o mesmo digest. No kind, os dois vizinhos e o `platform` entram no SHA da última execução verde do CD de cada um, ou, como contingência, no último commit da `main` quando o repositório ainda não tem CD verde, com o overlay enxuto `kind-ci` (sem Loki, Promtail e Grafana, uma réplica), um smoke por namespace e o E2E (teste de ponta a ponta) BDD; o summary nomeia o serviço que falhou.
 
 A independência que o enunciado pede (l. 90) está no que é de cada serviço: build, testes, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e o kind é o ambiente de integração.
 
