@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Confere requisitos e links do pacote; --final também exige identificação e vídeo."""
+"""Confere requisitos e links do pacote.
+
+--final também exige identificação, vídeo e texto sem marcas preliminares.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +21,23 @@ def _ids(texto: str) -> set[str]:
     ):
         ids.update(f"{prefixo}-{n:03d}" for n in range(int(inicio), int(fim) + 1))
     return ids
+
+
+# Marcas do texto preliminar do pacote; a versão final não pode levar nenhuma.
+# O \b inicial evita falso positivo dentro de palavra ("independente").
+RASCUNHO = re.compile(
+    r"\b(?:vers[aã]o (?:de ensaio|preliminar)|documento de ensaio|durante o ensaio"
+    r"|inserir o link|ainda ser[aá] gravado|n[aã]o serve para submiss[aã]o"
+    r"|antes da submiss[aã]o|em coleta|a coletar|aguarda|pendente"
+    r"|dependem do grupo)",
+    re.IGNORECASE,
+)
+# Documentos que vão para o PDF e a matriz que eles citam.
+PRELIMINARES = (
+    "docs/entrega/fase4/entrega-fase-4.md",
+    "INDICE-DA-ENTREGA.md",
+    "docs/entrega/matriz-de-rastreabilidade.md",
+)
 
 
 # Exceções auditadas em docs/entrega/fase4/evidencias/README.md.
@@ -188,6 +208,11 @@ def verificar(
             prova = documento.parent / "evidencias" / nome
             if not prova.is_file() or not prova.read_text().strip():
                 erros.append(f"final: evidência ausente: {nome}")
+        for relativo in PRELIMINARES:
+            arquivo = raiz / relativo
+            marcas = RASCUNHO.findall(arquivo.read_text()) if arquivo.is_file() else []
+            for marca in sorted({m.lower() for m in marcas}):
+                erros.append(f"final: texto preliminar em {relativo}: {marca}")
         texto = documento.read_text() if documento.is_file() else ""
         if not re.search(r"\|[^|\n]+\|\s*RM\d+\s*\|", texto):
             erros.append("final: identificação dos participantes ausente")

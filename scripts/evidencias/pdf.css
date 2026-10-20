@@ -14,7 +14,7 @@ p, li { orphans: 3; widows: 3; }
 a { color: #14566b; text-decoration: none; overflow-wrap: anywhere; }
 table { display: table; width: 100%; border-collapse: collapse; font-size: 9pt; }
 th, td { padding: 4pt; vertical-align: top; border-bottom: 1px solid #ddd; overflow-wrap: anywhere; }
-th { text-align: left; background: #e9f0f3; }
+th { text-align: left; background: #e9f0f3; overflow-wrap: normal; }
 tr { break-inside: avoid; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 code { font-size: .9em; }

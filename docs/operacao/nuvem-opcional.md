@@ -2,20 +2,18 @@
 
 > [↑ Raiz do projeto](../../README.md)
 
-Nada deste documento faz parte do estado entregue da fase 4. O deploy automatizado da fase é o kind efêmero do runner: o job `deploy-kind` do CD do OS Service sobe a plataforma e os três serviços num cluster que some com o job e valida o deploy com o smoke de cada namespace e o E2E da saga ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). O enunciado pede deploy automatizado em Kubernetes e não cita nuvem, e a infraestrutura AWS da fase 3 já foi desmontada.
+Nada deste documento faz parte do estado entregue da fase 4. O deploy automatizado da fase é o kind efêmero do runner: o job `deploy-kind` do CD de cada serviço sobe a plataforma e os três serviços num cluster que some com o job e valida o deploy com o smoke de cada namespace e o E2E da saga ([ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). O enunciado pede deploy automatizado em Kubernetes e não cita nuvem, e a infraestrutura AWS da fase 3 já foi desmontada.
 
 Para o caso de a avaliação pedir um ambiente que fique de pé, o CD tem um gancho neutro de provedor, desligado: o job `deploy-remote`, que chama o [`scripts/ci/deploy-remoto.sh`](../../scripts/ci/deploy-remoto.sh) deste repositório. Este documento diz o que o gancho faz, o que o dono do ambiente teria de criar para ligá-lo e traz duas receitas de cluster. As receitas não foram executadas nesta fase, e cada uma abre com esse aviso.
 
 ## Estado entregue
 
-Conferido em 18/10/2026:
+Conferido em 20/10/2026:
 
-- Na `main` dos serviços, só o OS Service tem `cd.yml`; o Billing e a Execução têm `ci.yml` e `security.yml`.
+- Os três serviços têm `cd.yml` na `main`, e cada um chama o [`cd-servico.yml`](../../.github/workflows/cd-servico.yml) deste repositório no commit `3f7cca2eb555a038b0d2780058ef0e692f93ee8a`.
 - Nenhum dos quatro repositórios da fase 4 tem variável de Actions. As da organização só um administrador lista.
-- No último CD do OS Service na `main` ([run 38837346818](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/38837346818), 15/10/2026), o `deploy-remote` ficou de fora e o `remote-skipped` passou: `DEPLOY_REMOTO_HABILITADO` não era `true` em nível nenhum.
-- O job `deploy-remote` do `cd.yml` do OS Service não declara segredo, `environment` nem `id-token`, e o arquivo não tem credencial de provedor.
-
-O [`cd-servico.yml`](../../.github/workflows/cd-servico.yml) agora oferece o mesmo gancho aos três serviços, sem ligar o remoto. Os callers precisam migrar para o SHA integrado dele. O protótipo do OS descrito no snapshot acima permanece até essa migração.
+- No último CD da `main` de cada serviço ([OS](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39357871773), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39358245264) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39357862805), 20/10/2026), o `deploy-remote` ficou de fora e o `remote-skipped` passou: `DEPLOY_REMOTO_HABILITADO` não era `true` em nível nenhum.
+- O job `deploy-remote` do `cd-servico.yml` não declara segredo, `environment` nem `id-token`, e o arquivo não tem credencial de provedor.
 
 ## O que o gancho faz
 
