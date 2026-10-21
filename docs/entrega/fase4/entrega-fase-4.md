@@ -732,7 +732,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RF-031 | Orçamento para aprovação | BDD: orçamento de R$ 210,00 e e-mail com o link |
 | RF-032 | Registro e verificação do pagamento | BDD: confirmado, recusado e estornado |
 | RF-033 | Status após o pagamento | BDD e Newman |
-| RF-034 | Mercado Pago | contrato do adapter ([Billing #17](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/17)); sandbox real pendente |
+| RF-034 | Mercado Pago | adapter do Mercado Pago com teste de contrato ([Billing #2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/2) e [Billing #9](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/9); [`test_mercadopago.py`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/unitarios/test_mercadopago.py)); sandbox real pendente |
 | RF-035 | Fila de execução | BDD: a OS só entra na fila depois do pagamento |
 | RF-036 | Status no diagnóstico e no reparo | BDD: diagnóstico, execução e finalização |
 | RF-037 | Finalização ao OS Service | BDD: baixa do estoque e saga concluída |
