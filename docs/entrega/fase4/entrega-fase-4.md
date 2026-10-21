@@ -330,7 +330,7 @@ sequenceDiagram
         Note over OS,BI: T3 e T4: orçamento e decisão do cliente
         OS-)BI: GerarOrcamento
         BI-)OS: OrcamentoGerado
-        Note over OS,EX: OS AGUARDANDO_APROVACAO, e-mail com link_decisao pela tabela de notificações
+        Note over OS,BI: OS AGUARDANDO_APROVACAO, e-mail com link_decisao pela tabela de notificações
         CL->>BI: POST /api/v1/publico/orcamentos/{token}/decisao (aprova)
         BI-)OS: OrcamentoAprovado
     end
@@ -349,7 +349,7 @@ sequenceDiagram
         MP->>BI: POST /api/v1/webhooks/mercadopago (x-signature)
         BI->>MP: GET /v1/payments/{id}
         MP-->>BI: status approved
-        Note over BI,MP: sem webhook, a conciliação do prazos acha o pagamento em até 30 s
+        Note over EX,MP: sem webhook, a conciliação do prazos acha o pagamento em até 30 s
         BI-)OS: PagamentoConfirmado
         Note over OS: OS AGUARDANDO_EXECUCAO
     end
@@ -360,7 +360,7 @@ sequenceDiagram
         EX-)OS: ExecucaoAgendada
         ME->>EX: POST /api/v1/execucoes/{ordem_id}/inicio
         EX-)OS: ExecucaoIniciada
-        Note over OS,EX: pivot: OS EM_EXECUCAO, cancelamento passa a responder 409
+        Note over OS,BI: pivot: OS EM_EXECUCAO, cancelamento passa a responder 409
         ME->>EX: POST /api/v1/execucoes/{ordem_id}/finalizacao
         EX->>EX: baixa das peças reservadas
         EX-)OS: ExecucaoFinalizada
@@ -394,7 +394,7 @@ sequenceDiagram
         BI-)OS: OrcamentoExpirado
     end
     OS->>OS: saga COMPENSANDO, plano com DescartarDiagnostico
-    Note over OS,EX: orçamento já encerrado pelo Billing: sem CancelarOrcamento
+    Note over BI,EX: orçamento já encerrado pelo Billing: sem CancelarOrcamento
     OS-)EX: DescartarDiagnostico
     EX-)OS: DiagnosticoDescartado
     OS->>OS: OS CANCELADA com motivo, saga COMPENSADA, e-mail ao cliente
