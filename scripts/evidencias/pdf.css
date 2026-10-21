@@ -1,36 +1,58 @@
-/* Receita A4 da fase 3, com página de arquitetura e índice anexo. */
-@page {
-  size: A4;
-  margin: 18mm;
-  @bottom-center { content: counter(page); font-size: 9pt; color: #555; }
-}
-html { color: #182632; font-family: sans-serif; }
-body { margin: 0; max-width: none; font-size: 10.5pt; line-height: 1.4; }
-h1 { font-size: 21pt; bookmark-level: 1; }
-h2 { font-size: 14pt; margin-top: 1.2em; bookmark-level: 2; }
-h3 { font-size: 12pt; bookmark-level: 3; }
-h1, h2, h3 { break-after: avoid; color: #12394b; }
-p, li { orphans: 3; widows: 3; }
-a { color: #14566b; text-decoration: none; overflow-wrap: anywhere; }
+/* Receita da fase 3 (scripts/build-entrega-pdf.sh do p3) sobre o CSS padrão do
+   pandoc: PT Serif, corpo de 36em, A4 com número no rodapé e capa sem número. */
+html { font-family: "PT Serif", serif; }
+/* display:table anula o "table { display:block }" do CSS padrão do pandoc,
+   feito para rolar a tabela na tela. Sem quebra forçada na célula, a largura
+   mínima de cada coluna é a da maior palavra, e o código quebra nos <wbr>. */
 table { display: table; width: 100%; border-collapse: collapse; font-size: 9pt; }
-th, td { padding: 4pt; vertical-align: top; border-bottom: 1px solid #ddd; overflow-wrap: anywhere; }
-th { text-align: left; background: #e9f0f3; overflow-wrap: normal; }
+th, td { padding: 3pt 5pt; vertical-align: top; overflow-wrap: normal; hyphens: manual; }
+th { text-align: left; }
 tr { break-inside: avoid; }
-pre { white-space: pre-wrap; overflow-wrap: anywhere; }
-code { font-size: .9em; }
+/* Referência interna numa tabela (o índice dos artefatos, a rastreabilidade)
+   leva a página do destino: "4.1, p. 9". */
+td a[href^="#"]::after { content: ", p. " target-counter(attr(href), page); }
+img { max-width: 100%; }
+pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8.5pt; }
+@page { size: A4; @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
+@page :first { @bottom-center { content: none; } }
+h1 { bookmark-level: 1; }
+h2 { bookmark-level: 2; }
+h3 { bookmark-level: 3; }
+h1, h2, h3 { break-after: avoid; }
+/* Documento e anexos (h1) começam em página nova. */
+h1 { break-before: page; }
+
+/* Capa ABNT, em página própria. */
+.capa { text-align: center; min-height: 23cm; display: flex; flex-direction: column;
+        justify-content: space-between; break-after: page; }
+.capa .logo { width: 4.5cm; margin: 0 auto 0.8cm auto; display: block; }
+.capa .titulo { font-size: 26pt; font-weight: bold; margin: 0.4cm 0; }
+.capa .subtitulo { font-size: 15pt; font-weight: bold; margin: 0.2cm 0; }
+.capa .autores p { margin: 0.15cm 0; }
+
+/* Sumário gerado pelo pandoc (--toc), movido para depois da capa. */
 #TOC { break-after: page; }
 #TOC ul { list-style: none; padding-left: 0; }
-#TOC ul ul { padding-left: 1em; }
-#TOC li { margin: 4pt 0; }
+#TOC ul ul { padding-left: 1.2em; }
+#TOC li { margin: 3pt 0; }
+#TOC a { text-decoration: none; color: inherit; }
 #TOC a::after { content: leader('.') target-counter(attr(href), page); }
-.arquitetura { break-before: page; break-after: page; }
-.diagrama { display: block; max-width: 100%; max-height: 195mm; margin: 5mm auto 0; }
-/* Galeria de evidências: imagem, legenda e linha de fonte ficam juntas, duas por página. */
+
+/* Diagramas Mermaid no fluxo do texto, sem partir a figura. O corpo do pandoc
+   tem 36em; a div usa a largura da página. O largo e denso (pdf.largo) vai
+   para uma página paisagem própria, onde a letra sai até 1,5 vez maior. */
+.diagrama { break-inside: avoid; width: 17cm; margin-left: -1.3cm; }
+.diagrama img { display: block; margin: 0 auto; max-width: 100%; max-height: 19cm; }
+@page paisagem { size: A4 landscape; margin: 1.2cm;
+                 @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
+.paisagem { page: paisagem; break-before: page; break-after: page; width: 26cm; margin-left: -5.4cm; }
+.paisagem img { max-height: 17cm; }
+.legenda { font-style: italic; font-size: 9.5pt; text-align: center; margin-top: 3mm; }
+
+/* Galeria de evidências: imagem, legenda e linha de fonte juntas, duas por
+   página, inclusive as telas altas do Swagger. */
 figure { margin: 4mm 0 0; break-inside: avoid; break-after: avoid; }
-figure img { display: block; max-width: 100%; max-height: 108mm; margin: 0 auto; border: 1px solid #c9d3d8; }
-/* As telas do Swagger são altas: uma por página, na largura toda. */
-figure img[src*="swagger-"] { max-height: 205mm; }
-figcaption { margin-top: 2mm; font-size: 9.5pt; }
+figure img { display: block; max-width: 100%; max-height: 88mm; margin: 0 auto; border: 1px solid #c9d3d8; }
+figcaption { margin-top: 2mm; font-size: 9.5pt; font-style: italic; }
 figure + p { margin: 1mm 0 4mm; font-size: 8.5pt; color: #555; }
-.indice { break-before: page; }
-.indice h1 { font-size: 18pt; }
+

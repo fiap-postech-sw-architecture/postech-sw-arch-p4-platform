@@ -15,10 +15,10 @@ Revisão de 20/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais
 
 CD da `main` aprovado nos quatro repositórios:
 
-- OS Service: [run 39357871773](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39357871773), em `ffcc2c1`.
-- Billing: [run 39358245264](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39358245264), em `f99e164`.
-- Execução: [run 39357862805](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39357862805), em `a1ede85`.
-- Plataforma: [run 39418143511](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39418143511), em `e74e41c`.
+- OS Service: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), em `3ce582b`.
+- Billing: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), em `76b5f9b`.
+- Execução: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), em `5b1bef4`.
+- Plataforma: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), em `d703200`.
 
 Cada CD de serviço roda os testes com o gate de cobertura de 95%, o SonarQube, a imagem, o kind e o E2E. A cobertura por camada está no [registro de cobertura](evidencias/coverage.md). Cada alteração posterior exige os mesmos gates e a atualização desta lista e do registro de cobertura antes do congelamento.
 

@@ -199,9 +199,25 @@ def test_final_confere_documento_e_indice(pacote: Path) -> None:
     assert "final: texto preliminar em INDICE-DA-ENTREGA.md: pendente" in erros
 
 
+def test_final_ignora_bloco_de_codigo_e_acusa_o_texto_entre_blocos(
+    pacote: Path,
+) -> None:
+    # Os diagramas da RFC copiados no documento trazem etapas e situações.
+    (pacote / "docs/entrega/fase4/entrega-fase-4.md").write_text(
+        "```mermaid\nstateDiagram-v2\n  AGUARDANDO_DECISAO --> X\n```\n"
+        "Captura pendente.\n"
+        '```mermaid\nerDiagram\n  n { varchar situacao "pendente ou dead" }\n```\n'
+    )
+    erros = [e for e in verificar(pacote, final=True) if "texto preliminar" in e]
+    assert erros == [
+        "final: texto preliminar em docs/entrega/fase4/entrega-fase-4.md: pendente"
+    ]
+
+
 def test_final_sem_marca_preliminar_nao_acusa_texto(pacote: Path) -> None:
     (pacote / "docs/entrega/fase4/entrega-fase-4.md").write_text(
         "| João | RM123456 |\nEnsaio local de 19/10 com 14 cenários.\n"
         "Pipeline independente de CI/CD; comando para coletar o snapshot.\n"
+        "Etapa `AGUARDANDO_DECISAO`; métrica `outbox_pendentes`.\n"
     )
     assert not any("texto preliminar" in e for e in verificar(pacote, final=True))

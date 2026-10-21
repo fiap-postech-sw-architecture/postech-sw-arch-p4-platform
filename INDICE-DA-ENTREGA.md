@@ -6,7 +6,7 @@ Versão preliminar. Os links de código apontam para `main`; a tag `entrega-fase
 
 ## Participantes e vídeo
 
-Integrantes do grupo 158, turma 15SOAT: João Amaral, Allan Aurélio, Carlos Silva, Guilherme Sousa e Nicolas Gerbi (RM e Discord na [seção 1 do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#1-participantes)). O link do vídeo aguarda a gravação. Esta versão não serve para submissão no portal.
+Integrantes do grupo 158, turma 15SOAT: João Amaral, Allan Aurélio, Carlos Silva, Guilherme Sousa e Nicolas Gerbi (RM e Discord na [seção 1 do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#1-identificação-do-grupo)). O link do vídeo aguarda a gravação. Esta versão não serve para submissão no portal.
 
 ## Repositórios
 
@@ -40,7 +40,7 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | CPF e CNPJ validados por módulo 11 | [CPF](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/src/compartilhado/dominio/cpf.py) e [CNPJ](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/src/compartilhado/dominio/cnpj.py) no OS Service; [cenário `@validacao` do BDD](e2e/features/saga_atendimento.feature#L102) |
 | Todo commit por pull request | [Proteção da `main` e origem dos commits](docs/entrega/fase4/evidencias/protecao-da-main.md) |
 | Dashboards de negócio em JSON separado e documentado, com volume diário de OS e tempo médio por status | [JSON do atendimento](observabilidade/dashboards/pytstop-negocio-atendimento.json) e [documentação painel a painel](observabilidade/negocio.md) |
-| Índice único dos artefatos | Este índice, que também fecha o PDF |
+| Índice único dos artefatos | Este índice e o [índice dos artefatos](docs/entrega/fase4/entrega-fase-4.md#índice-dos-artefatos) que abre o PDF, com a seção e a página de cada um |
 | Painéis de taxa de sucesso, latência e erros | [JSON dos serviços](observabilidade/dashboards/pytstop-servicos.json), com taxa de sucesso, latência p95 e erro 5xx por serviço ([como ler](observabilidade/README.md#dashboard-pytstop---serviços-pytstop-servicos)) |
 
 ## Dashboards
@@ -57,10 +57,10 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | Bancos | [bancos](observabilidade/dashboards/pytstop-bancos.json) | [painéis técnicos](observabilidade/README.md) |
 | Plataforma: broker, borda e alvos | [plataforma](observabilidade/dashboards/pytstop-plataforma.json) | [painéis técnicos](observabilidade/README.md) |
 
-O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As capturas do CD, do trace no Jaeger, do Swagger, do Newman e do ZAP estão na [seção 9 do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#9-evidências-visuais). As nove capturas finais, com três dias de histórico, continuam pendentes, conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
+O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As capturas do CD, do trace no Jaeger, do Swagger, do Newman e do ZAP estão no [Anexo B do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#anexo-b--evidências-visuais). As nove capturas finais, com três dias de histórico, continuam pendentes, conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
 
 ## Conferência
 
 A [auditoria pré-entrega e dívida técnica](docs/entrega/fase4/auditoria-e-divida-tecnica.md) separa o que já está provado do que falta provar.
 
-Etapas que dependem do grupo: identificação dos participantes, teste real na sandbox do Mercado Pago, gravação e publicação do vídeo e submissão do PDF no portal.
+Etapas que dependem do grupo: teste real na sandbox do Mercado Pago, gravação e publicação do vídeo e submissão do PDF no portal.
