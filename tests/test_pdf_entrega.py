@@ -3,6 +3,7 @@ com página paisagem só para o diagrama largo."""
 
 from __future__ import annotations
 
+import math
 import re
 from pathlib import Path
 
@@ -77,18 +78,47 @@ def test_os_diagramas_do_documento_sao_os_da_rfc_e_o_geral_o_do_readme() -> None
     )
 
 
+def _pixels(css: float) -> int:
+    """Lado do PNG de um diagrama de `css` px de CSS, na escala do gerador."""
+    return round(css * pdf.ESCALA)
+
+
+# As fronteiras usam as contas do largo(): `ceil` dá a menor largura que passa
+# em cada teste, sem depender de como o ponto flutuante arredonda 1,4 x altura.
+REDUZIDO = math.ceil(0.9 * pdf.LARGURA_MERMAID * pdf.ESCALA)
+ALTURA_NO_LIMITE = _pixels(1080)
+LARGURA_NO_LIMITE = math.ceil(1.4 * ALTURA_NO_LIMITE)
+
+
+# Os cinco primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584
+# é a largura a que o Mermaid reduz o diagrama que não cabe na página.
 @pytest.mark.parametrize(
     ("largura", "altura", "deitado"),
     [
-        pytest.param(1980, 1358, True, id="sequencia-larga-reduzida"),
-        pytest.param(1980, 658, True, id="er-largo-e-baixo"),
-        pytest.param(1980, 1568, False, id="componentes-quase-quadrado"),
-        pytest.param(1980, 2506, False, id="caminho-feliz-alto"),
-        pytest.param(1708, 993, False, id="largo-que-cabe-no-retrato"),
-        pytest.param(1800, 600, True, id="no-limite-do-reduzido"),
-        pytest.param(1799, 600, False, id="um-pixel-abaixo-do-reduzido"),
-        pytest.param(1890, 1350, True, id="no-limite-da-proporcao"),
-        pytest.param(1890, 1351, False, id="um-pixel-acima-da-proporcao"),
+        pytest.param(
+            _pixels(1584), _pixels(1086.4), True, id="sequencia-larga-reduzida"
+        ),
+        pytest.param(_pixels(1584), _pixels(526.4), True, id="er-largo-e-baixo"),
+        pytest.param(
+            _pixels(1584), _pixels(1254.4), False, id="componentes-quase-quadrado"
+        ),
+        pytest.param(_pixels(1584), _pixels(2004.8), False, id="caminho-feliz-alto"),
+        pytest.param(
+            _pixels(1366.4), _pixels(794.4), False, id="largo-que-cabe-no-retrato"
+        ),
+        pytest.param(REDUZIDO, _pixels(480), True, id="no-limite-do-reduzido"),
+        pytest.param(
+            REDUZIDO - 1, _pixels(480), False, id="um-pixel-abaixo-do-reduzido"
+        ),
+        pytest.param(
+            LARGURA_NO_LIMITE, ALTURA_NO_LIMITE, True, id="no-limite-da-proporcao"
+        ),
+        pytest.param(
+            LARGURA_NO_LIMITE,
+            ALTURA_NO_LIMITE + 1,
+            False,
+            id="um-pixel-acima-da-proporcao",
+        ),
     ],
 )
 def test_so_o_diagrama_reduzido_e_bem_mais_largo_que_alto_vai_deitado(
