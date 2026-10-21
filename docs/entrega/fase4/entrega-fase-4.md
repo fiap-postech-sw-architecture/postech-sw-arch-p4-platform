@@ -1,4 +1,4 @@
-# Documento de Entrega — Tech Challenge Fase 4
+# Documento de Entrega
 
 > Versão de 20/10/2026, sobre a `main` dos quatro repositórios nessa data. O vídeo, a prova na sandbox real do Mercado Pago, as capturas dos dashboards com três dias de histórico e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
 
@@ -8,7 +8,7 @@ Documento de entrega da fase 4 do Tech Challenge da Pós-Graduação em Arquitet
 
 Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega; o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase, sem alteração. Os números de testes, cobertura, scans e deploy vêm dos runs do CD na `main` de 20/10/2026 listados na [seção 2](#2-repositórios-e-estado-do-cicd).
 
-Siglas: ADR (registro de decisão de arquitetura), AMQP (protocolo de mensagens do RabbitMQ), BDD (testes de comportamento em Gherkin), CI/CD (integração e entrega contínuas), DLQ (fila de mensagens mortas), E2E (teste de ponta a ponta), GHCR (registro de imagens do GitHub), JWKS (chaves públicas do JWT), JWT (token assinado), kind (Kubernetes em contêineres Docker), LGPD (Lei Geral de Proteção de Dados), PR (pull request), RF, RNF e RN (requisito funcional, não funcional e regra de negócio), RFC (proposta técnica) e SBOM (lista dos componentes de uma imagem).
+Siglas: ACID (as garantias de uma transação de banco), ADR (registro de decisão de arquitetura), AMQP (protocolo de mensagens do RabbitMQ), BDD (testes de comportamento em Gherkin), CI e CD (integração e entrega contínuas), CVE (vulnerabilidade catalogada), DLQ (fila de mensagens mortas), E2E (teste de ponta a ponta), GHCR (registro de imagens do GitHub), HMAC (assinatura com chave secreta), JWKS (chaves públicas do JWT), JWT (token assinado), kind (Kubernetes em contêineres Docker), LGPD (Lei Geral de Proteção de Dados), PR (pull request), RF, RNF e RN (requisito funcional, não funcional e regra de negócio), RFC (proposta técnica), SAST e SCA (análise de segurança do código e das dependências), SBOM e SPDX (lista dos componentes de uma imagem e o formato dela), TLS (criptografia do tráfego), TTL (prazo de vida de um registro) e ZAP (varredura de segurança da OWASP).
 
 ## Índice dos artefatos
 
@@ -215,7 +215,7 @@ O enunciado sugere três serviços: ordens de serviço, orçamento e pagamento, 
 | Billing | Preços de serviços e peças; orçamento com preços congelados, link de decisão e validade; pagamento, conciliação, cancelamento e estorno | Mercado Pago (Checkout Pro, consulta, estorno e webhook); atende a Execução por REST |
 | Execução | Fila de diagnóstico; reserva, liberação e baixa de peças; fila de execução e estoque físico | Valida preços no Billing por REST |
 
-Há um desvio deliberado do enunciado, que põe o envio do orçamento no Billing: o Billing gera o orçamento e o link de decisão, e o e-mail sai do OS Service, dono do contato, para que nome, documento e contato do cliente não saiam dele. O código partiu do commit `08dcffe` da fase 3, recortado por contexto; a base técnica (entidades, `Dinheiro`, unidade de trabalho, outbox, logging e métricas) foi copiada em cada serviço, sem pacote compartilhado, e o teste de contrato pega a divergência que quebraria a integração.
+Entre os exemplos de divisão, o enunciado põe o envio do orçamento no Billing; aqui o Billing gera o orçamento e o link de decisão, e o e-mail sai do OS Service, dono do contato, para que nome, documento e contato do cliente não saiam dele. O código partiu do commit `08dcffe` da fase 3, recortado por contexto; a base técnica (entidades, `Dinheiro`, unidade de trabalho, outbox, logging e métricas) foi copiada em cada serviço, sem pacote compartilhado, e o teste de contrato pega a divergência que quebraria a integração.
 
 | Alternativa descartada | Por que não |
 |---|---|
@@ -279,17 +279,17 @@ Há uma instância da saga por OS (`saga_id = ordem_id`, que também é o `corre
 
 A reserva (T5) vem antes do pagamento (T6), como no exemplo da Aula 01 de SAGA Pattern, e a OS só entra na fila de execução (T7) com o pagamento confirmado (RN-027): a falta de peça aparece antes da cobrança. O pivot é o início da execução física (T8): depois que o mecânico começa a desmontar o carro, o trabalho não se desfaz por mensagem, e o cancelamento passa a responder 409 `TRANSICAO_STATUS_INVALIDA` (RN-029). Até ali tudo compensa, inclusive o pagamento, por estorno.
 
-As compensações rodam em sequência, cada uma esperando a resposta da anterior, na ordem inversa dos passos. O plano inclui os passos concluídos e o passo em voo, cujo comando saiu e ainda não teve resposta; o passo que falhou por regra de negócio fica de fora, porque o participante já o encerrou. Todo plano termina com a OS `CANCELADA` e a saga `COMPENSADA`.
+As compensações rodam em sequência, cada uma esperando a resposta da anterior, na ordem inversa dos passos. O plano inclui os passos concluídos e o passo em andamento, cujo comando saiu e ainda não teve resposta; o passo que falhou por regra de negócio fica de fora, porque o participante já o encerrou. Todo plano termina com a OS `CANCELADA` e a saga `COMPENSADA`.
 
 | Etapa da saga | Gatilho | Compensações, em ordem |
 |---|---|---|
 | `AGUARDANDO_DIAGNOSTICO` | cancelamento | `DescartarDiagnostico` |
 | `AGUARDANDO_ORCAMENTO` | `GeracaoDeOrcamentoFalhou` | `DescartarDiagnostico` |
-| `AGUARDANDO_ORCAMENTO` | cancelamento ou prazo técnico esgotado, com `GerarOrcamento` em voo | `CancelarOrcamento`, `DescartarDiagnostico` |
+| `AGUARDANDO_ORCAMENTO` | cancelamento ou prazo técnico esgotado, com `GerarOrcamento` em andamento | `CancelarOrcamento`, `DescartarDiagnostico` |
 | `AGUARDANDO_DECISAO` | `OrcamentoRecusado` ou `OrcamentoExpirado` | `DescartarDiagnostico` |
 | `AGUARDANDO_DECISAO` | cancelamento | `CancelarOrcamento`, `DescartarDiagnostico` |
 | `AGUARDANDO_RESERVA` | `ReservaDePecasFalhou` | `CancelarOrcamento`, `DescartarDiagnostico` |
-| `AGUARDANDO_RESERVA` | cancelamento ou prazo técnico esgotado, com `ReservarPecas` em voo | `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` |
+| `AGUARDANDO_RESERVA` | cancelamento ou prazo técnico esgotado, com `ReservarPecas` em andamento | `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` |
 | `AGUARDANDO_PAGAMENTO` | `PagamentoRecusado` ou `PagamentoExpirado` | `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` |
 | `AGUARDANDO_PAGAMENTO` | cancelamento ou prazo técnico esgotado | `EstornarPagamento`, `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` |
 | `AGUARDANDO_AGENDAMENTO` e `AGUARDANDO_INICIO` | cancelamento; no agendamento, também o prazo técnico esgotado | `CancelarExecucao`, `EstornarPagamento`, `LiberarReserva`, `CancelarOrcamento`, `DescartarDiagnostico` |
@@ -469,13 +469,13 @@ sequenceDiagram
 
 **Pagamento recusado ou vencido.** Por padrão, na terceira recusa ou em 60 minutos. Nada foi cobrado, então a saga segue o diagrama do cancelamento com estorno a partir do passo 12, `LiberarReserva`, sem estorno (RN-025), como diz a [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências); o cenário BDD do pagamento recusado confere a ordem ([seção 8](#8-testes-e-qualidade)).
 
-### 6.5 Idempotência, retentativas e prazos
+### 6.5 Idempotência, novas tentativas e prazos
 
 **Outbox e consumidor idempotente.** Nos três serviços, a mensagem de saída é gravada na transação do efeito, e o relay só a marca como entregue depois da confirmação do broker; com o broker fora, as mensagens esperam na outbox. O consumidor grava o `id` da mensagem em `mensagens_processadas` na mesma transação do efeito: evento repetido não repete efeito, e comando repetido, pelo `id` ou pela chave de negócio (uma reserva por OS, uma cobrança por orçamento), republica a resposta registrada (RN-028).
 
 **Isolamento.** A saga não tem o "I" do ACID, e o ADR-035 aplica as contramedidas da Aula 03 de SAGA Pattern: cada transição relê a OS e a instância e grava conferindo a versão (lock otimista), o estorno só sai depois de `ExecucaoCancelada`, e a compensação que chega antes do comando original cria o registro já no estado final.
 
-**Retentativas, DLQ e prazos.** Erro transitório volta à fila pelas filas de retry de 1, 5, 15, 60 e 300 s; a falha seguinte à quinta, ou um erro permanente, manda a mensagem para a DLQ, que dispara o alerta. O orquestrador espera 120 s pela resposta a cada comando e reenvia até 5 vezes; esgotados os reenvios, a saga compensa. Uma compensação que também esgota os reenvios, ou um estorno recusado, leva a saga a `FALHA_NA_COMPENSACAO`, e o operador retoma pelo [runbook da saga](../../operacao/runbook-saga.md). Os prazos e os parâmetros estão na [RFC-004, seções 4.6 e 10.3](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#103-parâmetros-e-variáveis-de-ambiente).
+**Novas tentativas, DLQ e prazos.** Erro transitório volta à fila pelas filas de retry de 1, 5, 15, 60 e 300 s; a falha seguinte à quinta, ou um erro permanente, manda a mensagem para a DLQ, que dispara o alerta. O orquestrador espera 120 s pela resposta a cada comando e reenvia até 5 vezes; esgotados os reenvios, a saga compensa. Uma compensação que também esgota os reenvios, ou um estorno recusado, leva a saga a `FALHA_NA_COMPENSACAO`, e o operador retoma pelo [runbook da saga](../../operacao/runbook-saga.md). Os prazos e os parâmetros estão na [RFC-004, seções 4.6 e 10.3](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#103-parâmetros-e-variáveis-de-ambiente).
 
 ## 7. Modelo de dados
 
@@ -720,7 +720,7 @@ A segurança é verificada no CI de cada serviço, em todo PR, a cada push na `m
 - **Bancos e broker.** Cada PostgreSQL tem um papel por uso, o MongoDB separa o usuário do serviço e o do exporter, e o RabbitMQ tem um usuário por serviço.
 - **Segredos e LGPD.** Nenhum segredo de aplicação fica no GitHub: senhas e chaves nascem no cluster, no primeiro deploy. O documento do cliente fica cifrado, as mensagens não levam nome, documento nem contato, e a eliminação de dados anonimiza a placa também na Execução. As APIs rodam sem root e com a raiz somente leitura.
 
-Riscos aceitos: tráfego interno do cluster sem TLS, contido pela NetworkPolicy; token revogado ainda válido por até 15 minutos no Billing e na Execução; Mailpit sem autenticação, só com dados fictícios; controller do Kong com leitura dos Secrets dos quatro namespaces; e imagens da plataforma herdadas da fase 3 com CVE sem correção na própria linha, que rodam só dentro do cluster. O tratamento está no [README do `platform`](../../../README.md#decisões-e-limites) e na [RFC-004, seção 11](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#11-riscos-limitações-e-pontos-em-aberto).
+Riscos aceitos: tráfego interno do cluster sem TLS, contido pela NetworkPolicy; token revogado ainda válido por até 15 minutos no Billing e na Execução; Mailpit sem autenticação, só com dados fictícios; controller do Kong com leitura dos Secrets dos quatro namespaces; e imagens da plataforma herdadas da fase 3 (Prometheus 2.54.1, Loki 2.9.8 e kube-state-metrics 2.13.0) com CVE HIGH e CRITICAL sem correção na própria linha (96 e 6, 53 e 3 e 44 e 1 no trivy de outubro), que rodam só dentro do cluster, sem Ingress. O tratamento está no [README do `platform`](../../../README.md#decisões-e-limites) e na [RFC-004, seção 11](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#11-riscos-limitações-e-pontos-em-aberto).
 
 ## 11. Observabilidade
 
@@ -788,7 +788,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-052 | Swagger ou Postman | OpenAPI e collection por serviço; Newman no CD |
 | RNF-053 | Vídeo de até 15 minutos | pendente: gravação ([seção 3](#3-link-do-vídeo)) |
 | RNF-054 | PDF com os seis itens | este documento; submissão pendente |
-| RNF-055 | Timeout, retry, DLQ e circuit breaker | BDD de resiliência ([seção 6.5](#65-idempotência-retentativas-e-prazos)) |
+| RNF-055 | Timeout, retry, DLQ e circuit breaker | BDD de resiliência ([seção 6.5](#65-idempotência-novas-tentativas-e-prazos)) |
 | RNF-056 | Rastreamento distribuído | trace nos três serviços ([Anexo B, B2](#b2--trace-da-saga-no-jaeger)); o do Mercado Pago pendente |
 | RN-023 | Compensação em qualquer etapa | plano de compensação ([seção 6.2](#62-passos-e-compensações)); quatro cenários BDD |
 | RN-024 | Orçamento recusado ou expirado | BDD: recusa pelo link e expiração |
