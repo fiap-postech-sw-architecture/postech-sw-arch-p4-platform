@@ -80,15 +80,15 @@ def test_os_diagramas_do_documento_sao_os_da_rfc_e_o_geral_o_do_readme() -> None
 @pytest.mark.parametrize(
     ("largura", "altura", "deitado"),
     [
-        pytest.param(3168, 2172, True, id="sequencia-larga-reduzida"),
-        pytest.param(3168, 1052, True, id="er-largo-e-baixo"),
-        pytest.param(3168, 2508, False, id="componentes-quase-quadrado"),
-        pytest.param(3168, 4010, False, id="caminho-feliz-alto"),
-        pytest.param(2732, 1588, False, id="largo-que-cabe-no-retrato"),
-        pytest.param(2880, 1000, True, id="no-limite-do-reduzido"),
-        pytest.param(2879, 1000, False, id="um-pixel-abaixo-do-reduzido"),
-        pytest.param(2940, 2100, True, id="no-limite-da-proporcao"),
-        pytest.param(2940, 2101, False, id="um-pixel-acima-da-proporcao"),
+        pytest.param(1980, 1358, True, id="sequencia-larga-reduzida"),
+        pytest.param(1980, 658, True, id="er-largo-e-baixo"),
+        pytest.param(1980, 1568, False, id="componentes-quase-quadrado"),
+        pytest.param(1980, 2506, False, id="caminho-feliz-alto"),
+        pytest.param(1708, 993, False, id="largo-que-cabe-no-retrato"),
+        pytest.param(1800, 600, True, id="no-limite-do-reduzido"),
+        pytest.param(1799, 600, False, id="um-pixel-abaixo-do-reduzido"),
+        pytest.param(1890, 1350, True, id="no-limite-da-proporcao"),
+        pytest.param(1890, 1351, False, id="um-pixel-acima-da-proporcao"),
     ],
 )
 def test_so_o_diagrama_reduzido_e_bem_mais_largo_que_alto_vai_deitado(
