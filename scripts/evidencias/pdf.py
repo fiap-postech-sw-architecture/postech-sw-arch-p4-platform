@@ -4,9 +4,9 @@ Adapta o scripts/build-entrega-pdf.sh da fase 3 e o gerar_pdf_entrega.py da
 skill entrega-tech-challenge: capa sem número de página, sumário logo depois
 dela, rodapé numerado, marcadores por título e links relativos trocados pelos
 do GitHub. Todo diagrama do documento é cópia literal de um da RFC-004 (o geral
-também está no README) e fica no fluxo do texto, na largura da página. O índice
-dos artefatos do documento dá a página de cada um. Pendências continuam
-visíveis no ensaio.
+também está no README) e fica no fluxo do texto, na largura da página; o largo
+e denso ganha página paisagem própria. O índice dos artefatos do documento dá a
+página de cada um. Pendências continuam visíveis no ensaio.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import itertools
 import json
 import re
 import shutil
+import struct
 
 # Executáveis resolvidos no PATH; argumentos separados, sem shell.
 import subprocess  # nosec B404
@@ -32,6 +33,10 @@ LOGO = Path("docs/entrega/fase4/logo-pytstop.png")
 MERMAID = re.compile(r"```mermaid\n(.*?)```", re.S)
 REPO = "fiap-postech-sw-architecture/postech-sw-arch-p4-platform"
 MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0"
+# Página do mermaid-cli (px de CSS) e pixels por px: o diagrama mais largo que
+# a página sai reduzido a ela, com 3.168 px, como os PNG da fase 3.
+LARGURA_MERMAID = 1600
+ESCALA = 2
 # Linha da tabela de participantes do documento: | Nome | RM123456 | Discord |
 PARTICIPANTE = re.compile(r"^\| ([^|\n]+?) \| (RM\d+) \|", re.M)
 # Pontos de quebra dentro de código: camelCase e depois de "_", "/" e ".".
@@ -78,6 +83,17 @@ def secao_da_rfc(rfc: str, bloco: str) -> str:
         raise ValueError("Mermaid divergente entre documento, RFC e README")
     titulos = re.findall(r"^#{2,4} (.+)$", rfc[:posicao], re.M)
     return titulos[-1].replace("`", "") if titulos else "RFC-004"
+
+
+def largo(largura: int, altura: int) -> bool:
+    """Diagrama que vai para a página paisagem: reduzido pelo Mermaid e deitado.
+
+    No retrato, o que o Mermaid reduziu à página dele sai com a letra menor. Na
+    paisagem, a letra cresce na proporção da largura sobre a altura, até 1,5
+    vez; abaixo de 1,4 o ganho não paga a página a mais.
+    """
+    reduzido = largura >= 0.9 * LARGURA_MERMAID * ESCALA
+    return reduzido and largura >= 1.4 * altura
 
 
 def capa(documento: str, logo: Path) -> str:
@@ -175,8 +191,8 @@ def main() -> int:
 
         def renderizar(match: re.Match[str]) -> str:
             # Weasyprint não pagina imagem: o max-height do CSS evita o corte
-            # no rodapé. Escala 1 dá cerca de 1.600 px de largura, o bastante
-            # para a impressão e para o zoom na tela.
+            # no rodapé. A escala 2 dá de 300 a 540 ppi na página, nítido no
+            # zoom; a letra impressa depende da largura que o diagrama ocupa.
             numero = next(numeros)
             fonte, imagem = (
                 tmp / f"diagrama-{numero}.mmd",
@@ -193,17 +209,19 @@ def main() -> int:
                     "-o",
                     str(imagem),
                     "-w",
-                    "1600",
+                    str(LARGURA_MERMAID),
                     "-s",
-                    "1",
+                    str(ESCALA),
                     "-b",
                     "white",
                 ]
             )
+            largura, altura = struct.unpack(">II", imagem.read_bytes()[16:24])
+            classe = "diagrama paisagem" if largo(largura, altura) else "diagrama"
             titulo = html.escape(secao_da_rfc(rfc, match.group(1)))
             legenda = f"Diagrama {numero} — RFC-004, {titulo}."
             return (
-                '<div class="diagrama">\n\n'
+                f'<div class="{classe}">\n\n'
                 f'<img src="{html.escape(str(imagem))}" alt="Diagrama {numero}"/>\n\n'
                 f'<p class="legenda">{legenda}</p>\n\n</div>\n'
             )

@@ -38,10 +38,15 @@ h1 { break-before: page; }
 #TOC a { text-decoration: none; color: inherit; }
 #TOC a::after { content: leader('.') target-counter(attr(href), page); }
 
-/* Diagramas Mermaid no fluxo do texto, sem partir a figura e sem página
-   paisagem. O corpo do pandoc tem 36em; a div usa a largura da página. */
+/* Diagramas Mermaid no fluxo do texto, sem partir a figura. O corpo do pandoc
+   tem 36em; a div usa a largura da página. O largo e denso (pdf.largo) vai
+   para uma página paisagem própria, onde a letra sai até 1,5 vez maior. */
 .diagrama { break-inside: avoid; width: 17cm; margin-left: -1.3cm; }
 .diagrama img { display: block; margin: 0 auto; max-width: 100%; max-height: 19cm; }
+@page paisagem { size: A4 landscape; margin: 1.2cm;
+                 @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
+.paisagem { page: paisagem; break-before: page; break-after: page; width: 26cm; margin-left: -5.4cm; }
+.paisagem img { max-height: 17cm; }
 .legenda { font-style: italic; font-size: 9.5pt; text-align: center; margin-top: 3mm; }
 
 /* Galeria de evidências: imagem, legenda e linha de fonte juntas, duas por

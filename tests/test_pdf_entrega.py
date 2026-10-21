@@ -1,11 +1,10 @@
-"""Garante links navegáveis, capa ABNT, sumário depois dela e diagramas da RFC."""
+"""Garante links navegáveis, capa ABNT, sumário depois dela e diagramas da RFC,
+com página paisagem só para o diagrama largo."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from pathlib import Path
+import re
+from pathlib import Path
 
 import pytest
 
@@ -66,6 +65,43 @@ def test_todo_diagrama_vem_da_rfc_e_o_geral_tambem_do_readme(
     raiz = _pacote(tmp_path, documento)
     with pytest.raises(ValueError, match="Mermaid divergente"):
         pdf.preparar(raiz, "grupo/repo", "main")
+
+
+def test_os_diagramas_do_documento_sao_os_da_rfc_e_o_geral_o_do_readme() -> None:
+    # O build do PDF faz a mesma conferência; aqui ela roda no CI, sem pandoc.
+    raiz = Path(pdf.__file__).resolve().parents[2]
+    pdf.conferir_diagramas(
+        (raiz / pdf.DOCUMENTO).read_text(),
+        (raiz / pdf.RFC).read_text(),
+        (raiz / "README.md").read_text(),
+    )
+
+
+@pytest.mark.parametrize(
+    ("largura", "altura", "deitado"),
+    [
+        pytest.param(3168, 2172, True, id="sequencia-larga-reduzida"),
+        pytest.param(3168, 1052, True, id="er-largo-e-baixo"),
+        pytest.param(3168, 2508, False, id="componentes-quase-quadrado"),
+        pytest.param(3168, 4010, False, id="caminho-feliz-alto"),
+        pytest.param(2732, 1588, False, id="largo-que-cabe-no-retrato"),
+        pytest.param(2880, 1000, True, id="no-limite-do-reduzido"),
+        pytest.param(2879, 1000, False, id="um-pixel-abaixo-do-reduzido"),
+        pytest.param(2940, 2100, True, id="no-limite-da-proporcao"),
+        pytest.param(2940, 2101, False, id="um-pixel-acima-da-proporcao"),
+    ],
+)
+def test_so_o_diagrama_reduzido_e_bem_mais_largo_que_alto_vai_deitado(
+    largura: int, altura: int, deitado: bool
+) -> None:
+    assert pdf.largo(largura, altura) is deitado
+
+
+def test_a_classe_paisagem_do_gerador_tem_pagina_deitada_no_css() -> None:
+    css = Path(pdf.__file__).with_name("pdf.css").read_text()
+
+    assert re.search(r"@page\s+paisagem\s*\{[^}]*size:\s*A4 landscape", css)
+    assert re.search(r"\.paisagem\s*\{[^}]*page:\s*paisagem", css)
 
 
 def test_legenda_traz_a_secao_da_rfc_que_contem_o_diagrama() -> None:
