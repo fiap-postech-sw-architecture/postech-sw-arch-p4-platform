@@ -85,15 +85,33 @@ Tabela gerada a partir do `coverage.xml` do [run 39235791515 do CI](https://gith
 
 ## SonarQube
 
-Cada CI sobe um SonarQube efêmero no runner, analisa o código com o `coverage.xml` do job `test` e reprova o run se o quality gate falhar. O gate versionado em `.sonar/quality-gate.json` é o mesmo nos três serviços: cobertura de pelo menos 80%, no máximo 3% de linhas duplicadas e nota A em confiabilidade, segurança e manutenibilidade. Resultado no último CD da `main` de cada serviço, tirado do log do job `ci / sonarqube`:
+Cada CI sobe um SonarQube efêmero no runner, analisa o código com o `coverage.xml` do job `test` e reprova o run se o quality gate falhar. O gate versionado em `.sonar/quality-gate.json` é o mesmo nos três serviços: cobertura de pelo menos 80%, no máximo 3% de linhas duplicadas e nota A em confiabilidade, segurança e manutenibilidade. Resultado no CD da `main` de 20/10/2026 de cada serviço, o que o documento de entrega cita: o gate e os arquivos indexados vêm do log do job `ci / sonarqube`, e as medidas, do artefato `sonarqube` do run, que expira em 90 dias.
 
-| Serviço | Run | Commit | Arquivos indexados | Quality gate |
-|---|---|---|---:|---|
-| OS Service | [39357871773](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39357871773) | `ffcc2c12645642410a748fa73a5c2a807c8a0a9b` | 352 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 02:24 UTC) |
-| Billing Service | [39358245264](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39358245264) | `f99e1646398f18b68e3e65b2633cea8b1976bac8` | 166 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 02:33 UTC) |
-| Execution Service | [39357862805](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39357862805) | `a1ede8551f50a34ac9228f36c38d5f1a6da6d581` | 186 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 02:20 UTC) |
+| Serviço | Run | Commit | Arquivos indexados | Quality gate | Linhas; cobertura | Bugs, vulnerabilidades e hotspots | Code smells |
+|---|---|---|---:|---|---|---|---:|
+| OS Service | [39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933) | `3ce582ba38aeb0b18a2de57adf58d05d514de95b` | 352 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 15:40 UTC) | 11.107; 97,2% | 0, 0 e 0 | 138 |
+| Billing Service | [39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713) | `76b5f9b59da4a6557de24ac08b1ee26920fdf27a` | 166 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 15:36 UTC) | 7.790; 98,8% | 0, 0 e 0 | 91 |
+| Execution Service | [39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419) | `5b1bef4738c728bfc4f34820ee55d0959fd0dcfb` | 186 | aprovado (`QUALITY GATE STATUS: PASSED`, 20/10/2026 15:37 UTC) | 6.077; 98,6% | 0, 0 e 0 | 18 |
 
-As medidas de cada análise (bugs, vulnerabilidades, code smells, duplicação e cobertura) ficam no summary do job e no artefato `sonarqube` do run, que expira em 90 dias.
+### Code smells por regra
+
+O artefato guarda só as medidas, e o log não lista os avisos. Para saber o que são os code smells, a análise foi refeita em 20/10/2026 numa máquina local, com as mesmas imagens do CI (`sonarqube:26.9.0.129388-community` e `sonarsource/sonar-scanner-cli:12.2.0.4256_8.1.0`, perfil padrão Sonar way), sobre os mesmos commits e sem o `coverage.xml`, que não muda a contagem. Deu os mesmos 138, 91 e 18 code smells e as mesmas linhas (11.107, 7.790 e 6.077), sem bug nem vulnerabilidade. Os nomes das regras são os da API do mesmo servidor.
+
+| Regra | O que pede | OS Service | Billing | Execução |
+|---|---|---:|---:|---:|
+| python:S5778 | uma só chamada dentro do bloco que testa a exceção (`pytest.raises`) | 125 | 76 | 13 |
+| python:S3415 | a mesma ordem dos argumentos nas asserções de um arquivo | 2 | 3 | 0 |
+| python:S7632 | comentário de supressão de aviso no formato certo | 0 | 5 | 1 |
+| python:S5886 | tipo de retorno igual ao da anotação | 4 | 0 | 1 |
+| python:S1192 | literal de texto sem repetição | 3 | 1 | 0 |
+| python:S1110 | sem par de parênteses redundante | 2 | 1 | 1 |
+| python:S3776 | complexidade cognitiva da função dentro do limite | 0 | 2 | 0 |
+| python:S1172 | sem parâmetro de função sem uso | 0 | 2 | 0 |
+| python:S8714 | asserção própria de exceção, em vez de `try`/`except` com `fail()` | 0 | 0 | 2 |
+| python:S107 | função sem parâmetros demais | 0 | 1 | 0 |
+| python:S8997 | o fixture `monkeypatch` para mudança temporária nos testes | 1 | 0 | 0 |
+| python:S1135 | acompanhar as marcas `TODO` | 1 | 0 | 0 |
+| Total | | 138 | 91 | 18 |
 
 ## Reprodução
 
