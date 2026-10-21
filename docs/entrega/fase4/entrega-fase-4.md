@@ -241,7 +241,7 @@ O enunciado pede banco próprio por serviço, com pelo menos um relacional e um 
 | Borda e REST | Kong 3.9.3 com o Ingress Controller 3.5.13; httpx com circuit breaker | gateway das aulas; uma chamada síncrona, protegida | [ADR-038](../../arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md) |
 | Identidade | JWT RS256 do OS Service, validado por JWKS | nenhum segredo compartilhado entre serviços | [ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md) |
 | Pagamento | Mercado Pago Checkout Pro; simulador no CI | exigido pelo enunciado | [ADR-040](../../arquitetura/adr/fase4/040-integracao-mercado-pago.md) |
-| Testes e qualidade | pytest, testcontainers, pytest-bdd 8, SonarQube 26.9 | pirâmide por serviço e BDD do fluxo completo | [ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md) |
+| Testes e qualidade | pytest, testcontainers, pytest-bdd (8.1 no `platform` e 9.0 no OS Service), SonarQube 26.9 | pirâmide por serviço e BDD do fluxo completo | [ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md) |
 | CI/CD | GitHub Actions, GHCR, Kustomize, kind com Kubernetes 1.35 | deploy automatizado sem credencial externa | [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) |
 | Observabilidade | OpenTelemetry, Jaeger 1.76.0, Prometheus 2.54.1, Grafana 11.1.0, Loki 2.9.8 | a stack da fase 3, nos três serviços | [ADR-043](../../arquitetura/adr/fase4/043-observabilidade-distribuida.md) |
 
@@ -654,16 +654,16 @@ O enunciado pede testes unitários em todos os serviços, ao menos um fluxo comp
 
 | Repositório | Testes no CD | Cobertura (gate) | SonarQube | Mutação | No README |
 |---|---|---|---|---|---|
-| OS Service | 10.312: unitários, integração com PostgreSQL e RabbitMQ reais, contrato e BDD de componente (28 cenários e 7 esquemas) | 99,61% (95%) | aprovado; 0 bugs, 0 vulnerabilidades, 138 code smells | 60 mutantes, 60 mortos | [cobertura](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#cobertura), [mutação](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#mutação) |
-| Billing | 1.731: unitários, integração com MongoDB e RabbitMQ reais e contrato | 100,00% (95%) | aprovado; 0, 0 e 91 | 74 mutantes, 72 mortos, 2 equivalentes | [cobertura](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/README.md#cobertura), [mutação](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/README.md#mutação) |
-| Execução | 1.475: unitários, integração com PostgreSQL e RabbitMQ reais e contrato | 100,00% (95%) | aprovado; 0, 0 e 18 | 95 mutantes, 94 mortos, 1 equivalente | [cobertura](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/README.md#cobertura), [mutação](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/README.md#mutação) |
+| OS Service | 10.312: unitários, integração com PostgreSQL e RabbitMQ reais, contrato e BDD de componente (28 cenários e 7 esquemas) | 99,6% (95%) | aprovado; 0 bugs, 0 vulnerabilidades, 138 code smells | 60 mutantes, 60 mortos | [cobertura](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#cobertura), [mutação](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#mutação) |
+| Billing | 1.731: unitários, integração com MongoDB e RabbitMQ reais e contrato | 100% (95%) | aprovado; 0, 0 e 91 | 74 mutantes, 72 mortos, 2 equivalentes | [cobertura](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/README.md#cobertura), [mutação](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/README.md#mutação) |
+| Execução | 1.475: unitários, integração com PostgreSQL e RabbitMQ reais e contrato | 100% (95%) | aprovado; 0, 0 e 18 | 95 mutantes, 94 mortos, 1 equivalente | [cobertura](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/README.md#cobertura), [mutação](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/README.md#mutação) |
 | `platform` | 3.366: contratos de mensageria, dashboards e alertas, scripts de deploy e smoke, apoio do E2E | 99,85% do código de teste (90%) | não se aplica | não se aplica | [CI](../../../README.md#ci) |
 
 A cobertura soma linhas e ramos, e o código novo de cada PR passa também pelo `diff-cover` (90%). O gate do SonarQube, versionado em `.sonar/quality-gate.json`, exige cobertura de 80%, no máximo 3% de duplicação e nota A em confiabilidade, segurança e manutenibilidade; os code smells têm nota A e não reprovam ([resumo](evidencias/coverage.md#sonarqube)). A mutação não é gate de CI: são mutantes escritos à mão nos módulos críticos, porque o `mutmut` não roda em pacote chamado `src`.
 
-**BDD do fluxo completo.** O [`saga_atendimento.feature`](../../../e2e/features/saga_atendimento.feature) do `platform` tem 14 cenários em Gherkin, em português, contra os três serviços no kind; roda no `deploy-kind` do CD de cada serviço e no job `e2e` do CD do `platform`, onde os 14 passaram em 206,65 s ([run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627)). Cobrem o caminho feliz, com os oito status, o orçamento de R$ 210,00, a baixa do estoque e o trace nos três serviços; as quatro compensações (orçamento recusado, falta de peça, pagamento recusado e cancelamento com estorno); a expiração do orçamento; o 409 depois do início; a recusa de CPF inválido; o consumidor do Billing parado; a API do Billing parada, com o circuito aberto; e a borda ([resumo do BDD](evidencias/bdd-resumo.md)). O pagamento usa o simulador do Mercado Pago.
+**BDD do fluxo completo.** O [`saga_atendimento.feature`](../../../e2e/features/saga_atendimento.feature) do `platform` tem 11 cenários e um esquema de cenário com 3 exemplos, 14 execuções em Gherkin, em português, contra os três serviços no kind; roda no `deploy-kind` do CD de cada serviço e no job `e2e` do CD do `platform`, onde as 14 passaram em 206,65 s ([run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627)). Cobrem o caminho feliz, com os oito status, o orçamento de R$ 210,00, a baixa do estoque e o trace nos três serviços; as quatro compensações (orçamento recusado, falta de peça, pagamento recusado e cancelamento com estorno); a expiração do orçamento; o 409 depois do início; a recusa de CPF inválido; o consumidor do Billing parado; a API do Billing parada, com o circuito aberto; e a borda ([resumo do BDD](evidencias/bdd-resumo.md)). O pagamento usa o simulador do Mercado Pago.
 
-**Collection com Newman.** A [collection do fluxo completo](../../api/fluxo-completo.postman_collection.json) leva uma OS pelos três serviços até a entrega, pela borda, com o Newman 6.2.3 no job `e2e` do `platform`: 108 assertions, 49 requisições e nenhuma falha no CD de 20/10/2026 ([execuções](evidencias/newman-resumo.md)).
+**Collection com Newman.** A [collection do fluxo completo](../../api/fluxo-completo.postman_collection.json) leva uma OS pelos três serviços até a entrega, pela borda, com o Newman 6.2.3 no job `e2e` do `platform`: 108 assertions, 49 requisições e nenhuma falha no [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), de 20/10/2026, o das capturas do [Anexo B, B4](#b4--newman-e-zap-no-cd-do-platform) ([execuções anteriores](evidencias/newman-resumo.md)).
 
 ## 9. CI/CD e deploy
 
@@ -745,8 +745,8 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-036 | Sem acesso ao banco de outro serviço | smoke do CD ([platform #25](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/25)) |
 | RNF-037 | Saga justificada no README | [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
 | RNF-038 | Testes unitários | 10.312, 1.731 e 1.475 testes ([seção 8](#8-testes-e-qualidade)) |
-| RNF-039 | Fluxo completo com BDD | 14 cenários no CD de cada serviço |
-| RNF-040 | Cobertura de 80% | 99,61%, 100,00% e 100,00% ([registro](evidencias/coverage.md)) |
+| RNF-039 | Fluxo completo com BDD | 11 cenários e um esquema com 3 exemplos no CD de cada serviço |
+| RNF-040 | Cobertura de 80% | 99,6%, 100% e 100% ([registro](evidencias/coverage.md)) |
 | RNF-041 | SonarQube no CI | gate aprovado nos três ([resumo](evidencias/coverage.md#sonarqube)) |
 | RNF-042 | Pipeline independente até o Kubernetes | CD aprovado nos três ([seção 9](#9-cicd-e-deploy)) |
 | RNF-043 | `main` protegida | ruleset nos quatro ([conferência](evidencias/protecao-da-main.md)) |
@@ -840,7 +840,7 @@ Fonte: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech
 
 ![CD do platform na main: CI, deploy-kind e e2e.](evidencias/cd-platform-main-2026-10-20.png)
 
-Fonte: [run 39449167465](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39449167465), commit `a12502e`, 20/10/2026.
+Fonte: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), commit `d703200`, 20/10/2026.
 
 ## B2 — Trace da saga no Jaeger
 
@@ -880,9 +880,9 @@ O job `e2e` roda o BDD, o Newman e o ZAP no mesmo kind; os resumos são montados
 
 ![Passos do job e2e: smoke, E2E, Newman e ZAP aprovados.](evidencias/cd-platform-e2e-passos-2026-10-20.png)
 
-Fonte: [job e2e do run 39449167465](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39449167465/job/118731446687).
+Fonte: [job e2e do run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627/job/118755242258), commit `d703200`.
 
-![Newman: 105 assertions, nenhuma falha e 48 requisições pela borda.](evidencias/cd-platform-newman-2026-10-20.png)
+![Newman: 108 assertions, nenhuma falha e 49 requisições pela borda.](evidencias/cd-platform-newman-2026-10-20.png)
 
 Fonte: artefato `e2e-kind` do mesmo run, `newman/resumo.json`.
 
