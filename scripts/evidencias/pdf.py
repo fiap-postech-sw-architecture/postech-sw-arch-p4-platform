@@ -34,9 +34,12 @@ MERMAID = re.compile(r"```mermaid\n(.*?)```", re.S)
 REPO = "fiap-postech-sw-architecture/postech-sw-arch-p4-platform"
 MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0"
 # Página do mermaid-cli (px de CSS) e pixels por px: o diagrama mais largo que
-# a página sai reduzido a ela, com 3.168 px, como os PNG da fase 3.
+# a página sai reduzido a ela, com 1.980 px, cerca de 300 ppi na largura do
+# texto. A escala 2 (3.168 px, como os PNG da fase 3) dava 2,5 MB só de
+# diagramas: o weasyprint regrava o PNG em RGB, e o peso no PDF acompanha os
+# pixels (reduzir a paleta quase não muda o arquivo).
 LARGURA_MERMAID = 1600
-ESCALA = 2
+ESCALA = 1.25
 # Linha da tabela de participantes do documento: | Nome | RM123456 | Discord |
 PARTICIPANTE = re.compile(r"^\| ([^|\n]+?) \| (RM\d+) \|", re.M)
 # Pontos de quebra dentro de código: camelCase e depois de "_", "/" e ".".
@@ -191,8 +194,9 @@ def main() -> int:
 
         def renderizar(match: re.Match[str]) -> str:
             # Weasyprint não pagina imagem: o max-height do CSS evita o corte
-            # no rodapé. A escala 2 dá de 300 a 540 ppi na página, nítido no
-            # zoom; a letra impressa depende da largura que o diagrama ocupa.
+            # no rodapé. A escala 1,25 dá de 190 a 335 ppi na página (a menor,
+            # na paisagem), nítido no zoom; a letra impressa depende da largura
+            # que o diagrama ocupa.
             numero = next(numeros)
             fonte, imagem = (
                 tmp / f"diagrama-{numero}.mmd",
