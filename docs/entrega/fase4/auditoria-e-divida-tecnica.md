@@ -13,7 +13,7 @@ Revisão de 20/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais
 
 ## Provas disponíveis
 
-CD da `main` aprovado nos quatro repositórios:
+CD da `main` de 20/10/2026 aprovado nos quatro repositórios:
 
 - OS Service: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), em `3ce582b`.
 - Billing: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), em `76b5f9b`.

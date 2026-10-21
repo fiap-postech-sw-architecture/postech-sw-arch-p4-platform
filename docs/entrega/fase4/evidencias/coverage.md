@@ -1,6 +1,6 @@
 # Cobertura publicada
 
-Estado: medida anterior ao congelamento, nos CDs da `main` de 21/10/2026 (UTC). Os testes de cada serviço rodaram em jobs Linux do GitHub Actions, com bancos descartáveis de integração. A cobertura soma linhas e ramos; o enunciado exige 80% e os serviços adotam gate de 95%. O quality gate do SonarQube está na [seção SonarQube](#sonarqube). As tabelas abaixo preservam a medida depois que os artefatos expiram.
+Estado: medida anterior ao congelamento, nos CDs da `main` de 21/10/2026 (UTC; em Brasília, os runs começaram entre 23:08 de 20/10 e 00:03 de 21/10). Os testes de cada serviço rodaram em jobs Linux do GitHub Actions, com bancos descartáveis de integração. A cobertura soma linhas e ramos; o enunciado exige 80% e os serviços adotam gate de 95%. O quality gate do SonarQube está na [seção SonarQube](#sonarqube). As tabelas abaixo preservam a medida depois que os artefatos expiram.
 
 ## Runs citados
 
