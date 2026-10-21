@@ -23,11 +23,11 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | Estratégia escolhida para o Saga Pattern | [6](#6-estratégia-da-saga) | [ADR-035](../../arquitetura/adr/fase4/035-saga-orquestrada.md); [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
 | Justificativa da divisão dos microsserviços e das tecnologias | [5](#5-divisão-dos-serviços-e-tecnologias) | [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md), [ADR-037](../../arquitetura/adr/fase4/037-banco-por-servico.md) |
 | Diagrama de componentes: processos, filas e integrações | [4.2](#42-componentes-e-integrações) | [RFC-004, Processos e integrações](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#processos-e-integrações) |
-| Sequências da saga: caminho feliz, falta de peça e cancelamento com estorno | [6.3](#63-caminho-feliz) e [6.4](#64-compensações-principais) | [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) |
-| Sequência do orçamento recusado ou expirado; estados da saga e da OS; mapa de contextos; topologia do RabbitMQ | só no repositório | RFC-004, seções [4.8 (b)](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#b-orçamento-recusado-ou-expirado), [4.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#41-etapas-da-instância), [4.2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#42-status-da-os), [3.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#31-mapa-de-contextos) e [5.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#51-topologia) |
+| Sequências da saga: caminho feliz, orçamento recusado ou expirado, falta de peça e cancelamento com estorno | [6.3](#63-caminho-feliz) e [6.4](#64-compensações-principais) | [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) |
+| Estados da saga e da OS; mapa de contextos; topologia do RabbitMQ | só no repositório | RFC-004, seções [4.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#41-etapas-da-instância), [4.2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#42-status-da-os), [3.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#31-mapa-de-contextos) e [5.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#51-topologia) |
 | RFC-004, o desenho integrado da fase | só no repositório | [rfc-004-microsservicos-saga.md](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) |
 | ADRs 034 a 043 | [5.3](#53-tecnologias-e-decisões) | [decisões da fase 4](../../arquitetura/adr/fase4/) |
-| Modelo de dados (ER) de cada serviço | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
+| Modelo de dados: ER do OS Service e da Execução e modelo dos documentos do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
 | Contratos de mensageria | [4.3](#43-comunicação-entre-os-serviços) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
 | Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
 | CI/CD e deploy em Kubernetes | [9](#9-cicd-e-deploy) | [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) |
@@ -375,6 +375,31 @@ No caminho feliz, a OS passa pelo diagnóstico, com a validação de preços no 
 
 ### 6.4 Compensações principais
 
+**Orçamento recusado ou expirado.** O cliente recusa pelo link, ou a validade vence sem decisão. O orçamento já está encerrado no Billing, então a saga só descarta o diagnóstico e cancela a OS (RN-024).
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor CL as Cliente
+    participant BI as billing-service
+    participant OS as os-service
+    participant EX as execution-service
+
+    Note over BI,EX: saga AGUARDANDO_DECISAO, OS AGUARDANDO_APROVACAO
+    alt cliente recusa pelo link
+        CL->>BI: POST /api/v1/publico/orcamentos/{token}/decisao (recusa)
+        BI-)OS: OrcamentoRecusado
+    else ORCAMENTO_VALIDADE_HORAS vence
+        BI->>BI: prazos expira o orçamento, se ainda PENDENTE
+        BI-)OS: OrcamentoExpirado
+    end
+    OS->>OS: saga COMPENSANDO, plano com DescartarDiagnostico
+    Note over OS,EX: orçamento já encerrado pelo Billing: sem CancelarOrcamento
+    OS-)EX: DescartarDiagnostico
+    EX-)OS: DiagnosticoDescartado
+    OS->>OS: OS CANCELADA com motivo, saga COMPENSADA, e-mail ao cliente
+```
+
 **Falta de peça na reserva.** A Execução trava os itens com lock pessimista, acha saldo insuficiente e não reserva nada. Nenhum pagamento foi solicitado: a saga cancela o orçamento, descarta o diagnóstico e cancela a OS sem cobrar o cliente (RN-026).
 
 ```mermaid
@@ -442,7 +467,7 @@ sequenceDiagram
     Note over AT,MP: depois de ExecucaoIniciada (pivot), o mesmo POST responde 409
 ```
 
-No orçamento recusado pelo link ou expirado, o orçamento já está encerrado no Billing, então a saga só descarta o diagnóstico e cancela a OS (RN-024); o diagrama está na [RFC-004, seção 4.8 (b)](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#b-orçamento-recusado-ou-expirado). No pagamento recusado ou vencido (por padrão, na terceira recusa ou em 60 minutos), a saga segue o trecho acima a partir de `LiberarReserva`, sem estorno, porque nada foi cobrado (RN-025); a RFC não tem diagrama desse caso, e o cenário BDD do pagamento recusado confere a ordem ([seção 8](#8-testes-e-qualidade)).
+**Pagamento recusado ou vencido.** Por padrão, na terceira recusa ou em 60 minutos. Nada foi cobrado, então a saga segue o diagrama do cancelamento com estorno a partir do passo 12, `LiberarReserva`, sem estorno (RN-025), como diz a [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências); o cenário BDD do pagamento recusado confere a ordem ([seção 8](#8-testes-e-qualidade)).
 
 ### 6.5 Idempotência, retentativas e prazos
 
@@ -455,15 +480,6 @@ No orçamento recusado pelo link ou expirado, o orçamento já está encerrado n
 ## 7. Modelo de dados
 
 Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele, e a NetworkPolicy de cada namespace só deixa o próprio namespace chegar ao banco. Os diagramas mostram as tabelas de que a saga e os contratos dependem; o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
-
-**Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o exemplo de documento está na [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7).
-
-| Coleção | Conteúdo e índices |
-|---|---|
-| `precos_servicos`, `precos_pecas` | código ou `sku`, descrição, preço e `ativo`; o `sku` liga a peça ao estoque da Execução |
-| `orcamentos` | um por OS (índice único `{ordem_id: 1}`), imutável depois de gerado, com as linhas e o total |
-| `pagamentos` | uma cobrança por orçamento; únicos por `ordem_id` e por `referencia_pagamento`, que o webhook usa |
-| `outbox`, `mensagens_processadas` | `_id` igual ao `id` da mensagem; índices TTL de 7 e 30 dias |
 
 **OS Service (PostgreSQL 16).** Clientes, veículos, consentimentos, usuários e tokens revogados vêm da fase 3; o documento do cliente fica cifrado, com um hash para a busca. A OS ganhou versão para o lock otimista e o resumo do orçamento e do pagamento, copiado dos eventos. O histórico só recebe inserções, `sagas` guarda a instância da saga e `notificacoes`, os e-mails do `notificador`.
 
@@ -647,6 +663,15 @@ erDiagram
 
     itens_estoque }o--o{ reservas : "sku nos itens"
 ```
+
+**Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. A tabela é a das coleções da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7), que traz também o exemplo de documento; o [`docs/arquitetura.md` do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) detalha esse modelo campo a campo, com três acréscimos que ele mesmo lista: um índice da outbox, dois campos de `mensagens_processadas` e a coleção `versao_do_banco`.
+
+| Coleção | Índices |
+|---|---|
+| `precos_servicos`, `precos_pecas` | únicos `{codigo: 1}` e `{sku: 1}`; o `sku` liga a peça ao estoque da Execução |
+| `orcamentos` | único `{ordem_id: 1}`: um orçamento por OS, imutável depois de gerado, com os preços congelados nas linhas (RN-013 e RN-016 do p3); `{status: 1, valido_ate: 1}` para a expiração. O subtotal de cada linha não é gravado: é a quantidade vezes o preço |
+| `pagamentos` | único e parcial `{orcamento_id: 1}`, só nos documentos que têm o campo (uma cobrança por orçamento, RF-032; a lápide não tem orçamento); único `{ordem_id: 1}`, pelo qual a compensação acha a cobrança; único e parcial `{referencia_pagamento: 1}`, só quando é texto, para o webhook; `{status: 1, expira_em: 1}` para a expiração e a conciliação |
+| `outbox`, `mensagens_processadas` | `{status: 1, proxima_tentativa_em: 1, _id: 1}` para o *claim*; `_id` igual ao `id` da mensagem; índices TTL (apagam sozinhos) em `entregue_em` (7 dias, só `entregue`), `morta_em` (30 dias, só `dead`) e `processada_em` (30 dias) |
 
 ## 8. Testes e qualidade
 
