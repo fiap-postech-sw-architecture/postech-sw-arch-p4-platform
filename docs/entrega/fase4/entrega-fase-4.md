@@ -1,6 +1,6 @@
 # Documento de Entrega
 
-> Versão de 20/10/2026, sobre a `main` dos quatro repositórios nessa data. O vídeo, a prova na sandbox real do Mercado Pago, as capturas dos dashboards com três dias de histórico e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
+> Versão de 21/10/2026, sobre a `main` dos quatro repositórios nos commits que as seções 2 e 8 citam. O vídeo, a prova na sandbox real do Mercado Pago, as capturas dos dashboards com três dias de histórico e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
 
 Documento de entrega da fase 4 do Tech Challenge da Pós-Graduação em Arquitetura de Software (FIAP). O PytStop é o sistema de gestão de uma oficina mecânica: registra cada ordem de serviço (OS) da abertura à entrega do veículo. Nas fases 1 a 3 ele foi um monólito modular; na fase 4 virou três microsserviços, cada um com repositório, banco e pipeline próprios, coordenados por uma saga orquestrada. O OS Service cuida da OS, dos clientes e da identidade e orquestra a saga; o Billing Service, dos preços, do orçamento e do pagamento no Mercado Pago; o Execution Service, do diagnóstico, do estoque de peças e da execução do reparo.
 
