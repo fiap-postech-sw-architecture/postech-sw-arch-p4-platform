@@ -287,7 +287,7 @@ Reprocessar é um `UPDATE` no banco do serviço, uma linha por vez. Não passa p
 
    `matchedCount: 1` é o sinal de que a linha estava `dead` e voltou a `pendente`; `matchedCount: 0` quer dizer que o `_id` não existe ou a linha já não estava `dead`, e nada mudou. O filtro `status: "dead"` é a guarda: sem ele, o comando devolveria ao relay uma linha já `entregue` e a mensagem sairia de novo.
 
-Os e-mails ao cliente que esgotaram as tentativas ficam na tabela `notificacoes` do OS Service (`situacao = 'dead'`), sem métrica nem alerta; o README do OS Service traz a consulta e o `UPDATE` ([Operação do e-mail](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service#operação-do-e-mail)).
+Os e-mails ao cliente que esgotaram as tentativas ficam na tabela `notificacoes` do OS Service (`situacao = 'dead'`), sem métrica nem alerta; o `docs/mensageria.md` do OS Service traz a consulta e o `UPDATE` ([Operação do e-mail](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/mensageria.md#operação-do-e-mail)).
 
 ## 4. Mensagem na DLQ e redrive
 

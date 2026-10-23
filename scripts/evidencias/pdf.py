@@ -40,8 +40,17 @@ MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0"
 # pixels (reduzir a paleta quase não muda o arquivo).
 LARGURA_MERMAID = 1600
 ESCALA = 1.25
+# Limite de resolução das imagens na página. As miniaturas do Anexo B, quatro por
+# linha a 40 mm, chegam a 889 ppi e pesam o dobro sem ganho de leitura; 450 ppi só
+# reamostra essas, e as capturas em duas colunas (418 ppi) ficam como estão. Um
+# limite abaixo de 418 (400, 350, 300) reamostra também as capturas e deixa o PDF
+# maior que o de 450 (de 25 a 300 KB): o weasyprint reamostra com ruído, e o PNG
+# comprime pior.
+DPI_MAXIMO = 450
 # Linha da tabela de participantes do documento: | Nome | RM123456 | Discord |
 PARTICIPANTE = re.compile(r"^\| ([^|\n]+?) \| (RM\d+) \|", re.M)
+# Abertura da seção de identificação do documento: "Grupo 158 (PytStop), turma ..."
+GRUPO = re.compile(r"^Grupo (\d+)\b", re.M)
 # Pontos de quebra dentro de código: camelCase e depois de "_", "/" e ".".
 QUEBRA = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[_/.])(?=[^\W_])")
 
@@ -93,18 +102,40 @@ def largo(largura: int, altura: int) -> bool:
 
     No retrato, o que o Mermaid reduziu à página dele sai com a letra menor. Na
     paisagem, a letra cresce na proporção da largura sobre a altura, até 1,5
-    vez; abaixo de 1,4 o ganho não paga a página a mais.
+    vez; abaixo de 1,1 o ganho não paga a página a mais.
     """
     reduzido = largura >= 0.9 * LARGURA_MERMAID * ESCALA
-    return reduzido and largura >= 1.4 * altura
+    return reduzido and largura >= 1.1 * altura
+
+
+def compacto(largura: int, altura: int) -> bool:
+    """Diagrama largo que o Mermaid não reduziu e fica no retrato com altura limitada.
+
+    Dois deles cabem numa página com o texto que os apresenta (as compensações do
+    orçamento recusado e da falta de peça).
+    """
+    return largura >= 1.45 * altura
+
+
+def meia(largura: int, altura: int) -> bool:
+    """Diagrama médio, menos largo que o compacto, que também fica no retrato.
+
+    Vale depois de `compacto`. Na largura do texto ele passa de 120 mm de altura;
+    limitado a 120 mm, dois cabem numa página só (as duas últimas partes do
+    caminho feliz). O geral, mais quadrado, fica de fora e usa a largura toda.
+    """
+    return largura >= 1.34 * altura
 
 
 def capa(documento: str, logo: Path) -> str:
-    """Capa ABNT, um participante por linha, com a tabela da seção 1."""
-    autores = "\n".join(
+    """Capa ABNT, com o grupo e um participante por linha, como na seção 1."""
+    linhas = [
         f"<p>{html.escape(nome)} — {rm}</p>"
         for nome, rm in PARTICIPANTE.findall(documento)
-    )
+    ]
+    if grupo := GRUPO.search(documento):
+        linhas.insert(0, f"<p><strong>Grupo {grupo[1]}</strong></p>")
+    autores = "\n".join(linhas)
     return f"""<div class="capa">
 <div>
 <p><strong>FIAP — Faculdade de Informática e Administração Paulista</strong></p>
@@ -172,11 +203,10 @@ def executar(argumentos: list[str]) -> None:
     subprocess.run([ferramenta, *argumentos[1:]], check=True)  # noqa: S603  # nosec B603
 
 
-def comando_weasyprint(entrada: Path, destino: Path, dpi: int | None) -> list[str]:
-    """Sem ``dpi`` as capturas entram na resolução original; com ele, o weasyprint
-    reduz as imagens maiores (a versão compacta, de reserva para o portal)."""
-    limite = ["-D", str(dpi)] if dpi is not None else []
-    return ["weasyprint", *limite, str(entrada), str(destino)]
+def comando_weasyprint(entrada: Path, destino: Path, dpi: int) -> list[str]:
+    """O weasyprint reduz as imagens que passam de ``dpi`` na página: ``DPI_MAXIMO``
+    na versão completa e 150 na compacta, de reserva para o portal."""
+    return ["weasyprint", "-D", str(dpi), str(entrada), str(destino)]
 
 
 def main() -> int:
@@ -185,10 +215,13 @@ def main() -> int:
     parser.add_argument("--final", action="store_true")
     parser.add_argument("--github", type=Path)
     parser.add_argument(
-        "--dpi", type=int, help="limite de resolução das imagens (versão compacta)"
+        "--dpi",
+        type=int,
+        default=DPI_MAXIMO,
+        help=f"limite de resolução das imagens ({DPI_MAXIMO}; 150 na versão compacta)",
     )
     args = parser.parse_args()
-    if args.dpi is not None and args.dpi <= 0:
+    if args.dpi <= 0:
         parser.error("--dpi precisa ser positivo")
     raiz = Path(__file__).resolve().parents[2]
     destino = args.output.expanduser().resolve()
@@ -233,7 +266,14 @@ def main() -> int:
                 ]
             )
             largura, altura = struct.unpack(">II", imagem.read_bytes()[16:24])
-            classe = "diagrama paisagem" if largo(largura, altura) else "diagrama"
+            if largo(largura, altura):
+                classe = "diagrama paisagem"
+            elif compacto(largura, altura):
+                classe = "diagrama compacto"
+            elif meia(largura, altura):
+                classe = "diagrama meia"
+            else:
+                classe = "diagrama"
             titulo = html.escape(secao_da_rfc(rfc, match.group(1)))
             legenda = f"Diagrama {numero} — RFC-004, {titulo}."
             return (

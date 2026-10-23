@@ -85,25 +85,43 @@ def _pixels(css: float) -> int:
 
 
 # As fronteiras usam as contas do largo(): `ceil` dá a menor largura que passa
-# em cada teste, sem depender de como o ponto flutuante arredonda 1,4 x altura.
+# em cada teste, sem depender de como o ponto flutuante arredonda 1,1 x altura.
 REDUZIDO = math.ceil(0.9 * pdf.LARGURA_MERMAID * pdf.ESCALA)
-ALTURA_NO_LIMITE = _pixels(1080)
-LARGURA_NO_LIMITE = math.ceil(1.4 * ALTURA_NO_LIMITE)
+ALTURA_NO_LIMITE = _pixels(1350)
+LARGURA_NO_LIMITE = math.ceil(1.1 * ALTURA_NO_LIMITE)
 
 
-# Os cinco primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584
-# é a largura a que o Mermaid reduz o diagrama que não cabe na página.
+# Os oito primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584 é
+# a largura a que o Mermaid reduz o diagrama que não cabe na página. O de
+# componentes e o ER do OS levam espaçamento menor na RFC, que os deixa mais
+# largos que altos; as duas últimas partes do caminho feliz, que o Mermaid não
+# reduz, ficam no retrato.
 @pytest.mark.parametrize(
     ("largura", "altura", "deitado"),
     [
         pytest.param(
             _pixels(1584), _pixels(1086.4), True, id="sequencia-larga-reduzida"
         ),
-        pytest.param(_pixels(1584), _pixels(526.4), True, id="er-largo-e-baixo"),
         pytest.param(
-            _pixels(1584), _pixels(1254.4), False, id="componentes-quase-quadrado"
+            _pixels(1584),
+            _pixels(936.2),
+            True,
+            id="er-da-execucao-sem-a-infraestrutura",
         ),
-        pytest.param(_pixels(1584), _pixels(2004.8), False, id="caminho-feliz-alto"),
+        pytest.param(
+            _pixels(1584), _pixels(1020), True, id="componentes-com-espacamento-menor"
+        ),
+        pytest.param(
+            _pixels(1584), _pixels(1034.4), True, id="er-do-os-com-espacamento-menor"
+        ),
+        pytest.param(
+            _pixels(1582.4), _pixels(1147.2), True, id="caminho-feliz-t1-a-t4"
+        ),
+        pytest.param(_pixels(1340), _pixels(979), False, id="caminho-feliz-t5-a-t6"),
+        pytest.param(_pixels(1123), _pixels(828), False, id="caminho-feliz-t7-a-t10"),
+        pytest.param(
+            _pixels(1584), _pixels(1500), False, id="quase-quadrado-fica-no-retrato"
+        ),
         pytest.param(
             _pixels(1366.4), _pixels(794.4), False, id="largo-que-cabe-no-retrato"
         ),
@@ -128,11 +146,14 @@ def test_so_o_diagrama_reduzido_e_bem_mais_largo_que_alto_vai_deitado(
     assert pdf.largo(largura, altura) is deitado
 
 
-def test_so_a_versao_compacta_limita_a_resolucao_das_imagens() -> None:
+def test_toda_versao_limita_a_resolucao_das_imagens_e_a_compacta_limita_mais() -> None:
     html, destino = Path("entrega.html"), Path("entrega.pdf")
 
-    assert pdf.comando_weasyprint(html, destino, None) == [
+    assert pdf.DPI_MAXIMO == 450
+    assert pdf.comando_weasyprint(html, destino, pdf.DPI_MAXIMO) == [
         "weasyprint",
+        "-D",
+        "450",
         "entrega.html",
         "entrega.pdf",
     ]
@@ -191,7 +212,8 @@ def test_capa_abnt_abre_o_pdf_com_os_participantes_do_documento(
     tmp_path: Path,
 ) -> None:
     documento = (
-        f"{GERAL}\n# Documento\n\n| Nome | RM | Discord |\n|---|---|---|\n"
+        f"{GERAL}\n# Documento\n\nGrupo 158 (PytStop), turma 15SOAT.\n\n"
+        "| Nome | RM | Discord |\n|---|---|---|\n"
         "| Ana Lima | RM111111 | ana |\n| Bruno Reis | RM222222 | bruno |\n"
         "| Caio Dias | RM333333 | caio |\n| Davi Melo | RM444444 | davi |\n"
     )
@@ -204,7 +226,8 @@ def test_capa_abnt_abre_o_pdf_com_os_participantes_do_documento(
     assert "Documento de Entrega" in capa
     assert "São Paulo — 2026" in capa
     assert f'src="{tmp_path / "docs/entrega/fase4/logo-pytstop.png"}"' in capa
-    # Um participante por linha, sem partir nome e RM entre linhas.
+    # O grupo abre a lista; um participante por linha, sem partir nome e RM.
+    assert "<p><strong>Grupo 158</strong></p>\n<p>Ana Lima — RM111111</p>" in capa
     assert "<p>Ana Lima — RM111111</p>\n<p>Bruno Reis — RM222222</p>" in capa
     assert "<p>Davi Melo — RM444444</p>" in capa
     assert "# Documento" in corpo
@@ -246,3 +269,48 @@ def test_sumario_vai_para_depois_da_capa_e_codigo_quebra_entre_palavras() -> Non
 def test_sem_marcador_ou_sem_sumario_o_build_para(html: str) -> None:
     with pytest.raises(ValueError, match="sumário"):
         pdf.ajustar_html(html)
+
+
+def test_capa_sem_a_linha_do_grupo_nao_inventa_um(tmp_path: Path) -> None:
+    documento = (
+        f"{GERAL}\n| Nome | RM | Discord |\n|---|---|---|\n"
+        "| Ana Lima | RM111111 | ana |\n"
+    )
+    capa = pdf.preparar(_pacote(tmp_path, documento), "grupo/repo", "main").partition(
+        '<div id="pos-capa"></div>'
+    )[0]
+
+    assert "Grupo" not in capa
+    assert "<p>Ana Lima — RM111111</p>" in capa
+
+
+@pytest.mark.parametrize(
+    ("largura", "altura", "esperado"),
+    [
+        pytest.param(_pixels(1217), _pixels(811), True, id="orcamento-recusado"),
+        pytest.param(_pixels(1366), _pixels(794), True, id="falta-de-peca"),
+        pytest.param(_pixels(1169), _pixels(936), False, id="geral-quase-quadrado"),
+        pytest.param(1450, 1000, True, id="no-limite-da-proporcao"),
+        pytest.param(1449, 1000, False, id="um-pixel-abaixo-da-proporcao"),
+    ],
+)
+def test_so_o_diagrama_largo_que_cabe_no_retrato_ganha_altura_limitada(
+    largura: int, altura: int, esperado: bool
+) -> None:
+    assert pdf.compacto(largura, altura) is esperado
+
+
+@pytest.mark.parametrize(
+    ("largura", "altura", "esperado"),
+    [
+        pytest.param(_pixels(1340), _pixels(979), True, id="caminho-feliz-t5-a-t6"),
+        pytest.param(_pixels(1123), _pixels(828), True, id="caminho-feliz-t7-a-t10"),
+        pytest.param(_pixels(1169), _pixels(936), False, id="geral-quase-quadrado"),
+        pytest.param(1340, 1000, True, id="no-limite-da-proporcao"),
+        pytest.param(1339, 1000, False, id="um-pixel-abaixo-da-proporcao"),
+    ],
+)
+def test_so_o_diagrama_medio_ganha_meia_pagina(
+    largura: int, altura: int, esperado: bool
+) -> None:
+    assert pdf.meia(largura, altura) is esperado

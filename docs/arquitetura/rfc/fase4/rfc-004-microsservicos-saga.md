@@ -109,9 +109,11 @@ flowchart TB
         billing <-->|AMQP| rabbit
         execucao <-->|AMQP| rabbit
         execucao -->|REST: preços| billing
-        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger"]
+        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger<br/>(Grafana e Loki<br/>só no kind local)"]
+        execucao & billing -.->|JWKS| os
     end
-    billing <-->|HTTPS| mp["Mercado Pago"]
+    billing -->|HTTPS| mp["Mercado Pago"]
+    mp -->|webhook| kong
 ```
 
 ### Processos e integrações
@@ -121,6 +123,9 @@ flowchart TB
 config:
   flowchart:
     wrappingWidth: 400
+    nodeSpacing: 20
+    rankSpacing: 40
+    padding: 8
 ---
 flowchart TB
     interno(["Atendente · Mecânico · Admin"])
@@ -426,9 +431,9 @@ Resposta que chega atrasada em `FALHA_NA_COMPENSACAO` é ignorada, como todo eve
 
 ### 4.8 Sequências
 
-Setas de ponta aberta são mensagens assíncronas (outbox, relay, exchange, fila, consumidor); chamadas REST de fora do cluster passam pelo Kong, omitido.
+Setas de ponta aberta são mensagens assíncronas (outbox, relay, exchange, fila, consumidor); chamadas REST de fora do cluster passam pelo Kong, omitido. O caminho feliz vem em três diagramas, de T1 a T4, de T5 a T6 e de T7 a T10, com a numeração das mensagens contínua.
 
-#### (a) Caminho feliz até a entrega
+#### (a1) Caminho feliz, de T1 a T4
 
 ```mermaid
 sequenceDiagram
@@ -439,7 +444,6 @@ sequenceDiagram
     participant OS as os-service
     participant EX as execution-service
     participant BI as billing-service
-    participant MP as Mercado Pago
 
     rect rgba(70, 130, 180, 0.10)
         Note over AT,EX: T1 e T2: abertura e diagnóstico
@@ -465,7 +469,20 @@ sequenceDiagram
         CL->>BI: POST /api/v1/publico/orcamentos/{token}/decisao (aprova)
         BI-)OS: OrcamentoAprovado
     end
+```
 
+#### (a2) Caminho feliz, de T5 a T6
+
+```mermaid
+sequenceDiagram
+    autonumber 16
+    actor CL as Cliente
+    participant OS as os-service
+    participant EX as execution-service
+    participant BI as billing-service
+    participant MP as Mercado Pago
+
+    Note over OS,BI: continua o diagrama anterior, com o orçamento aprovado
     rect rgba(218, 165, 32, 0.12)
         Note over OS,MP: T5 e T6: reserva de peças e pagamento
         OS-)EX: ReservarPecas
@@ -484,7 +501,20 @@ sequenceDiagram
         BI-)OS: PagamentoConfirmado
         Note over OS: OS AGUARDANDO_EXECUCAO
     end
+```
 
+#### (a3) Caminho feliz, de T7 a T10
+
+```mermaid
+sequenceDiagram
+    autonumber 27
+    actor AT as Atendente
+    actor ME as Mecânico
+    participant OS as os-service
+    participant EX as execution-service
+    participant BI as billing-service
+
+    Note over OS,BI: continua o diagrama anterior, com o pagamento confirmado
     rect rgba(147, 112, 219, 0.10)
         Note over OS,EX: T7 a T9: fila, execução e finalização
         OS-)EX: AgendarExecucao
@@ -801,7 +831,7 @@ Kong Ingress Controller em modo DB-less, o gateway das Aulas 03 e 04 de Microsse
 
 ### 6.3 Swagger e Postman
 
-Cada serviço publica o Swagger UI em `/docs` e versiona em `docs/api/` o OpenAPI exportado e a collection Postman com exemplos; o README aponta os arquivos e traz um `curl` por endpoint. A [collection do fluxo completo](../../../api/fluxo-completo.postman_collection.json) fica no `platform` e roda com Node 24 e Newman 6.2.3 por `make newman` (RNF-052). Os [pré-requisitos, relatórios sanitizados e resultados locais](../../../../README.md#collection-do-fluxo-completo-make-newman) estão no README; o fluxo usa o simulador do Billing, com histórico de oito status e métricas administrativas dos nove status. O passo passou no [CI do PR #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573); as [fontes e o resumo sanitizado](../../../entrega/fase4/evidencias/newman-resumo.md#execução-no-ci-do-platform-24) distinguem a prova do PR do CD da main e do congelamento.
+Cada serviço publica o Swagger UI em `/docs` e versiona em `docs/api/` o OpenAPI exportado e a collection Postman com exemplos, mais o `docs/api/exemplos.md`, com um `curl` por rota ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/api/exemplos.md), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/api/exemplos.md) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/api/exemplos.md)); o README aponta os arquivos. A [collection do fluxo completo](../../../api/fluxo-completo.postman_collection.json) fica no `platform` e roda com Node 24 e Newman 6.2.3 por `make newman` (RNF-052). Os [pré-requisitos, relatórios sanitizados e resultados locais](../../../../README.md#collection-do-fluxo-completo-make-newman) estão no README; o fluxo usa o simulador do Billing, com histórico de oito status e métricas administrativas dos nove status. O passo passou no [CI do PR #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573); as [fontes e o resumo sanitizado](../../../entrega/fase4/evidencias/newman-resumo.md#execução-no-ci-do-platform-24) distinguem a prova do PR do CD da main e do congelamento.
 
 ## 7. Dados
 
@@ -824,6 +854,11 @@ Os estados finais aceitam a compensação repetida sem efeito e republicam a res
 ### 7.2 OS Service (PostgreSQL 16)
 
 ```mermaid
+---
+config:
+  er:
+    entityPadding: 8
+---
 erDiagram
     clientes {
         uuid id PK
@@ -945,6 +980,9 @@ erDiagram
 ### 7.3 Execution Service (PostgreSQL 16)
 
 ```mermaid
+---
+title: A outbox e a mensagens_processadas estão no docs/arquitetura.md da Execução, seção 3.4
+---
 erDiagram
     itens_estoque {
         uuid id PK
@@ -965,12 +1003,12 @@ erDiagram
     }
     diagnosticos {
         uuid ordem_id PK
-        jsonb veiculo "retrato: veiculo_id, placa, marca, modelo e ano"
-        text descricao_problema "texto livre: marcador na eliminação LGPD"
+        jsonb veiculo "retrato do veículo"
+        text descricao_problema "texto livre (LGPD)"
         varchar status
         uuid mecanico_id
-        jsonb itens "tipo (servico ou peca), codigo e quantidade"
-        text observacoes "texto livre: marcador na eliminação LGPD"
+        jsonb itens "tipo, codigo e quantidade"
+        text observacoes "texto livre (LGPD)"
         timestamptz solicitado_em
         timestamptz iniciado_em
         timestamptz concluido_em
@@ -993,30 +1031,15 @@ erDiagram
         varchar traceparent
         varchar tracestate
     }
-    outbox {
-        bigint id PK
-        uuid mensagem_id UK
-        uuid correlation_id "ordem_id"
-        varchar tipo
-        varchar exchange
-        varchar routing_key
-        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
-        varchar traceparent
-        varchar tracestate
-        varchar status
-        timestamptz entregue_em
-    }
-    mensagens_processadas {
-        uuid mensagem_id PK
-        timestamptz processada_em
-    }
 
     itens_estoque }o--o{ reservas : "sku nos itens"
 ```
 
 Ao contrário do p3, reservar não consome o saldo: a reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. A reserva guarda os itens em JSONB e, quando recusada, os faltantes que seguem em `ReservaDePecasFalhou`. O coletor da API lê `execucoes.iniciada_em` e `finalizada_em` com `diagnosticos.itens` (o tempo médio de execução por serviço, RF-008 da fase 1) e `reservas.criada_em` com `reservas.faltantes` (as peças em falta), ambos numa janela de 7 dias. `ordem_id` é referência lógica, sem chave estrangeira, e único por tabela (a chave primária de diagnóstico e execução), o que torna reserva, diagnóstico e execução idempotentes por OS e sustenta a lápide.
 
-Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent` e o `tracestate` e o `id` do comando que os abriu (`solicitacao_id` e `agendamento_id`), de onde saem o `causation_id` e o pai do trace dos eventos que o mecânico provoca. O diagnóstico guarda o retrato do veículo, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois e, no diagnóstico, também `descricao_problema` e `observacoes`, que são texto livre (seção 5.3). Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
+Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent` e o `tracestate` e o `id` do comando que os abriu (`solicitacao_id` e `agendamento_id`), de onde saem o `causation_id` e o pai do trace dos eventos que o mecânico provoca. O diagnóstico guarda o retrato do veículo, com o `veiculo_id`, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois e, no diagnóstico, também `descricao_problema` e `observacoes`, que são texto livre (seção 5.3). Os `itens` do diagnóstico trazem `tipo` (`servico` ou `peca`), `codigo` e `quantidade`. Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
+
+A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e por isso ficam fora do diagrama; as colunas estão na [seção 3.4 do `docs/arquitetura.md` da Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
 
 ### 7.4 Billing Service (MongoDB 7)
 
