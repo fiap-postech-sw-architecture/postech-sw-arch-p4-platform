@@ -1,13 +1,13 @@
 # Auditoria pré-entrega e dívida técnica
 
-Revisão de 20/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e pendências registradas nos serviços. Esta auditoria acompanha a versão preliminar do pacote; a revisão final depende dos commits congelados e das evidências listadas abaixo.
+Revisão de 20/10/2026, com a observabilidade atualizada em 22/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e pendências registradas nos serviços. Esta auditoria acompanha a versão preliminar do pacote; a revisão final depende dos commits congelados e das evidências listadas abaixo.
 
 ## Pendências que afetam a entrega
 
 | Item | Situação | Quem fecha | Condição para fechar |
 |---|---|---|---|
 | Collection do fluxo completo | Duas provas locais e [execução no CI do platform #24](evidencias/newman-resumo.md#execução-no-ci-do-platform-24) aprovadas; CD da `main` aprovado; prova do congelamento pendente | Plataforma | Preservar a collection e comprovar o run sobre os commits finais, incluindo as métricas administrativas do OS Service; [fontes e resumos](evidencias/newman-resumo.md) |
-| Ensaio final de observabilidade | Trace com os três serviços, 600,9 s sem tráfego, smoke e alerta com recuperação comprovados localmente; RNF-046/RNF-056 continuam parciais | Plataforma e serviços | Preservar capturas com três dias; chamada externa e observação no modo real do Billing dependem da sandbox |
+| Ensaio final de observabilidade | Trace com os três serviços, 600,9 s sem tráfego, smoke, alerta com recuperação e os nove dashboards com mais de três dias de dados (capturas de 22/10, [Anexo B, B7](entrega-fase-4.md#b7--dashboards-do-grafana)) comprovados localmente; RNF-046/RNF-056 continuam parciais só pela chamada ao Mercado Pago | Plataforma e serviços | Chamada externa e observação no modo real do Billing dependem da sandbox; refazer as capturas dos dashboards se o JSON de algum mudar até o congelamento |
 | Evidência real do Mercado Pago | Simulador não comprova acesso à sandbox do provedor | Integrante com as credenciais da sandbox | Cobrança, aprovação e estorno reais, com saída higienizada |
 | Grupo, vídeo e submissão | RNF-053/RNF-054 ainda não podem ser encerrados | Grupo | Confirmar identificação; publicar vídeo; conferir acesso do avaliador; submeter o PDF final |
 
@@ -30,7 +30,7 @@ Todo commit da `main` entrou por pull request, exceto o commit inicial de cada r
 
 Em 19/10/2026, o E2E local passou com 14 cenários, e os três da sandbox ficaram fora da seleção; o `smoke-servicos` passou em seguida. O trace `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e o span CLIENT da chamada Execução → Billing. A janela medida de 600,9 s sem tráfego terminou sem reinícios, com 18 grupos de alvos disponíveis e três bancos acessíveis. O alerta controlado de fila disparou e recuperou, e o smoke posterior passou. O [relatório parcial](evidencias/observabilidade.md) preserva os commits, timestamps, trace e capturas do alerta.
 
-O simulador não produz chamada HTTP externa; o span CLIENT Billing → Mercado Pago permanece pendente da sandbox real. Capturas com uma hora de dados ainda não encerram a prova de três dias. O painel de volume diário fica sem dados antes da primeira meia-noite UTC, limitação descrita no JSON dele. O dashboard de bancos usa apenas as séries disponíveis no exporter, sem as `mongodb_ss_*`.
+O simulador não produz chamada HTTP externa; o span CLIENT Billing → Mercado Pago permanece pendente da sandbox real. Os nove dashboards foram capturados em 22/10/2026, com mais de três dias de dados e uma execução diária do `make demo` ([Anexo B, B7](entrega-fase-4.md#b7--dashboards-do-grafana)). O painel de volume diário só ganha barra depois de cada meia-noite UTC, limitação descrita no JSON dele, e tem quatro barras na captura. O dashboard de bancos usa apenas as séries disponíveis no exporter, sem as `mongodb_ss_*`.
 
 ## Dívida aceita e acompanhada
 
