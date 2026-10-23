@@ -401,8 +401,8 @@ def test_painel_que_diz_sem_leitura_mapeia_o_nan_para_sem_leitura(
 
 
 def motivos_de_compensacao() -> set[str]:
-    """Os codigos de `motivo` que o README da raiz lista para a saga."""
-    texto = (RAIZ / "README.md").read_text(encoding="utf-8")
+    """Os codigos de `motivo` que docs/contratos-de-mensageria.md lista para a saga."""
+    texto = (RAIZ / "docs" / "contratos-de-mensageria.md").read_text(encoding="utf-8")
     (linha,) = re.findall(r"^- `motivo` dos cinco comandos.*$", texto, re.MULTILINE)
     (lista,) = re.findall(r"\(((?:`\w+`(?:, )?)+)\)", linha)
     return set(re.findall(r"\w+", lista))

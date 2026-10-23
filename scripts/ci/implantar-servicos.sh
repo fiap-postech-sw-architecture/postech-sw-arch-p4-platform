@@ -2,7 +2,7 @@
 # Implanta os servicos no kind, depois da plataforma (scripts/ci/deploy-kind.sh,
 # que tambem gera os Secrets deles): o CD de cada servico chama este script
 # com os tres repositorios, o proprio pela imagem do job image e os vizinhos
-# construidos do codigo (README, "Contrato com os servicos").
+# construidos do codigo (docs/contrato-com-os-servicos.md).
 #
 #   scripts/ci/implantar-servicos.sh --overlay <overlay>
 #     [--tar <servico>=<arquivo> --imagem <servico>=<ref>]... <servico>=<dir>...
@@ -19,8 +19,8 @@
 # server-side, espera o banco (StatefulSet), o Job (log dele no erro) e cada
 # Deployment. Os namespaces vao em paralelo, e a saida de cada um leva o nome
 # do servico. Antes de tudo, cada servico so pode usar, alem da propria imagem,
-# as imagens da tabela de versoes do README deste repositorio (banco, exporter,
-# initContainers).
+# as imagens da tabela de versoes deste repositorio, docs/componentes-e-versoes.md
+# (banco, exporter, initContainers).
 #
 # Tudo o que pode pendurar roda com prazo, e o que passa dele reprova o servico
 # em vez de consumir o timeout do job do CD (variaveis de ambiente, em segundos):
@@ -95,8 +95,8 @@ limpa() {
 }
 trap limpa EXIT
 
-# As imagens permitidas: as da tabela "Componentes e versoes" do README.
-versoes=$("$raiz/scripts/ci/imagens-do-readme.sh")
+# As imagens permitidas: as da tabela de docs/componentes-e-versoes.md.
+versoes=$("$raiz/scripts/ci/imagens-da-tabela.sh")
 
 # tag_de <dir> <commit>: a tag da imagem construida do checkout. Arvore limpa, o
 # commit; com mudanca ou arquivo novo fora do .gitignore, <commit>-sujo-<12
@@ -151,7 +151,7 @@ for par in "${pares[@]}"; do
       grep -qxF "$imagem" <<< "$versoes" || echo "$imagem"
     done)
   if [ -n "$fora" ]; then
-    echo "$servico (commit $sha): images outside the versions table of the platform README: $(tr '\n' ' ' <<< "$fora" | sed 's/ *$//')" >&2
+    echo "$servico (commit $sha): images outside the versions table of the platform (docs/componentes-e-versoes.md): $(tr '\n' ' ' <<< "$fora" | sed 's/ *$//')" >&2
     exit 1
   fi
   tar=$(valor "$servico" ${tars[@]+"${tars[@]}"})

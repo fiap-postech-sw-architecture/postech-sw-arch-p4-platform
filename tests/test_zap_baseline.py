@@ -9,7 +9,7 @@ cada servico, a recusa de borda fora do loopback, que FAIL de regra, alvo que
 nao responde 200, scan sem pagina lida, ZAP que pendura e saida sem resumo
 reprovam sem esconder os outros servicos, a saida do script e a tabela do
 summary. O e2e/zap/regras.conf e lido como o ZAP o le, e cada regra tem de estar
-no README com a mesma acao.
+em docs/zap.md com a mesma acao.
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parents[1]
 SCRIPT = RAIZ / "scripts" / "ci" / "zap-baseline.sh"
 REGRAS = RAIZ / "e2e" / "zap" / "regras.conf"
-README = (RAIZ / "README.md").read_text(encoding="utf-8")
+DOC_DO_ZAP = (RAIZ / "docs" / "zap.md").read_text(encoding="utf-8")
 PREFIXOS = {
     "os-service": "/os",
     "billing-service": "/billing",
@@ -376,14 +376,14 @@ def test_o_prazo_envolve_cada_docker_run(
     ]
 
 
-def test_a_imagem_do_zap_vai_por_digest_e_esta_na_tabela_do_readme() -> None:
+def test_a_imagem_do_zap_vai_por_digest_e_esta_na_tabela_de_versoes() -> None:
     assert IMAGEM is not None
     imagem = IMAGEM.group(1)
     assert re.fullmatch(
         r"ghcr\.io/zaproxy/zaproxy:\d+\.\d+\.\d+@sha256:[0-9a-f]{64}", imagem
     )
     tabela = subprocess.run(  # noqa: S603  # nosec B603
-        [str(RAIZ / "scripts" / "ci" / "imagens-do-readme.sh")],
+        [str(RAIZ / "scripts" / "ci" / "imagens-da-tabela.sh")],
         capture_output=True,
         text=True,
         check=True,
@@ -536,9 +536,11 @@ def test_cabecalhos_reprovam_so_o_hsts_avisa_e_so_o_10015_e_ignorado() -> None:
     assert {r for r, a in acoes.items() if a == "IGNORE"} == {"10015"}
 
 
-def test_readme_documenta_cada_regra_com_a_mesma_acao() -> None:
+def test_a_doc_do_zap_documenta_cada_regra_com_a_mesma_acao() -> None:
     linhas = {
         (m.group(1), m.group(2))
-        for m in re.finditer(r"^\| (\d+) \| (FAIL|WARN|IGNORE|INFO) \|", README, re.M)
+        for m in re.finditer(
+            r"^\| (\d+) \| (FAIL|WARN|IGNORE|INFO) \|", DOC_DO_ZAP, re.M
+        )
     }
     assert linhas == {(regra, acao) for regra, acao, _ in regras_do_arquivo()}
