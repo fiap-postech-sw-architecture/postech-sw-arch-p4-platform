@@ -1,18 +1,28 @@
 # Documento de Entrega
 
-> Versão de 22/10/2026, com os CDs da `main` de 20/10 ([seção 2](#2-repositórios-e-estado-do-cicd)) e de 21/10 UTC ([seção 8](#8-testes-e-qualidade)) e os dashboards do kind local capturados em 22/10 (23/10 UTC; [Anexo B, B7](#b7--dashboards-do-grafana)). O vídeo, a prova na sandbox real do Mercado Pago e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
+> Versão de 23/10/2026. O vídeo, a prova na sandbox real do Mercado Pago e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
 
 Documento de entrega da fase 4 do Tech Challenge da Pós-Graduação em Arquitetura de Software (FIAP). O PytStop é o sistema de gestão de uma oficina mecânica: registra cada ordem de serviço (OS) da abertura à entrega do veículo. Nas fases 1 a 3 ele foi um monólito modular; na fase 4 virou três microsserviços, cada um com repositório, banco e pipeline próprios, coordenados por uma saga orquestrada. O OS Service cuida da OS, dos clientes e da identidade e orquestra a saga; o Billing Service, dos preços, do orçamento e do pagamento no Mercado Pago; o Execution Service, do diagnóstico, do estoque de peças e da execução do reparo.
 
 ## Como ler este documento
 
-Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega; o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase, sem alteração. Os números de scans e deploy vêm dos runs do CD na `main` de 20/10/2026 listados na [seção 2](#2-repositórios-e-estado-do-cicd); os de testes, cobertura e SonarQube, dos CDs da `main` de 21/10/2026 (UTC) citados na [seção 8](#8-testes-e-qualidade), menos os do `platform`, que são do run de 20/10; os dos dashboards, do Prometheus do kind local, capturados em 22/10/2026 (23/10 UTC; [Anexo B, B7](#b7--dashboards-do-grafana)).
+Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega, e o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase. Cada número cita o run, o commit ou a janela de onde veio, e o [registro de evidências](evidencias/README.md) guarda a origem e as conferências. A demonstração, que o texto chama de `make demo`, são seis cenários do BDD rodados no kind local.
 
-Siglas: ACID (as garantias de uma transação de banco), ADR (registro de decisão de arquitetura), AMQP (protocolo de mensagens do RabbitMQ), BDD (testes de comportamento em Gherkin), CI e CD (integração e entrega contínuas), CVE (vulnerabilidade catalogada), DLQ (fila de mensagens mortas), E2E (teste de ponta a ponta), GHCR (registro de imagens do GitHub), HMAC (assinatura com chave secreta), JWKS (chaves públicas do JWT), JWT (token assinado), kind (Kubernetes em contêineres Docker), LGPD (Lei Geral de Proteção de Dados), PR (pull request), RF, RNF e RN (requisito funcional, não funcional e regra de negócio), RFC (proposta técnica), SAST e SCA (análise de segurança do código e das dependências), SBOM e SPDX (lista dos componentes de uma imagem e o formato dela), TLS (criptografia do tráfego), TTL (prazo de vida de um registro) e ZAP (varredura de segurança da OWASP).
+| Sigla | Significado | Sigla | Significado |
+|---|---|---|---|
+| ACID | garantias de uma transação de banco | JWKS | chaves públicas do JWT |
+| ADR | registro de decisão de arquitetura | kind | Kubernetes em contêineres Docker |
+| AMQP | protocolo de mensagens do RabbitMQ | LGPD | Lei Geral de Proteção de Dados |
+| BDD | testes de comportamento em Gherkin | RF, RNF, RN | requisito funcional, não funcional e regra de negócio |
+| CVE | vulnerabilidade catalogada | RFC | proposta técnica |
+| DLQ | fila de mensagens mortas | SBOM | lista dos componentes de uma imagem, em formato SPDX |
+| E2E | teste de ponta a ponta | TTL | prazo de vida de um registro |
+| GHCR | registro de imagens do GitHub | ZAP | varredura de segurança da OWASP |
+| HMAC | assinatura com chave secreta | | |
 
 ## Índice dos artefatos
 
-As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais reúnem os artefatos que a avaliação da fase 3 pediu num índice só (componentes, sequências, RFC, ADRs e modelo de dados), mais testes, CI/CD, segurança e observabilidade. Na coluna "Neste PDF" vêm a seção e a página. O [índice da entrega](../../../INDICE-DA-ENTREGA.md), no repositório, liga os mesmos artefatos a cada grupo de requisitos.
+As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais reúnem os artefatos que a avaliação da fase 3 pediu num índice só (componentes, sequências, RFC, ADRs e modelo de dados), mais testes, CI/CD, segurança e observabilidade. A coluna "Neste PDF" dá a seção e a página, e o [índice da entrega](../../../INDICE-DA-ENTREGA.md), no repositório, liga os mesmos artefatos a cada grupo de requisitos.
 
 | Artefato | Neste PDF | No repositório |
 |---|---|---|
@@ -22,33 +32,24 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | Diagrama geral: microsserviços, bancos e comunicação | [4.1](#41-diagrama-geral) | [RFC-004, seção 2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#2-diagrama-geral-da-arquitetura) |
 | Estratégia escolhida para o Saga Pattern | [6](#6-estratégia-da-saga) | [ADR-035](../../arquitetura/adr/fase4/035-saga-orquestrada.md); [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
 | Justificativa da divisão dos microsserviços e das tecnologias | [5](#5-divisão-dos-serviços-e-tecnologias) | [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md), [ADR-037](../../arquitetura/adr/fase4/037-banco-por-servico.md) |
-| Diagrama de componentes: processos, filas e integrações | [4.2](#42-componentes-e-integrações) | [RFC-004, Processos e integrações](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#processos-e-integrações) |
+| Diagrama de componentes: processos, filas e integrações | [4.2](#42-componentes-e-integrações) | [RFC-004, processos e integrações](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#processos-e-integrações) |
 | Sequências da saga: caminho feliz, orçamento recusado ou expirado, falta de peça e cancelamento com estorno | [6.3](#63-caminho-feliz) e [6.4](#64-compensações-principais) | [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) |
-| Estados da saga e da OS; mapa de contextos; topologia do RabbitMQ | só no repositório | RFC-004, seções [4.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#41-etapas-da-instância), [4.2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#42-status-da-os), [3.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#31-mapa-de-contextos) e [5.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#51-topologia) |
-| RFC-004, o desenho integrado da fase | só no repositório | [rfc-004-microsservicos-saga.md](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) |
+| RFC-004, o desenho integrado, com os estados da saga e da OS, o mapa de contextos e a topologia do RabbitMQ | só no repositório | [rfc-004-microsservicos-saga.md](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) |
 | ADRs 034 a 043 | [5.3](#53-tecnologias-e-decisões) | [decisões da fase 4](../../arquitetura/adr/fase4/) |
 | Modelo de dados: ER do OS Service e da Execução e modelo dos documentos do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
 | Contratos de mensageria | [4.3](#43-comunicação-entre-os-serviços) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
-| Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [Anexo B, B2](#b2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
+| Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [B2](#b2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
 | CI/CD e deploy em Kubernetes | [9](#9-cicd-e-deploy) | [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) |
 | Segurança e relatório de vulnerabilidades | [10](#10-segurança-e-análise-de-vulnerabilidades) e [Anexo A](#anexo-a--scans-de-segurança-da-fase-4) | [ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md); [README do `platform`](../../../README.md#decisões-e-limites) |
 | Observabilidade: dashboards, alertas e traces | [11](#11-observabilidade) | [técnicos e alertas](../../../observabilidade/README.md), [negócio](../../../observabilidade/negocio.md) |
-| Swagger e collections Postman | [Anexo B, B4](#b4--swagger-pela-borda) | `docs/api/` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api); [fluxo completo](../../api/fluxo-completo.postman_collection.json) |
+| Swagger e collections Postman | [B4](#b4--swagger-pela-borda) | `docs/api/` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api); [fluxo completo](../../api/fluxo-completo.postman_collection.json) |
 | Rastreabilidade dos 44 requisitos | [12](#12-rastreabilidade-requisito--evidência) | [matriz de rastreabilidade](../matriz-de-rastreabilidade.md) |
 | Feedback da fase 3 | [13](#13-feedback-da-fase-3) | [tratamento na fase 3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/entrega/fase3/feedback-professor.md) |
 | Capturas de tela | [Anexo B](#anexo-b--evidências-visuais) | [registro de evidências](evidencias/README.md#capturas-de-tela) |
 
 ## 1. Identificação do grupo
 
-| Campo | Valor |
-|---|---|
-| Nome do grupo | PytStop |
-| Grupo | 158 |
-| Turma | 15SOAT — Pós-Graduação em Arquitetura de Software (FIAP) |
-
-### Participantes
-
-Os mesmos integrantes das fases 1 a 3.
+Grupo 158 (PytStop), turma 15SOAT — Pós-Graduação em Arquitetura de Software (FIAP). Os integrantes são os mesmos das fases 1 a 3.
 
 | Nome | RM | Discord |
 |---|---|---|
@@ -69,29 +70,19 @@ Os quatro repositórios são públicos, e o usuário `soat-architecture` é cola
 | Execution Service ("Execução", no texto)<br>[https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service) | PostgreSQL 16 | [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), commit `5b1bef4`, aprovado |
 | `platform`: RabbitMQ, Kong, observabilidade, contratos, E2E e documentos da entrega<br>[https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform) | nenhum | [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), commit `d703200`, aprovado |
 
-Cada repositório de serviço tem o código em `src/` (camadas `dominio`, `aplicacao`, `infraestrutura` e `interfaces`), o `Dockerfile`, os manifestos em `k8s/`, os workflows de CI/CD, a arquitetura em `docs/arquitetura.md` e o OpenAPI e a collection Postman em `docs/api/`; o README diz como rodar e testar e traz a cobertura com o link do run. O `make check` roda na máquina os mesmos gates de código do CI.
+Cada repositório de serviço tem o código em `src/` (camadas `dominio`, `aplicacao`, `infraestrutura` e `interfaces`), o `Dockerfile`, os manifestos em `k8s/`, os workflows de CI/CD, `docs/arquitetura.md` e `docs/api/` (OpenAPI e collection Postman); o README diz como rodar e testar e traz a cobertura com o link do run.
 
 **Proteção da `main`.** Os quatro repositórios têm ruleset ativo, visível a quem só tem leitura e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit`, que o GitHub cria com o repositório, entrou por PR; o ruleset veio depois do PR #1, mesclado duas a três horas antes. O [Anexo B, B8](#b8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
 
 ## 3. Link do vídeo
 
-Vídeo de até 15 minutos, no YouTube, com as quatro demonstrações do enunciado. A gravação está pendente; o link entra nesta tabela e no índice da entrega depois da publicação.
+Vídeo de até 15 minutos, no YouTube, com as quatro demonstrações do enunciado. A gravação está pendente; o link entra na tabela e no índice da entrega depois da publicação.
 
 | Recurso | URL |
 |---|---|
 | Vídeo de demonstração (YouTube, não listado) | pendente: gravação e publicação |
 
-O [roteiro](roteiro-video.md) prevê 14 minutos sobre os quatro commits da entrega:
-
-| Tempo | Demonstração |
-|---|---|
-| 00:00–00:30 | Integrantes, repositórios e o diagrama com os bancos separados |
-| 00:30–04:30 | Fluxo completo de uma OS pelos três serviços (`make demo`, bloco 1) |
-| 04:30–08:30 | Saga e falhas: falta de peça, estorno, 409 depois do início, consumidor parado e circuito aberto (bloco 2) |
-| 08:30–11:00 | Deploy automatizado de um serviço, do PR ao E2E no kind |
-| 11:00–14:00 | Trace da saga, logs correlacionados, dashboards, alerta e runbook |
-
-O pagamento do vídeo usa o simulador do Mercado Pago, dito na tela; a prova na sandbox real é outra execução ([seção 14](#14-pendências-até-a-submissão)).
+O [roteiro](roteiro-video.md) prevê 14 minutos: os integrantes e o diagrama com os bancos separados, o fluxo completo de uma OS pelos três serviços (a demonstração), a saga e as falhas (falta de peça, estorno, 409 depois do início, consumidor parado e circuito aberto), o deploy automatizado de um serviço, do PR ao E2E no kind, e o trace da saga, os logs correlacionados, os dashboards, o alerta e o runbook. O pagamento do vídeo usa o simulador do Mercado Pago, dito na tela; a prova na sandbox real é outra execução ([seção 14](#14-pendências-até-a-submissão)).
 
 ## 4. Desenho da arquitetura
 
