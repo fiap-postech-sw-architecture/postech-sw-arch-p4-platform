@@ -242,3 +242,47 @@ def test_comentario_em_bloco_de_comando_reprova() -> None:
         "make lint  # confere",
         "$ make lint  # confere",
     ]
+
+
+# Os titulos de segundo nivel do README, na ordem: o esqueleto dos READMEs da fase.
+ESQUELETO_DO_README = [
+    "Como subir",
+    "Como testar",
+    "Contratos",
+    "Observabilidade",
+    "CI/CD",
+    "Segurança",
+    "Entrega e decisões",
+]
+# Ancoras que os READMEs dos servicos citam (os links deles nao passam por esta
+# suite): o OS, o Billing e a Execucao apontam para estas secoes do platform.
+ANCORAS_CITADAS_PELOS_SERVICOS = {
+    "segredos-gerados",
+    "contrato-com-os-serviços",
+    "troca-de-senha-do-banco",
+    "filas-exchanges-e-argumentos",
+}
+
+
+def test_o_readme_segue_o_esqueleto() -> None:
+    texto = _CERCA.sub("", (RAIZ / "README.md").read_text(encoding="utf-8"))
+
+    assert re.findall(r"^## (.+)$", texto, re.MULTILINE) == ESQUELETO_DO_README
+
+
+def test_o_readme_mantem_as_ancoras_que_os_servicos_citam() -> None:
+    texto = (RAIZ / "README.md").read_text(encoding="utf-8")
+
+    assert ANCORAS_CITADAS_PELOS_SERVICOS - _ancoras(texto) == set()
+
+
+def test_o_readme_aponta_cada_documento_de_docs() -> None:
+    readme = (RAIZ / "README.md").read_text(encoding="utf-8")
+    soltos = [
+        documento
+        for documento in DOCUMENTOS
+        if re.fullmatch(r"docs/[^/]+\.md", documento)
+        and not re.search(rf"\({re.escape(documento)}[)#]", readme)
+    ]
+
+    assert soltos == []

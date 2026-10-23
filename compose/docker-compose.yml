@@ -247,7 +247,7 @@ services:
   # Profile `servicos`: a API de cada servico, construida do repositorio
   # irmao (../../postech-sw-arch-p4-<servico>); relay, consumidor, prazos e
   # notificador rodam so no Kubernetes. Variaveis: o contrato de configuracao
-  # descrito no README.
+  # descrito em docs/enderecos-e-variaveis.md.
   os-service:
     labels: *logs
     profiles: [servicos]

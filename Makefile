@@ -223,7 +223,7 @@ GUARDA_DE_CONTEXTO := case "$(KUBE_CONTEXT)" in kind-*) ;; *) \
 	echo "contexto $(KUBE_CONTEXT) nao e um kind descartavel: o E2E derruba o Billing e nao limpa; para rodar assim mesmo exporte E2E_CONTEXTO_NAO_DESCARTAVEL=$(KUBE_CONTEXT)" >&2; exit 2; };; esac
 
 # E2E BDD da saga contra o kind com a plataforma e os tres servicos de pe
-# (README, "E2E da saga"). Os relatorios ficam em reports/e2e; o resumo.md sai
+# (docs/e2e-da-saga.md). Os relatorios ficam em reports/e2e; o resumo.md sai
 # mesmo com cenario reprovado, e o status do make e o do pytest. Com todos os
 # cenarios verdes, o make confere ainda que cada consulta de painel de negocio
 # devolve serie no Prometheus do kind (e2e/apoio/paineis.py, paineis.md): painel
@@ -272,7 +272,7 @@ demo: ## roda os blocos 1 e 2 do video (cenarios @demo) imprimindo o status da O
 	uv run --group e2e python -m e2e.resumo reports/demo || true; \
 	exit $$status
 
-# Sandbox do Mercado Pago (README, "Mercado Pago na sandbox"). O real grava o Access
+# Sandbox do Mercado Pago (docs/mercado-pago-na-sandbox.md). O real grava o Access
 # Token num Secret do cluster: so kind, e sem o escape do E2E. As credenciais vem do
 # ambiente do shell (read -rs), nunca da linha de comando, e as duas pastas de
 # relatorios sao separadas para o ensaio nao apagar a evidencia do real. O -x

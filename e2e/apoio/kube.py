@@ -52,7 +52,7 @@ class ComandoAusenteError(ErroDeComandoError):
     def __init__(self, programa: str) -> None:
         super().__init__(
             f"{programa} não está no PATH: instale-o e abra um terminal novo "
-            '(README, "Pré-requisitos")'
+            '(docs/como-subir.md, "Pré-requisitos")'
         )
 
 

@@ -4,7 +4,7 @@ O kubectl falso guarda os Secrets num JSON, registra os argumentos e o
 ambiente de cada chamada e recusa manifesto que o apiserver recusaria ou com
 rotulo fora do previsto (os da plataforma com os dela, os dos servicos sem
 nenhum). O teste confere o que o script cria num cluster novo, com o formato
-de cada chave dos servicos; a tabela "Segredos gerados" do README contra essas
+de cada chave dos servicos; a tabela de docs/segredos.md contra essas
 fontes (nome, namespace, chaves, formato e quando o script grava); que dois
 deploys seguidos mantem os valores; que as fontes que ja existem, da
 plataforma e dos servicos, ficam como estao, e a que falta nasce sozinha; que
@@ -99,8 +99,8 @@ FORMATOS = {
     ),
     "JWT_PREVIOUS_PUBLIC_KEY": r"",
 }
-# Como a tabela "Segredos gerados" do README escreve cada formato.
-FORMATO_NO_README = {
+# Como a tabela de docs/segredos.md escreve cada formato.
+FORMATO_NA_TABELA = {
     HEX_48: "48 hexadecimais",
     HEX_64: "64 hexadecimais",
     FORMATOS["ENCRYPTION_KEY"]: "44 caracteres",
@@ -408,7 +408,7 @@ def test_chave_fernet_troca_o_alfabeto_do_base64_pelo_url_safe(
 ) -> None:
     # 32 bytes cujo base64 padrao tem "+" e "/". O Fernet aceitaria a chave
     # assim, mas o contrato e o base64 url-safe da chave que o proprio Fernet
-    # gera (README, Segredos gerados).
+    # gera (docs/segredos.md).
     chave = b"\xfb\xff" * 16
     padrao = base64.b64encode(chave).decode()
     assert {"+", "/"} <= set(padrao)
@@ -823,9 +823,9 @@ def test_no_github_actions_a_senha_lida_da_fonte_e_mascarada(tmp_path: Path) -> 
     assert mascaradas == lidas
 
 
-def test_tabela_do_readme_tem_chaves_formato_e_quando_de_cada_fonte() -> None:
-    readme = (RAIZ / "README.md").read_text(encoding="utf-8")
-    secao = readme.split("### Segredos gerados\n", 1)[1].split("\n#", 1)[0]
+def test_tabela_dos_segredos_tem_chaves_formato_e_quando_de_cada_fonte() -> None:
+    doc = (RAIZ / "docs" / "segredos.md").read_text(encoding="utf-8")
+    secao = doc.split("# Segredos gerados\n", 1)[1].split("\n#", 1)[0]
     # "<namespace>/<nome>" -> a celula das chaves e a do "Quando o script grava".
     tabela: dict[str, tuple[str, str]] = {}
     for linha in secao.splitlines():
@@ -850,7 +850,7 @@ def test_tabela_do_readme_tem_chaves_formato_e_quando_de_cada_fonte() -> None:
         f"{fonte} {chave}"
         for fonte, (celula, _) in dos_servicos.items()
         for chave in FONTES_DOS_SERVICOS[fonte]
-        if FORMATO_NO_README[FORMATOS[chave]] not in celula
+        if FORMATO_NA_TABELA[FORMATOS[chave]] not in celula
     ]
     assert sem_formato == []
     assert [

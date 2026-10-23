@@ -8,8 +8,8 @@ overlay da execucao parte do overlay pedido, troca a imagem e some no fim; a
 ordem de cada namespace (Jobs de inicializacao apagados, apply, banco, Job,
 Deployments); que falha de build, de Job, de rollout ou de apply nomeia o
 servico e o commit; que servico sem o overlay pedido, ou com imagem de
-terceiro fora da tabela de versoes do README (citada ou nao em outro trecho
-dele), falha antes de tudo; e os argumentos recusados.
+terceiro fora da tabela de versoes (docs/componentes-e-versoes.md; citada ou nao
+em outro trecho do documento), falha antes de tudo; e os argumentos recusados.
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ import yaml
 SCRIPT = (
     Path(__file__).resolve().parents[1] / "scripts" / "ci" / "implantar-servicos.sh"
 )
-LEITOR_DO_README = SCRIPT.with_name("imagens-do-readme.sh")
+LEITOR_DA_TABELA = SCRIPT.with_name("imagens-da-tabela.sh")
 # As funcoes de cluster (kubectl com prazo, ordem do namespace e mapas), comuns
 # ao deploy-remoto.sh.
 COMUM = SCRIPT.with_name("implantacao.sh")
@@ -282,7 +282,7 @@ def git(*args: str, cwd: Path) -> str:
 
 
 # Imagens de terceiros que os manifests de cada servico usam, todas na tabela
-# de versoes do README.
+# de versoes (docs/componentes-e-versoes.md).
 DE_TERCEIROS = {
     "os-service": "postgres:16.15 prometheuscommunity/postgres-exporter:v0.20.1",
     "billing-service": "mongo:7.0.43 percona/mongodb_exporter:0.53.0",
@@ -784,9 +784,9 @@ FORMAS_DA_IMAGEM = pytest.mark.parametrize(
 )
 
 
-def copia_da_plataforma(tmp_path: Path, readme: str) -> Path:
+def copia_da_plataforma(tmp_path: Path, tabela: str) -> Path:
     """Uma copia do script, das funcoes comuns e dos leitores de imagem ao lado
-    do README dado."""
+    do documento de versoes dado."""
     plataforma = tmp_path / "plataforma"
     (plataforma / "scripts" / "ci").mkdir(parents=True)
     copia = plataforma / "scripts" / "ci" / SCRIPT.name
@@ -794,7 +794,10 @@ def copia_da_plataforma(tmp_path: Path, readme: str) -> Path:
     shutil.copy(COMUM, copia.with_name(COMUM.name))
     for leitor in SCRIPT.parent.glob("imagens-*.sh"):
         shutil.copy(leitor, copia.with_name(leitor.name))
-    (plataforma / "README.md").write_text(readme, encoding="utf-8")
+    (plataforma / "docs").mkdir()
+    (plataforma / "docs" / "componentes-e-versoes.md").write_text(
+        tabela, encoding="utf-8"
+    )
     return copia
 
 
@@ -835,7 +838,7 @@ def test_imagem_fora_da_tabela_de_versoes_para_antes_de_tudo(
     commit = sha(implantacao.dirs["billing-service"])
     assert (
         f"billing-service (commit {commit}): images outside the versions table "
-        f"of the platform README: {imagem}"
+        f"of the platform (docs/componentes-e-versoes.md): {imagem}"
     ) in processo.stderr
     assert implantacao.chamadas("docker") == []
     assert implantacao.chamadas("kubectl") == []
@@ -882,10 +885,10 @@ def test_nome_so_de_digitos_entre_aspas_vale_se_esta_na_tabela(
 def test_so_a_tabela_de_versoes_vale_como_lista_de_imagens(
     implantacao: Implantacao, tmp_path: Path
 ) -> None:
-    # README de mentira, ao lado de uma copia do script: a tabela tem as imagens
-    # de terceiros dos tres servicos menos a postgres:16.15, que so aparece na
-    # prosa e na segunda coluna de outra tabela, depois da de versoes, como o
-    # `postgres` do superusuario no README de verdade.
+    # Documento de mentira, ao lado de uma copia do script: a tabela tem as
+    # imagens de terceiros dos tres servicos menos a postgres:16.15, que so
+    # aparece na prosa e na segunda coluna de outra tabela, depois da de versoes,
+    # como o `postgres` do superusuario no documento de verdade.
     imagens = {i for lista in DE_TERCEIROS.values() for i in lista.split()}
     linhas = "".join(
         f"| item | `{imagem}` | para que serve |\n"
@@ -906,7 +909,7 @@ def test_so_a_tabela_de_versoes_vale_como_lista_de_imagens(
     commit = sha(implantacao.dirs["os-service"])
     assert (
         f"os-service (commit {commit}): images outside the versions table "
-        "of the platform README: postgres:16.15"
+        "of the platform (docs/componentes-e-versoes.md): postgres:16.15"
     ) in processo.stderr
     assert implantacao.chamadas("docker") == []
     assert implantacao.chamadas("kubectl") == []
@@ -922,14 +925,15 @@ def test_versoes_conferidas_no_overlay_pedido(implantacao: Implantacao) -> None:
     )
 
 
-def test_imagens_do_readme_sao_so_o_primeiro_trecho_da_coluna_versao(
+def test_imagens_da_tabela_sao_so_o_primeiro_trecho_da_coluna_versao(
     tmp_path: Path,
 ) -> None:
     plataforma = tmp_path / "plataforma"
     (plataforma / "scripts" / "ci").mkdir(parents=True)
-    leitor = plataforma / "scripts" / "ci" / LEITOR_DO_README.name
-    shutil.copy(LEITOR_DO_README, leitor)
-    (plataforma / "README.md").write_text(
+    leitor = plataforma / "scripts" / "ci" / LEITOR_DA_TABELA.name
+    shutil.copy(LEITOR_DA_TABELA, leitor)
+    (plataforma / "docs").mkdir()
+    (plataforma / "docs" / "componentes-e-versoes.md").write_text(
         "O banco roda `postgres:16.15` no cluster.\n\n"
         "| Componente | Versão | Para que serve |\n|---|---|---|\n"
         "| Kong | `kong:3.9.3` (chart `kong/kong` 3.4.1) | `fora/da-coluna:1` |\n"
@@ -1370,11 +1374,13 @@ def test_mapa_servico_namespace_dos_scripts_e_do_makefile_concorda() -> None:
     assert set(makefile.group(1).split()) == set(SERVICOS.values())
 
 
-def test_secret_do_banco_de_cada_namespace_e_o_da_tabela_do_readme() -> None:
+def test_secret_do_banco_de_cada_namespace_e_o_da_tabela_do_contrato() -> None:
     no_script = dict(re.findall(r"(pytstop-\w+)\) echo ([\w-]+) ;;", COMUM.read_text()))
     linha = next(
         linha
-        for linha in (RAIZ / "README.md").read_text().splitlines()
+        for linha in (RAIZ / "docs" / "contrato-com-os-servicos.md")
+        .read_text()
+        .splitlines()
         if linha.startswith("| Secret com as senhas do banco")
     )
 

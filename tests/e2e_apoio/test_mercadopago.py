@@ -131,7 +131,9 @@ def test_o_cliente_http_tem_prazo_tls_ligado_e_nao_segue_redirecionamento(
     ClienteMercadoPago(CHAVE_APP_USR)
 
     assert opcoes["base_url"] == URL_DA_API == "https://api.mercadopago.com"
-    assert opcoes["timeout"] == PRAZO == 10.0, "o README promete 10 s"
+    assert opcoes["timeout"] == PRAZO == 10.0, (
+        "docs/mercado-pago-na-sandbox.md promete 10 s"
+    )
     assert opcoes["verify"] is True
     assert opcoes["follow_redirects"] is False
 

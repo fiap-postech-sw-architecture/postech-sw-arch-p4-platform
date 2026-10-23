@@ -1,7 +1,7 @@
 """scripts/versoes.sh e o leitor de imagens dos manifests que ele divide com o
 scripts/ci/implantar-servicos.sh.
 
-O versoes.sh roda numa copia da plataforma (README com a tabela de versoes,
+O versoes.sh roda numa copia da plataforma (a tabela de versoes em docs/,
 kind/cluster.yaml, e os scripts), com kubectl e docker falsos que devolvem os
 manifests e as imagens do compose do teste. O teste confere que ele reprova a
 imagem de terceiro fora da tabela em cada forma que o kustomize a emite (chave
@@ -107,7 +107,8 @@ class Plataforma:
             binario.write_text(f"#!{sys.executable}\n{codigo}", encoding="utf-8")
             binario.chmod(0o755)
         linhas = "".join(f"| item | `{imagem}` | serve |\n" for imagem in TABELA)
-        (raiz / "README.md").write_text(
+        (raiz / "docs").mkdir()
+        (raiz / "docs" / "componentes-e-versoes.md").write_text(
             "| Componente | Versão | Para que serve |\n|---|---|---|\n" + linhas,
             encoding="utf-8",
         )
@@ -164,4 +165,4 @@ def test_versoes_reprova_a_imagem_fora_da_tabela_em_qualquer_forma(
     processo = plataforma.roda("        image: busybox:1.37\n" + trecho)
 
     assert processo.returncode == 1
-    assert f"{imagem} missing from the README versions table" in processo.stdout
+    assert f"{imagem} missing from the versions table" in processo.stdout

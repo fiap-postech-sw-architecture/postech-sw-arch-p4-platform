@@ -8,7 +8,7 @@
 # correlation-id, prometheus, bloqueia-barra-codificada e rate-limiting-global.
 # Os demais entram por anotacao no Ingress (konghq.com/plugins: <nome>); o
 # rate-limiting da rota substitui o global e conta num balde proprio da rota.
-# Tabela rota -> plugin e exemplos completos de Ingress no README.
+# Tabela rota -> plugin e exemplos completos de Ingress em docs/gateway.md.
 apiVersion: configuration.konghq.com/v1
 kind: KongClusterPlugin
 metadata:
@@ -89,7 +89,7 @@ config:
 # redis resolveria). Limites do ADR-038; o overlay kind os multiplica por 10.
 # O kong-proxy usa externalTrafficPolicy Local para o IP real chegar (no k3s
 # isso ainda nao foi conferido com dois clientes; no kind todo cliente chega
-# com o IP da bridge do Docker: ADR-038, values.yaml e README).
+# com o IP da bridge do Docker: ADR-038, values.yaml e docs/gateway.md).
 apiVersion: configuration.konghq.com/v1
 kind: KongClusterPlugin
 metadata:

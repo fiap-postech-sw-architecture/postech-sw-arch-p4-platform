@@ -43,8 +43,8 @@ MODOS: Final = frozenset({"real", "ensaio"})
 # A saida de um kubectl que falhou: "<comando>: saiu com 1: <o que o kubectl disse>".
 _DO_KUBECTL: Final = re.compile(r": saiu com \d+: (?P<motivo>.*)$", re.DOTALL)
 SUBIR_O_CLUSTER: Final = (
-    'Suba o cluster e os três serviços (README, "Mercado Pago na sandbox", '
-    '"Como rodar") e confira o KUBE_CONTEXT.'
+    "Suba o cluster e os três serviços "
+    '(docs/mercado-pago-na-sandbox.md, "Como rodar") e confira o KUBE_CONTEXT.'
 )
 
 

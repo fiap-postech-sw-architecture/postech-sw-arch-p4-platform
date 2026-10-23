@@ -91,7 +91,7 @@ jobs:
       # SBOM em SPDX e proveniencia ficam no indice da imagem no registry. O
       # cache de camadas e o do BuildKit no cache do GitHub, por servico. O
       # registro do build (*.dockerbuild) que a action anexaria sozinha, por 90
-      # dias, fica desligado: os artefatos do run sao so os tres listados no README.
+      # dias, fica desligado: os artefatos do run sao so os tres listados em docs/ci-cd.md.
       - id: build
         name: Build e push
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0

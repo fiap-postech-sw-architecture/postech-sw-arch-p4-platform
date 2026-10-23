@@ -43,7 +43,7 @@ A API, o banco e as métricas escrevem etapa e status em minúsculas (`falha_na_
    kubectl --context kind-pytstop-p4 -n pytstop-plataforma get secret rabbitmq-credenciais -o jsonpath='{.data.admin-senha}' | base64 -d; echo
    ```
 
-4. Defina os endereços das APIs, que respondem pela borda do kind, e entre como `admin` do OS Service. O e-mail do admin semeado é o `ADMIN_EMAIL` do ConfigMap do serviço, e a senha está na chave `ADMIN_PASSWORD` do Secret `os-admin`, gerado pelo deploy, os dois no namespace `pytstop-os` ([Segredos gerados](../../README.md#segredos-gerados)). O ConfigMap se acha pela chave, sem depender do nome dele. A senha fica numa variável do shell, não exportada, que só o `jq` recebe, no ambiente dele, e sai do shell logo depois do login; ao `curl` ela chega pela entrada padrão, sem aparecer na lista de processos:
+4. Defina os endereços das APIs, que respondem pela borda do kind, e entre como `admin` do OS Service. O e-mail do admin semeado é o `ADMIN_EMAIL` do ConfigMap do serviço, e a senha está na chave `ADMIN_PASSWORD` do Secret `os-admin`, gerado pelo deploy, os dois no namespace `pytstop-os` ([Segredos gerados](../segredos.md#segredos-gerados)). O ConfigMap se acha pela chave, sem depender do nome dele. A senha fica numa variável do shell, não exportada, que só o `jq` recebe, no ambiente dele, e sai do shell logo depois do login; ao `curl` ela chega pela entrada padrão, sem aparecer na lista de processos:
 
    ```bash
    OS=http://localhost/os BILLING=http://localhost/billing EXECUCAO=http://localhost/execucao
@@ -145,7 +145,7 @@ As métricas não levam o `ordem_id`, porque os labels são fechados. Para chega
 
 1. No Explore do Grafana, com o datasource Loki, `{namespace="pytstop-os"} |= "falha_na_compensacao" | json` traz as linhas do OS Service que citam essa etapa; o campo `correlation_id` de cada linha é o `ordem_id`.
 2. Na mensagem parada numa DLQ, a propriedade `correlation_id` ([seção 4](#4-mensagem-na-dlq-e-redrive)).
-3. No banco do OS Service, a lista completa, com uma consulta só de leitura. O comando acha o pod e o container do PostgreSQL pela imagem, sem depender do nome que o manifesto lhes der, e entra como `os_app` (só DML), com a senha que o container do banco já recebe do Secret em `POSTGRES_APP_PASSWORD`: o PostgreSQL do OS pede senha até no socket local (`scram-sha-256`, [Contrato com os serviços](../../README.md#o-que-cada-serviço-precisa-ter)), e ela chega ao `psql` por `PGPASSWORD`, sem passar pelo terminal nem por argumento. O `PGOPTIONS` limita a espera por um lock a 2 s e a consulta a 10 s: o lock que faz o coletor desistir é o mesmo que prenderia o `psql` do operador. A consulta junta cada instância à linha da outbox do envio mais recente do comando em voo (o último de `mensagem_ids`) e lista as instâncias em `falha_na_compensacao` e as com o prazo vencido há mais de 60 s, contado do `entregue_em` mais 120 s, o `SAGA_PRAZO_RESPOSTA_SEGUNDOS` padrão; se a configuração mudou, troque os dois números:
+3. No banco do OS Service, a lista completa, com uma consulta só de leitura. O comando acha o pod e o container do PostgreSQL pela imagem, sem depender do nome que o manifesto lhes der, e entra como `os_app` (só DML), com a senha que o container do banco já recebe do Secret em `POSTGRES_APP_PASSWORD`: o PostgreSQL do OS pede senha até no socket local (`scram-sha-256`, [Contrato com os serviços](../contrato-com-os-servicos.md#o-que-cada-serviço-precisa-ter)), e ela chega ao `psql` por `PGPASSWORD`, sem passar pelo terminal nem por argumento. O `PGOPTIONS` limita a espera por um lock a 2 s e a consulta a 10 s: o lock que faz o coletor desistir é o mesmo que prenderia o `psql` do operador. A consulta junta cada instância à linha da outbox do envio mais recente do comando em voo (o último de `mensagem_ids`) e lista as instâncias em `falha_na_compensacao` e as com o prazo vencido há mais de 60 s, contado do `entregue_em` mais 120 s, o `SAGA_PRAZO_RESPOSTA_SEGUNDOS` padrão; se a configuração mudou, troque os dois números:
 
    ```bash
    kos() { kubectl --context kind-pytstop-p4 -n pytstop-os "$@"; }
@@ -263,7 +263,7 @@ Reprocessar é um `UPDATE` no banco do serviço, uma linha por vez. Não passa p
 
    O `UPDATE` devolve o `id` da linha que mudou, e nenhuma linha se ela já não estava `dead`. Ele não emite `NOTIFY`: o relay a pega no próximo ciclo de poll (`OUTBOX_POLL_SEGUNDOS`).
 
-   No Billing (MongoDB), a linha é um documento da coleção `outbox` do banco `billing`, com o `_id` igual ao `id` da mensagem. O `mongosh` lê o script como arquivo (`--file /dev/stdin`), e o contêiner autentica como root com a variável do próprio contêiner; se a senha do root foi trocada sem reiniciar o StatefulSet, ela está defasada ([troca de senha do banco](../../README.md#troca-de-senha-do-banco)). Primeiro, a leitura:
+   No Billing (MongoDB), a linha é um documento da coleção `outbox` do banco `billing`, com o `_id` igual ao `id` da mensagem. O `mongosh` lê o script como arquivo (`--file /dev/stdin`), e o contêiner autentica como root com a variável do próprio contêiner; se a senha do root foi trocada sem reiniciar o StatefulSet, ela está defasada ([troca de senha do banco](../segredos.md#troca-de-senha-do-banco)). Primeiro, a leitura:
 
    ```bash
    kubectl --context kind-pytstop-p4 -n pytstop-billing exec -i statefulset/billing-mongo -c mongo -- \

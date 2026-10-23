@@ -11,7 +11,7 @@
 # admin.json so no boot, e uma senha de admin nova com o broker de pe deixaria
 # o Job rabbitmq-usuarios sem acesso a API (401) ate o proximo restart.
 #
-# Fontes dos servicos, no namespace de cada um (README, "Segredos gerados"):
+# Fontes dos servicos, no namespace de cada um (docs/segredos.md):
 # senhas dos bancos (no PostgreSQL, uma por papel), chave RSA do JWT,
 # ENCRYPTION_KEY, senha do admin semeado, chave HMAC do link de decisao e as
 # credenciais e o keyfile do MongoDB.
@@ -23,10 +23,11 @@
 #
 # Derivado: o Secret rabbitmq de cada namespace de servico (pytstop-os,
 # pytstop-billing, pytstop-execucao), com a chave RABBITMQ_URL, a URL do
-# usuario do servico no broker. E o contrato com os servicos (README, "Usuario
-# e permissoes no RabbitMQ") e e regravado a cada deploy com a senha da fonte,
-# a mesma que o Job rabbitmq-usuarios aplica no broker: trocar a senha na
-# fonte vale no deploy seguinte (README, "Troca de senha do RabbitMQ").
+# usuario do servico no broker. E o contrato com os servicos
+# (docs/rabbitmq.md, "Usuario e permissoes no RabbitMQ") e e regravado a cada
+# deploy com a senha da fonte, a mesma que o Job rabbitmq-usuarios aplica no
+# broker: trocar a senha na fonte vale no deploy seguinte (docs/segredos.md,
+# "Troca de senha do RabbitMQ").
 #
 # Nenhuma senha ou chave vai para argumento de processo, para variavel
 # exportada, para a saida ou para o repositorio: o Secret chega ao kubectl pela
@@ -72,7 +73,7 @@ confere() {
     case "$atual " in
       *" $chave "*) ;;
       *)
-        echo "secret $ns/$nome has no key $chave: add it in the format of the README" \
+        echo "secret $ns/$nome has no key $chave: add it in the format of docs/segredos.md" \
           "(Segredos gerados); the script never rewrites a source that exists" >&2
         exit 1
         ;;
@@ -116,7 +117,7 @@ sem_volume() {
   volumes=$($K -n "$1" get pvc -o name) || exit 1
   [ -n "$volumes" ] || return 0
   echo "secret $1/$2 is missing but $1 has database volumes (${volumes//$'\n'/ }):" \
-    "restore the secret (README, Segredos gerados). Only on a demo cluster, deleting the" \
+    "restore the secret (docs/segredos.md). Only on a demo cluster, deleting the" \
     "namespace destroys the database and lets it start from scratch: $K delete namespace $1," \
     "then make deploy and the deploy of the service" >&2
   exit 1
@@ -180,7 +181,7 @@ for usuario in os billing execucao; do
   # de um cluster criado antes das senhas geradas, tem hifen e para aqui.
   if ! [[ "$senha_usuario" =~ ^[A-Za-z0-9]+$ ]]; then
     echo "secret $NS/rabbitmq-credenciais: senha-$usuario must have only letters and digits (A-Z, a-z, 0-9)." \
-      "Change it as in the README (Troca de senha do RabbitMQ); a kind cluster created with the demo" \
+      "Change it as in docs/segredos.md (Troca de senha do RabbitMQ); a kind cluster created with the demo" \
       "passwords is recreated with make kind-down kind-up deploy" >&2
     exit 1
   fi

@@ -1,7 +1,7 @@
 # Prometheus da plataforma (veio do k8s/prometheus.yaml da fase 3). A fase 3
 # listava cada alvo; aqui os servicos se registram sozinhos: todo pod dos
 # namespaces pytstop-* com as anotacoes abaixo e raspado, com os labels app
-# (vira o job) e processo do pod (contrato no README).
+# (vira o job) e processo do pod (contrato em docs/enderecos-e-variaveis.md).
 #
 #   prometheus.io/scrape: "true"
 #   prometheus.io/port: "<porta>"     (precisa estar em ports do container)

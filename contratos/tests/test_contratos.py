@@ -1059,7 +1059,8 @@ def test_todo_defeito_gerado_do_exemplo_e_rejeitado(
 # exata de um limite, nem provam o lado aceito. Daqui ate o fim da secao, cada
 # limite e cada regra condicional tem o valor na fronteira aceito e o seguinte
 # rejeitado, para que mexer em um limite, tirar uma regra ou apertar uma lista
-# reprove o teste. O oraculo e a RFC-004 5.3 e o README, nao o schema.
+# reprove o teste. O oraculo e a RFC-004 5.3 e docs/contratos-de-mensageria.md,
+# nao o schema.
 def listas_dos_exemplos() -> list[Any]:
     achadas = []
     for tipo in CATALOGO:
