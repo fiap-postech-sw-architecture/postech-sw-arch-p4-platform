@@ -779,6 +779,10 @@ Riscos aceitos: tráfego interno do cluster sem TLS, contido pela NetworkPolicy;
 
 A stack da fase 3 passou para o `platform` e serve os três serviços, cada um com `service.name` próprio ([ADR-043](../../arquitetura/adr/fase4/043-observabilidade-distribuida.md)): Prometheus para métricas, Grafana para dashboards e alertas, Loki com Promtail para os logs e Jaeger para os traces, recebidos por OpenTelemetry; a peça nova são os exporters dos bancos. Os logs são JSON, sem dado pessoal, com `correlation_id` (o `ordem_id`) e `trace_id`: uma busca no Loki traz a OS nos três serviços, e o `trace_id` leva ao trace. Cada saga é um trace, porque a outbox grava o `traceparent` de quem a escreveu e o relay o publica nos headers AMQP ([RFC-004, seção 9](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#9-observabilidade)). As métricas estão no [catálogo](../../../observabilidade/README.md#catálogo-de-métricas), e um teste reprova painel ou alerta que use métrica fora dele.
 
+![Explore de um Grafana local 11.1.0 consultando o Loki do kind: 16 linhas dos três serviços para a mesma OS, com o `trace_id` ligado ao Jaeger.](evidencias/loki-correlacao-os-2026-10-23.png)
+
+Fonte: Loki do kind, 23/10/2026, 09:36 UTC, na mesma OS e no mesmo trace do [B3](#b3--trace-da-saga-no-jaeger). O Explore do Grafana do cluster exige login de admin, por isso o print vem de um Grafana local.
+
 | Dashboard | Tag | Responde |
 |---|---|---|
 | Atendimento | negócio | volume diário de OS e tempo médio por status, OS por status, funil, desfecho das sagas e motivos de cancelamento |
@@ -903,27 +907,35 @@ As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2), de
 
 ## B1 — CD da `main`
 
-CI, segurança, SonarQube, imagem e implantação no kind verdes; o `remote-skipped` registra o deploy remoto desligado.
+CI, segurança, SonarQube, imagem e implantação no kind verdes. O `deploy-remote` cinza é o gancho opcional, desligado: o deploy entregue é o `deploy-kind`, cujos passos estão no último print. O "push" de cada run é o do merge do PR citado.
 
 ![CD do OS Service na main.](evidencias/cd-os-service-main-2026-10-20.png)
 
-Fonte: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), commit `3ce582b`, 20/10/2026.
+Fonte: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), commit `3ce582b`, merge do PR #24, 20/10/2026.
 
 ![CD do Billing Service na main.](evidencias/cd-billing-service-main-2026-10-20.png)
 
-Fonte: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), commit `76b5f9b`, 20/10/2026.
+Fonte: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), commit `76b5f9b`, merge do PR #21, 20/10/2026.
 
 ![CD do Execution Service na main.](evidencias/cd-execution-service-main-2026-10-20.png)
 
-Fonte: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), commit `5b1bef4`, 20/10/2026.
+Fonte: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), commit `5b1bef4`, merge do PR #18, 20/10/2026.
 
 ![CD do platform na main: CI, deploy-kind e e2e.](evidencias/cd-platform-main-2026-10-20.png)
 
-Fonte: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), commit `d703200`, 20/10/2026.
+Fonte: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), commit `d703200`, merge do PR #31, 20/10/2026.
+
+![Passos do deploy-kind do OS Service: plataforma e serviços no kind, smoke por namespace e E2E BDD, em 7 min 28 s.](evidencias/cd-deploy-kind-os-service-2026-10-23.png)
+
+Fonte: [job do run 39957080878](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39957080878/job/120430471330), commit `a51d83e`, merge do PR #29, 23/10/2026.
 
 ## B2 — SonarQube
 
-Cada print mostra o painel do SonarQube na aba Overall Code, que mede o código inteiro: quality gate Passed, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, a cobertura e a duplicação. O artefato do CI traz as contagens por tipo (`vulnerabilities`, `bugs` e `code_smells`), todas em 0. O servidor é local, com as mesmas imagens do CI, o `sonar-project.properties` e o quality gate do repositório, o commit do CD e o `coverage.xml` do artefato de testes desse CD; as medidas são iguais às do job `ci / sonarqube` do run citado em cada print. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol` (`repository.py`, `ports.py` e `unit_of_work.py`), que o `.coveragerc` omite por não terem lógica ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
+O job `ci / sonarqube` verde de cada CD está no [B1](#b1--cd-da-main) e roda a análise no CI. Os três prints a seguir mostram o painel do SonarQube na aba Overall Code, que mede o código inteiro: quality gate Passed, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, a cobertura e a duplicação. O artefato do CI traz as contagens por tipo (`vulnerabilities`, `bugs` e `code_smells`), todas em 0. O servidor é local, com as mesmas imagens do CI, o `sonar-project.properties` e o quality gate do repositório, o commit do CD e o `coverage.xml` do artefato de testes desse CD; as medidas são iguais às do job `ci / sonarqube` do run citado em cada print. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol` (`repository.py`, `ports.py` e `unit_of_work.py`), que o `.coveragerc` omite por não terem lógica ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
+
+![Job ci / sonarqube do OS Service verde em 2 min 19 s: análise, resumo e relatório publicados.](evidencias/ci-sonarqube-job-os-service-2026-10-23.png)
+
+Fonte: [job do run 39957080878](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39957080878/job/120428849725), 23/10/2026.
 
 ![SonarQube do OS Service no commit c0f5a57: quality gate aprovado, 0 problemas abertos, cobertura de 97,2% e 0,0% de duplicação.](evidencias/sonarqube-os-service-2026-10-21.png)
 
@@ -939,15 +951,15 @@ Fonte: análise local de `0ec76fe` em 21/10/2026, com as imagens e o `coverage.x
 
 ## B3 — Trace da saga no Jaeger
 
-Os dois primeiros traces são de uma execução no kind local em 20/10/2026, às 09:03 (horário de Brasília), lidos no Jaeger do kind por `kubectl port-forward`. O do caminho feliz, de 19/10/2026, já tinha saído da memória do Jaeger e foi aberto pela aba Upload de um Jaeger 1.76.0 avulso.
+Os traces são do Jaeger do kind local; o do caminho feliz, de 19/10/2026, já tinha saído da memória dele e foi aberto pela aba Upload de um Jaeger 1.76.0 avulso. O das compensações vem de um ensaio com o simulador do Mercado Pago, não do provedor real, e a mesma OS está no Loki, na [seção 11](#11-observabilidade). O mesmo cenário em 20/10/2026 (trace `bfe21ce701ea69d6afc008a870d2ce21`, também de 339 spans) está [no registro](evidencias/jaeger-trace-saga-2026-10-20.png).
 
 ![Busca por POST /api/v1/ordens-de-servico: três traces, cada um nos três serviços.](evidencias/jaeger-busca-saga-2026-10-20.png)
 
 Fonte: Jaeger 1.76.0, serviço `os-service`, de 09:03:10 a 09:03:40.
 
-![OS paga e cancelada antes do início: 339 spans em 3 serviços, em 7,63 s.](evidencias/jaeger-trace-saga-2026-10-20.png)
+![OS paga e cancelada: 339 spans em 3 serviços, com as compensações destacadas (CancelarExecucao, EstornarPagamento, LiberarReserva).](evidencias/jaeger-estorno-compensacoes-2026-10-23.png)
 
-Fonte: trace `bfe21ce701ea69d6afc008a870d2ce21`, da mesma busca.
+Fonte: trace `a1103d3357c265b8d697b250f8a4ddd9`, 23/10/2026, 09:36 UTC; ensaio com o simulador do Mercado Pago.
 
 ![Caminho feliz de 19/10/2026 pela aba Upload: 245 spans nos três serviços.](evidencias/jaeger-upload-caminho-feliz-2026-10-20.png)
 
