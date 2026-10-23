@@ -242,7 +242,6 @@
       "fieldConfig": {
         "defaults": {
           "unit": "short",
-          "decimals": 0,
           "noValue": "sem dado"
         },
         "overrides": []
