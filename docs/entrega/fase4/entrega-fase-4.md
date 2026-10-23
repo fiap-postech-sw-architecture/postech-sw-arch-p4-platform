@@ -848,12 +848,12 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 
 ## 14. Pendências até a submissão
 
-A dívida técnica aceita, com o limite atual e quando revisar cada item, está na [auditoria pré-entrega](auditoria-e-divida-tecnica.md). O que falta para a submissão:
+A dívida técnica aceita está na [auditoria pré-entrega](auditoria-e-divida-tecnica.md). O que falta para a submissão:
 
 | Pendência | Quem fecha e como |
 |---|---|
-| Vídeo de até 15 minutos | O grupo grava pelo [roteiro](roteiro-video.md), publica no YouTube (não listado) e põe o link na seção 3 e no índice |
-| Prova na sandbox real do Mercado Pago | Um integrante com as credenciais de teste roda o `make mp-sandbox` no kind local ([README do `platform`](../../../README.md#mercado-pago-na-sandbox)) |
+| Vídeo de até 15 minutos | O grupo grava pelo [roteiro](roteiro-video.md) e põe o link do YouTube (não listado) na seção 3 e no índice |
+| Prova na sandbox real do Mercado Pago | Um integrante com as credenciais de teste roda `make mp-sandbox` no kind local ([README](../../../README.md#mercado-pago-na-sandbox)) |
 | Tag `entrega-fase-4` nos quatro repositórios | O grupo cria a tag nos commits da entrega, repete as provas do CD, refaz as capturas do Anexo B sobre esses commits e gera o PDF final |
 | Submissão do PDF no portal | O grupo submete o PDF final depois da tag e do vídeo |
 
