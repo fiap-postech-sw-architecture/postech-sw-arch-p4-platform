@@ -57,7 +57,7 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | Bancos | [bancos](observabilidade/dashboards/pytstop-bancos.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-bancos-2026-10-22.png) |
 | Plataforma: broker, borda e alvos | [plataforma](observabilidade/dashboards/pytstop-plataforma.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-plataforma-2026-10-22.png) |
 
-O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As capturas do CD, do SonarQube, do trace no Jaeger, do Swagger, do Newman, do ZAP e dos nove dashboards (de 22/10/2026, com mais de três dias de dados) estão no [Anexo B do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#anexo-b--evidências-visuais), e o [registro de evidências](docs/entrega/fase4/evidencias/README.md#capturas-de-tela) dá a origem de cada arquivo.
+O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As capturas do CD, do SonarQube, do trace no Jaeger, do Swagger, do Newman, do ZAP e dos nove dashboards (de 22/10/2026, 23/10 UTC, sobre um Prometheus com dados desde 19/10) estão no [Anexo B do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#anexo-b--evidências-visuais), e o [registro de evidências](docs/entrega/fase4/evidencias/README.md#capturas-de-tela) dá a origem de cada arquivo.
 
 ## Conferência
 
