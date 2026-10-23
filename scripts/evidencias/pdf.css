@@ -53,6 +53,15 @@ h1 { break-before: page; }
    página, inclusive as telas altas do Swagger. */
 figure { margin: 4mm 0 0; break-inside: avoid; break-after: avoid; }
 figure img { display: block; max-width: 100%; max-height: 88mm; margin: 0 auto; border: 1px solid #c9d3d8; }
+/* Os dashboards do Grafana são telas densas e saem sem o teto de 88 mm da
+   galeria: 94% da largura do texto (263 ppi na página, 247 a 100%) deixa o
+   Execução e a Saga na mesma página, e a altura vem da proporção do print, de
+   73 mm (Orçamentos) a 161 mm (Serviços). O teto de 200 mm só vale para uma
+   captura futura mais alta. */
+figure img[src*="grafana-"] { max-width: 94%; max-height: 200mm; }
 figcaption { margin-top: 2mm; font-size: 9.5pt; font-style: italic; }
 figure + p { margin: 1mm 0 4mm; font-size: 8.5pt; color: #555; }
+/* O parágrafo de abertura de um item fica com a primeira captura, e o título
+   não sobra sozinho no pé da página. */
+h2 + p, h3 + p { break-after: avoid; }
 

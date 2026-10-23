@@ -1,12 +1,12 @@
 # Documento de Entrega
 
-> Versão de 21/10/2026, com os CDs da `main` de 20/10 ([seção 2](#2-repositórios-e-estado-do-cicd)) e de 21/10 UTC ([seção 8](#8-testes-e-qualidade)). O vídeo, a prova na sandbox real do Mercado Pago, as capturas dos dashboards com três dias de histórico e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
+> Versão de 22/10/2026, com os CDs da `main` de 20/10 ([seção 2](#2-repositórios-e-estado-do-cicd)) e de 21/10 UTC ([seção 8](#8-testes-e-qualidade)) e os dashboards do kind local capturados em 22/10 (23/10 UTC; [Anexo B, B7](#b7--dashboards-do-grafana)). O vídeo, a prova na sandbox real do Mercado Pago e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
 
 Documento de entrega da fase 4 do Tech Challenge da Pós-Graduação em Arquitetura de Software (FIAP). O PytStop é o sistema de gestão de uma oficina mecânica: registra cada ordem de serviço (OS) da abertura à entrega do veículo. Nas fases 1 a 3 ele foi um monólito modular; na fase 4 virou três microsserviços, cada um com repositório, banco e pipeline próprios, coordenados por uma saga orquestrada. O OS Service cuida da OS, dos clientes e da identidade e orquestra a saga; o Billing Service, dos preços, do orçamento e do pagamento no Mercado Pago; o Execution Service, do diagnóstico, do estoque de peças e da execução do reparo.
 
 ## Como ler este documento
 
-Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega; o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase, sem alteração. Os números de scans e deploy vêm dos runs do CD na `main` de 20/10/2026 listados na [seção 2](#2-repositórios-e-estado-do-cicd); os de testes, cobertura e SonarQube, dos CDs da `main` de 21/10/2026 (UTC) citados na [seção 8](#8-testes-e-qualidade), menos os do `platform`, que são do run de 20/10.
+Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega; o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase, sem alteração. Os números de scans e deploy vêm dos runs do CD na `main` de 20/10/2026 listados na [seção 2](#2-repositórios-e-estado-do-cicd); os de testes, cobertura e SonarQube, dos CDs da `main` de 21/10/2026 (UTC) citados na [seção 8](#8-testes-e-qualidade), menos os do `platform`, que são do run de 20/10; os dos dashboards, do Prometheus do kind local, capturados em 22/10/2026 (23/10 UTC; [Anexo B, B7](#b7--dashboards-do-grafana)).
 
 Siglas: ACID (as garantias de uma transação de banco), ADR (registro de decisão de arquitetura), AMQP (protocolo de mensagens do RabbitMQ), BDD (testes de comportamento em Gherkin), CI e CD (integração e entrega contínuas), CVE (vulnerabilidade catalogada), DLQ (fila de mensagens mortas), E2E (teste de ponta a ponta), GHCR (registro de imagens do GitHub), HMAC (assinatura com chave secreta), JWKS (chaves públicas do JWT), JWT (token assinado), kind (Kubernetes em contêineres Docker), LGPD (Lei Geral de Proteção de Dados), PR (pull request), RF, RNF e RN (requisito funcional, não funcional e regra de negócio), RFC (proposta técnica), SAST e SCA (análise de segurança do código e das dependências), SBOM e SPDX (lista dos componentes de uma imagem e o formato dela), TLS (criptografia do tráfego), TTL (prazo de vida de um registro) e ZAP (varredura de segurança da OWASP).
 
@@ -745,7 +745,7 @@ Cada dashboard é um JSON em [`observabilidade/dashboards/`](../../../observabil
 | Trace da saga nos três serviços: 339 spans numa OS paga e cancelada, 245 no caminho feliz | [Anexo B, B3](#b3--trace-da-saga-no-jaeger) |
 | Alerta de fila sem consumidor disparado e recuperado no kind local, em 19/10/2026 | [Anexo B, B6](#b6--alerta-de-fila-sem-consumidor) |
 | Kind local de 19/10/2026: E2E com as 14 execuções do BDD, 28 pods sem reinício em 600,9 s sem tráfego e `make demo` com seis cenários | [relatório da execução local](evidencias/observabilidade.md) |
-| Nove dashboards com três dias de histórico | pendente: [Anexo B, B7](#b7--dashboards-do-grafana) |
+| Nove dashboards sobre um Prometheus com mais de três dias de dados (cinco na janela inteira, quatro nos nove minutos do último `make demo`), capturados em 22/10/2026 (23/10 UTC) depois de sete execuções do `make demo` | [Anexo B, B7](#b7--dashboards-do-grafana) |
 
 ## 12. Rastreabilidade requisito → evidência
 
@@ -779,7 +779,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-043 | `main` protegida | ruleset nos quatro ([conferência](evidencias/protecao-da-main.md)) |
 | RNF-044 | Um repositório por serviço | [seção 2](#2-repositórios-e-estado-do-cicd) |
 | RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.3](#43-comunicação-entre-os-serviços)) |
-| RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); capturas pendentes |
+| RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); nove dashboards sobre um Prometheus com mais de três dias de dados (cinco na janela inteira, quatro nos nove minutos do último `make demo`) no [Anexo B, B7](#b7--dashboards-do-grafana) |
 | RNF-047 | Código-fonte | `src/` de cada serviço |
 | RNF-048 | Dockerfile e manifestos | imagem e deploy em cada CD |
 | RNF-049 | Pipelines de CI/CD | runs da [seção 2](#2-repositórios-e-estado-do-cicd) |
@@ -816,7 +816,6 @@ A dívida técnica aceita, com o limite atual e quando revisar cada item, está 
 |---|---|
 | Vídeo de até 15 minutos | O grupo grava pelo [roteiro](roteiro-video.md), publica no YouTube (não listado) e põe o link na seção 3 e no índice |
 | Prova na sandbox real do Mercado Pago | Um integrante com as credenciais de teste roda o `make mp-sandbox` no kind local ([README do `platform`](../../../README.md#mercado-pago-na-sandbox)) |
-| Capturas dos nove dashboards com três dias de histórico | O `platform` captura no kind com o Prometheus em volume persistente, para a seção B7 |
 | Tag `entrega-fase-4` nos quatro repositórios | O grupo cria a tag nos commits da entrega, repete as provas do CD, refaz as capturas do Anexo B sobre esses commits e gera o PDF final |
 | Submissão do PDF no portal | O grupo submete o PDF final depois da tag e do vídeo |
 
@@ -847,7 +846,7 @@ Ficam em FAIL, e reprovam o job, o nome e a versão de produto nos cabeçalhos `
 
 # Anexo B — Evidências visuais
 
-As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2), de um cluster kind local, que só recebeu leituras, e dos artefatos dos runs; o kind roda os commits de 19/10/2026 do [relatório da execução local](evidencias/observabilidade.md#ambiente-e-commits). O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem de cada arquivo.
+As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2), de um cluster kind local, onde cada captura só fez leituras, e dos artefatos dos runs; o kind roda os commits de 19/10/2026 do [relatório da execução local](evidencias/observabilidade.md#ambiente-e-commits). O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem de cada arquivo.
 
 ## B1 — CD da `main`
 
@@ -947,4 +946,42 @@ Fonte: Grafana do kind, 19/10/2026, 00:58 (horário de Brasília).
 
 ## B7 — Dashboards do Grafana
 
-Os nove dashboards (Atendimento, Orçamentos, Pagamentos, Execução, Saga, Mensageria, Serviços, Bancos e Plataforma) entram aqui depois da captura de 22/10/2026, com três dias de histórico no kind. Captura pendente.
+Os nove dashboards do Grafana do kind local, abertos sem login, só para leitura. O Prometheus guarda os dados num volume persistente desde 19/10/2026, 03:16 UTC, com lacunas de quando o computador dormiu e de um reinício dos pods em 21/10. O histórico vem do E2E da subida do cluster e de sete execuções do `make demo` (os seis cenários `@demo` do BDD); os horários e o resultado de cada execução estão no [relatório de observabilidade](evidencias/observabilidade.md#dashboards-e-histórico). Nenhuma amostra foi criada nem alterada.
+
+A captura é de 23/10/2026, a partir das 00:10 UTC (22/10, 21:10 em Brasília); os nomes dos arquivos levam a data de Brasília. Atendimento, Orçamentos, Pagamentos, Execução e Saga mostram de 19/10, 00:00 UTC, até a captura. Mensageria, Serviços, Bancos e Plataforma mostram os nove minutos em volta do último `make demo`, porque numa janela de quatro dias a rajada de dois minutos fica achatada. Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos.
+
+![Atendimento: volume diário de OS em quatro barras (19 a 22/10), funil de 53 OS abertas a 10 finalizadas e sagas com 33 compensadas e 10 concluídas.](evidencias/grafana-atendimento-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As quatro barras somam 47 OS, de dias fechados: 19/10 inclui o E2E da subida do cluster, e 20/10 e 22/10 têm duas execuções do `make demo` cada uma. As 6 OS do `make demo` de 23/10 estão só no funil (53). "OS por status agora" mostra só as OS que ainda não terminaram, sem "Entregue" nem "Cancelada": as 10 que finalizaram a execução já foram entregues, e por isso "Finalizada" é 0. As 8 OS em "Em execução" são as do cenário do 409, que termina ali de propósito (o cancelamento depois do início da execução responde 409): uma por execução do `make demo` (sete) e a do E2E de 19/10.
+
+![Orçamentos: 53 gerados, 35 aprovados, 1 recusado e 15 expirados, com taxa de aprovação de 69% (35 de 51: aprovados, recusados e expirados) e 2 orçamentos esperando a decisão.](evidencias/grafana-orcamentos-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. O Atendimento foi capturado 6 s antes, às 00:10:38 UTC, e a última OS do `make demo` mudou de estado entre as duas capturas: lá o funil tem 52 orçamentos gerados e uma OS em diagnóstico; aqui, 53 gerados e 2 esperando a decisão.
+
+![Pagamentos: faturamento bruto de R$ 5.481,47, estornado de R$ 1.267,16 e líquido de R$ 4.214,31, com 26 cobranças pagas, 1 recusada e 8 estornadas.](evidencias/grafana-pagamentos-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. O total das quatro barras de "Faturamento por dia" (R$ 4.880,91) é menor que o bruto porque a barra de um dia só aparece depois da meia-noite UTC que o fecha: o que o `make demo` pagou em 23/10 está no bruto e ainda não tem barra.
+
+![Execução e estoque: 8 OS em execução e nenhuma na fila, espera de 6,66 s até o diagnóstico e de 415 ms na fila de execução, 27 reservas de peças atendidas e 8 recusadas.](evidencias/grafana-execucao-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As 8 OS em execução são as mesmas do Atendimento.
+
+![Saga: nenhuma saga parada nem prazo técnico vencido, o processo prazos rodou há 12 s no OS e há 8 s no Billing, nenhum reenvio e duração por etapa (p95).](evidencias/grafana-saga-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As sagas em `em_execucao` são as mesmas 8 OS do cenário do 409: "Sagas ativas por etapa" sobe de 2 em 19/10 (o E2E e a primeira execução) a 8 em seis degraus, um por execução do `make demo` de 20 a 23/10, e a mais antiga, de 19/10, tem 3,86 dias.
+
+![Mensageria: mensagens publicadas por tipo e consumidas por resultado durante o make demo, nenhum retry, outbox dead em zero nos três serviços e nenhuma reconexão ao broker; as três DLQs em zero aparecem no print da Plataforma.](evidencias/grafana-mensageria-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`, com o JSON da `main` ([platform #34](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/34)). "Retry por nível" aparece vazio ("No data") porque não houve retry no período.
+
+![Serviços: requisições, erro 5xx, taxa de sucesso e latência p95 por serviço, rotas mais lentas, nenhum circuito aberto ao fim da janela, Mercado Pago sem chamadas e CPU e memória por pod.](evidencias/grafana-servicos-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`. O pico de 5xx e a queda da taxa de sucesso, por volta de 00:10 UTC, são do cenário da API do Billing parada: o circuito abre e a conclusão do diagnóstico responde 503 até o Billing voltar. O Mercado Pago fica em zero porque o kind usa o simulador.
+
+![Bancos: os três exporters no ar, conexões do PostgreSQL em 7% e 11% do máximo, transações, locks, tamanho dos bancos (9,32 MiB no OS, 8,43 MiB na Execução e 272 KiB no Billing), documentos do MongoDB e replica set rs0 em PRIMARY.](evidencias/grafana-bancos-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`.
+
+![Plataforma: nenhuma mensagem nas três DLQs, um consumidor em cada fila de trabalho, alarmes de memória e disco do broker em OK, os 18 alvos do Prometheus no ar e tráfego e latência p95 da borda.](evidencias/grafana-plataforma-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`. A mensagem pronta em `billing.comandos`, por volta de 00:09:30 UTC, é a do cenário do consumidor do Billing parado por 20 s.

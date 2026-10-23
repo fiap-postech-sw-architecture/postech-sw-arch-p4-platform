@@ -29,7 +29,7 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | RNF-031 a RNF-037; RNF-044; RNF-045; RNF-055 | [RFC-004](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), [decisões de arquitetura](docs/arquitetura/adr/fase4/) e [contratos](contratos/asyncapi.yaml); justificativa da saga no [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
 | RNF-038 a RNF-041; RNF-050 | CI de cada serviço: [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/.github/workflows/ci.yml), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/.github/workflows/ci.yml), [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/.github/workflows/ci.yml); [cobertura e SonarQube](docs/entrega/fase4/evidencias/coverage.md); [BDD no CD](docs/entrega/fase4/evidencias/bdd-resumo.md) |
 | RNF-042; RNF-043; RNF-048; RNF-049 | CD de cada serviço: [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/.github/workflows/cd.yml), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/.github/workflows/cd.yml), [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/.github/workflows/cd.yml); [provas do CD](docs/entrega/fase4/evidencias/README.md#cd-compartilhado-dos-serviços); [CI/CD e deploy em Kubernetes](docs/arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md); [proteção da `main`](docs/entrega/fase4/evidencias/protecao-da-main.md) |
-| RNF-046; RNF-056 | [Dashboards de negócio](observabilidade/negocio.md), [técnicos, alertas e métricas](observabilidade/README.md), [ensaio integrado](docs/operacao/ensaio-integrado.md); [trace e alerta do ensaio local](docs/entrega/fase4/evidencias/observabilidade.md) |
+| RNF-046; RNF-056 | [Dashboards de negócio](observabilidade/negocio.md), [técnicos, alertas e métricas](observabilidade/README.md), [ensaio integrado](docs/operacao/ensaio-integrado.md); [trace e alerta do ensaio local](docs/entrega/fase4/evidencias/observabilidade.md); [capturas dos nove dashboards](docs/entrega/fase4/entrega-fase-4.md#b7--dashboards-do-grafana) |
 | RNF-047; RNF-051; RNF-052 | Arquitetura de cada serviço: [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md), [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md); OpenAPI e collection: [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api), [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api); [collection do fluxo completo](docs/api/fluxo-completo.postman_collection.json) e [execuções do Newman](docs/entrega/fase4/evidencias/newman-resumo.md) |
 | RNF-053; RNF-054 | [Documento de entrega](docs/entrega/fase4/entrega-fase-4.md), [roteiro do vídeo](docs/entrega/fase4/roteiro-video.md) e este índice |
 
@@ -45,19 +45,19 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 
 ## Dashboards
 
-| Dashboard | JSON | Como ler |
-|---|---|---|
-| Negócio — Atendimento: volume diário de OS e tempo médio por status | [atendimento](observabilidade/dashboards/pytstop-negocio-atendimento.json) | [painéis de negócio](observabilidade/negocio.md) |
-| Negócio — Orçamentos | [orçamentos](observabilidade/dashboards/pytstop-negocio-orcamentos.json) | [painéis de negócio](observabilidade/negocio.md) |
-| Negócio — Pagamentos | [pagamentos](observabilidade/dashboards/pytstop-negocio-pagamentos.json) | [painéis de negócio](observabilidade/negocio.md) |
-| Negócio — Execução | [execução](observabilidade/dashboards/pytstop-negocio-execucao.json) | [painéis de negócio](observabilidade/negocio.md) |
-| Saga | [saga](observabilidade/dashboards/pytstop-saga.json) | [painéis técnicos](observabilidade/README.md) |
-| Mensageria dos serviços | [mensageria](observabilidade/dashboards/pytstop-mensageria.json) | [painéis técnicos](observabilidade/README.md) |
-| Serviços | [serviços](observabilidade/dashboards/pytstop-servicos.json) | [painéis técnicos](observabilidade/README.md) |
-| Bancos | [bancos](observabilidade/dashboards/pytstop-bancos.json) | [painéis técnicos](observabilidade/README.md) |
-| Plataforma: broker, borda e alvos | [plataforma](observabilidade/dashboards/pytstop-plataforma.json) | [painéis técnicos](observabilidade/README.md) |
+| Dashboard | JSON | Como ler | Captura |
+|---|---|---|---|
+| Negócio — Atendimento: volume diário de OS e tempo médio por status | [atendimento](observabilidade/dashboards/pytstop-negocio-atendimento.json) | [painéis de negócio](observabilidade/negocio.md) | [captura](docs/entrega/fase4/evidencias/grafana-atendimento-2026-10-22.png) |
+| Negócio — Orçamentos | [orçamentos](observabilidade/dashboards/pytstop-negocio-orcamentos.json) | [painéis de negócio](observabilidade/negocio.md) | [captura](docs/entrega/fase4/evidencias/grafana-orcamentos-2026-10-22.png) |
+| Negócio — Pagamentos | [pagamentos](observabilidade/dashboards/pytstop-negocio-pagamentos.json) | [painéis de negócio](observabilidade/negocio.md) | [captura](docs/entrega/fase4/evidencias/grafana-pagamentos-2026-10-22.png) |
+| Negócio — Execução | [execução](observabilidade/dashboards/pytstop-negocio-execucao.json) | [painéis de negócio](observabilidade/negocio.md) | [captura](docs/entrega/fase4/evidencias/grafana-execucao-2026-10-22.png) |
+| Saga | [saga](observabilidade/dashboards/pytstop-saga.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-saga-2026-10-22.png) |
+| Mensageria dos serviços | [mensageria](observabilidade/dashboards/pytstop-mensageria.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-mensageria-2026-10-22.png) |
+| Serviços | [serviços](observabilidade/dashboards/pytstop-servicos.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-servicos-2026-10-22.png) |
+| Bancos | [bancos](observabilidade/dashboards/pytstop-bancos.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-bancos-2026-10-22.png) |
+| Plataforma: broker, borda e alvos | [plataforma](observabilidade/dashboards/pytstop-plataforma.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-plataforma-2026-10-22.png) |
 
-O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As capturas do CD, do SonarQube, do trace no Jaeger, do Swagger, do Newman e do ZAP estão no [Anexo B do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#anexo-b--evidências-visuais). As nove capturas finais, com três dias de histórico, continuam pendentes, conforme o [registro de evidências](docs/entrega/fase4/evidencias/README.md).
+O trace local e as capturas do alerta disparado e recuperado estão preservados no [ensaio de observabilidade](docs/entrega/fase4/evidencias/observabilidade.md). As capturas do CD, do SonarQube, do trace no Jaeger, do Swagger, do Newman, do ZAP e dos nove dashboards (de 22/10/2026, 23/10 UTC, sobre um Prometheus com dados desde 19/10) estão no [Anexo B do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#anexo-b--evidências-visuais), e o [registro de evidências](docs/entrega/fase4/evidencias/README.md#capturas-de-tela) dá a origem de cada arquivo.
 
 ## Conferência
 
