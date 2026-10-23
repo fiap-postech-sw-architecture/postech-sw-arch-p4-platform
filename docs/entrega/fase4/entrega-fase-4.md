@@ -71,7 +71,7 @@ Os quatro repositórios são públicos, e o usuário `soat-architecture` é cola
 
 Cada repositório de serviço tem o código em `src/` (camadas `dominio`, `aplicacao`, `infraestrutura` e `interfaces`), o `Dockerfile`, os manifestos em `k8s/`, os workflows de CI/CD, a arquitetura em `docs/arquitetura.md` e o OpenAPI e a collection Postman em `docs/api/`; o README diz como rodar e testar e traz a cobertura com o link do run. O `make check` roda na máquina os mesmos gates de código do CI.
 
-**Proteção da `main`.** Os quatro repositórios têm ruleset ativo, visível a quem só tem leitura e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Nos commits da tabela, as `main` do OS Service, do Billing, da Execução e do `platform` tinham 26, 24, 20 e 32 commits, todos de PR, menos o `Initial commit` que o GitHub cria com o repositório ([conferência](evidencias/protecao-da-main.md)).
+**Proteção da `main`.** Os quatro repositórios têm ruleset ativo, visível a quem só tem leitura e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit`, que o GitHub cria com o repositório, entrou por PR; o ruleset veio depois do PR #1, mesclado duas a três horas antes. O [Anexo B, B8](#b8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
 
 ## 3. Link do vídeo
 
@@ -829,7 +829,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-040 | Cobertura de 80% | 99,6%, 100% e 100% ([registro](evidencias/coverage.md)) |
 | RNF-041 | SonarQube no CI | gate aprovado nos três, com 0 code smells ([resumo](evidencias/coverage.md#sonarqube); [prints](#b2--sonarqube)) |
 | RNF-042 | Pipeline independente até o Kubernetes | CD aprovado nos três ([seção 9](#9-cicd-e-deploy)) |
-| RNF-043 | `main` protegida | ruleset nos quatro ([conferência](evidencias/protecao-da-main.md)) |
+| RNF-043 | `main` protegida | ruleset nos quatro ([B8](#b8--proteção-da-main); [conferência](evidencias/protecao-da-main.md)) |
 | RNF-044 | Um repositório por serviço | [seção 2](#2-repositórios-e-estado-do-cicd) |
 | RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.3](#43-comunicação-entre-os-serviços)) |
 | RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); nove dashboards sobre um Prometheus com mais de três dias de dados (cinco na janela inteira, quatro nos nove minutos do último `make demo`) no [Anexo B, B7](#b7--dashboards-do-grafana) |
@@ -856,7 +856,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | Ponto da avaliação da fase 3 | Como a fase 4 trata |
 |---|---|
 | Validar o CPF antes da consulta ao banco | O OS Service valida CPF e CNPJ pelo módulo 11 antes de consultar ([CPF](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/src/compartilhado/dominio/cpf.py), [CNPJ](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/src/compartilhado/dominio/cnpj.py)), e o cenário BDD `@validacao` prova a recusa no CD |
-| Commits diretos na `main`; exigir PR | Os quatro repositórios nasceram com ruleset: nenhum commit direto além do `Initial commit` ([seção 2](#2-repositórios-e-estado-do-cicd)) |
+| Commits diretos na `main`; exigir PR | Os quatro repositórios ganharam o ruleset no dia da criação, e nenhum commit direto entrou além do `Initial commit` ([seção 2](#2-repositórios-e-estado-do-cicd) e [B8](#b8--proteção-da-main)) |
 | Dashboards de negócio em JSON separado e documentado | Quatro dashboards de negócio em JSON próprio, cada painel documentado em [`negocio.md`](../../../observabilidade/negocio.md), com teste que reprova a divergência ([seção 11](#11-observabilidade)) |
 | Material muito extenso; concentrar num índice os artefatos pedidos (componentes, sequências, RFCs, ADRs e ER) | O documento abre com o [índice dos artefatos](#índice-dos-artefatos), com seção, página e link, e o detalhe dos READMEs ficou neles |
 | Vídeo, repositório extra e observação geral | Sem pendência; a entrega tem só os quatro repositórios da seção 2 |
@@ -1038,3 +1038,15 @@ Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta 
 ![Plataforma: nenhuma mensagem nas três DLQs, um consumidor em cada fila de trabalho, alarmes de memória e disco do broker em OK, os 18 alvos do Prometheus no ar e tráfego e latência p95 da borda.](evidencias/grafana-plataforma-2026-10-22.png)
 
 Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`. A mensagem pronta em `billing.comandos`, por volta de 00:09:30 UTC, é a do cenário do consumidor do Billing parado por 20 s.
+
+## B8 — Proteção da `main`
+
+O ruleset da `main` do OS Service, aberto sem login, e a lista dos commits dela: todo commit tem o `(#N)` do PR no título, menos o `Initial commit` que o GitHub cria com o repositório. O Billing tem o mesmo ruleset ([print](evidencias/protecao-ruleset-billing-service-2026-10-23.png)). A página pública não mostra a lista de exceções, que a API devolve vazia nos quatro repositórios ([conferência](evidencias/protecao-da-main.md)).
+
+![Ruleset da main do OS Service: ativo, PR obrigatório e nove checks obrigatórios.](evidencias/protecao-ruleset-os-service-2026-10-23.png)
+
+Fonte: [ruleset 24594457](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/rules/24594457), 23/10/2026.
+
+![Commits da main do OS Service: 29 de PR e o Initial commit.](evidencias/protecao-commits-main-os-service-2026-10-23.png)
+
+Fonte: [commits da main](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/commits/main), 23/10/2026.
