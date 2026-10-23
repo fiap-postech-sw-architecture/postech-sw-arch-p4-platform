@@ -714,23 +714,54 @@ A cobertura soma linhas e ramos, e o código novo de cada PR passa também pelo 
 
 ## 9. CI/CD e deploy
 
-O enunciado pede deploy automatizado em ambiente Kubernetes e não exige nuvem. A cada push na `main`, o CD de cada serviço cria um cluster Kubernetes (kind) descartável no runner, implanta nele a imagem que acabou de publicar e só passa com o smoke e o E2E verdes. Nenhuma credencial de nuvem fica no GitHub, e o deploy não depende da credencial de cerca de 4 horas do AWS Academy, que alguém teria de renovar a cada sessão ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md#deploy-remoto-opcional-e-desligado)).
+O ambiente Kubernetes do enunciado é o kind que o CD de cada serviço cria no runner, e o CD só fica verde depois do smoke e do BDD nele. A cada push na `main`, o CD cria o cluster descartável, implanta a plataforma e os três serviços, gera os Secrets no próprio run e roda o smoke de cada namespace e o E2E BDD pela borda, com a imagem que o serviço acabou de publicar. O enunciado pede deploy automatizado em Kubernetes e não exige nuvem: nenhuma credencial de nuvem fica no GitHub, e o deploy não depende da credencial de cerca de 4 horas do AWS Academy, que alguém teria de renovar a cada sessão ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md#deploy-remoto-opcional-e-desligado)). O gancho de deploy remoto, que levaria o mesmo digest a um cluster persistente, existe e fica desligado ([nuvem opcional](../../operacao/nuvem-opcional.md)). O kind do CI não tem Grafana nem Loki, que só existem no kind local ([seção 11](#11-observabilidade)).
 
-Cada serviço tem três workflows, com jobs de nome estável, que são os checks obrigatórios do ruleset ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)). O `ci.yml` roda em todo PR: lint e import-linter, mypy strict, bandit, testes com os gates de cobertura, SonarQube e o build, com os manifestos e o smoke da imagem. O `security.yml` roda pip-audit, gitleaks e trivy em todo PR e toda segunda-feira. O `cd.yml` roda no push na `main`: chama o CI e a segurança do mesmo commit e, com os dois verdes, segue para:
+```mermaid
+---
+config:
+  flowchart:
+    wrappingWidth: 400
+---
+flowchart TB
+    push(["push na main do serviço<br/>(só via PR com os checks verdes)"])
+    gates["jobs ci e security-scan<br/>ci.yml e security.yml reutilizáveis"]
+    image["job image<br/>build único, push no GHCR por SHA,<br/>SBOM e tar da imagem como artefato"]
+    ghcr[("GHCR<br/>pytstop-&lt;serviço&gt;:SHA")]
+    dk["job deploy-kind<br/>kind load do tar; vizinhos e platform<br/>no último SHA verde; overlay kind-ci;<br/>segredos gerados no run; smoke por namespace"]
+    e2e["E2E BDD (pytest-bdd) pelo Kong<br/>relatório como artefato"]
+    remote["job deploy-remote<br/>deploy-remoto.sh do platform; mesmo digest,<br/>cluster persistente; só com DEPLOY_REMOTO_HABILITADO = true"]
+    skip["job remote-skipped<br/>aviso no run (o estado entregue)"]
 
-1. `image`: build único, push no GHCR com o SHA do commit como tag, SBOM em SPDX e o tar da imagem como artefato;
-2. `deploy-kind`: cria um kind efêmero no runner, implanta a plataforma e os três serviços, gera os Secrets no próprio run, roda o smoke de cada namespace e o E2E BDD pela borda ([passos, no README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#o-que-o-deploy-kind-faz-na-ordem)). O serviço do pipeline entra com a imagem que o `image` publicou; os outros dois são construídos do código, no commit do último CD verde de cada um, para o E2E provar a saga com os três;
-3. `remote-skipped`: roda no lugar do `deploy-remote`, o gancho opcional que implantaria num cluster persistente o mesmo digest que passou no kind. O gancho fica desligado na entrega, sem a variável `DEPLOY_REMOTO_HABILITADO` igual a `true`, e as receitas de EKS e k3s estão em [nuvem opcional](../../operacao/nuvem-opcional.md).
+    subgraph kind["cluster kind pytstop-p4, efêmero, dentro do runner"]
+        subgraph plat["platform · namespace pytstop-plataforma"]
+            rmq["RabbitMQ<br/>exchanges, filas e bindings por definições"]
+            kong["Kong DB-less<br/>/os · /billing · /execucao"]
+            obs["Prometheus · Jaeger · Mailpit<br/>(kind-ci sem Loki, Promtail e Grafana)"]
+        end
+        ms["metrics-server do platform<br/>namespace kube-system"]
+        subgraph svcs["três serviços"]
+            os["os-service · pytstop-os<br/>PostgreSQL em StatefulSet · Job de migração<br/>api · relay · consumidor · notificador · prazos"]
+            exe["execution-service · pytstop-execucao<br/>PostgreSQL em StatefulSet · Job de migração<br/>api · relay · consumidor"]
+            bil["billing-service · pytstop-billing<br/>MongoDB em StatefulSet · Job de inicialização<br/>api · relay · consumidor · prazos"]
+        end
+    end
+
+    push --> gates
+    gates -->|"verdes"| image
+    image -->|"push por SHA"| ghcr
+    image -->|"tar da imagem"| dk
+    dk -->|"kind create e kubectl apply"| kind
+    dk --> e2e
+    e2e -->|"verde"| remote
+    ghcr -->|"mesmo digest"| remote
+    e2e -.->|"DEPLOY_REMOTO_HABILITADO diferente de true"| skip
+```
+
+Cada serviço tem três workflows, com jobs de nome estável, que são os checks obrigatórios do ruleset ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)): o `ci.yml`, em todo PR (lint e import-linter, mypy strict, bandit, testes com os gates de cobertura, SonarQube e build); o `security.yml`, em todo PR e toda segunda-feira (pip-audit, gitleaks e trivy); e o `cd.yml`, no push na `main`, que chama os dois e segue para o `image` (build único, push no GHCR com o SHA do commit, SBOM em SPDX), o `deploy-kind` ([passos, no README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#o-que-o-deploy-kind-faz-na-ordem)) e o `remote-skipped`, que ocupa o lugar do `deploy-remote` desligado. O serviço do pipeline entra com a imagem do `image`; os outros dois são construídos do código, no commit do último CD verde de cada um, para o E2E provar a saga com os três.
 
 Os jobs do CD têm uma definição só, no `.github/workflows/cd-servico.yml` do `platform`, chamada pelo `cd.yml` de cada serviço com o nome dele e quatro SHAs ([platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22)). A independência que o enunciado pede está no que é de cada serviço: build, testes, análise, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e nenhum pipeline publica a imagem de outro. Nos manifestos de cada serviço, a API tem sondas de inicialização, de vida e de prontidão, requests e limits, e um HPA de 1 a 2 réplicas por CPU (70%); o overlay do CD limita o HPA a 1 réplica, para os três serviços caberem no runner. O CD do `platform` implanta a plataforma com o smoke e, no job `e2e`, os três serviços, com o BDD, o Newman e o ZAP.
 
-| Serviço | Digest da imagem publicada em 20/10/2026 | SBOM |
-|---|---|---|
-| OS Service | `sha256:7e4d5d0312d7bc244f8b4c18997422f38232e106121304e0c4e1bf6e80320d59` | 171 pacotes |
-| Billing | `sha256:340abc00151ffd49d835e14ceb93a02691c3147aa1f4931bda38f5973b641488` | 147 pacotes |
-| Execução | `sha256:c53d188243ff3fc2b454502bcd47e77e21b0a32a856d0b8a0e167bd7e40d75f1` | 162 pacotes |
-
-No CD do OS Service de 20/10/2026, as etapas medidas do `deploy-kind` (criação do kind, plataforma, serviços, smoke e E2E) somaram 7 min 13 s; no job `e2e` do `platform`, com o Newman e o ZAP, 9 min 18 s. A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md), de 14/10/2026, o diagrama do pipeline na [RFC-004, seção 10.2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#102-pipeline-e-deploy), e as capturas dos CDs no [Anexo B](#b1--cd-da-main).
+Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no OS Service, no Billing e na Execução; os digests estão no [registro de evidências](evidencias/README.md#imagens-publicadas-nos-cds-de-20102026)). O `deploy-kind` do OS Service levou 7 min 40 s no run do [Anexo B, B1](#b1--cd-da-main), e o job `e2e` do `platform`, com o Newman e o ZAP, 9 min 34 s ([B5](#b5--newman-e-zap-no-cd-do-platform)). A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md).
 
 ## 10. Segurança e análise de vulnerabilidades
 

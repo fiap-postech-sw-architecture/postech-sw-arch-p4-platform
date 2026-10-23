@@ -75,6 +75,16 @@ As imagens publicadas são `ghcr.io/fiap-postech-sw-architecture/pytstop-<servi�
 
 Para conferir: `gh run view <run> --repo <organização/repositório> --json headSha,status,conclusion,jobs`; para preservar o SBOM, `gh run download <run> --repo <organização/repositório> --name sbom-<serviço> --dir <destino>`. Alterações posteriores e o congelamento exigem novas provas.
 
+## Imagens publicadas nos CDs de 20/10/2026
+
+Digest e SBOM de cada imagem dos CDs da `main` de 20/10/2026, os runs da seção 2 do documento de entrega e do B1.
+
+| Serviço | Run | Commit | Digest publicado | SBOM SPDX |
+|---|---|---|---|---|
+| OS Service | [39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933) | `3ce582b` | `sha256:7e4d5d0312d7bc244f8b4c18997422f38232e106121304e0c4e1bf6e80320d59` | 171 pacotes |
+| Billing Service | [39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713) | `76b5f9b` | `sha256:340abc00151ffd49d835e14ceb93a02691c3147aa1f4931bda38f5973b641488` | 147 pacotes |
+| Execution Service | [39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419) | `5b1bef4` | `sha256:c53d188243ff3fc2b454502bcd47e77e21b0a32a856d0b8a0e167bd7e40d75f1` | 162 pacotes |
+
 ## Coleta e conferência reproduzíveis
 
 Da raiz da plataforma, com Python 3.14/uv e `gh` autenticado, grave o snapshot fora do repositório:
