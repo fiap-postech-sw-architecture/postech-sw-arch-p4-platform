@@ -80,7 +80,7 @@ figure img[src*="cd-deploy-kind"] { max-height: 125mm; }
    cada uma com a legenda e a fonte. É tabela, e não flex: o weasyprint 69
    levava a linha inteira para a página seguinte quando sobrava espaço. */
 .grade { display: table; table-layout: fixed; border-spacing: 4mm 0; margin: 4mm -4mm;
-         width: calc(100% + 8mm); }
+         width: calc(100% + 8mm); break-inside: avoid; }
 .grade > div { display: table-cell; vertical-align: top; }
 .grade figure { margin: 0; }
 .grade figure img { width: 100%; max-height: none; }
