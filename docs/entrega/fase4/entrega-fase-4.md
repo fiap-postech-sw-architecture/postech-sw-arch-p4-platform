@@ -40,7 +40,7 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | Contratos de mensageria | [4.3](#43-comunicação-entre-os-serviços) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
 | Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [B2](#b2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
 | CI/CD e deploy em Kubernetes | [9](#9-cicd-e-deploy) | [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) |
-| Segurança e relatório de vulnerabilidades | [10](#10-segurança-e-análise-de-vulnerabilidades) e [Anexo A](#anexo-a--scans-de-segurança-da-fase-4) | [ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md); [README do `platform`](../../../README.md#decisões-e-limites) |
+| Segurança e relatório de vulnerabilidades | [10](#10-segurança-e-análise-de-vulnerabilidades) | [registro de segurança](evidencias/seguranca.md); [ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md) |
 | Observabilidade: dashboards, alertas e traces | [11](#11-observabilidade) | [técnicos e alertas](../../../observabilidade/README.md), [negócio](../../../observabilidade/negocio.md) |
 | Swagger e collections Postman | [B4](#b4--swagger-pela-borda) | `docs/api/` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api); [fluxo completo](../../api/fluxo-completo.postman_collection.json) |
 | Rastreabilidade dos 44 requisitos | [12](#12-rastreabilidade-requisito--evidência) | [matriz de rastreabilidade](../matriz-de-rastreabilidade.md) |
@@ -756,15 +756,23 @@ Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no
 
 ## 10. Segurança e análise de vulnerabilidades
 
-A segurança é verificada no CI de cada serviço, em todo PR, a cada push na `main` e toda segunda-feira, e o ZAP varre a borda no CD do `platform`. Na `main` de 20/10/2026, bandit, pip-audit, trivy e gitleaks não acharam nada nos três serviços, o ZAP não teve regra em FAIL e o SBOM listou 171, 147 e 162 pacotes; no CD de 21/10/2026 (UTC), o SonarQube aprovou os três, com 0 bugs, 0 vulnerabilidades, 0 hotspots e 0 code smells. O detalhe por ferramenta e por serviço, com os avisos do ZAP, está no [Anexo A](#anexo-a--scans-de-segurança-da-fase-4).
+A segurança é verificada no CI de cada serviço, em todo PR, a cada push na `main` e toda segunda-feira, e o ZAP varre a borda no CD do `platform`. A tabela resume a `main` de 20/10/2026 nos três serviços; o detalhe por serviço e os avisos do ZAP estão no [registro de segurança](evidencias/seguranca.md).
+
+| Ferramenta | O que verifica | Resultado |
+|---|---|---|
+| bandit | código, qualquer severidade | 0 achados |
+| pip-audit | dependências de runtime, com `--strict` | nenhuma vulnerável |
+| trivy | imagem, HIGH e CRITICAL com correção | 0 achados |
+| gitleaks | histórico dos commits | 0 vazamentos |
+| ZAP | borda, uma chamada a cada operação do OpenAPI | nenhuma regra em FAIL |
+| SBOM | componentes de cada imagem | 171, 147 e 162 pacotes |
 
 - **Identidade.** JWT RS256 emitido só pelo OS Service, com validade de 15 minutos; Billing e Execução validam pelo JWKS, e a matriz de papel por rota (admin, atendente e mecânico) vira teste de 401 e 403 em cada serviço ([ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)).
 - **Canais públicos.** O link de decisão do orçamento é assinado com HMAC-SHA256 e vale uma vez; o webhook do Mercado Pago confere o `x-signature` e lê o estado na API do provedor, nunca no corpo da notificação.
 - **Borda e rede.** O Kong não revela produto nem versão, barra `/metrics` e `/api/v1/admin/*` e limita a taxa por IP do cliente. A NetworkPolicy de cada namespace nega toda entrada e libera só o previsto, e o smoke do CD prova que o banco recusa conexão de outro namespace.
-- **Bancos e broker.** Cada PostgreSQL tem um papel por uso, o MongoDB separa o usuário do serviço e o do exporter, e o RabbitMQ tem um usuário por serviço.
-- **Segredos e LGPD.** Nenhum segredo de aplicação fica no GitHub: senhas e chaves nascem no cluster, no primeiro deploy. O documento do cliente fica cifrado, as mensagens não levam nome, documento nem contato, e a eliminação de dados anonimiza a placa também na Execução. As APIs rodam sem root e com a raiz somente leitura.
+- **Bancos, broker, segredos e LGPD.** Cada PostgreSQL tem um papel por uso, o MongoDB separa o usuário do serviço e o do exporter, e o RabbitMQ tem um usuário por serviço. Nenhum segredo de aplicação fica no GitHub: senhas e chaves nascem no cluster, no primeiro deploy. O documento do cliente fica cifrado, as mensagens não levam nome, documento nem contato, e a eliminação de dados anonimiza a placa também na Execução. As APIs rodam sem root e com a raiz somente leitura.
 
-Riscos aceitos: tráfego interno do cluster sem TLS, contido pela NetworkPolicy; token revogado ainda válido por até 15 minutos no Billing e na Execução; Mailpit sem autenticação, só com dados fictícios; controller do Kong com leitura dos Secrets dos quatro namespaces; e imagens da plataforma herdadas da fase 3 (Prometheus 2.54.1, Loki 2.9.8 e kube-state-metrics 2.13.0) com CVE HIGH e CRITICAL sem correção na própria linha (96 e 6, 53 e 3 e 44 e 1 no trivy de outubro), que rodam só dentro do cluster, sem Ingress. O tratamento está no [README do `platform`](../../../README.md#decisões-e-limites) e na [RFC-004, seção 11](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#11-riscos-limitações-e-pontos-em-aberto).
+Riscos aceitos: tráfego interno do cluster sem TLS, contido pela NetworkPolicy; token revogado ainda válido por até 15 minutos no Billing e na Execução; Mailpit sem autenticação, só com dados fictícios; controller do Kong com leitura dos Secrets dos quatro namespaces; e imagens da plataforma herdadas da fase 3 (Prometheus 2.54.1, Loki 2.9.8 e kube-state-metrics 2.13.0) com CVE HIGH e CRITICAL sem correção na própria linha, que rodam só dentro do cluster, sem Ingress. O tratamento está no [README do `platform`](../../../README.md#decisões-e-limites) e na [RFC-004, seção 11](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#11-riscos-limitações-e-pontos-em-aberto).
 
 ## 11. Observabilidade
 
@@ -866,31 +874,6 @@ A dívida técnica aceita, com o limite atual e quando revisar cada item, está 
 | Prova na sandbox real do Mercado Pago | Um integrante com as credenciais de teste roda o `make mp-sandbox` no kind local ([README do `platform`](../../../README.md#mercado-pago-na-sandbox)) |
 | Tag `entrega-fase-4` nos quatro repositórios | O grupo cria a tag nos commits da entrega, repete as provas do CD, refaz as capturas do Anexo B sobre esses commits e gera o PDF final |
 | Submissão do PDF no portal | O grupo submete o PDF final depois da tag e do vídeo |
-
-# Anexo A — Scans de segurança da fase 4
-
-Bateria da `main` de 20/10/2026, nos CDs do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933) (`3ce582b`), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713) (`76b5f9b`), da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419) (`5b1bef4`) e do [`platform`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627) (`d703200`), cujo job `e2e` roda o ZAP contra os três serviços nesses commits. Os números foram lidos nos logs e nos artefatos desses runs, menos o SonarQube (CDs de 21/10, UTC).
-
-| Ferramenta | OS Service | Billing | Execução |
-|---|---|---|---|
-| bandit 1.9.4 (SAST) | 0 achados | 0 achados | 0 achados |
-| pip-audit 2.10.1 (SCA) | 70 dependências, nenhuma vulnerável | 57, nenhuma | 61, nenhuma |
-| trivy 0.72.0 (imagem) | 73 alvos, 0 achados | 59 alvos, 0 | 64 alvos, 0 |
-| gitleaks (histórico) | 26 commits, 0 vazamentos | 24 commits, 0 | 20 commits, 0 |
-| SonarQube 26.9: linhas e cobertura | 11.111; 97,2% | 7.802; 98,8% | 6.078; 98,6% |
-| SonarQube: bugs, vulnerabilidades, hotspots, duplicação | 0, 0, 0 e 0,0% | 0, 0, 0 e 0,0% | 0, 0, 0 e 0,0% |
-| ZAP 2.17.0: URLs; FAIL, WARN e PASS | 38; 0, 1 e 59 | 38; 0, 2 e 58 | 24; 0, 1 e 59 |
-| SBOM em SPDX | 171 pacotes | 147 pacotes | 162 pacotes |
-
-O bandit reprova qualquer severidade, o pip-audit roda com `--strict` nas dependências de runtime e o trivy barra HIGH e CRITICAL com correção. O gitleaks do `platform` varreu 32 commits, sem vazamento, e um controle negativo confere que as regras pegam senha plantada. O kubeconform e o `trivy config` aprovaram os overlays `kind`, `kind-ci` e `k3s`. O ZAP varre a borda como um cliente de fora a vê, no kind descartável do job `e2e`, e chama cada operação do OpenAPI uma vez. Os avisos:
-
-| Achado | Onde | Tratamento |
-|---|---|---|
-| 10035, `Strict-Transport-Security` ausente (WARN) | só nos 404 do próprio Kong (`/`, o prefixo, `/robots.txt` e `/sitemap.xml`) | o Kong sem rota casada não executa plugin |
-| 10024, dado sensível na URL (WARN, só no Billing) | o checkout do simulador, com o `token` na query | só existe com `MP_MODE=simulado`; o Promtail mascara o `token=` |
-| 10015, `Cache-Control` (IGNORE) | `saude` e `openapi.json`, com `no-store`, e o JWKS, com `max-age=600` | `no-store` já proíbe o cache |
-
-Ficam em FAIL, e reprovam o job, o nome e a versão de produto nos cabeçalhos `Server` e `X-Powered-By` e a falta de `X-Content-Type-Options` ([regras](../../../README.md#regras-e-allowlist)). O relatório da fase 1, com o OWASP Top 10, está no [repositório da fase 3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/seguranca/relatorio-vulnerabilidades.md).
 
 # Anexo B — Evidências visuais
 
