@@ -276,7 +276,7 @@
     {
       "id": 4,
       "title": "Estornos e devoluções manuais",
-      "description": "Estornos concluídos por motivo (compensação da saga ou pagamento depois do encerramento), estornos automáticos que o provedor recusou (a devolução fica com o operador; vermelho acima de zero) e checkouts que o provedor não fechou na compensação. Os estornos contam pelo menos uma vez: uma reentrega da mensagem pode contar a mais. O contador é do próprio Billing: se o pod for trocado antes da raspagem seguinte (15 s), o que ele contou depois da última raspagem se perde, e a soma dos motivos fica abaixo de Estornadas (painel 3). Em caso de diferença vale o painel 3, e a lista exata está no banco do Billing.",
+      "description": "Estornos concluídos por motivo (compensação da saga ou pagamento depois do encerramento), estornos automáticos que o provedor recusou (a devolução fica com o operador; vermelho acima de zero) e checkouts que o provedor não fechou na compensação. Os estornos contam pelo menos uma vez: uma reentrega da mensagem pode contar a mais. O contador é do próprio Billing: se o pod for trocado antes da raspagem seguinte (15 s), o que ele contou depois da última raspagem se perde, e a soma dos motivos fica abaixo de Estornadas (painel 3). A lista exata está no banco do Billing.",
       "type": "bargauge",
       "gridPos": {
         "h": 8,
