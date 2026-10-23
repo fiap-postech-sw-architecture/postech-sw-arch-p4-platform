@@ -431,7 +431,7 @@ Resposta que chega atrasada em `FALHA_NA_COMPENSACAO` é ignorada, como todo eve
 
 ### 4.8 Sequências
 
-Setas de ponta aberta são mensagens assíncronas (outbox, relay, exchange, fila, consumidor); chamadas REST de fora do cluster passam pelo Kong, omitido. O caminho feliz vem em dois diagramas, de T1 a T4 e de T5 a T10, com a numeração das mensagens contínua.
+Setas de ponta aberta são mensagens assíncronas (outbox, relay, exchange, fila, consumidor); chamadas REST de fora do cluster passam pelo Kong, omitido. O caminho feliz vem em três diagramas, de T1 a T4, de T5 a T6 e de T7 a T10, com a numeração das mensagens contínua.
 
 #### (a1) Caminho feliz, de T1 a T4
 
@@ -471,13 +471,11 @@ sequenceDiagram
     end
 ```
 
-#### (a2) Caminho feliz, de T5 a T10
+#### (a2) Caminho feliz, de T5 a T6
 
 ```mermaid
 sequenceDiagram
     autonumber 16
-    actor AT as Atendente
-    actor ME as Mecânico
     actor CL as Cliente
     participant OS as os-service
     participant EX as execution-service
@@ -503,7 +501,20 @@ sequenceDiagram
         BI-)OS: PagamentoConfirmado
         Note over OS: OS AGUARDANDO_EXECUCAO
     end
+```
 
+#### (a3) Caminho feliz, de T7 a T10
+
+```mermaid
+sequenceDiagram
+    autonumber 27
+    actor AT as Atendente
+    actor ME as Mecânico
+    participant OS as os-service
+    participant EX as execution-service
+    participant BI as billing-service
+
+    Note over OS,BI: continua o diagrama anterior, com o pagamento confirmado
     rect rgba(147, 112, 219, 0.10)
         Note over OS,EX: T7 a T9: fila, execução e finalização
         OS-)EX: AgendarExecucao

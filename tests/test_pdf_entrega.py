@@ -91,11 +91,11 @@ ALTURA_NO_LIMITE = _pixels(1350)
 LARGURA_NO_LIMITE = math.ceil(1.1 * ALTURA_NO_LIMITE)
 
 
-# Os sete primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584 é
+# Os oito primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584 é
 # a largura a que o Mermaid reduz o diagrama que não cabe na página. O de
 # componentes e o ER do OS levam espaçamento menor na RFC, que os deixa mais
-# largos que altos; a segunda metade do caminho feliz, quase quadrada, vai
-# deitada para ficar ao lado da primeira.
+# largos que altos; as duas últimas partes do caminho feliz, que o Mermaid não
+# reduz, ficam no retrato.
 @pytest.mark.parametrize(
     ("largura", "altura", "deitado"),
     [
@@ -112,7 +112,8 @@ LARGURA_NO_LIMITE = math.ceil(1.1 * ALTURA_NO_LIMITE)
         pytest.param(
             _pixels(1582.4), _pixels(1147.2), True, id="caminho-feliz-t1-a-t4"
         ),
-        pytest.param(_pixels(1584), _pixels(1396.8), True, id="caminho-feliz-t5-a-t10"),
+        pytest.param(_pixels(1340), _pixels(979), False, id="caminho-feliz-t5-a-t6"),
+        pytest.param(_pixels(1123), _pixels(828), False, id="caminho-feliz-t7-a-t10"),
         pytest.param(
             _pixels(1584), _pixels(1500), False, id="quase-quadrado-fica-no-retrato"
         ),
@@ -289,3 +290,19 @@ def test_so_o_diagrama_largo_que_cabe_no_retrato_ganha_altura_limitada(
     largura: int, altura: int, esperado: bool
 ) -> None:
     assert pdf.compacto(largura, altura) is esperado
+
+
+@pytest.mark.parametrize(
+    ("largura", "altura", "esperado"),
+    [
+        pytest.param(_pixels(1340), _pixels(979), True, id="caminho-feliz-t5-a-t6"),
+        pytest.param(_pixels(1123), _pixels(828), True, id="caminho-feliz-t7-a-t10"),
+        pytest.param(_pixels(1169), _pixels(936), False, id="geral-quase-quadrado"),
+        pytest.param(1340, 1000, True, id="no-limite-da-proporcao"),
+        pytest.param(1339, 1000, False, id="um-pixel-abaixo-da-proporcao"),
+    ],
+)
+def test_so_o_diagrama_medio_ganha_meia_pagina(
+    largura: int, altura: int, esperado: bool
+) -> None:
+    assert pdf.meia(largura, altura) is esperado

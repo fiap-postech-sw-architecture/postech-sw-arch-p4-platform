@@ -301,7 +301,7 @@ O `EstornarPagamento` compensa o T6 em qualquer estado do pagamento: com a cobra
 
 ### 6.4 Caminho feliz
 
-No caminho feliz, a OS passa pelo diagnóstico, com a validação de preços no Billing, pelo orçamento enviado por e-mail e aprovado pelo cliente, pela reserva de peças e pelo pagamento no Mercado Pago, confirmado pelo webhook ou pela conciliação em até 30 s; depois vêm o agendamento, o início (o pivot), a finalização com a baixa das peças e a entrega. O caminho vem em dois diagramas, de T1 a T4 e de T5 a T10, com a numeração das mensagens contínua. Nos diagramas de sequência, setas de ponta aberta são mensagens assíncronas (outbox, relay, fila e consumidor), e as chamadas REST de fora do cluster passam pelo Kong, omitido.
+No caminho feliz, a OS passa pelo diagnóstico, com a validação de preços no Billing, pelo orçamento enviado por e-mail e aprovado pelo cliente, pela reserva de peças e pelo pagamento no Mercado Pago, confirmado pelo webhook ou pela conciliação em até 30 s; depois vêm o agendamento, o início (o pivot), a finalização com a baixa das peças e a entrega. O caminho vem em três diagramas, de T1 a T4, de T5 a T6 e de T7 a T10, com a numeração das mensagens contínua. Nos diagramas de sequência, setas de ponta aberta são mensagens assíncronas (outbox, relay, fila e consumidor), e as chamadas REST de fora do cluster passam pelo Kong, omitido.
 
 ```mermaid
 sequenceDiagram
@@ -342,8 +342,6 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     autonumber 16
-    actor AT as Atendente
-    actor ME as Mecânico
     actor CL as Cliente
     participant OS as os-service
     participant EX as execution-service
@@ -369,7 +367,18 @@ sequenceDiagram
         BI-)OS: PagamentoConfirmado
         Note over OS: OS AGUARDANDO_EXECUCAO
     end
+```
 
+```mermaid
+sequenceDiagram
+    autonumber 27
+    actor AT as Atendente
+    actor ME as Mecânico
+    participant OS as os-service
+    participant EX as execution-service
+    participant BI as billing-service
+
+    Note over OS,BI: continua o diagrama anterior, com o pagamento confirmado
     rect rgba(147, 112, 219, 0.10)
         Note over OS,EX: T7 a T9: fila, execução e finalização
         OS-)EX: AgendarExecucao

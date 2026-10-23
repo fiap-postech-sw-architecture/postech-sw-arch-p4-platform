@@ -95,9 +95,7 @@ def largo(largura: int, altura: int) -> bool:
 
     No retrato, o que o Mermaid reduziu à página dele sai com a letra menor. Na
     paisagem, a letra cresce na proporção da largura sobre a altura, até 1,5
-    vez; abaixo de 1,1 o ganho não paga a página a mais. Páginas deitadas
-    seguidas não deixam meia página em branco entre elas, o que a segunda
-    metade do caminho feliz, quase quadrada, aproveita.
+    vez; abaixo de 1,1 o ganho não paga a página a mais.
     """
     reduzido = largura >= 0.9 * LARGURA_MERMAID * ESCALA
     return reduzido and largura >= 1.1 * altura
@@ -110,6 +108,16 @@ def compacto(largura: int, altura: int) -> bool:
     orçamento recusado e da falta de peça).
     """
     return largura >= 1.45 * altura
+
+
+def meia(largura: int, altura: int) -> bool:
+    """Diagrama médio, menos largo que o compacto, que também fica no retrato.
+
+    Vale depois de `compacto`. Na largura do texto ele passa de 120 mm de altura;
+    limitado a 120 mm, dois cabem numa página só (as duas últimas partes do
+    caminho feliz). O geral, mais quadrado, fica de fora e usa a largura toda.
+    """
+    return largura >= 1.34 * altura
 
 
 def capa(documento: str, logo: Path) -> str:
@@ -253,6 +261,8 @@ def main() -> int:
                 classe = "diagrama paisagem"
             elif compacto(largura, altura):
                 classe = "diagrama compacto"
+            elif meia(largura, altura):
+                classe = "diagrama meia"
             else:
                 classe = "diagrama"
             titulo = html.escape(secao_da_rfc(rfc, match.group(1)))
