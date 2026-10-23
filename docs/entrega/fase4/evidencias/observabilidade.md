@@ -4,7 +4,7 @@ Estado: prova parcial. O fluxo local, o trace distribuído, a ociosidade e a sa�
 
 ## Ambiente e commits
 
-Cluster próprio `pytstop-p4-codex`, contexto `kind-pytstop-p4-codex`, criado em 19/10/2026. A plataforma usa o overlay `kind`, com PVC do Prometheus e retenção de 15 dias. Os serviços usam `kind-ci`, com os prazos de negócio do ensaio; a combinação mantém o Grafana e a persistência locais e permite exercitar os mesmos cenários do CI.
+Kind local próprio, criado em 19/10/2026 e removido depois das capturas de 22/10 (o nome do cluster e o do contexto estão nos comandos abaixo). A plataforma usa o overlay `kind`, com PVC do Prometheus e retenção de 15 dias. Os serviços usam `kind-ci`, com os prazos de negócio do ensaio; a combinação mantém o Grafana e a persistência locais e permite exercitar os mesmos cenários do CI.
 
 | Repositório | Commit exercitado |
 |---|---|
