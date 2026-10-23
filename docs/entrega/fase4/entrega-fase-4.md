@@ -301,6 +301,8 @@ O `EstornarPagamento` compensa o T6 em qualquer estado do pagamento: com a cobra
 
 ### 6.3 Caminho feliz
 
+No caminho feliz, a OS passa pelo diagnóstico, com a validação de preços no Billing, pelo orçamento enviado por e-mail e aprovado pelo cliente, pela reserva de peças e pelo pagamento no Mercado Pago, confirmado pelo webhook ou pela conciliação em até 30 s; depois vêm o agendamento, o início (o pivot), a finalização com a baixa das peças e a entrega. Nos diagramas de sequência, setas de ponta aberta são mensagens assíncronas (outbox, relay, fila e consumidor), e as chamadas REST de fora do cluster passam pelo Kong, omitido. O caminho vem em dois diagramas, de T1 a T4 e de T5 a T10, com a numeração das mensagens contínua.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -310,7 +312,6 @@ sequenceDiagram
     participant OS as os-service
     participant EX as execution-service
     participant BI as billing-service
-    participant MP as Mercado Pago
 
     rect rgba(70, 130, 180, 0.10)
         Note over AT,EX: T1 e T2: abertura e diagnóstico
@@ -336,7 +337,20 @@ sequenceDiagram
         CL->>BI: POST /api/v1/publico/orcamentos/{token}/decisao (aprova)
         BI-)OS: OrcamentoAprovado
     end
+```
 
+```mermaid
+sequenceDiagram
+    autonumber 16
+    actor AT as Atendente
+    actor ME as Mecânico
+    actor CL as Cliente
+    participant OS as os-service
+    participant EX as execution-service
+    participant BI as billing-service
+    participant MP as Mercado Pago
+
+    Note over OS,BI: continua o diagrama anterior, com o orçamento aprovado
     rect rgba(218, 165, 32, 0.12)
         Note over OS,MP: T5 e T6: reserva de peças e pagamento
         OS-)EX: ReservarPecas
@@ -372,8 +386,6 @@ sequenceDiagram
     AT->>OS: POST /api/v1/ordens-de-servico/{id}/entrega
     Note over AT,OS: T10: OS ENTREGUE (fora da saga)
 ```
-
-No caminho feliz, a OS passa pelo diagnóstico, com a validação de preços no Billing, pelo orçamento enviado por e-mail e aprovado pelo cliente, pela reserva de peças e pelo pagamento no Mercado Pago, confirmado pelo webhook ou pela conciliação em até 30 s; depois vêm o agendamento, o início (o pivot), a finalização com a baixa das peças e a entrega. Nos diagramas de sequência, setas de ponta aberta são mensagens assíncronas (outbox, relay, fila e consumidor), e as chamadas REST de fora do cluster passam pelo Kong, omitido.
 
 ### 6.4 Compensações principais
 
