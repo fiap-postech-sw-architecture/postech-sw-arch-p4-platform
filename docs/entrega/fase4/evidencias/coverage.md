@@ -4,7 +4,7 @@ Estado: medida anterior ao congelamento, nos CDs da `main` de 21/10/2026 (UTC; e
 
 ## Runs citados
 
-Cada serviço tem um run só: o CD da `main` de 21/10/2026 (UTC), o primeiro aprovado depois dos PRs que zeraram os code smells do SonarQube. A cobertura por camada, o quality gate e as medidas do SonarQube deste arquivo saem desse mesmo run, e as tabelas são geradas por `scripts/cobertura_resumo.py` a partir do `coverage.xml` dele ([Reprodução](#reprodução)). O README de cada serviço mostra a tabela do run que ele cita, que pode ser anterior a estes.
+Cada serviço tem um run só: o CD da `main` de 21/10/2026 (UTC), o primeiro aprovado depois dos PRs que zeraram os code smells do SonarQube. A cobertura por camada, o quality gate e as medidas do SonarQube deste arquivo saem desse mesmo run, e as tabelas são geradas por `scripts/cobertura_resumo.py` a partir do `coverage.xml` dele ([Reprodução](#reprodução)). O README de cada serviço mostra a tabela do run que ele cita, que muda com os PRs e pode ser outro, anterior ou posterior a estes.
 
 | Serviço | Run | Commit medido | PR que zerou os code smells |
 |---|---|---|---|
