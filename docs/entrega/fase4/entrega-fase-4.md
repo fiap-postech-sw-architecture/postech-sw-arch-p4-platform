@@ -1030,6 +1030,6 @@ O ruleset da `main` do OS Service, aberto sem login, e a lista dos commits dela:
 
 Fonte: [ruleset 24594457](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/rules/24594457), 23/10/2026.
 
-![Commits da main do OS Service: 29 de PR e o Initial commit.](evidencias/protecao-commits-main-os-service-2026-10-23.png)
+![Commits da main do OS Service na captura de 23/10: 29 de PR e o Initial commit.](evidencias/protecao-commits-main-os-service-2026-10-23.png)
 
-Fonte: [commits da main](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/commits/main), 23/10/2026.
+Fonte: [commits da main](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/commits/main), 23/10/2026. O × do #15 é o `trivy` do run depois do merge, que bateu no limite de pulls do registro de imagens; os checks do PR passaram.

@@ -31,7 +31,7 @@ A versão anterior do documento de entrega contava 26, 24, 20 e 32 commits, os q
 ## Prints do Anexo B, B8
 
 - [protecao-ruleset-os-service-2026-10-23.png](protecao-ruleset-os-service-2026-10-23.png): página do ruleset do OS Service, aberta sem login, com os dois "Show additional settings" abertos; capturada em 23/10/2026, 15:59:49 UTC. A página pública não mostra a lista de exceções (o cabeçalho traz "Sign in"); as exceções vêm da API, na tabela acima.
-- [protecao-commits-main-os-service-2026-10-23.png](protecao-commits-main-os-service-2026-10-23.png): lista dos 30 commits da `main` do OS Service, capturada às 15:59:22 UTC. O X de CI do commit `28d6240` (#15, 19/10) foi o job `security-scan / trivy` do run depois do merge: `TOOMANYREQUESTS` ao baixar o banco de vulnerabilidades, limite do registro de imagens e não achado de segurança.
+- [protecao-commits-main-os-service-2026-10-23.png](protecao-commits-main-os-service-2026-10-23.png): lista dos 30 commits da `main` do OS Service, capturada às 15:59:22 UTC. O X de CI do commit `28d6240` (#15, 19/10) foi o job `security-scan / trivy` do run depois do merge: `TOOMANYREQUESTS` ao baixar o banco de vulnerabilidades, limite do registro de imagens e não achado de segurança. Os nove checks do PR #15 passaram, `trivy` inclusive (conferido pela API do GitHub em 23/10/2026).
 - [protecao-ruleset-billing-service-2026-10-23.png](protecao-ruleset-billing-service-2026-10-23.png): o mesmo ruleset no Billing (24594468), capturado às 16:04:23 UTC.
 
 Para repetir a conferência de um repositório, com o número do ruleset da tabela:
