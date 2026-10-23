@@ -58,9 +58,16 @@ class Resultado:
         return self.series is not None and self.series > 0
 
 
+# O p90 de Orcamentos so aparece com 10 decisoes ou mais; o E2E decide poucas vezes, e
+# a barra sumiria. Aqui o limiar cai para 1: o gate prova metrica e rotulo, e o
+# limiar de 10 fica provado no promtool (tests/alertas.promtool.yml).
+_LIMIAR_DE_VOLUME: Final = (">= 10)", ">= 1)")
+
+
 def resolver(expr: str) -> str:
     """A consulta como o Grafana a manda: o periodo e a taxa viram valores fixos."""
-    return expr.replace("$__range", "1h").replace("$__rate_interval", "5m")
+    resolvida = expr.replace("$__range", "1h").replace("$__rate_interval", "5m")
+    return resolvida.replace(*_LIMIAR_DE_VOLUME)
 
 
 def carregar(raiz: Path = OBSERVABILIDADE) -> list[Consulta]:

@@ -1507,3 +1507,32 @@ tests:
         exp_samples:
           - labels: '{job="os-service-api", rota="/api/v1/ordens-de-servico"}'
             value: 0.2425
+  # Orcamentos 3: o p90 so aparece com 10 decisoes ou mais no periodo; com menos ele so
+  # diria em que balde as decisoes cairam. O $__range do teste e 1h.
+  - name: painel Orcamentos 3, o p90 aparece com 10 decisoes e some com 9
+    interval: 1m
+    input_series:
+      # aprovado: 10 decisoes na hora, 4 de ate 1 s e 6 de 1 a 2 s.
+      - series: pytstop_orcamentos_tempo_decisao_segundos_bucket{decisao="aprovado", le="1"}
+        values: 0x30 4x30
+      - series: pytstop_orcamentos_tempo_decisao_segundos_bucket{decisao="aprovado", le="2"}
+        values: 0x30 10x30
+      - series: pytstop_orcamentos_tempo_decisao_segundos_bucket{decisao="aprovado", le="+Inf"}
+        values: 0x30 10x30
+      - series: pytstop_orcamentos_tempo_decisao_segundos_count{decisao="aprovado"}
+        values: 0x30 10x30
+      # recusado: 9 decisoes, todas de 1 a 2 s.
+      - series: pytstop_orcamentos_tempo_decisao_segundos_bucket{decisao="recusado", le="1"}
+        values: 0x61
+      - series: pytstop_orcamentos_tempo_decisao_segundos_bucket{decisao="recusado", le="2"}
+        values: 0x30 9x30
+      - series: pytstop_orcamentos_tempo_decisao_segundos_bucket{decisao="recusado", le="+Inf"}
+        values: 0x30 9x30
+      - series: pytstop_orcamentos_tempo_decisao_segundos_count{decisao="recusado"}
+        values: 0x30 9x30
+    promql_expr_test:
+      - expr: histogram_quantile(0.9, sum by (le, decisao) (increase(pytstop_orcamentos_tempo_decisao_segundos_bucket[1h]))) and on (decisao) (sum by (decisao) (increase(pytstop_orcamentos_tempo_decisao_segundos_count[1h])) >= 10)
+        eval_time: 60m
+        exp_samples:
+          - labels: '{decisao="aprovado"}'
+            value: 1.8333333333333335
