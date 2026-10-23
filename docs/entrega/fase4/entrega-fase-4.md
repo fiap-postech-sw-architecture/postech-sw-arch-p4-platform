@@ -947,4 +947,42 @@ Fonte: Grafana do kind, 19/10/2026, 00:58 (horário de Brasília).
 
 ## B7 — Dashboards do Grafana
 
-Os nove dashboards (Atendimento, Orçamentos, Pagamentos, Execução, Saga, Mensageria, Serviços, Bancos e Plataforma) entram aqui depois da captura de 22/10/2026, com três dias de histórico no kind. Captura pendente.
+Os nove dashboards do Grafana do kind local, abertos sem login, como Viewer (o botão "Sign in" é só o da tela). O cluster está no ar desde 19/10/2026, 03:12 UTC, e o Prometheus guarda os dados num volume persistente, desde as 03:16 UTC. O histórico vem do uso: os E2E da subida do cluster, em 19/10, e o `make demo`, uma vez por dia UTC: em 19/10, às 00:05 de 20/10, às 00:16 de 21/10, às 00:13 de 22/10 e das 00:08:31 às 00:10:21 de 23/10. Ele roda os seis cenários `@demo` do BDD (caminho feliz, falta de peça, cancelamento depois do pagamento com estorno, 409 depois do início da execução, consumidor do Billing parado por 20 s e API do Billing parada com o circuito aberto), e os seis passaram em todas as execuções. Nenhuma amostra foi criada nem alterada. A série tem lacunas, de quando o computador dormiu e de um reinício dos pods em 21/10, por volta de 01:45 UTC, por falta de memória da VM do Docker.
+
+A captura é de 23/10/2026, a partir das 00:10 UTC (22/10, 21:10 em Brasília), e os nomes dos arquivos levam a data de Brasília. Cada print mostra a janela no topo. Os quatro dashboards de negócio e o da Saga mostram de 19/10, 00:00 UTC, até a captura. Os quatro técnicos têm painéis de taxa e de p95 em janelas de 5 minutos, que ficam sem dado numa janela de quatro dias, e por isso mostram os nove minutos em volta do `make demo` de 23/10.
+
+![Atendimento: volume diário de OS em quatro barras (19 a 22/10), funil de 53 OS abertas a 10 finalizadas e sagas com 33 compensadas e 10 concluídas.](evidencias/grafana-atendimento-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As 8 OS em "Em execução" são, na maior parte, do cenário do 409: a demonstração para ali de propósito, porque o cenário prova que o cancelamento depois do início da execução responde 409.
+
+![Orçamentos: 53 gerados, 35 aprovados, 1 recusado e 15 expirados, com taxa de aprovação de 69% (35 dos 51 decididos) e 2 orçamentos esperando a decisão.](evidencias/grafana-orcamentos-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura.
+
+![Pagamentos: faturamento bruto de R$ 5.481,47, estornado de R$ 1.267,16 e líquido de R$ 4.214,31, com 26 cobranças pagas, 1 recusada e 8 estornadas.](evidencias/grafana-pagamentos-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. O total das quatro barras de "Faturamento por dia" (R$ 4.880,91) é menor que o bruto porque a barra de um dia só aparece depois da meia-noite UTC que o fecha: o que o `make demo` pagou em 23/10 está no bruto e ainda não tem barra.
+
+![Execução e estoque: 8 OS em execução e nenhuma na fila, espera de 6,66 s até o diagnóstico e de 415 ms na fila de execução, 27 reservas de peças atendidas e 8 recusadas.](evidencias/grafana-execucao-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As 8 OS em execução são as mesmas do Atendimento.
+
+![Saga: nenhuma saga parada nem prazo técnico vencido, o processo prazos rodou há 12 s no OS e há 8 s no Billing, nenhum reenvio e duração por etapa (p95).](evidencias/grafana-saga-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As sagas em `em_execucao` são, na maior parte, as do cenário do 409, e a mais antiga, de 19/10, tem 3,86 dias.
+
+![Mensageria: mensagens publicadas e consumidas por tipo durante o make demo, nenhum retry, nenhuma mensagem na DLQ por tipo, outbox dead em zero nos três serviços e nenhuma reconexão ao broker.](evidencias/grafana-mensageria-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`, capturada de novo às 00:15 UTC, com o eixo de "Outbox pendente" do JSON do [platform #34](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/34), que tira o "sem dado" dos ticks 0,5 e 1,5. "Retry por nível" aparece vazio ("No data") porque não houve retry no período.
+
+![Serviços: requisições, erro 5xx, taxa de sucesso e latência p95 por serviço, rotas mais lentas, nenhum circuito aberto ao fim da janela, Mercado Pago sem chamadas e CPU e memória por pod.](evidencias/grafana-servicos-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`. O pico de 5xx e a queda da taxa de sucesso, por volta de 00:10 UTC, são do cenário da API do Billing parada: o circuito abre e a conclusão do diagnóstico responde 503 até o Billing voltar. O Mercado Pago fica em zero porque o kind usa o simulador.
+
+![Bancos: os três exporters no ar, conexões do PostgreSQL em 7% e 11% do máximo, transações, locks, tamanho dos bancos (9,32 MiB no OS, 8,43 MiB na Execução e 272 KiB no Billing), documentos do MongoDB e replica set rs0 em PRIMARY.](evidencias/grafana-bancos-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`.
+
+![Plataforma: nenhuma mensagem nas três DLQs, um consumidor em cada fila de trabalho, alarmes de memória e disco do broker em OK, os 18 alvos do Prometheus no ar e tráfego e latência p95 da borda.](evidencias/grafana-plataforma-2026-10-22.png)
+
+Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`. A mensagem pronta em `billing.comandos`, por volta de 00:09:30 UTC, é a do cenário do consumidor do Billing parado por 20 s.

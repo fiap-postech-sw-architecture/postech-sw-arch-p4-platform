@@ -1,6 +1,6 @@
 # Ensaio local de observabilidade — 19/10/2026
 
-Estado: prova parcial. O fluxo local, o trace distribuído, a ociosidade e a saúde posterior foram exercitados. A chamada HTTP ao Mercado Pago real e as capturas com três dias de histórico continuam pendentes. As capturas deste ensaio têm uma hora de dados e não substituem essas provas.
+Estado: prova parcial. O fluxo local, o trace distribuído, a ociosidade e a saúde posterior foram exercitados, e os nove dashboards foram capturados em 22/10/2026 com mais de três dias de dados ([Dashboards e histórico](#dashboards-e-histórico)). A chamada HTTP ao Mercado Pago real continua pendente. As capturas locais de 19/10 tinham uma hora de dados; as de 22/10 as substituem.
 
 ## Ambiente e commits
 
@@ -35,11 +35,24 @@ Uma consulta posterior por container usou um recorte de dez minutos e encontrou 
 
 Após a observação, `scripts/ci/smoke-servicos.sh` passou novamente e a varredura de `reports/e2e` não encontrou segredos.
 
-## Dashboards e primeiro dia
+## Dashboards e histórico
 
-Os nove dashboards provisionados foram abertos no Grafana anônimo como Viewer. As consultas de negócio produziram séries no Prometheus. Os painéis de volume diário e faturamento diário dependem da primeira meia-noite UTC após o início da coleta, conforme suas descrições; as capturas iniciais ainda mostram essa ausência de histórico.
+Os nove dashboards provisionados foram abertos no Grafana anônimo como Viewer. As consultas de negócio produziram séries no Prometheus. Em 19/10, os painéis de volume diário e faturamento diário ainda não tinham barra, porque dependem da primeira meia-noite UTC depois do início da coleta, conforme as descrições deles.
 
 `make demo CLUSTER=pytstop-p4-codex` passou em 19/10: seis cenários, 11 não selecionados, 111,11 s; blocos 1 e 2 em 19 s e 92 s. Os relatórios também passaram pela varredura. Esse é o primeiro dia real; não foram criadas amostras retroativas nem alterados timestamps.
+
+O cluster e o PVC do Prometheus ficaram no ar, e o `make demo` rodou de novo uma vez por dia UTC, com seis cenários aprovados e 11 não selecionados em cada execução:
+
+| Dia (UTC) | Início | Fim | Duração |
+|---|---|---|---|
+| 20/10/2026 | 00:03:11 | 00:05:05 | 113,54 s |
+| 21/10/2026 | 00:14:26 | 00:16:15 | 108,62 s |
+| 22/10/2026 | 00:11:35 | 00:13:27 | 111,08 s |
+| 23/10/2026 | 00:08:31 | 00:10:21 | 109,89 s |
+
+Início e fim são a criação e a última escrita do log de cada execução, que guarda a saída do pytest; a duração é a da última linha dele. Os logs ficam fora do repositório.
+
+Os nove dashboards foram capturados em 23/10/2026, a partir das 00:10 UTC (22/10, 21:10 em Brasília), logo depois da última execução, e estão no [Anexo B, B7](../entrega-fase-4.md#b7--dashboards-do-grafana). O Prometheus tem dados desde 19/10, 03:16 UTC, com lacunas de quando o computador dormiu e de um reinício dos pods em 21/10, por volta de 01:45 UTC, por falta de memória da VM do Docker. O painel de volume diário tem quatro barras (19 a 22/10). Os dashboards de negócio e o da Saga mostram de 19/10, 00:00 UTC, até a captura; os técnicos, de 00:03:31 a 00:12:21 UTC de 23/10, em volta da última execução, porque os painéis de taxa e de p95 usam janelas de 5 minutos e ficam sem dado numa janela de quatro dias.
 
 ## Alertas e recuperação
 
@@ -65,6 +78,5 @@ As sondas só abriram e fecharam conexões TCP, sem autenticação ou payload SM
 
 ## O que falta
 
-- Manter o cluster e o PVC por três dias reais, rodar `make demo` em cada dia e capturar os nove dashboards com o histórico exigido.
 - Executar a prova real do Mercado Pago e observar a ociosidade também nesse modo.
 - Atualizar os quatro commits e as provas depois das próximas integrações; conferir o pacote e o PDF sobre as tags finais.
