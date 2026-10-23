@@ -34,7 +34,7 @@
     {
       "id": 1,
       "title": "Faturamento no período",
-      "description": "Valor dos pagamentos confirmados no Mercado Pago, dos estornos de pagamentos confirmados (cancelamento depois do pagamento) e a diferença. Contado em centavos pelo Billing; o banco do Billing segue como fonte de verdade. O estornado conta pelo menos uma vez, no consumidor: uma reentrega da mensagem pode somá-lo de novo.",
+      "description": "Valor dos pagamentos confirmados no Mercado Pago, dos estornos de pagamentos confirmados (cancelamento depois do pagamento) e a diferença. Contado em centavos pelo Billing; o banco do Billing segue como fonte de verdade. O estornado conta pelo menos uma vez, no consumidor: uma reentrega da mensagem pode somá-lo de novo. Se o pod do consumidor for trocado antes da raspagem seguinte, o estornado pode ficar abaixo do real (painel 4).",
       "type": "stat",
       "gridPos": {
         "h": 6,
@@ -169,7 +169,7 @@
     {
       "id": 3,
       "title": "Pagamentos por desfecho",
-      "description": "Cobranças abertas no período e o desfecho, contados quando o OS processa o evento do Billing. Recusado: o provedor recusou todas as tentativas permitidas; expirado: o cliente não pagou em 60 min; cancelado e estornado vêm do cancelamento da OS ou de pagamento que chegou depois do encerramento.",
+      "description": "Cobranças abertas no período e o desfecho, contados quando o OS processa o evento do Billing. Recusado: o provedor recusou todas as tentativas permitidas; expirado: o cliente não pagou em 60 min; cancelado e estornado vêm do cancelamento da OS ou de pagamento que chegou depois do encerramento. Estornadas é o total de estornos que o OS recebeu; o painel 4 o abre por motivo, pelo contador do Billing.",
       "type": "bargauge",
       "gridPos": {
         "h": 8,
@@ -276,7 +276,7 @@
     {
       "id": 4,
       "title": "Estornos e devoluções manuais",
-      "description": "Estornos concluídos por motivo (compensação da saga ou pagamento depois do encerramento), estornos automáticos que o provedor recusou (a devolução fica com o operador; vermelho acima de zero) e checkouts que o provedor não fechou na compensação. Os estornos contam pelo menos uma vez: uma reentrega da mensagem pode contar a mais.",
+      "description": "Estornos concluídos por motivo (compensação da saga ou pagamento depois do encerramento), estornos automáticos que o provedor recusou (a devolução fica com o operador; vermelho acima de zero) e checkouts que o provedor não fechou na compensação. Os estornos contam pelo menos uma vez: uma reentrega da mensagem pode contar a mais. O contador é do próprio Billing: se o pod for trocado antes da raspagem seguinte (15 s), o que ele contou depois da última raspagem se perde, e a soma dos motivos fica abaixo de Estornadas (painel 3). Em caso de diferença vale o painel 3, e a lista exata está no banco do Billing.",
       "type": "bargauge",
       "gridPos": {
         "h": 8,
