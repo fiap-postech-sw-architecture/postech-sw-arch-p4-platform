@@ -62,12 +62,14 @@ h1 { break-before: page; }
 figure { margin: 4mm 0 0; break-inside: avoid; break-after: avoid; }
 figure img { display: block; max-width: 100%; max-height: 88mm; margin: 0 auto; border: 1px solid #c9d3d8; }
 /* Os dashboards do Grafana são telas densas e saem sem o teto de 88 mm da
-   galeria: com 88% da largura do texto o título e dois painéis (Atendimento e
-   Orçamentos) cabem numa página, e Pagamentos e Execução, em outra; a altura
-   vem da proporção do print, de 70 mm (Orçamentos) a 150 mm (Serviços). O
-   teto de 200 mm só vale para uma captura mais alta. */
+   galeria: com 80% da largura do texto o título e dois painéis (Atendimento e
+   Orçamentos), com as legendas que explicam os números, cabem numa página, e
+   Pagamentos e Execução, em outra; a altura vem da proporção do print, de 70 mm
+   (Orçamentos) a 150 mm (Serviços). O Loki e o trace das compensações ficam em
+   88%, e o teto de 200 mm só vale para uma captura mais alta. */
 figure img[src*="grafana-"], figure img[src*="loki-"], figure img[src*="jaeger-estorno"] {
   max-width: 88%; max-height: 200mm; }
+figure img[src*="grafana-"] { max-width: 80%; }
 /* Ruleset e lista de commits: telas altas de GitHub, uma por página. */
 figure img[src*="protecao-"] { max-height: 200mm; }
 /* Prints de status lado a lado (a grade do Anexo B): duas ou três por linha,
