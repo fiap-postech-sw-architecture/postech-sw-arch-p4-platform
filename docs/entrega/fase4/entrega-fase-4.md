@@ -32,12 +32,12 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | Diagrama geral: microsserviços, bancos e comunicação | [4.1](#41-diagrama-geral) | [RFC-004, seção 2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#2-diagrama-geral-da-arquitetura) |
 | Estratégia escolhida para o Saga Pattern | [6](#6-estratégia-da-saga) | [ADR-035](../../arquitetura/adr/fase4/035-saga-orquestrada.md); [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
 | Justificativa da divisão dos microsserviços e das tecnologias | [5](#5-divisão-dos-serviços-e-tecnologias) | [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md), [ADR-037](../../arquitetura/adr/fase4/037-banco-por-servico.md) |
-| Diagrama de componentes: processos, filas e integrações | [4.3](#43-componentes-e-integrações) | [RFC-004, processos e integrações](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#processos-e-integrações) |
+| Diagrama de componentes: processos, filas e integrações | [4.2](#42-comunicação-e-componentes) | [RFC-004, processos e integrações](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#processos-e-integrações) |
 | Sequências da saga: caminho feliz, orçamento recusado ou expirado, falta de peça e cancelamento com estorno | [6.4](#64-caminho-feliz) e [6.5](#65-compensações-principais) | [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) |
 | RFC-004, o desenho integrado, com os estados da saga e da OS, o mapa de contextos e a topologia do RabbitMQ | só no repositório | [rfc-004-microsservicos-saga.md](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) |
 | ADRs 034 a 043 | [5.3](#53-tecnologias-e-decisões) | [decisões da fase 4](../../arquitetura/adr/fase4/) |
 | Modelo de dados: ER do OS Service e da Execução e modelo dos documentos do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
-| Contratos de mensageria | [4.2](#42-comunicação-entre-os-serviços) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
+| Contratos de mensageria | [4.2](#42-comunicação-e-componentes) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
 | Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [B2](#b2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
 | CI/CD e deploy em Kubernetes | [9](#9-cicd-e-deploy) | [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) |
 | Segurança e relatório de vulnerabilidades | [10](#10-segurança-e-análise-de-vulnerabilidades) | [registro de segurança](evidencias/seguranca.md); [ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md) |
@@ -111,7 +111,7 @@ flowchart TB
     mp -->|webhook| kong
 ```
 
-### 4.2 Comunicação entre os serviços
+### 4.2 Comunicação e componentes
 
 A regra é REST quando quem chama precisa da resposta para continuar e a operação só lê, e mensagem quando a operação muda estado em outro serviço ([ADR-038](../../arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md)).
 
@@ -120,10 +120,6 @@ A regra é REST quando quem chama precisa da resposta para continuar e a operaç
 **Contratos.** Toda mensagem usa o mesmo envelope JSON, com `correlation_id` igual ao `ordem_id`, `causation_id` e o `traceparent` nos headers AMQP. São 34 mensagens, 11 comandos e 23 eventos, cada uma com um JSON Schema, reunidos em [AsyncAPI 3.0](../../../contratos/asyncapi.yaml); cada serviço valida os schemas que usa em teste de contrato no CI.
 
 **REST síncrono.** Na conclusão do diagnóstico, a Execução valida os códigos de serviço e de peça no Billing (`POST /api/v1/precos/validacao`), com timeout de 2 s, 2 retries com jitter e circuit breaker que abre com 5 falhas e fica aberto por 30 s; com o circuito aberto, a conclusão responde 503 e não grava nada. A chamada é síncrona porque o mecânico precisa saber na hora que um código não existe.
-
-### 4.3 Componentes e integrações
-
-Cada serviço roda um Deployment por processo: a `api`, o `consumidor`, o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que envia os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois.
 
 ```mermaid
 ---
@@ -198,6 +194,8 @@ flowchart TB
     os -->|"e-mail pelo notificador (SMTP)"| mailpit
     os & exe & bil -.->|"OTLP · /metrics · logs"| obs
 ```
+
+**Processos.** Cada serviço roda um Deployment por processo: a `api`, o `consumidor`, o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que envia os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois.
 
 ## 5. Divisão dos serviços e tecnologias
 
@@ -821,7 +819,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-042 | Pipeline independente até o Kubernetes | CD aprovado nos três ([seção 9](#9-cicd-e-deploy)) |
 | RNF-043 | `main` protegida | ruleset nos quatro ([B8](#b8--proteção-da-main); [conferência](evidencias/protecao-da-main.md)) |
 | RNF-044 | Um repositório por serviço | [seção 2](#2-repositórios-e-estado-do-cicd) |
-| RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.2](#42-comunicação-entre-os-serviços)) |
+| RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.2](#42-comunicação-e-componentes)) |
 | RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); capturas no [B7](#b7--dashboards-do-grafana) |
 | RNF-047 | Código-fonte | `src/` de cada serviço |
 | RNF-048 | Dockerfile e manifestos | imagem e deploy em cada CD |
@@ -913,7 +911,7 @@ Fonte: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech
 
 ## B2 — SonarQube
 
-O job `ci / sonarqube` verde de cada CD está no [B1](#b1--cd-da-main) e roda a análise no CI. Os três prints do painel do SonarQube (aba Overall Code: quality gate aprovado, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, cobertura e duplicação) são de um servidor local, com as mesmas imagens do CI e o quality gate do repositório; as medidas são as do job. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol`, que o `.coveragerc` omite ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
+O job `ci / sonarqube` verde de cada CD de serviço está no [B1](#b1--cd-da-main) e roda a análise no CI. Os três prints do painel do SonarQube (aba Overall Code: quality gate aprovado, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, cobertura e duplicação) são de um servidor local, com as mesmas imagens do CI e o quality gate do repositório; as medidas são as do job. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol`, que o `.coveragerc` omite ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
 
 <div class="grade">
 <div>
