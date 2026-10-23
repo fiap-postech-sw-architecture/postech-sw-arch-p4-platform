@@ -949,28 +949,15 @@ Fonte: commit `0ec76fe`, 21/10/2026; [run 39536414057](https://github.com/fiap-p
 
 ## B3 — Trace da saga no Jaeger
 
-Os traces são do Jaeger do kind local; o do caminho feliz, de 19/10/2026, já tinha saído da memória dele e foi aberto pela aba Upload de um Jaeger 1.76.0 avulso. O das compensações vem de um ensaio com o simulador do Mercado Pago, não do provedor real, e a mesma OS está no Loki, na [seção 11](#11-observabilidade). O mesmo cenário em 20/10/2026 (trace `bfe21ce701ea69d6afc008a870d2ce21`, também de 339 spans) está [no registro](evidencias/jaeger-trace-saga-2026-10-20.png).
+Os traces são do Jaeger do kind local. O das compensações vem de um ensaio com o simulador do Mercado Pago, não do provedor real, e a mesma OS está no Loki ([seção 11](#11-observabilidade)). O do caminho feliz, de 19/10/2026, já tinha saído da memória do Jaeger e foi aberto pela aba Upload. A busca de 20/10/2026 (três traces, cada um nos três serviços) e o trace `bfe21ce701ea69d6afc008a870d2ce21`, do mesmo cenário das compensações, ficam no repositório, fora do PDF: [busca](evidencias/jaeger-busca-saga-2026-10-20.png) e [trace](evidencias/jaeger-trace-saga-2026-10-20.png).
 
 ![OS paga e cancelada: 339 spans em 3 serviços, com as compensações destacadas (CancelarExecucao, EstornarPagamento, LiberarReserva).](evidencias/jaeger-estorno-compensacoes-2026-10-23.png)
 
 Fonte: trace `a1103d3357c265b8d697b250f8a4ddd9`, 23/10/2026, 09:36 UTC; ensaio com o simulador do Mercado Pago.
 
-<div class="grade">
-<div>
-
-![Busca por POST /api/v1/ordens-de-servico: três traces, cada um nos três serviços.](evidencias/jaeger-busca-saga-2026-10-20.png)
-
-Fonte: Jaeger 1.76.0, serviço `os-service`, 20/10/2026, de 09:03:10 a 09:03:40 (Brasília).
-
-</div>
-<div>
-
 ![Caminho feliz de 19/10/2026 pela aba Upload: 245 spans nos três serviços.](evidencias/jaeger-upload-caminho-feliz-2026-10-20.png)
 
 Fonte: [trace-saga-2026-10-19.json](evidencias/trace-saga-2026-10-19.json), trace `af146ea716424dfc2ac5b25960b8e9ae`.
-
-</div>
-</div>
 
 ## B4 — Swagger pela borda
 
