@@ -73,7 +73,10 @@ figure img[src*="grafana-"], figure img[src*="loki-"], figure img[src*="jaeger-e
 figure img[src*="grafana-"] { max-width: 80%; }
 /* Ruleset e lista de commits: telas altas de GitHub, uma por página. */
 figure img[src*="protecao-"] { max-height: 200mm; }
-/* Prints de status lado a lado (a grade do Anexo B): duas ou três por linha,
+/* Passos do deploy-kind: o texto da interface (14 px) sai com 6,8 pt na largura
+   toda; no teto de 88 mm seriam 5 pt, e na grade de duas colunas, 2,4 pt. */
+figure img[src*="cd-deploy-kind"] { max-height: 125mm; }
+/* Prints de status lado a lado (a grade do Anexo B): de duas a quatro por linha,
    cada uma com a legenda e a fonte. É tabela, e não flex: o weasyprint 69
    levava a linha inteira para a página seguinte quando sobrava espaço. */
 .grade { display: table; table-layout: fixed; border-spacing: 4mm 0; margin: 4mm -4mm;

@@ -861,7 +861,11 @@ As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2) e d
 
 ## B1 — CD da `main`
 
-CI, segurança, SonarQube, imagem e implantação no kind verdes. O `deploy-remote` cinza é o gancho opcional, desligado: o deploy entregue é o `deploy-kind`, cujos passos estão no segundo print. O "push" de cada run é o do merge do PR citado.
+CI, segurança, SonarQube, imagem e implantação no kind verdes. O deploy entregue é o `deploy-kind`, e os passos dele vêm primeiro; o `deploy-remote` cinza dos grafos é o gancho opcional, desligado. O "push" de cada run é o do merge do PR citado.
+
+![Passos do deploy-kind do OS Service: plataforma e serviços no kind, smoke por namespace e E2E BDD, em 7 min 28 s.](evidencias/cd-deploy-kind-os-service-2026-10-23.png)
+
+Fonte: [job do run 39957080878](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39957080878/job/120430471330), commit `a51d83e`, merge do PR #29, 23/10/2026; recorte do painel dos passos.
 
 <div class="grade">
 <div>
@@ -871,16 +875,6 @@ CI, segurança, SonarQube, imagem e implantação no kind verdes. O `deploy-remo
 Fonte: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), commit `3ce582b`, merge do PR #24, 20/10/2026.
 
 </div>
-<div>
-
-![Passos do deploy-kind do OS Service: plataforma e serviços no kind, smoke por namespace e E2E BDD, em 7 min 28 s.](evidencias/cd-deploy-kind-os-service-2026-10-23.png)
-
-Fonte: [job do run 39957080878](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39957080878/job/120430471330), commit `a51d83e`, merge do PR #29, 23/10/2026.
-
-</div>
-</div>
-
-<div class="grade">
 <div>
 
 ![CD do Billing Service: todos os jobs verdes.](evidencias/cd-billing-service-main-2026-10-20.png)
