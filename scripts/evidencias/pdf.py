@@ -42,6 +42,8 @@ LARGURA_MERMAID = 1600
 ESCALA = 1.25
 # Linha da tabela de participantes do documento: | Nome | RM123456 | Discord |
 PARTICIPANTE = re.compile(r"^\| ([^|\n]+?) \| (RM\d+) \|", re.M)
+# Abertura da seção de identificação do documento: "Grupo 158 (PytStop), turma ..."
+GRUPO = re.compile(r"^Grupo (\d+)\b", re.M)
 # Pontos de quebra dentro de código: camelCase e depois de "_", "/" e ".".
 QUEBRA = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[_/.])(?=[^\W_])")
 
@@ -100,11 +102,14 @@ def largo(largura: int, altura: int) -> bool:
 
 
 def capa(documento: str, logo: Path) -> str:
-    """Capa ABNT, um participante por linha, com a tabela da seção 1."""
-    autores = "\n".join(
+    """Capa ABNT, com o grupo e um participante por linha, como na seção 1."""
+    linhas = [
         f"<p>{html.escape(nome)} — {rm}</p>"
         for nome, rm in PARTICIPANTE.findall(documento)
-    )
+    ]
+    if grupo := GRUPO.search(documento):
+        linhas.insert(0, f"<p><strong>Grupo {grupo[1]}</strong></p>")
+    autores = "\n".join(linhas)
     return f"""<div class="capa">
 <div>
 <p><strong>FIAP — Faculdade de Informática e Administração Paulista</strong></p>

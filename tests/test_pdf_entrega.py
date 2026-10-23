@@ -201,7 +201,8 @@ def test_capa_abnt_abre_o_pdf_com_os_participantes_do_documento(
     tmp_path: Path,
 ) -> None:
     documento = (
-        f"{GERAL}\n# Documento\n\n| Nome | RM | Discord |\n|---|---|---|\n"
+        f"{GERAL}\n# Documento\n\nGrupo 158 (PytStop), turma 15SOAT.\n\n"
+        "| Nome | RM | Discord |\n|---|---|---|\n"
         "| Ana Lima | RM111111 | ana |\n| Bruno Reis | RM222222 | bruno |\n"
         "| Caio Dias | RM333333 | caio |\n| Davi Melo | RM444444 | davi |\n"
     )
@@ -214,7 +215,8 @@ def test_capa_abnt_abre_o_pdf_com_os_participantes_do_documento(
     assert "Documento de Entrega" in capa
     assert "São Paulo — 2026" in capa
     assert f'src="{tmp_path / "docs/entrega/fase4/logo-pytstop.png"}"' in capa
-    # Um participante por linha, sem partir nome e RM entre linhas.
+    # O grupo abre a lista; um participante por linha, sem partir nome e RM.
+    assert "<p><strong>Grupo 158</strong></p>\n<p>Ana Lima — RM111111</p>" in capa
     assert "<p>Ana Lima — RM111111</p>\n<p>Bruno Reis — RM222222</p>" in capa
     assert "<p>Davi Melo — RM444444</p>" in capa
     assert "# Documento" in corpo
@@ -256,3 +258,16 @@ def test_sumario_vai_para_depois_da_capa_e_codigo_quebra_entre_palavras() -> Non
 def test_sem_marcador_ou_sem_sumario_o_build_para(html: str) -> None:
     with pytest.raises(ValueError, match="sumário"):
         pdf.ajustar_html(html)
+
+
+def test_capa_sem_a_linha_do_grupo_nao_inventa_um(tmp_path: Path) -> None:
+    documento = (
+        f"{GERAL}\n| Nome | RM | Discord |\n|---|---|---|\n"
+        "| Ana Lima | RM111111 | ana |\n"
+    )
+    capa = pdf.preparar(_pacote(tmp_path, documento), "grupo/repo", "main").partition(
+        '<div id="pos-capa"></div>'
+    )[0]
+
+    assert "Grupo" not in capa
+    assert "<p>Ana Lima — RM111111</p>" in capa
