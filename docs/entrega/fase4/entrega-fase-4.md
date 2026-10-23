@@ -942,7 +942,7 @@ Os traces são do Jaeger do kind local. O das compensações vem de um ensaio co
 
 ![OS paga e cancelada: 339 spans em 3 serviços, com as compensações destacadas (CancelarExecucao, EstornarPagamento, LiberarReserva).](evidencias/jaeger-estorno-compensacoes-2026-10-23.png)
 
-Fonte: trace `a1103d3357c265b8d697b250f8a4ddd9`, 23/10/2026, 09:36 UTC; ensaio com o simulador do Mercado Pago.
+Fonte: [trace-estorno-2026-10-23.json](evidencias/trace-estorno-2026-10-23.json), trace `a1103d3357c265b8d697b250f8a4ddd9`, 23/10/2026, 09:36 UTC; ensaio com o simulador do Mercado Pago.
 
 ![Caminho feliz de 19/10/2026 pela aba Upload: 245 spans nos três serviços.](evidencias/jaeger-upload-caminho-feliz-2026-10-20.png)
 
