@@ -903,153 +903,213 @@ Ficam em FAIL, e reprovam o job, o nome e a versão de produto nos cabeçalhos `
 
 # Anexo B — Evidências visuais
 
-As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2), de um cluster kind local, onde cada captura só fez leituras, e dos artefatos dos runs; o kind roda os commits de 19/10/2026 do [relatório da execução local](evidencias/observabilidade.md#ambiente-e-commits). O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem de cada arquivo.
+As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2) e do kind local, onde cada captura só fez leituras. O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem, a data e a janela de cada arquivo.
 
 ## B1 — CD da `main`
 
-CI, segurança, SonarQube, imagem e implantação no kind verdes. O `deploy-remote` cinza é o gancho opcional, desligado: o deploy entregue é o `deploy-kind`, cujos passos estão no último print. O "push" de cada run é o do merge do PR citado.
+CI, segurança, SonarQube, imagem e implantação no kind verdes. O `deploy-remote` cinza é o gancho opcional, desligado: o deploy entregue é o `deploy-kind`, cujos passos estão no segundo print. O "push" de cada run é o do merge do PR citado.
 
-![CD do OS Service na main.](evidencias/cd-os-service-main-2026-10-20.png)
+<div class="grade">
+<div>
+
+![CD do OS Service: todos os jobs verdes, inclusive o `ci / sonarqube`.](evidencias/cd-os-service-main-2026-10-20.png)
 
 Fonte: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), commit `3ce582b`, merge do PR #24, 20/10/2026.
 
-![CD do Billing Service na main.](evidencias/cd-billing-service-main-2026-10-20.png)
-
-Fonte: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), commit `76b5f9b`, merge do PR #21, 20/10/2026.
-
-![CD do Execution Service na main.](evidencias/cd-execution-service-main-2026-10-20.png)
-
-Fonte: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), commit `5b1bef4`, merge do PR #18, 20/10/2026.
-
-![CD do platform na main: CI, deploy-kind e e2e.](evidencias/cd-platform-main-2026-10-20.png)
-
-Fonte: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), commit `d703200`, merge do PR #31, 20/10/2026.
+</div>
+<div>
 
 ![Passos do deploy-kind do OS Service: plataforma e serviços no kind, smoke por namespace e E2E BDD, em 7 min 28 s.](evidencias/cd-deploy-kind-os-service-2026-10-23.png)
 
 Fonte: [job do run 39957080878](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39957080878/job/120430471330), commit `a51d83e`, merge do PR #29, 23/10/2026.
 
+</div>
+</div>
+
+<div class="grade">
+<div>
+
+![CD do Billing Service: todos os jobs verdes.](evidencias/cd-billing-service-main-2026-10-20.png)
+
+Fonte: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), commit `76b5f9b`, merge do PR #21, 20/10/2026.
+
+</div>
+<div>
+
+![CD do Execution Service: todos os jobs verdes.](evidencias/cd-execution-service-main-2026-10-20.png)
+
+Fonte: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), commit `5b1bef4`, merge do PR #18, 20/10/2026.
+
+</div>
+<div>
+
+![CD do platform: CI, deploy-kind e e2e verdes.](evidencias/cd-platform-main-2026-10-20.png)
+
+Fonte: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), commit `d703200`, merge do PR #31, 20/10/2026.
+
+</div>
+</div>
+
 ## B2 — SonarQube
 
-O job `ci / sonarqube` verde de cada CD está no [B1](#b1--cd-da-main) e roda a análise no CI. Os três prints a seguir mostram o painel do SonarQube na aba Overall Code, que mede o código inteiro: quality gate Passed, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, a cobertura e a duplicação. O artefato do CI traz as contagens por tipo (`vulnerabilities`, `bugs` e `code_smells`), todas em 0. O servidor é local, com as mesmas imagens do CI, o `sonar-project.properties` e o quality gate do repositório, o commit do CD e o `coverage.xml` do artefato de testes desse CD; as medidas são iguais às do job `ci / sonarqube` do run citado em cada print. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol` (`repository.py`, `ports.py` e `unit_of_work.py`), que o `.coveragerc` omite por não terem lógica ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
+O job `ci / sonarqube` verde de cada CD está no [B1](#b1--cd-da-main) e roda a análise no CI. Os três prints do painel do SonarQube (aba Overall Code: quality gate aprovado, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, cobertura e duplicação) são de um servidor local, com as mesmas imagens do CI e o quality gate do repositório; as medidas são as do job. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol`, que o `.coveragerc` omite ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
+
+<div class="grade">
+<div>
 
 ![Job ci / sonarqube do OS Service verde em 2 min 19 s: análise, resumo e relatório publicados.](evidencias/ci-sonarqube-job-os-service-2026-10-23.png)
 
 Fonte: [job do run 39957080878](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39957080878/job/120428849725), 23/10/2026.
 
-![SonarQube do OS Service no commit c0f5a57: quality gate aprovado, 0 problemas abertos, cobertura de 97,2% e 0,0% de duplicação.](evidencias/sonarqube-os-service-2026-10-21.png)
+</div>
+<div>
 
-Fonte: análise local de `c0f5a57` em 21/10/2026, com as imagens e o `coverage.xml` do CI; o [run 39531343409](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39531343409), do CD do mesmo commit, deu os mesmos números (11.111 linhas, 97,2% de cobertura, 0 code smells).
+![SonarQube do OS Service: gate aprovado, 0 problemas abertos, 97,2% de cobertura, 0,0% de duplicação.](evidencias/sonarqube-os-service-2026-10-21.png)
 
-![SonarQube do Billing Service no commit 8a367e1: quality gate aprovado, 0 problemas abertos, cobertura de 98,8% e 0,0% de duplicação.](evidencias/sonarqube-billing-service-2026-10-21.png)
+Fonte: commit `c0f5a57`, 21/10/2026; [run 39531343409](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39531343409) do mesmo commit.
 
-Fonte: análise local de `8a367e1` em 21/10/2026, com as imagens e o `coverage.xml` do CI; o [run 39531974299](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39531974299), do CD do mesmo commit, deu os mesmos números (7.802 linhas, 98,8% de cobertura, 0 code smells).
+</div>
+</div>
 
-![SonarQube do Execution Service no commit 0ec76fe: quality gate aprovado, 0 problemas abertos, cobertura de 98,6% e 0,0% de duplicação.](evidencias/sonarqube-execution-service-2026-10-21.png)
+<div class="grade">
+<div>
 
-Fonte: análise local de `0ec76fe` em 21/10/2026, com as imagens e o `coverage.xml` do CI; o [run 39536414057](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39536414057), do CD do mesmo commit, deu os mesmos números (6.078 linhas, 98,6% de cobertura, 0 code smells).
+![SonarQube do Billing Service: gate aprovado, 0 problemas abertos, 98,8% de cobertura, 0,0% de duplicação.](evidencias/sonarqube-billing-service-2026-10-21.png)
+
+Fonte: commit `8a367e1`, 21/10/2026; [run 39531974299](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39531974299) do mesmo commit.
+
+</div>
+<div>
+
+![SonarQube do Execution Service: gate aprovado, 0 problemas abertos, 98,6% de cobertura, 0,0% de duplicação.](evidencias/sonarqube-execution-service-2026-10-21.png)
+
+Fonte: commit `0ec76fe`, 21/10/2026; [run 39536414057](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39536414057) do mesmo commit.
+
+</div>
+</div>
 
 ## B3 — Trace da saga no Jaeger
 
 Os traces são do Jaeger do kind local; o do caminho feliz, de 19/10/2026, já tinha saído da memória dele e foi aberto pela aba Upload de um Jaeger 1.76.0 avulso. O das compensações vem de um ensaio com o simulador do Mercado Pago, não do provedor real, e a mesma OS está no Loki, na [seção 11](#11-observabilidade). O mesmo cenário em 20/10/2026 (trace `bfe21ce701ea69d6afc008a870d2ce21`, também de 339 spans) está [no registro](evidencias/jaeger-trace-saga-2026-10-20.png).
 
-![Busca por POST /api/v1/ordens-de-servico: três traces, cada um nos três serviços.](evidencias/jaeger-busca-saga-2026-10-20.png)
-
-Fonte: Jaeger 1.76.0, serviço `os-service`, de 09:03:10 a 09:03:40.
-
 ![OS paga e cancelada: 339 spans em 3 serviços, com as compensações destacadas (CancelarExecucao, EstornarPagamento, LiberarReserva).](evidencias/jaeger-estorno-compensacoes-2026-10-23.png)
 
 Fonte: trace `a1103d3357c265b8d697b250f8a4ddd9`, 23/10/2026, 09:36 UTC; ensaio com o simulador do Mercado Pago.
+
+<div class="grade">
+<div>
+
+![Busca por POST /api/v1/ordens-de-servico: três traces, cada um nos três serviços.](evidencias/jaeger-busca-saga-2026-10-20.png)
+
+Fonte: Jaeger 1.76.0, serviço `os-service`, 20/10/2026, de 09:03:10 a 09:03:40 (Brasília).
+
+</div>
+<div>
 
 ![Caminho feliz de 19/10/2026 pela aba Upload: 245 spans nos três serviços.](evidencias/jaeger-upload-caminho-feliz-2026-10-20.png)
 
 Fonte: [trace-saga-2026-10-19.json](evidencias/trace-saga-2026-10-19.json), trace `af146ea716424dfc2ac5b25960b8e9ae`.
 
+</div>
+</div>
+
 ## B4 — Swagger pela borda
 
 O Swagger de cada serviço pelo Kong do kind, em `https://localhost/<prefixo>/docs`; o campo Servers mostra o prefixo.
+
+<div class="grade">
+<div>
 
 ![Swagger do OS Service em /os/docs.](evidencias/swagger-os-service-2026-10-20.png)
 
 Fonte: `https://localhost/os/docs`, 20/10/2026.
 
+</div>
+<div>
+
 ![Swagger do Billing Service em /billing/docs.](evidencias/swagger-billing-service-2026-10-20.png)
 
 Fonte: `https://localhost/billing/docs`, 20/10/2026.
+
+</div>
+<div>
 
 ![Swagger do Execution Service em /execucao/docs.](evidencias/swagger-execution-service-2026-10-20.png)
 
 Fonte: `https://localhost/execucao/docs`, 20/10/2026.
 
+</div>
+</div>
+
 ## B5 — Newman e ZAP no CD do `platform`
 
-O job `e2e` roda o BDD, o Newman e o ZAP no mesmo kind; os resumos são montados com os números dos artefatos do run.
+O job `e2e` roda o BDD, o Newman e o ZAP no mesmo kind; os resumos são páginas montadas com os números dos artefatos do run.
 
 ![Passos do job e2e: smoke, E2E, Newman e ZAP aprovados.](evidencias/cd-platform-e2e-passos-2026-10-20.png)
 
 Fonte: [job e2e do run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627/job/118755242258), commit `d703200`.
 
+<div class="grade">
+<div>
+
 ![Newman: 108 assertions, nenhuma falha e 49 requisições pela borda.](evidencias/cd-platform-newman-2026-10-20.png)
 
 Fonte: artefato `e2e-kind` do mesmo run, `newman/resumo.json`.
+
+</div>
+<div>
 
 ![ZAP baseline: nenhuma regra em FAIL nos três serviços.](evidencias/cd-platform-zap-2026-10-20.png)
 
 Fonte: artefato `zap-baseline` do mesmo run.
 
+</div>
+</div>
+
 ## B6 — Alerta de fila sem consumidor
 
-No kind local, em 19/10/2026, o consumidor do Billing ficou parado por quatro minutos; a regra `pytstop-fila-sem-consumidor` disparou para `billing.comandos` e voltou ao normal depois da restauração ([horários no relatório](evidencias/observabilidade.md#alertas-e-recuperação)).
+Com o consumidor do Billing parado por quatro minutos no kind local, a regra `pytstop-fila-sem-consumidor` disparou para `billing.comandos` e voltou ao normal depois da restauração ([horários](evidencias/observabilidade.md#alertas-e-recuperação)).
+
+<div class="grade">
+<div>
 
 ![Alerta em Firing para billing.comandos; as outras filas normais.](evidencias/alerta-fila-disparado-2026-10-19.png)
 
-Fonte: Grafana do kind, 19/10/2026, 00:56 (horário de Brasília).
+Fonte: Grafana do kind, 19/10/2026, 00:56 (Brasília).
+
+</div>
+<div>
 
 ![O mesmo alerta de volta a Normal nas três filas.](evidencias/alerta-fila-recuperado-2026-10-19.png)
 
-Fonte: Grafana do kind, 19/10/2026, 00:58 (horário de Brasília).
+Fonte: Grafana do kind, 19/10/2026, 00:58 (Brasília).
+
+</div>
+</div>
 
 ## B7 — Dashboards do Grafana
 
-Os nove dashboards do Grafana do kind local, abertos sem login, só para leitura. O Prometheus guarda os dados num volume persistente desde 19/10/2026, 03:16 UTC, com lacunas de quando o computador dormiu e de um reinício dos pods em 21/10. O histórico vem do E2E da subida do cluster e de sete execuções do `make demo` (os seis cenários `@demo` do BDD); os horários e o resultado de cada execução estão no [relatório de observabilidade](evidencias/observabilidade.md#dashboards-e-histórico). Nenhuma amostra foi criada nem alterada.
+Dashboards do Grafana do kind local, abertos sem login, só para leitura; as janelas, o histórico do Prometheus e as execuções da demonstração estão no [relatório de observabilidade](evidencias/observabilidade.md#dashboards-e-histórico). Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos. Os outros quatro dashboards ficam no repositório, fora do PDF: [Saga](evidencias/grafana-saga-2026-10-22.png), [Mensageria](evidencias/grafana-mensageria-2026-10-22.png), [Bancos](evidencias/grafana-bancos-2026-10-22.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-22.png).
 
-A captura é de 23/10/2026, a partir das 00:10 UTC (22/10, 21:10 em Brasília); os nomes dos arquivos levam a data de Brasília. Atendimento, Orçamentos, Pagamentos, Execução e Saga mostram de 19/10, 00:00 UTC, até a captura. Mensageria, Serviços, Bancos e Plataforma mostram os nove minutos em volta do último `make demo`, porque numa janela de quatro dias a rajada de dois minutos fica achatada. Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos.
+![Atendimento: volume diário de OS, funil de 53 OS abertas a 10 finalizadas e sagas com 33 compensadas e 10 concluídas.](evidencias/grafana-atendimento-2026-10-22.png)
 
-![Atendimento: volume diário de OS em quatro barras (19 a 22/10), funil de 53 OS abertas a 10 finalizadas e sagas com 33 compensadas e 10 concluídas.](evidencias/grafana-atendimento-2026-10-22.png)
+Fonte: Grafana do kind, de 19/10/2026, 00:00 UTC, até a captura (23/10, 00:10 UTC).
 
-Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As quatro barras somam 47 OS, de dias fechados: 19/10 inclui o E2E da subida do cluster, e 20/10 e 22/10 têm duas execuções do `make demo` cada uma. As 6 OS do `make demo` de 23/10 estão só no funil (53). "OS por status agora" mostra só as OS que ainda não terminaram, sem "Entregue" nem "Cancelada": as 10 que finalizaram a execução já foram entregues, e por isso "Finalizada" é 0. As 8 OS em "Em execução" são as do cenário do 409, que termina ali de propósito (o cancelamento depois do início da execução responde 409): uma por execução do `make demo` (sete) e a do E2E de 19/10.
+![Orçamentos: 53 gerados, 35 aprovados, 1 recusado e 15 expirados, com taxa de aprovação de 69%.](evidencias/grafana-orcamentos-2026-10-22.png)
 
-![Orçamentos: 53 gerados, 35 aprovados, 1 recusado e 15 expirados, com taxa de aprovação de 69% (35 de 51: aprovados, recusados e expirados) e 2 orçamentos esperando a decisão.](evidencias/grafana-orcamentos-2026-10-22.png)
-
-Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. O Atendimento foi capturado 6 s antes, às 00:10:38 UTC, e a última OS do `make demo` mudou de estado entre as duas capturas: lá o funil tem 52 orçamentos gerados e uma OS em diagnóstico; aqui, 53 gerados e 2 esperando a decisão.
+Fonte: a mesma janela do Atendimento.
 
 ![Pagamentos: faturamento bruto de R$ 5.481,47, estornado de R$ 1.267,16 e líquido de R$ 4.214,31, com 26 cobranças pagas, 1 recusada e 8 estornadas.](evidencias/grafana-pagamentos-2026-10-22.png)
 
-Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. O total das quatro barras de "Faturamento por dia" (R$ 4.880,91) é menor que o bruto porque a barra de um dia só aparece depois da meia-noite UTC que o fecha: o que o `make demo` pagou em 23/10 está no bruto e ainda não tem barra.
+Fonte: a mesma janela do Atendimento.
 
-![Execução e estoque: 8 OS em execução e nenhuma na fila, espera de 6,66 s até o diagnóstico e de 415 ms na fila de execução, 27 reservas de peças atendidas e 8 recusadas.](evidencias/grafana-execucao-2026-10-22.png)
+![Execução e estoque: 8 OS em execução, espera de 6,66 s até o diagnóstico e de 415 ms na fila de execução, 27 reservas atendidas e 8 recusadas.](evidencias/grafana-execucao-2026-10-22.png)
 
-Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As 8 OS em execução são as mesmas do Atendimento.
+Fonte: a mesma janela do Atendimento.
 
-![Saga: nenhuma saga parada nem prazo técnico vencido, o processo prazos rodou há 12 s no OS e há 8 s no Billing, nenhum reenvio e duração por etapa (p95).](evidencias/grafana-saga-2026-10-22.png)
+![Serviços: requisições, erro 5xx, taxa de sucesso e latência p95 por serviço, circuitos, Mercado Pago e CPU e memória por pod.](evidencias/grafana-servicos-2026-10-22.png)
 
-Fonte: Grafana do kind, janela de 19/10/2026, 00:00 UTC, até a captura. As sagas em `em_execucao` são as mesmas 8 OS do cenário do 409: "Sagas ativas por etapa" sobe de 2 em 19/10 (o E2E e a primeira execução) a 8 em seis degraus, um por execução do `make demo` de 20 a 23/10, e a mais antiga, de 19/10, tem 3,86 dias.
-
-![Mensageria: mensagens publicadas por tipo e consumidas por resultado durante o make demo, nenhum retry, outbox dead em zero nos três serviços e nenhuma reconexão ao broker; as três DLQs em zero aparecem no print da Plataforma.](evidencias/grafana-mensageria-2026-10-22.png)
-
-Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`, com o JSON da `main` ([platform #34](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/34)). "Retry por nível" aparece vazio ("No data") porque não houve retry no período.
-
-![Serviços: requisições, erro 5xx, taxa de sucesso e latência p95 por serviço, rotas mais lentas, nenhum circuito aberto ao fim da janela, Mercado Pago sem chamadas e CPU e memória por pod.](evidencias/grafana-servicos-2026-10-22.png)
-
-Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`. O pico de 5xx e a queda da taxa de sucesso, por volta de 00:10 UTC, são do cenário da API do Billing parada: o circuito abre e a conclusão do diagnóstico responde 503 até o Billing voltar. O Mercado Pago fica em zero porque o kind usa o simulador.
-
-![Bancos: os três exporters no ar, conexões do PostgreSQL em 7% e 11% do máximo, transações, locks, tamanho dos bancos (9,32 MiB no OS, 8,43 MiB na Execução e 272 KiB no Billing), documentos do MongoDB e replica set rs0 em PRIMARY.](evidencias/grafana-bancos-2026-10-22.png)
-
-Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`.
-
-![Plataforma: nenhuma mensagem nas três DLQs, um consumidor em cada fila de trabalho, alarmes de memória e disco do broker em OK, os 18 alvos do Prometheus no ar e tráfego e latência p95 da borda.](evidencias/grafana-plataforma-2026-10-22.png)
-
-Fonte: Grafana do kind, janela de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta do `make demo`. A mensagem pronta em `billing.comandos`, por volta de 00:09:30 UTC, é a do cenário do consumidor do Billing parado por 20 s.
+Fonte: Grafana do kind, de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta da demonstração.
 
 ## B8 — Proteção da `main`
 

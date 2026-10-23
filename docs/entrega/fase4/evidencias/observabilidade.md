@@ -57,6 +57,20 @@ Início e fim são a criação e a última escrita do log de cada execução, qu
 
 Os nove dashboards foram capturados em 23/10/2026, a partir das 00:10 UTC (22/10, 21:10 em Brasília), logo depois da última execução, e estão no [Anexo B, B7](../entrega-fase-4.md#b7--dashboards-do-grafana). O Prometheus tem dados desde 19/10, 03:16 UTC, com lacunas de quando o computador dormiu e de um reinício dos pods em 21/10, por volta de 01:45 UTC, por falta de memória da VM do Docker. O painel de volume diário tem quatro barras (19 a 22/10). Atendimento, Orçamentos, Pagamentos, Execução e Saga mostram de 19/10, 00:00 UTC, até a captura; Mensageria, Serviços, Bancos e Plataforma, de 00:03:31 a 00:12:21 UTC de 23/10, em volta da última execução, porque numa janela de quatro dias a rajada de dois minutos fica achatada.
 
+### Como os números dos prints fecham
+
+Notas de cada print do [Anexo B, B7](../entrega-fase-4.md#b7--dashboards-do-grafana). O PDF traz Atendimento, Orçamentos, Pagamentos, Execução e Serviços; Saga, Mensageria, Bancos e Plataforma ficam no repositório, com o link no documento.
+
+- **Atendimento.** As quatro barras do volume diário somam 47 OS, de dias fechados: 19/10 inclui o E2E da subida do cluster, e 20/10 e 22/10 têm duas execuções do `make demo` cada uma. As 6 OS do `make demo` de 23/10 estão só no funil (53). "OS por status agora" mostra só as OS que ainda não terminaram, sem "Entregue" nem "Cancelada": as 10 que finalizaram a execução já foram entregues, e por isso "Finalizada" é 0. As 8 OS em "Em execução" são as do cenário do 409, que termina ali de propósito (o cancelamento depois do início da execução responde 409): uma por execução do `make demo` (sete) e a do E2E de 19/10.
+- **Orçamentos.** O Atendimento foi capturado 6 s antes, às 00:10:38 UTC, e a última OS do `make demo` mudou de estado entre as duas capturas: lá o funil tem 52 orçamentos gerados e uma OS em diagnóstico; aqui, 53 gerados e 2 esperando a decisão. A taxa de aprovação de 69% é 35 de 51, entre aprovados, recusados e expirados.
+- **Pagamentos.** O total das quatro barras de "Faturamento por dia" (R$ 4.880,91) é menor que o bruto (R$ 5.481,47) porque a barra de um dia só aparece depois da meia-noite UTC que o fecha: o que o `make demo` pagou em 23/10 está no bruto e ainda não tem barra.
+- **Execução e estoque.** As 8 OS em execução são as mesmas do Atendimento.
+- **Saga.** As sagas em `em_execucao` são as mesmas 8 OS do cenário do 409: "Sagas ativas por etapa" sobe de 2 em 19/10 (o E2E e a primeira execução) a 8 em seis degraus, um por execução do `make demo` de 20 a 23/10, e a mais antiga, de 19/10, tem 3,86 dias. O processo `prazos` rodou há 12 s no OS e há 8 s no Billing, no instante da captura.
+- **Mensageria.** A janela é de 23/10, de 00:03:31 a 00:12:21 UTC, com o JSON da `main` ([platform #34](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/34)). "Retry por nível" aparece vazio ("No data") porque não houve retry no período.
+- **Serviços.** O pico de 5xx e a queda da taxa de sucesso, por volta de 00:10 UTC, são do cenário da API do Billing parada: o circuito abre e a conclusão do diagnóstico responde 503 até o Billing voltar. O Mercado Pago fica em zero porque o kind usa o simulador.
+- **Bancos.** Mesma janela da Mensageria; os tamanhos são 9,32 MiB no OS, 8,43 MiB na Execução e 272 KiB no Billing.
+- **Plataforma.** Mesma janela; a mensagem pronta em `billing.comandos`, por volta de 00:09:30 UTC, é a do cenário do consumidor do Billing parado por 20 s.
+
 ## Alertas e recuperação
 
 O consumidor do Billing foi pausado de `03:54:01Z` a `03:58:01Z`, com restauração automática da única réplica e rollout concluído às `03:58:06Z`. A regra provisionada `pytstop-fila-sem-consumidor` ficou em Firing para `queue=billing.comandos` às `03:56:30Z` e voltou a Normal às `03:58:30Z`. As outras duas filas ficaram normais nessa regra. As capturas de [disparo](alerta-fila-disparado-2026-10-19.png) e [recuperação](alerta-fila-recuperado-2026-10-19.png) registram a transição real. O smoke dos três serviços passou novamente após a restauração.

@@ -17,11 +17,15 @@ PASTA = RAIZ / "docs/entrega/fase4/evidencias"
 DOCUMENTO = RAIZ / "docs/entrega/fase4/entrega-fase-4.md"
 # O PDF de ensaio precisa ficar abaixo de cerca de 6 MB; o resto é texto e diagrama.
 TETO_DOS_PNG = 5_000_000
-# Decisão de volume do PDF: o ruleset do Billing (o B8 mostra o do OS Service) e o
-# print de 20/10 do trace (o B3 mostra o de 23/10, com as compensações) só ficam
-# ligados no documento. Imagem que sair desta lista passa a ser embutida, e o
-# teste reprova a troca silenciosa de uma imagem por um link.
+# Decisão de volume do PDF: os quatro dashboards que o Anexo B, B7, só lista, o
+# ruleset do Billing (o B8 mostra o do OS Service) e o print de 20/10 do trace
+# (o B3 mostra o de 23/10, com as compensações). Imagem que sair desta lista passa
+# a ser embutida, e o teste reprova a troca silenciosa de uma imagem por um link.
 SO_COM_LINK = {
+    "grafana-saga-2026-10-22.png",
+    "grafana-mensageria-2026-10-22.png",
+    "grafana-bancos-2026-10-22.png",
+    "grafana-plataforma-2026-10-22.png",
     "protecao-ruleset-billing-service-2026-10-23.png",
     "jaeger-trace-saga-2026-10-20.png",
 }
