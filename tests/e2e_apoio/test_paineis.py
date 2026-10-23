@@ -60,6 +60,13 @@ def test_resolver_poe_o_periodo_e_a_taxa_como_o_grafana_resolveria() -> None:
     )
 
 
+def test_resolver_relaxa_o_limiar_de_volume_do_p90_de_orcamentos() -> None:
+    (p90,) = [c for c in carregar() if "histogram_quantile(0.9, " in c.expr]
+
+    assert ">= 10" in p90.expr
+    assert resolver(p90.expr).endswith(">= 1)")
+
+
 def test_carregar_marca_so_os_paineis_de_negocio_como_obrigatorios() -> None:
     consultas = carregar()
     obrigatorias = [c for c in consultas if c.obrigatoria]
