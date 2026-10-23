@@ -97,7 +97,7 @@ O pagamento do vídeo usa o simulador do Mercado Pago, dito na tela; a prova na 
 
 ### 4.1 Diagrama geral
 
-Três serviços, um banco para cada um e dois canais de comunicação: REST pela borda e entre a Execução e o Billing, e mensagens AMQP pelo RabbitMQ. O Kong é a única entrada de fora do cluster. A única chamada síncrona de negócio entre serviços é a validação de preços, da Execução para o Billing; a outra dependência HTTP é a chave pública do JWT (JWKS), que Billing e Execução leem do OS Service com cache de 10 minutos. Só o Billing fala com o Mercado Pago. Tudo roda num cluster Kubernetes kind, na máquina local e no CI.
+Três serviços, um banco para cada um e dois canais de comunicação: REST pela borda e entre a Execução e o Billing, e mensagens AMQP pelo RabbitMQ. O Kong é a única entrada de fora do cluster, inclusive para o webhook do Mercado Pago. A única chamada síncrona de negócio entre serviços é a validação de preços, da Execução para o Billing; a outra dependência HTTP é a chave pública do JWT (JWKS), que Billing e Execução leem do OS Service com cache de 10 minutos. Só o Billing fala com o Mercado Pago. Tudo roda num cluster Kubernetes kind, na máquina local e no CI; o do CI não tem Grafana nem Loki.
 
 ```mermaid
 flowchart TB
@@ -113,9 +113,11 @@ flowchart TB
         billing <-->|AMQP| rabbit
         execucao <-->|AMQP| rabbit
         execucao -->|REST: preços| billing
-        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger"]
+        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger<br/>(Grafana e Loki<br/>só no kind local)"]
+        execucao & billing -.->|JWKS| os
     end
-    billing <-->|HTTPS| mp["Mercado Pago"]
+    billing -->|HTTPS| mp["Mercado Pago"]
+    mp -->|webhook| kong
 ```
 
 ### 4.2 Componentes e integrações

@@ -168,9 +168,11 @@ flowchart TB
         billing <-->|AMQP| rabbit
         execucao <-->|AMQP| rabbit
         execucao -->|REST: preços| billing
-        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger"]
+        os & billing & execucao -.-> obs["Prometheus · Grafana<br/>Loki · Jaeger<br/>(Grafana e Loki<br/>só no kind local)"]
+        execucao & billing -.->|JWKS| os
     end
-    billing <-->|HTTPS| mp["Mercado Pago"]
+    billing -->|HTTPS| mp["Mercado Pago"]
+    mp -->|webhook| kong
 ```
 
 Fonte: [RFC-004, seção 2](docs/arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md). No CI, o overlay `kind-ci` roda Prometheus e Jaeger; Grafana e Loki ficam só no kind local.
