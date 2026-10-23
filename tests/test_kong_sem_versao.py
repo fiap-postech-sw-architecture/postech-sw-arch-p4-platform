@@ -3,8 +3,8 @@
 O values.yaml e o kong.yaml que o make deploy aplica trazem o headers=off, e o
 `reveladores` do scripts/smoke.sh, que prova no cluster que nenhum desses
 cabecalhos sai, enxerga os tres em qualquer caixa e nao confunde o X-Request-ID
-nem o rate limit com eles. A prova contra um Kong 3.9.3 de verdade esta no
-README (Gateway): sem o headers=off, ele responde `Server: kong/3.9.3`.
+nem o rate limit com eles. A prova contra um Kong 3.9.3 de verdade esta em
+docs/gateway.md: sem o headers=off, ele responde `Server: kong/3.9.3`.
 """
 
 from __future__ import annotations

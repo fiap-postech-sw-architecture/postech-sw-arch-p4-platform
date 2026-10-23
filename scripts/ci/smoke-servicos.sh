@@ -12,8 +12,8 @@
 # outro namespace, numa conexao do rabbitmq-0 da plataforma que tem de esgotar
 # o prazo (recusa ou nome que nao resolve nao provam a regra), depois de uma
 # conexao do pod da API ao mesmo banco ter funcionado (sem esse controle, o
-# prazo esgotado poderia ser a sonda quebrada). README, "Contrato com os
-# servicos".
+# prazo esgotado poderia ser a sonda quebrada). Ver
+# docs/contrato-com-os-servicos.md.
 #
 #   scripts/ci/smoke-servicos.sh [<servico>...]   (sem argumento, os tres)
 #

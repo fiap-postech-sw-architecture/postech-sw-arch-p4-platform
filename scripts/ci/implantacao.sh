@@ -2,8 +2,9 @@
 # Funcoes comuns ao scripts/ci/implantar-servicos.sh (os servicos no kind do
 # CD) e ao scripts/ci/deploy-remoto.sh (um servico num cluster persistente,
 # opcional), carregadas por source: o kubectl com prazo e a implantacao de um
-# namespace na ordem do contrato com os servicos (README). Quem carrega define
-# CONTEXTO antes de chamar kc, k ou implanta.
+# namespace na ordem do contrato com os servicos
+# (docs/contrato-com-os-servicos.md). Quem carrega define CONTEXTO antes de
+# chamar kc, k ou implanta.
 #
 # Prazos, em segundos, pelo ambiente: PRAZO_KUBECTL (cada chamada ao cluster,
 # 120; nas esperas, somado ao tempo delas), ESPERA_BANCO (180), ESPERA_JOB

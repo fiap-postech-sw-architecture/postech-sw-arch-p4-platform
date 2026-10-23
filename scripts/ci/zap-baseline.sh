@@ -27,7 +27,7 @@
 set -euo pipefail
 
 # Versao e digest do indice multi-arquitetura; a mesma imagem esta na tabela
-# "Componentes e versoes" do README (um teste confere).
+# de docs/componentes-e-versoes.md (um teste confere).
 ZAP_IMAGE="ghcr.io/zaproxy/zaproxy:2.17.0@sha256:7aaa659b0d43078febd82e29bad112285c370727e86ab8340444220e17d9f0d2"
 
 raiz=$(cd "$(dirname "$0")/../.." && pwd)

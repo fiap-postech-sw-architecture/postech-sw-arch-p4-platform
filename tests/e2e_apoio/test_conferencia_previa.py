@@ -266,7 +266,7 @@ def test_overlay_do_kind_ci_recusa_com_a_instrucao_de_refazer_o_cluster(
     assert codigo == 2
     assert "o Billing está com os prazos do E2E (kind-ci)" in erro
     assert "make kind-down" in erro
-    assert 'README, "Mercado Pago na sandbox", "Como rodar"' in erro
+    assert 'docs/mercado-pago-na-sandbox.md, "Como rodar"' in erro
 
 
 def test_token_recusado_pelo_mercado_pago_diz_isso_sem_repetir_o_valor(
