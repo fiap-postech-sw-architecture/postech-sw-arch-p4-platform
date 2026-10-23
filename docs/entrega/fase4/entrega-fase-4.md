@@ -1017,13 +1017,13 @@ Dashboards do Grafana do kind local, abertos sem login, só para leitura; as jan
 
 Fonte: Grafana do kind, de 19/10/2026, 00:00 UTC, até a captura (23/10, 00:10 UTC).
 
-![Orçamentos: 53 gerados, 35 aprovados, 1 recusado e 15 expirados, com taxa de aprovação de 69%. O p90 de 54 s é a interpolação do primeiro balde (60 s) do histograma da captura, e a média, de 1 s, é o tempo real das decisões da demonstração.](evidencias/grafana-orcamentos-2026-10-22.png)
+![Orçamentos: 53 gerados, 35 aprovados, 1 recusado, 15 expirados; aprovação de 69%. O p90 de 54 s é o primeiro balde (60 s); a média, 1 s, é o tempo real.](evidencias/grafana-orcamentos-2026-10-22.png)
 
-Fonte: a mesma janela do Atendimento. Os baldes passaram a começar em 100 ms no [Billing #30](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/30), e o painel só mostra o p90 com 10 decisões ou mais ([platform #41](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/41)).
+Fonte: a mesma janela do Atendimento. A correção dos baldes está no [Billing #30](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/30); a explicação, no [registro](evidencias/observabilidade.md#como-os-números-dos-prints-fecham).
 
-![Pagamentos: faturamento bruto de R$ 5.481,47, estornado de R$ 1.267,16 e líquido de R$ 4.214,31, com 26 cobranças pagas, 1 recusada e 8 estornadas. As 8 estornadas (um estorno por execução) são os eventos que o OS consumiu; os 6 do painel de estornos por motivo vêm do consumidor do Billing, que o cenário do consumidor parado derruba antes da raspagem seguinte do Prometheus (15 s), e a contagem desse intervalo se perde.](evidencias/grafana-pagamentos-2026-10-22.png)
+![Pagamentos: bruto de R$ 5.481,47, estornado de R$ 1.267,16 e líquido de R$ 4.214,31; 26 pagas, 1 recusada, 8 estornadas. Os 6 do painel de estornos são do Billing, que provavelmente perdeu 2 ao reiniciar o pod.](evidencias/grafana-pagamentos-2026-10-22.png)
 
-Fonte: a mesma janela do Atendimento; explicação no [platform #41](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/41).
+Fonte: a mesma janela do Atendimento. A causa provável e as consultas que a provam estão no [registro](evidencias/observabilidade.md#como-os-números-dos-prints-fecham).
 
 ![Execução e estoque: 8 OS em execução, espera de 6,66 s até o diagnóstico e de 415 ms na fila de execução, 27 reservas atendidas e 8 recusadas.](evidencias/grafana-execucao-2026-10-22.png)
 
