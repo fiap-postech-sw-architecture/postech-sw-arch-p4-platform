@@ -129,6 +129,9 @@ Cada serviço roda processos separados, um Deployment para cada: a `api`, o `con
 config:
   flowchart:
     wrappingWidth: 400
+    nodeSpacing: 20
+    rankSpacing: 40
+    padding: 8
 ---
 flowchart TB
     interno(["Atendente · Mecânico · Admin"])
@@ -498,6 +501,11 @@ Cada serviço é o único dono do seu banco, com credencial própria montada só
 **OS Service (PostgreSQL 16).** Clientes, veículos, consentimentos, usuários e tokens revogados vêm da fase 3; o documento do cliente fica cifrado, com um hash para a busca. A OS ganhou versão para o lock otimista e o resumo do orçamento e do pagamento, copiado dos eventos. O histórico só recebe inserções, `sagas` guarda a instância da saga e `notificacoes`, os e-mails do `notificador`.
 
 ```mermaid
+---
+config:
+  er:
+    entityPadding: 8
+---
 erDiagram
     clientes {
         uuid id PK

@@ -123,6 +123,9 @@ flowchart TB
 config:
   flowchart:
     wrappingWidth: 400
+    nodeSpacing: 20
+    rankSpacing: 40
+    padding: 8
 ---
 flowchart TB
     interno(["Atendente · Mecânico · Admin"])
@@ -840,6 +843,11 @@ Os estados finais aceitam a compensação repetida sem efeito e republicam a res
 ### 7.2 OS Service (PostgreSQL 16)
 
 ```mermaid
+---
+config:
+  er:
+    entityPadding: 8
+---
 erDiagram
     clientes {
         uuid id PK
