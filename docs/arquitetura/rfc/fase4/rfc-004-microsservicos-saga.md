@@ -980,6 +980,9 @@ erDiagram
 ### 7.3 Execution Service (PostgreSQL 16)
 
 ```mermaid
+---
+title: A outbox e a mensagens_processadas estão no docs/arquitetura.md da Execução, seção 3.4
+---
 erDiagram
     itens_estoque {
         uuid id PK
@@ -1000,12 +1003,12 @@ erDiagram
     }
     diagnosticos {
         uuid ordem_id PK
-        jsonb veiculo "retrato: veiculo_id, placa, marca, modelo e ano"
-        text descricao_problema "texto livre: marcador na eliminação LGPD"
+        jsonb veiculo "retrato do veículo"
+        text descricao_problema "texto livre (LGPD)"
         varchar status
         uuid mecanico_id
-        jsonb itens "tipo (servico ou peca), codigo e quantidade"
-        text observacoes "texto livre: marcador na eliminação LGPD"
+        jsonb itens "tipo, codigo e quantidade"
+        text observacoes "texto livre (LGPD)"
         timestamptz solicitado_em
         timestamptz iniciado_em
         timestamptz concluido_em
@@ -1028,30 +1031,15 @@ erDiagram
         varchar traceparent
         varchar tracestate
     }
-    outbox {
-        bigint id PK
-        uuid mensagem_id UK
-        uuid correlation_id "ordem_id"
-        varchar tipo
-        varchar exchange
-        varchar routing_key
-        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
-        varchar traceparent
-        varchar tracestate
-        varchar status
-        timestamptz entregue_em
-    }
-    mensagens_processadas {
-        uuid mensagem_id PK
-        timestamptz processada_em
-    }
 
     itens_estoque }o--o{ reservas : "sku nos itens"
 ```
 
 Ao contrário do p3, reservar não consome o saldo: a reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. A reserva guarda os itens em JSONB e, quando recusada, os faltantes que seguem em `ReservaDePecasFalhou`. O coletor da API lê `execucoes.iniciada_em` e `finalizada_em` com `diagnosticos.itens` (o tempo médio de execução por serviço, RF-008 da fase 1) e `reservas.criada_em` com `reservas.faltantes` (as peças em falta), ambos numa janela de 7 dias. `ordem_id` é referência lógica, sem chave estrangeira, e único por tabela (a chave primária de diagnóstico e execução), o que torna reserva, diagnóstico e execução idempotentes por OS e sustenta a lápide.
 
-Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent` e o `tracestate` e o `id` do comando que os abriu (`solicitacao_id` e `agendamento_id`), de onde saem o `causation_id` e o pai do trace dos eventos que o mecânico provoca. O diagnóstico guarda o retrato do veículo, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois e, no diagnóstico, também `descricao_problema` e `observacoes`, que são texto livre (seção 5.3). Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
+Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent` e o `tracestate` e o `id` do comando que os abriu (`solicitacao_id` e `agendamento_id`), de onde saem o `causation_id` e o pai do trace dos eventos que o mecânico provoca. O diagnóstico guarda o retrato do veículo, com o `veiculo_id`, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois e, no diagnóstico, também `descricao_problema` e `observacoes`, que são texto livre (seção 5.3). Os `itens` do diagnóstico trazem `tipo` (`servico` ou `peca`), `codigo` e `quantidade`. Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
+
+A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e por isso ficam fora do diagrama; as colunas estão na [seção 3.4 do `docs/arquitetura.md` da Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
 
 ### 7.4 Billing Service (MongoDB 7)
 

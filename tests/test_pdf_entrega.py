@@ -102,7 +102,12 @@ LARGURA_NO_LIMITE = math.ceil(1.1 * ALTURA_NO_LIMITE)
         pytest.param(
             _pixels(1584), _pixels(1086.4), True, id="sequencia-larga-reduzida"
         ),
-        pytest.param(_pixels(1584), _pixels(526.4), True, id="er-largo-e-baixo"),
+        pytest.param(
+            _pixels(1584),
+            _pixels(936.2),
+            True,
+            id="er-da-execucao-sem-a-infraestrutura",
+        ),
         pytest.param(
             _pixels(1584), _pixels(1020), True, id="componentes-com-espacamento-menor"
         ),

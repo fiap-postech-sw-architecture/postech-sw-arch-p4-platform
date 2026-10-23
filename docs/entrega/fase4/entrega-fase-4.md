@@ -498,7 +498,7 @@ Cada serviço é o único dono do seu banco, com credencial própria montada só
 
 **OS Service (PostgreSQL 16).** Clientes, veículos, consentimentos, usuários e tokens revogados vêm da fase 3; o documento do cliente fica cifrado, com um hash para a busca. A OS ganhou versão para o lock otimista e o resumo do orçamento e do pagamento, copiado dos eventos. O histórico só recebe inserções, `sagas` guarda a instância da saga e `notificacoes`, os e-mails do `notificador`.
 
-**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio.
+**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio. A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e ficam fora do ER: as colunas estão na [seção 3.4 do `docs/arquitetura.md`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
 
 **Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. A tabela é a das coleções da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7), que traz também o exemplo de documento; o [`docs/arquitetura.md` do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) detalha o modelo campo a campo, com três acréscimos: um índice da outbox, dois campos de `mensagens_processadas` e a coleção `versao_do_banco`.
 
@@ -623,6 +623,9 @@ erDiagram
     ordens_de_servico ||--o{ notificacoes : "e-mails ao cliente"
 ```
 ```mermaid
+---
+title: A outbox e a mensagens_processadas estão no docs/arquitetura.md da Execução, seção 3.4
+---
 erDiagram
     itens_estoque {
         uuid id PK
@@ -643,12 +646,12 @@ erDiagram
     }
     diagnosticos {
         uuid ordem_id PK
-        jsonb veiculo "retrato: veiculo_id, placa, marca, modelo e ano"
-        text descricao_problema "texto livre: marcador na eliminação LGPD"
+        jsonb veiculo "retrato do veículo"
+        text descricao_problema "texto livre (LGPD)"
         varchar status
         uuid mecanico_id
-        jsonb itens "tipo (servico ou peca), codigo e quantidade"
-        text observacoes "texto livre: marcador na eliminação LGPD"
+        jsonb itens "tipo, codigo e quantidade"
+        text observacoes "texto livre (LGPD)"
         timestamptz solicitado_em
         timestamptz iniciado_em
         timestamptz concluido_em
@@ -670,23 +673,6 @@ erDiagram
         uuid agendamento_id "id do AgendarExecucao"
         varchar traceparent
         varchar tracestate
-    }
-    outbox {
-        bigint id PK
-        uuid mensagem_id UK
-        uuid correlation_id "ordem_id"
-        varchar tipo
-        varchar exchange
-        varchar routing_key
-        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
-        varchar traceparent
-        varchar tracestate
-        varchar status
-        timestamptz entregue_em
-    }
-    mensagens_processadas {
-        uuid mensagem_id PK
-        timestamptz processada_em
     }
 
     itens_estoque }o--o{ reservas : "sku nos itens"
