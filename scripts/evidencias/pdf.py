@@ -172,12 +172,24 @@ def executar(argumentos: list[str]) -> None:
     subprocess.run([ferramenta, *argumentos[1:]], check=True)  # noqa: S603  # nosec B603
 
 
+def comando_weasyprint(entrada: Path, destino: Path, dpi: int | None) -> list[str]:
+    """Sem ``dpi`` as capturas entram na resolução original; com ele, o weasyprint
+    reduz as imagens maiores (a versão compacta, de reserva para o portal)."""
+    limite = ["-D", str(dpi)] if dpi is not None else []
+    return ["weasyprint", *limite, str(entrada), str(destino)]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--final", action="store_true")
     parser.add_argument("--github", type=Path)
+    parser.add_argument(
+        "--dpi", type=int, help="limite de resolução das imagens (versão compacta)"
+    )
     args = parser.parse_args()
+    if args.dpi is not None and args.dpi <= 0:
+        parser.error("--dpi precisa ser positivo")
     raiz = Path(__file__).resolve().parents[2]
     destino = args.output.expanduser().resolve()
     if destino.is_relative_to(raiz):
@@ -259,7 +271,7 @@ def main() -> int:
         )
         pagina = ajustar_html((tmp / "entrega.html").read_text())
         (tmp / "entrega.html").write_text(pagina)
-        executar(["weasyprint", str(tmp / "entrega.html"), str(destino)])
+        executar(comando_weasyprint(tmp / "entrega.html", destino, args.dpi))
     print(f"PDF {'final' if args.final else 'de ensaio'} gerado: {destino}")
     return 0
 
