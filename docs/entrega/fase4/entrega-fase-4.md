@@ -252,7 +252,7 @@ A saga é orquestrada. O OS Service é o orquestrador: envia comandos aos outros
 - **O tamanho da saga.** São nove passos (T1 a T9) em três serviços, mais a entrega local (T10), com esperas humanas, um provedor externo e seis compensações. A Aula 02 de SAGA Pattern, citando Richardson, recomenda a coreografia para sagas simples, e esta não é.
 - **Um lugar que sabe a etapa.** Com coreografia, os passos ficariam espalhados, sem um lugar que diga em que etapa a OS está; prazos, ordem das compensações e o ponto sem retorno exigiriam que cada serviço assinasse eventos dos outros dois, com risco de ciclo.
 - **Orquestrador no serviço que inicia a saga.** Como nos exemplos do material, o orquestrador fica no OS Service, e não num quarto serviço: etapa da saga e status da OS mudam na mesma transação local.
-- **Os contras, contidos.** O orquestrador só conhece a ordem dos passos, as compensações e os prazos; preço, validade e pagamento ficam com os participantes. Ele também não é ponto único de falha: o estado fica no banco, as mensagens em filas duráveis, e o consumidor recriado pelo Kubernetes segue do ponto gravado.
+- **Os contras, contidos.** O orquestrador só conhece a ordem dos passos, as compensações e os prazos; preço, validade e pagamento ficam com os participantes. Ele também não perde estado quando cai: o estado fica no banco, as mensagens em filas duráveis, e o consumidor recriado pelo Kubernetes segue do ponto gravado; com uma réplica, a saga espera a recriação.
 
 Ficaram de fora a coreografia, o orquestrador como quarto serviço (status da OS e etapa da saga em bancos diferentes), um motor de workflow como Temporal, Camunda ou AWS Step Functions (servidor e banco próprios no cluster) e o Apache Camel das aulas (Java, e as rotas do exemplo não guardam estado nem compensam).
 
@@ -275,7 +275,7 @@ Há uma instância da saga por OS (`saga_id = ordem_id`, que também é o `corre
 
 A reserva (T5) vem antes do pagamento (T6), como no exemplo da Aula 01 de SAGA Pattern, e a OS só entra na fila de execução (T7) com o pagamento confirmado (RN-027): a falta de peça aparece antes da cobrança. O pivot é o início da execução física (T8): depois que o mecânico começa a desmontar o carro, o trabalho não se desfaz por mensagem, e o cancelamento passa a responder 409 `TRANSICAO_STATUS_INVALIDA` (RN-029). Até ali tudo compensa, inclusive o pagamento, por estorno.
 
-As compensações rodam em sequência, cada uma esperando a resposta da anterior, na ordem inversa dos passos. O plano inclui os passos concluídos e o passo em andamento, cujo comando saiu e ainda não teve resposta; o passo que falhou por regra de negócio fica de fora, porque o participante já o encerrou. Todo plano termina com a OS `CANCELADA` e a saga `COMPENSADA`.
+As compensações rodam em sequência, cada uma esperando a resposta da anterior, na ordem inversa dos passos. O plano inclui os passos concluídos e o passo em andamento, cujo comando saiu e ainda não teve resposta; o passo que falhou por regra de negócio fica de fora, porque o participante já o encerrou. Todo plano concluído termina com a OS `CANCELADA` e a saga `COMPENSADA`; se uma compensação esgota os reenvios, a saga para em `FALHA_NA_COMPENSACAO` ([6.5](#65-idempotência-novas-tentativas-e-prazos)).
 
 | Etapa da saga | Gatilho | Compensações, em ordem |
 |---|---|---|
