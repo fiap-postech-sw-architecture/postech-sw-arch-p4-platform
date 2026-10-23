@@ -85,16 +85,17 @@ def _pixels(css: float) -> int:
 
 
 # As fronteiras usam as contas do largo(): `ceil` dá a menor largura que passa
-# em cada teste, sem depender de como o ponto flutuante arredonda 1,3 x altura.
+# em cada teste, sem depender de como o ponto flutuante arredonda 1,1 x altura.
 REDUZIDO = math.ceil(0.9 * pdf.LARGURA_MERMAID * pdf.ESCALA)
-ALTURA_NO_LIMITE = _pixels(1200)
-LARGURA_NO_LIMITE = math.ceil(1.3 * ALTURA_NO_LIMITE)
+ALTURA_NO_LIMITE = _pixels(1350)
+LARGURA_NO_LIMITE = math.ceil(1.1 * ALTURA_NO_LIMITE)
 
 
 # Os sete primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584 é
 # a largura a que o Mermaid reduz o diagrama que não cabe na página. O de
 # componentes e o ER do OS levam espaçamento menor na RFC, que os deixa mais
-# largos que altos; a segunda metade do caminho feliz é quase quadrada.
+# largos que altos; a segunda metade do caminho feliz, quase quadrada, vai
+# deitada para ficar ao lado da primeira.
 @pytest.mark.parametrize(
     ("largura", "altura", "deitado"),
     [
@@ -111,8 +112,9 @@ LARGURA_NO_LIMITE = math.ceil(1.3 * ALTURA_NO_LIMITE)
         pytest.param(
             _pixels(1582.4), _pixels(1147.2), True, id="caminho-feliz-t1-a-t4"
         ),
+        pytest.param(_pixels(1584), _pixels(1396.8), True, id="caminho-feliz-t5-a-t10"),
         pytest.param(
-            _pixels(1584), _pixels(1396.8), False, id="caminho-feliz-t5-a-t10"
+            _pixels(1584), _pixels(1500), False, id="quase-quadrado-fica-no-retrato"
         ),
         pytest.param(
             _pixels(1366.4), _pixels(794.4), False, id="largo-que-cabe-no-retrato"
@@ -271,3 +273,19 @@ def test_capa_sem_a_linha_do_grupo_nao_inventa_um(tmp_path: Path) -> None:
 
     assert "Grupo" not in capa
     assert "<p>Ana Lima — RM111111</p>" in capa
+
+
+@pytest.mark.parametrize(
+    ("largura", "altura", "esperado"),
+    [
+        pytest.param(_pixels(1217), _pixels(811), True, id="orcamento-recusado"),
+        pytest.param(_pixels(1366), _pixels(794), True, id="falta-de-peca"),
+        pytest.param(_pixels(1169), _pixels(936), False, id="geral-quase-quadrado"),
+        pytest.param(1450, 1000, True, id="no-limite-da-proporcao"),
+        pytest.param(1449, 1000, False, id="um-pixel-abaixo-da-proporcao"),
+    ],
+)
+def test_so_o_diagrama_largo_que_cabe_no_retrato_ganha_altura_limitada(
+    largura: int, altura: int, esperado: bool
+) -> None:
+    assert pdf.compacto(largura, altura) is esperado

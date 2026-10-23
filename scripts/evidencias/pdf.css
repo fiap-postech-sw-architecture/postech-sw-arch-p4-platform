@@ -50,6 +50,7 @@ h1 { break-before: page; }
    vez maior; o corpo ocupa a largura de cada página, retrato ou paisagem. */
 .diagrama { break-inside: avoid; width: 100%; }
 .diagrama img { display: block; margin: 0 auto; max-width: 100%; max-height: 19cm; }
+.compacto img { max-height: 95mm; }
 @page paisagem { size: A4 landscape; margin: 1.2cm;
                  @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
 .paisagem { page: paisagem; break-before: page; break-after: page; width: 100%; }
@@ -68,7 +69,7 @@ figure img { display: block; max-width: 100%; max-height: 88mm; margin: 0 auto; 
 figure img[src*="grafana-"], figure img[src*="loki-"], figure img[src*="jaeger-estorno"] {
   max-width: 94%; max-height: 200mm; }
 /* Ruleset e lista de commits: telas altas de GitHub, uma por página. */
-figure img[src*="protecao-"] { max-height: 225mm; }
+figure img[src*="protecao-"] { max-height: 200mm; }
 /* Prints de status lado a lado (a grade do Anexo B): duas ou três por linha,
    cada uma com a legenda e a fonte. É tabela, e não flex: o weasyprint 69
    levava a linha inteira para a página seguinte quando sobrava espaço. */
