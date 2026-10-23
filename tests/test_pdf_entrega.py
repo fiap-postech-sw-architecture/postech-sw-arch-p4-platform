@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -125,6 +126,35 @@ def test_so_o_diagrama_reduzido_e_bem_mais_largo_que_alto_vai_deitado(
     largura: int, altura: int, deitado: bool
 ) -> None:
     assert pdf.largo(largura, altura) is deitado
+
+
+def test_so_a_versao_compacta_limita_a_resolucao_das_imagens() -> None:
+    html, destino = Path("entrega.html"), Path("entrega.pdf")
+
+    assert pdf.comando_weasyprint(html, destino, None) == [
+        "weasyprint",
+        "entrega.html",
+        "entrega.pdf",
+    ]
+    assert pdf.comando_weasyprint(html, destino, 150) == [
+        "weasyprint",
+        "-D",
+        "150",
+        "entrega.html",
+        "entrega.pdf",
+    ]
+
+
+@pytest.mark.parametrize("valor", ["0", "-5"])
+def test_dpi_zero_ou_negativo_e_recusado_antes_do_build(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, valor: str
+) -> None:
+    saida = tmp_path / "entrega.pdf"
+    monkeypatch.setattr(sys, "argv", ["pdf", "--output", str(saida), "--dpi", valor])
+
+    with pytest.raises(SystemExit):
+        pdf.main()
+    assert not saida.exists()
 
 
 def test_a_classe_paisagem_do_gerador_tem_pagina_deitada_no_css() -> None:
