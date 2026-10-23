@@ -156,7 +156,7 @@ Toda métrica que um painel ou um alerta consulta está nesta tabela, na coluna 
 
 | Métrica | Tipo | Labels | Quem emite | Quando | Unidade |
 |---|---|---|---|---|---|
-| `http_request_duration_seconds` | histograma, 5 ms a 5 s | `method`, `rota` (template da rota, `nao_roteada` se nenhuma casou), `status` | api dos três serviços | fim de cada requisição (a que estoura conta como 500) | s |
+| `http_request_duration_seconds` | histograma, 5 ms a 5 s | `method` (GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS ou `OUTRO`), `rota` (template da rota, `nao_roteada` se nenhuma casou), `status` | api dos três serviços | fim de cada requisição (a que estoura conta como 500) | s |
 | `pytstop_mensagens_publicadas_total` | contador | `tipo` (os eventos que o serviço publica) | relay dos três | confirmação do broker | mensagens |
 | `pytstop_mensagens_consumidas_total` | contador | `tipo` (do catálogo ou `desconhecido`), `resultado` (`processada`, `duplicada`, `ignorada`, `retry`, `dlq`) | consumidor dos três | mensagem resolvida, depois do commit e do ack | mensagens |
 | `outbox_pendentes`, `outbox_dead` | gauge por consulta | - | relay dos três; no Billing, também a api | raspagem | linhas |
