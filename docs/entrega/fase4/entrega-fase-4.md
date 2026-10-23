@@ -1016,11 +1016,11 @@ Fonte: a mesma janela do Atendimento. A causa provável e as consultas que a pro
 
 ![Execução e estoque: 8 OS em execução, espera de 6,66 s até o diagnóstico e de 415 ms na fila de execução, 27 reservas atendidas e 8 recusadas.](evidencias/grafana-execucao-2026-10-22.png)
 
-Fonte: a mesma janela do Atendimento.
+Fonte: a mesma janela do Atendimento. Os códigos SRV-E2E e PEC-E2E são os catálogos que o E2E cria em cada cenário.
 
 ![Serviços: requisições, erro 5xx, taxa de sucesso e latência p95 por serviço, circuitos, Mercado Pago e CPU e memória por pod.](evidencias/grafana-servicos-2026-10-22.png)
 
-Fonte: Grafana do kind, de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta da demonstração.
+Fonte: Grafana do kind, de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta da demonstração. O pico de 5xx é o cenário da API do Billing parada.
 
 ## B8 — Proteção da `main`
 
