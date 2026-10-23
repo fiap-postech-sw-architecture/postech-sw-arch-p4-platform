@@ -40,6 +40,12 @@ MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0"
 # pixels (reduzir a paleta quase não muda o arquivo).
 LARGURA_MERMAID = 1600
 ESCALA = 1.25
+# Limite de resolução das imagens na página. As miniaturas do Anexo B, quatro por
+# linha a 40 mm, chegam a 889 ppi e pesam o dobro sem ganho de leitura; 450 ppi só
+# reamostra essas, e as capturas em duas colunas (418 ppi) ficam como estão. Um
+# limite abaixo do ppi da maioria (400, 350, 300) deixava o PDF maior: o
+# weasyprint reamostra com ruído, e o PNG comprime pior.
+DPI_MAXIMO = 450
 # Linha da tabela de participantes do documento: | Nome | RM123456 | Discord |
 PARTICIPANTE = re.compile(r"^\| ([^|\n]+?) \| (RM\d+) \|", re.M)
 # Abertura da seção de identificação do documento: "Grupo 158 (PytStop), turma ..."
@@ -196,11 +202,10 @@ def executar(argumentos: list[str]) -> None:
     subprocess.run([ferramenta, *argumentos[1:]], check=True)  # noqa: S603  # nosec B603
 
 
-def comando_weasyprint(entrada: Path, destino: Path, dpi: int | None) -> list[str]:
-    """Sem ``dpi`` as capturas entram na resolução original; com ele, o weasyprint
-    reduz as imagens maiores (a versão compacta, de reserva para o portal)."""
-    limite = ["-D", str(dpi)] if dpi is not None else []
-    return ["weasyprint", *limite, str(entrada), str(destino)]
+def comando_weasyprint(entrada: Path, destino: Path, dpi: int) -> list[str]:
+    """O weasyprint reduz as imagens que passam de ``dpi`` na página: ``DPI_MAXIMO``
+    na versão completa e 150 na compacta, de reserva para o portal."""
+    return ["weasyprint", "-D", str(dpi), str(entrada), str(destino)]
 
 
 def main() -> int:
@@ -209,10 +214,13 @@ def main() -> int:
     parser.add_argument("--final", action="store_true")
     parser.add_argument("--github", type=Path)
     parser.add_argument(
-        "--dpi", type=int, help="limite de resolução das imagens (versão compacta)"
+        "--dpi",
+        type=int,
+        default=DPI_MAXIMO,
+        help=f"limite de resolução das imagens ({DPI_MAXIMO}; 150 na versão compacta)",
     )
     args = parser.parse_args()
-    if args.dpi is not None and args.dpi <= 0:
+    if args.dpi <= 0:
         parser.error("--dpi precisa ser positivo")
     raiz = Path(__file__).resolve().parents[2]
     destino = args.output.expanduser().resolve()

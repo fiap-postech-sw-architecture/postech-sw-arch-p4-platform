@@ -146,11 +146,14 @@ def test_so_o_diagrama_reduzido_e_bem_mais_largo_que_alto_vai_deitado(
     assert pdf.largo(largura, altura) is deitado
 
 
-def test_so_a_versao_compacta_limita_a_resolucao_das_imagens() -> None:
+def test_toda_versao_limita_a_resolucao_das_imagens_e_a_compacta_limita_mais() -> None:
     html, destino = Path("entrega.html"), Path("entrega.pdf")
 
-    assert pdf.comando_weasyprint(html, destino, None) == [
+    assert pdf.DPI_MAXIMO == 450
+    assert pdf.comando_weasyprint(html, destino, pdf.DPI_MAXIMO) == [
         "weasyprint",
+        "-D",
+        "450",
         "entrega.html",
         "entrega.pdf",
     ]
