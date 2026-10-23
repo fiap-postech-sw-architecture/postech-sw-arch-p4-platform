@@ -6,7 +6,7 @@ Documento de entrega da fase 4 do Tech Challenge da Pós-Graduação em Arquitet
 
 ## Como ler este documento
 
-Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega, e o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase. Cada número cita o run, o commit ou a janela de onde veio, e o [registro de evidências](evidencias/README.md) guarda a origem e as conferências. A demonstração, que o texto chama de `make demo`, são seis cenários do BDD rodados no kind local.
+Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega, e o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase. Os números trazem o run, o commit ou a janela de onde saíram, e o [registro de evidências](evidencias/README.md) guarda a origem e as conferências. A demonstração, que o texto chama de `make demo`, são seis cenários do BDD rodados no kind local.
 
 | Sigla | Significado | Sigla | Significado |
 |---|---|---|---|
@@ -72,7 +72,7 @@ Os quatro repositórios são públicos, e o usuário `soat-architecture` é cola
 
 Cada repositório de serviço tem o código em `src/` (camadas `dominio`, `aplicacao`, `infraestrutura` e `interfaces`), o `Dockerfile`, os manifestos em `k8s/`, os workflows de CI/CD, `docs/arquitetura.md` e `docs/api/` (OpenAPI e collection Postman); o README traz como rodar e testar e a cobertura com o link do run.
 
-**Proteção da `main`.** Os quatro repositórios têm ruleset ativo e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit` entrou por PR (o ruleset veio depois do PR #1, mesclado duas a três horas antes). O [B8](#b8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
+**Proteção da `main`.** Os quatro repositórios têm ruleset ativo e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit` entrou por PR (em 06/10/2026, horário de Brasília, o PR #1 foi mesclado por volta das 12:00 e o ruleset veio depois: às 13:50 nos serviços e às 14:54 no `platform`). O [B8](#b8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
 
 ## 3. Link do vídeo
 
@@ -689,7 +689,7 @@ O enunciado pede testes unitários em todos os serviços, ao menos um fluxo comp
 
 | Repositório | Testes no CD | Cobertura (gate) | SonarQube |
 |---|---|---|---|
-| OS Service | 10.312 casos, 3.000 deles de sementes de 3 testes de propriedade da saga: unitários, integração com PostgreSQL e RabbitMQ reais, contrato e BDD de componente (28 cenários e 7 esquemas) | [99,6%](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#cobertura) (95%) | aprovado; 0 bugs, 0 vulnerabilidades, 0 code smells |
+| OS Service | 10.312 casos (3.000 deles de sementes de 3 testes de propriedade): unitários, integração com PostgreSQL e RabbitMQ reais, contrato e BDD de componente (28 cenários e 7 esquemas) | [99,6%](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#cobertura) (95%) | aprovado; 0 bugs, 0 vulnerabilidades, 0 code smells |
 | Billing | 1.731: unitários, integração com MongoDB e RabbitMQ reais e contrato | [100%](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/README.md#cobertura) (95%) | aprovado; 0, 0 e 0 |
 | Execução | 1.475: unitários, integração com PostgreSQL e RabbitMQ reais e contrato | [100%](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/README.md#cobertura) (95%) | aprovado; 0, 0 e 0 |
 | `platform` | 3.366: contratos de mensageria, dashboards e alertas, scripts de deploy e smoke, apoio do E2E | 99,85% do código de teste (90%; [CI](../../../README.md#ci)) | não se aplica |
@@ -749,7 +749,7 @@ Cada serviço tem três workflows, com jobs de nome estável, que são os checks
 
 Os jobs do CD têm uma definição só, no `.github/workflows/cd-servico.yml` do `platform`, chamada pelo `cd.yml` de cada serviço com o nome dele e quatro SHAs ([platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22)). A independência que o enunciado pede está no que é de cada serviço: build, testes, análise, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e nenhum pipeline publica a imagem de outro. Nos manifestos de cada serviço, a API tem sondas de inicialização, de vida e de prontidão, requests e limits, e um HPA de 1 a 2 réplicas por CPU (70%); o overlay do CD limita o HPA a 1 réplica, para os três serviços caberem no runner. O CD do `platform` implanta a plataforma com o smoke e, no job `e2e`, os três serviços, com o BDD, o Newman e o ZAP. O kind do CI não tem Grafana nem Loki, que só existem no kind local ([seção 11](#11-observabilidade)).
 
-Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no OS Service, no Billing e na Execução; os digests estão no [registro de evidências](evidencias/README.md#imagens-publicadas-nos-cds-de-20102026)). O `deploy-kind` do OS Service levou 7 min 40 s no run do [B1](#b1--cd-da-main), e o job `e2e` do `platform`, com o Newman e o ZAP, 9 min 34 s ([B5](#b5--newman-e-zap-no-cd-do-platform)). A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md).
+Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no OS Service, no Billing e na Execução; os digests estão no [registro de evidências](evidencias/README.md#imagens-publicadas-nos-cds-de-20102026)). O `deploy-kind` do OS Service levou 7 min 40 s no run de 20/10 e 7 min 28 s no de 23/10 ([B1](#b1--cd-da-main)), e o job `e2e` do `platform`, com o Newman e o ZAP, 9 min 34 s ([B5](#b5--newman-e-zap-no-cd-do-platform)). A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md).
 
 ## 10. Segurança e análise de vulnerabilidades
 
@@ -862,7 +862,7 @@ A dívida técnica aceita, com o limite atual e quando revisar cada item, está 
 
 # Anexo B — Evidências visuais
 
-As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2) e do kind local, onde cada captura só fez leituras. O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem, a data e a janela de cada arquivo.
+As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2) e do kind local, onde cada captura só fez leituras. O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem, a data e a janela de cada arquivo. Os scans de segurança, que formavam o Anexo A, estão na [seção 10](#10-segurança-e-análise-de-vulnerabilidades).
 
 ## B1 — CD da `main`
 
