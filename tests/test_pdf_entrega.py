@@ -85,14 +85,16 @@ def _pixels(css: float) -> int:
 
 
 # As fronteiras usam as contas do largo(): `ceil` dá a menor largura que passa
-# em cada teste, sem depender de como o ponto flutuante arredonda 1,4 x altura.
+# em cada teste, sem depender de como o ponto flutuante arredonda 1,3 x altura.
 REDUZIDO = math.ceil(0.9 * pdf.LARGURA_MERMAID * pdf.ESCALA)
-ALTURA_NO_LIMITE = _pixels(1080)
-LARGURA_NO_LIMITE = math.ceil(1.4 * ALTURA_NO_LIMITE)
+ALTURA_NO_LIMITE = _pixels(1200)
+LARGURA_NO_LIMITE = math.ceil(1.3 * ALTURA_NO_LIMITE)
 
 
-# Os cinco primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584
-# é a largura a que o Mermaid reduz o diagrama que não cabe na página.
+# Os sete primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584 é
+# a largura a que o Mermaid reduz o diagrama que não cabe na página. O de
+# componentes e o ER do OS levam espaçamento menor na RFC, que os deixa mais
+# largos que altos; a segunda metade do caminho feliz é quase quadrada.
 @pytest.mark.parametrize(
     ("largura", "altura", "deitado"),
     [
@@ -101,9 +103,17 @@ LARGURA_NO_LIMITE = math.ceil(1.4 * ALTURA_NO_LIMITE)
         ),
         pytest.param(_pixels(1584), _pixels(526.4), True, id="er-largo-e-baixo"),
         pytest.param(
-            _pixels(1584), _pixels(1254.4), False, id="componentes-quase-quadrado"
+            _pixels(1584), _pixels(1020), True, id="componentes-com-espacamento-menor"
         ),
-        pytest.param(_pixels(1584), _pixels(2004.8), False, id="caminho-feliz-alto"),
+        pytest.param(
+            _pixels(1584), _pixels(1034.4), True, id="er-do-os-com-espacamento-menor"
+        ),
+        pytest.param(
+            _pixels(1582.4), _pixels(1147.2), True, id="caminho-feliz-t1-a-t4"
+        ),
+        pytest.param(
+            _pixels(1584), _pixels(1396.8), False, id="caminho-feliz-t5-a-t10"
+        ),
         pytest.param(
             _pixels(1366.4), _pixels(794.4), False, id="largo-que-cabe-no-retrato"
         ),

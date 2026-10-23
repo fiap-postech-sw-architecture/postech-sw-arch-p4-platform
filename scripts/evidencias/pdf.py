@@ -93,10 +93,10 @@ def largo(largura: int, altura: int) -> bool:
 
     No retrato, o que o Mermaid reduziu à página dele sai com a letra menor. Na
     paisagem, a letra cresce na proporção da largura sobre a altura, até 1,5
-    vez; abaixo de 1,4 o ganho não paga a página a mais.
+    vez; abaixo de 1,3 o ganho não paga a página a mais.
     """
     reduzido = largura >= 0.9 * LARGURA_MERMAID * ESCALA
-    return reduzido and largura >= 1.4 * altura
+    return reduzido and largura >= 1.3 * altura
 
 
 def capa(documento: str, logo: Path) -> str:
