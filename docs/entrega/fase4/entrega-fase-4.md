@@ -13,12 +13,14 @@ Os repositórios são a fonte de verdade. Este documento traz o que o avaliador 
 | ACID | garantias de uma transação de banco | JWKS | chaves públicas do JWT |
 | ADR | registro de decisão de arquitetura | kind | Kubernetes em contêineres Docker |
 | AMQP | protocolo de mensagens do RabbitMQ | LGPD | Lei Geral de Proteção de Dados |
-| BDD | testes de comportamento em Gherkin | RF, RNF, RN | requisito funcional, não funcional e regra de negócio |
-| CVE | vulnerabilidade catalogada | RFC | proposta técnica |
+| BDD | testes de comportamento em Gherkin | p90, p95 | tempo abaixo do qual ficam 90% e 95% das medidas |
+| CVE | vulnerabilidade catalogada | RF, RNF, RN | requisito funcional, não funcional e regra de negócio |
+| DDD | projeto do código pelo domínio do negócio | RFC | proposta técnica |
 | DLQ | fila de mensagens mortas | SBOM | lista dos componentes de uma imagem, em formato SPDX |
-| E2E | teste de ponta a ponta | TTL | prazo de vida de um registro |
-| GHCR | registro de imagens do GitHub | ZAP | varredura de segurança da OWASP |
-| HMAC | assinatura com chave secreta | | |
+| E2E | teste de ponta a ponta | SKU | código de uma peça no estoque |
+| GHCR | registro de imagens do GitHub | SMTP | protocolo de envio de e-mail |
+| HMAC | assinatura com chave secreta | TTL | prazo de vida de um registro |
+| HPA | escala as réplicas de um serviço pela CPU | ZAP | varredura de segurança da OWASP |
 
 ## Índice dos artefatos
 
@@ -505,7 +507,7 @@ Cada serviço é o único dono do seu banco, com credencial própria montada só
 | Coleção | Índices |
 |---|---|
 | `precos_servicos`, `precos_pecas` | únicos `{codigo: 1}` e `{sku: 1}`; o `sku` liga a peça ao estoque da Execução |
-| `orcamentos` | único `{ordem_id: 1}` (um orçamento por OS, imutável depois de gerado, com os preços congelados nas linhas; RN-013 e RN-016 da fase 3) e `{status: 1, valido_ate: 1}` para a expiração; o subtotal de cada linha não é gravado |
+| `orcamentos` | único `{ordem_id: 1}` (um orçamento por OS, imutável depois de gerado, com os preços congelados nas linhas) e `{status: 1, valido_ate: 1}` para a expiração; o subtotal de cada linha não é gravado |
 | `pagamentos` | único e parcial `{orcamento_id: 1}` (uma cobrança por orçamento, RF-032; a lápide não tem orçamento); único `{ordem_id: 1}`, pelo qual a compensação acha a cobrança; único e parcial `{referencia_pagamento: 1}`, para o webhook; `{status: 1, expira_em: 1}` para a expiração e a conciliação |
 | `outbox`, `mensagens_processadas` | `{status: 1, proxima_tentativa_em: 1, _id: 1}` para o *claim*; `_id` igual ao `id` da mensagem; índices TTL (apagam sozinhos) em `entregue_em` (7 dias, só `entregue`), `morta_em` (30 dias, só `dead`) e `processada_em` (30 dias) |
 
@@ -842,7 +844,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | Commits diretos na `main`; exigir PR | Os quatro repositórios ganharam o ruleset no dia da criação, e nenhum commit direto entrou além do `Initial commit` ([seção 2](#2-repositórios-e-estado-do-cicd) e [B8](#b8--proteção-da-main)) |
 | Dashboards de negócio em JSON separado e documentado | Quatro dashboards de negócio em JSON próprio, cada painel documentado em [`negocio.md`](../../../observabilidade/negocio.md), com teste que reprova a divergência ([seção 11](#11-observabilidade)) |
 | Material muito extenso; concentrar num índice os artefatos pedidos (componentes, sequências, RFCs, ADRs e ER) | O documento abre com o [índice dos artefatos](#índice-dos-artefatos), com seção, página e link, e os READMEs dos quatro repositórios ficaram com cerca de 170 a 200 linhas, com o detalhe em `docs/` |
-| Vídeo, repositório extra e observação geral | Sem pendência; a entrega tem só os quatro repositórios da seção 2 |
+| Vídeo, repositório extra e observação geral | O vídeo da fase 3 não tinha pendência; o da fase 4 está pendente ([seção 3](#3-link-do-vídeo)). A entrega tem só os quatro repositórios da seção 2 |
 
 ## 14. Pendências até a submissão
 
@@ -857,7 +859,7 @@ A dívida técnica aceita, com o limite atual e quando revisar cada item, está 
 
 # Anexo B — Evidências visuais
 
-As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2) e do kind local, onde cada captura só fez leituras. O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem, a data e a janela de cada arquivo. Os scans de segurança, que formavam o Anexo A, estão na [seção 10](#10-segurança-e-análise-de-vulnerabilidades).
+As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2) e do kind local, onde cada captura só fez leituras. O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem, a data e a janela de cada arquivo.
 
 ## B1 — CD da `main`
 
@@ -938,7 +940,7 @@ Fonte: commit `0ec76fe`, 21/10/2026; [run 39536414057](https://github.com/fiap-p
 
 ## B3 — Trace da saga no Jaeger
 
-Os traces são do Jaeger do kind local. O das compensações vem de um ensaio com o simulador do Mercado Pago, não do provedor real, e a mesma OS está no Loki ([seção 11](#11-observabilidade)). O do caminho feliz, de 19/10/2026, já tinha saído da memória do Jaeger e foi aberto pela aba Upload. A busca de 20/10/2026 (três traces, cada um nos três serviços) e o trace `bfe21ce701ea69d6afc008a870d2ce21`, do mesmo cenário das compensações, ficam no repositório, fora do PDF: [busca](evidencias/jaeger-busca-saga-2026-10-20.png) e [trace](evidencias/jaeger-trace-saga-2026-10-20.png).
+Os traces são do Jaeger do kind local. O das compensações vem de um ensaio com o simulador do Mercado Pago, não do provedor real, e a mesma OS está no Loki ([seção 11](#11-observabilidade)). O do caminho feliz, de 19/10/2026, foi aberto pela aba Upload de um Jaeger avulso. A busca de 20/10/2026 (três traces, cada um nos três serviços) e o trace `bfe21ce701ea69d6afc008a870d2ce21`, do mesmo cenário das compensações, estão em [busca](evidencias/jaeger-busca-saga-2026-10-20.png) e [trace](evidencias/jaeger-trace-saga-2026-10-20.png).
 
 ![OS paga e cancelada: 339 spans em 3 serviços, com as compensações destacadas (CancelarExecucao, EstornarPagamento, LiberarReserva).](evidencias/jaeger-estorno-compensacoes-2026-10-23.png)
 
@@ -950,7 +952,7 @@ Fonte: [trace-saga-2026-10-19.json](evidencias/trace-saga-2026-10-19.json), trac
 
 ## B4 — Swagger pela borda
 
-O Swagger de cada serviço pelo Kong do kind, em `https://localhost/<prefixo>/docs` (o campo Servers mostra o prefixo), está no repositório, fora do PDF: [OS Service](evidencias/swagger-os-service-2026-10-20.png), [Billing](evidencias/swagger-billing-service-2026-10-20.png) e [Execução](evidencias/swagger-execution-service-2026-10-20.png), de 20/10/2026. O OpenAPI e a collection Postman de cada serviço estão em `docs/api/` ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api)).
+O Swagger de cada serviço pelo Kong do kind, em `https://localhost/<prefixo>/docs` (o campo Servers mostra o prefixo), tem print no repositório: [OS Service](evidencias/swagger-os-service-2026-10-20.png), [Billing](evidencias/swagger-billing-service-2026-10-20.png) e [Execução](evidencias/swagger-execution-service-2026-10-20.png), de 20/10/2026. O OpenAPI e a collection Postman de cada serviço estão em `docs/api/` ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api)).
 
 ## B5 — Newman e ZAP no CD do `platform`
 
@@ -1000,7 +1002,7 @@ Fonte: Grafana do kind, 19/10/2026, 00:58 (Brasília).
 
 ## B7 — Dashboards do Grafana
 
-Dashboards do Grafana do kind local, abertos sem login, só para leitura; as janelas, o histórico do Prometheus e as execuções da demonstração estão no [relatório de observabilidade](evidencias/observabilidade.md#dashboards-e-histórico). Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos. Os outros quatro dashboards ficam no repositório, fora do PDF: [Saga](evidencias/grafana-saga-2026-10-22.png), [Mensageria](evidencias/grafana-mensageria-2026-10-22.png), [Bancos](evidencias/grafana-bancos-2026-10-22.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-22.png).
+Dashboards do Grafana do kind local, abertos sem login, só para leitura; as janelas, o histórico do Prometheus e as execuções da demonstração estão no [relatório de observabilidade](evidencias/observabilidade.md#dashboards-e-histórico). Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos. Os outros quatro dashboards estão no repositório: [Saga](evidencias/grafana-saga-2026-10-22.png), [Mensageria](evidencias/grafana-mensageria-2026-10-22.png), [Bancos](evidencias/grafana-bancos-2026-10-22.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-22.png).
 
 ![Atendimento: volume diário de OS, funil de 53 OS abertas a 10 finalizadas e sagas com 33 compensadas e 10 concluídas.](evidencias/grafana-atendimento-2026-10-22.png)
 
