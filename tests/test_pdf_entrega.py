@@ -127,6 +127,23 @@ def test_so_o_diagrama_reduzido_e_bem_mais_largo_que_alto_vai_deitado(
     assert pdf.largo(largura, altura) is deitado
 
 
+def test_so_a_versao_compacta_limita_a_resolucao_das_imagens() -> None:
+    html, destino = Path("entrega.html"), Path("entrega.pdf")
+
+    assert pdf.comando_weasyprint(html, destino, None) == [
+        "weasyprint",
+        "entrega.html",
+        "entrega.pdf",
+    ]
+    assert pdf.comando_weasyprint(html, destino, 150) == [
+        "weasyprint",
+        "-D",
+        "150",
+        "entrega.html",
+        "entrega.pdf",
+    ]
+
+
 def test_a_classe_paisagem_do_gerador_tem_pagina_deitada_no_css() -> None:
     css = Path(pdf.__file__).with_name("pdf.css").read_text()
 
