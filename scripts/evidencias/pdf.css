@@ -1,11 +1,18 @@
 /* Receita da fase 3 (scripts/build-entrega-pdf.sh do p3) sobre o CSS padrão do
-   pandoc: PT Serif, corpo de 36em, A4 com número no rodapé e capa sem número. */
+   pandoc: PT Serif, A4 com número no rodapé e capa sem número. O corpo usa a
+   largura toda da página (o padrão do pandoc, 36em com 50px de folga, deixava
+   uns 3 cm de cada lado sem texto) e 11 pt: o volume do PDF é um critério. */
 html { font-family: "PT Serif", serif; }
+body { max-width: none; padding: 0; font-size: 11pt; line-height: 1.3; }
+p { margin: 0.7em 0; }
+ul, ol { margin: 0.6em 0; }
+h2 { margin-top: 1.2em; margin-bottom: 0.5em; }
+h3 { margin-top: 1em; margin-bottom: 0.4em; }
 /* display:table anula o "table { display:block }" do CSS padrão do pandoc,
    feito para rolar a tabela na tela. Sem quebra forçada na célula, a largura
    mínima de cada coluna é a da maior palavra, e o código quebra nos <wbr>. */
-table { display: table; width: 100%; border-collapse: collapse; font-size: 9pt; }
-th, td { padding: 3pt 5pt; vertical-align: top; overflow-wrap: normal; hyphens: manual; }
+table { display: table; width: 100%; border-collapse: collapse; font-size: 8.5pt; }
+th, td { padding: 2pt 4pt; vertical-align: top; overflow-wrap: normal; hyphens: manual; }
 th { text-align: left; }
 tr { break-inside: avoid; }
 /* Referência interna numa tabela (o índice dos artefatos, a rastreabilidade)
@@ -13,7 +20,7 @@ tr { break-inside: avoid; }
 td a[href^="#"]::after { content: ", p. " target-counter(attr(href), page); }
 img { max-width: 100%; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8.5pt; }
-@page { size: A4; @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
+@page { size: A4; margin: 17mm 18mm 18mm; @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
 @page :first { @bottom-center { content: none; } }
 h1 { bookmark-level: 1; }
 h2 { bookmark-level: 2; }
@@ -38,14 +45,14 @@ h1 { break-before: page; }
 #TOC a { text-decoration: none; color: inherit; }
 #TOC a::after { content: leader('.') target-counter(attr(href), page); }
 
-/* Diagramas Mermaid no fluxo do texto, sem partir a figura. O corpo do pandoc
-   tem 36em; a div usa a largura da página. O largo e denso (pdf.largo) vai
-   para uma página paisagem própria, onde a letra sai até 1,5 vez maior. */
-.diagrama { break-inside: avoid; width: 17cm; margin-left: -1.3cm; }
+/* Diagramas Mermaid no fluxo do texto, sem partir a figura. O largo e denso
+   (pdf.largo) vai para uma página paisagem própria, onde a letra sai até 1,5
+   vez maior; o corpo ocupa a largura de cada página, retrato ou paisagem. */
+.diagrama { break-inside: avoid; width: 100%; }
 .diagrama img { display: block; margin: 0 auto; max-width: 100%; max-height: 19cm; }
 @page paisagem { size: A4 landscape; margin: 1.2cm;
                  @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
-.paisagem { page: paisagem; break-before: page; break-after: page; width: 26cm; margin-left: -5.4cm; }
+.paisagem { page: paisagem; break-before: page; break-after: page; width: 100%; }
 .paisagem img { max-height: 17cm; }
 .legenda { font-style: italic; font-size: 9.5pt; text-align: center; margin-top: 3mm; }
 
@@ -58,7 +65,19 @@ figure img { display: block; max-width: 100%; max-height: 88mm; margin: 0 auto; 
    Execução e a Saga na mesma página, e a altura vem da proporção do print, de
    73 mm (Orçamentos) a 161 mm (Serviços). O teto de 200 mm só vale para uma
    captura futura mais alta. */
-figure img[src*="grafana-"] { max-width: 94%; max-height: 200mm; }
+figure img[src*="grafana-"], figure img[src*="loki-"], figure img[src*="jaeger-estorno"] {
+  max-width: 94%; max-height: 200mm; }
+/* Ruleset e lista de commits: telas altas de GitHub, uma por página. */
+figure img[src*="protecao-"] { max-height: 225mm; }
+/* Prints de status lado a lado (a grade do Anexo B): duas ou três por linha,
+   cada uma com a legenda e a fonte. É tabela, e não flex: o weasyprint 69
+   levava a linha inteira para a página seguinte quando sobrava espaço. */
+.grade { display: table; table-layout: fixed; border-spacing: 4mm 0; margin: 4mm -4mm;
+         width: calc(100% + 8mm); }
+.grade > div { display: table-cell; vertical-align: top; }
+.grade figure { margin: 0; }
+.grade figure img { width: 100%; max-height: none; }
+.grade figure + p { margin: 1mm 0 0; }
 figcaption { margin-top: 2mm; font-size: 9.5pt; font-style: italic; }
 figure + p { margin: 1mm 0 4mm; font-size: 8.5pt; color: #555; }
 /* O parágrafo de abertura de um item fica com a primeira captura, e o título
