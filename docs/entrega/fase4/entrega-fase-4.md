@@ -706,6 +706,10 @@ A cobertura soma linhas e ramos, e o código novo de cada PR passa também pelo 
 
 O ambiente Kubernetes do enunciado é o kind que o CD de cada serviço cria no runner, e o CD só fica verde depois do smoke e do BDD nele. A cada push na `main`, o CD cria o cluster descartável, implanta a plataforma e os três serviços, gera os Secrets no próprio run e roda o smoke de cada namespace e o E2E BDD pela borda, com a imagem que o serviço acabou de publicar. O enunciado pede deploy automatizado em Kubernetes e não exige nuvem: nenhuma credencial de nuvem fica no GitHub, e o deploy não depende da credencial de cerca de 4 horas do AWS Academy, que alguém teria de renovar a cada sessão ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md#deploy-remoto-opcional-e-desligado)). O gancho de deploy remoto, que levaria o mesmo digest a um cluster persistente, existe e fica desligado ([nuvem opcional](../../operacao/nuvem-opcional.md)). O kind do CI não tem Grafana nem Loki, que só existem no kind local ([seção 11](#11-observabilidade)).
 
+Cada serviço tem três workflows, com jobs de nome estável, que são os checks obrigatórios do ruleset ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)): o `ci.yml`, em todo PR (lint e import-linter, mypy strict, bandit, testes com os gates de cobertura, SonarQube e build); o `security.yml`, em todo PR e toda segunda-feira (pip-audit, gitleaks e trivy); e o `cd.yml`, no push na `main`, que chama os dois e segue para o `image` (build único, push no GHCR com o SHA do commit, SBOM em SPDX), o `deploy-kind` ([passos, no README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#o-que-o-deploy-kind-faz-na-ordem)) e o `remote-skipped`, que ocupa o lugar do `deploy-remote` desligado. O serviço do pipeline entra com a imagem do `image`; os outros dois são construídos do código, no commit do último CD verde de cada um, para o E2E provar a saga com os três.
+
+Os jobs do CD têm uma definição só, no `.github/workflows/cd-servico.yml` do `platform`, chamada pelo `cd.yml` de cada serviço com o nome dele e quatro SHAs ([platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22)). A independência que o enunciado pede está no que é de cada serviço: build, testes, análise, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e nenhum pipeline publica a imagem de outro. Nos manifestos de cada serviço, a API tem sondas de inicialização, de vida e de prontidão, requests e limits, e um HPA de 1 a 2 réplicas por CPU (70%); o overlay do CD limita o HPA a 1 réplica, para os três serviços caberem no runner. O CD do `platform` implanta a plataforma com o smoke e, no job `e2e`, os três serviços, com o BDD, o Newman e o ZAP.
+
 ```mermaid
 ---
 config:
@@ -747,10 +751,6 @@ flowchart TB
     e2e -.->|"DEPLOY_REMOTO_HABILITADO diferente de true"| skip
 ```
 
-Cada serviço tem três workflows, com jobs de nome estável, que são os checks obrigatórios do ruleset ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)): o `ci.yml`, em todo PR (lint e import-linter, mypy strict, bandit, testes com os gates de cobertura, SonarQube e build); o `security.yml`, em todo PR e toda segunda-feira (pip-audit, gitleaks e trivy); e o `cd.yml`, no push na `main`, que chama os dois e segue para o `image` (build único, push no GHCR com o SHA do commit, SBOM em SPDX), o `deploy-kind` ([passos, no README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#o-que-o-deploy-kind-faz-na-ordem)) e o `remote-skipped`, que ocupa o lugar do `deploy-remote` desligado. O serviço do pipeline entra com a imagem do `image`; os outros dois são construídos do código, no commit do último CD verde de cada um, para o E2E provar a saga com os três.
-
-Os jobs do CD têm uma definição só, no `.github/workflows/cd-servico.yml` do `platform`, chamada pelo `cd.yml` de cada serviço com o nome dele e quatro SHAs ([platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22)). A independência que o enunciado pede está no que é de cada serviço: build, testes, análise, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e nenhum pipeline publica a imagem de outro. Nos manifestos de cada serviço, a API tem sondas de inicialização, de vida e de prontidão, requests e limits, e um HPA de 1 a 2 réplicas por CPU (70%); o overlay do CD limita o HPA a 1 réplica, para os três serviços caberem no runner. O CD do `platform` implanta a plataforma com o smoke e, no job `e2e`, os três serviços, com o BDD, o Newman e o ZAP.
-
 Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no OS Service, no Billing e na Execução; os digests estão no [registro de evidências](evidencias/README.md#imagens-publicadas-nos-cds-de-20102026)). O `deploy-kind` do OS Service levou 7 min 40 s no run do [Anexo B, B1](#b1--cd-da-main), e o job `e2e` do `platform`, com o Newman e o ZAP, 9 min 34 s ([B5](#b5--newman-e-zap-no-cd-do-platform)). A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md).
 
 ## 10. Segurança e análise de vulnerabilidades
@@ -781,26 +781,14 @@ A stack da fase 3 passou para o `platform` e serve os três serviços, cada um c
 
 Fonte: Loki do kind, 23/10/2026, 09:36 UTC, na mesma OS e no mesmo trace do [B3](#b3--trace-da-saga-no-jaeger). O Explore do Grafana do cluster exige login de admin, por isso o print vem de um Grafana local.
 
-| Dashboard | Tag | Responde |
-|---|---|---|
-| Atendimento | negócio | volume diário de OS e tempo médio por status, OS por status, funil, desfecho das sagas e motivos de cancelamento |
-| Orçamentos | negócio | orçamentos por desfecho, taxa de aprovação e tempo até a decisão |
-| Pagamentos | negócio | faturamento por dia, pagamentos por desfecho, estornos e cobranças abertas |
-| Execução e estoque | negócio | filas da oficina, tempos de espera e de execução e peças em falta |
-| Saga | técnico | prazo técnico vencido, falhas na compensação, sagas ativas e duração por etapa |
-| Mensageria dos serviços | técnico | mensagens por tipo e resultado, retry, DLQ, outbox e reconexões |
-| Serviços | técnico | requisições, erro 5xx, latência p95 e taxa de sucesso por serviço, circuitos e Mercado Pago |
-| Bancos | técnico | conexões, transações, locks, tamanho e replica set do MongoDB |
-| Plataforma | técnico | DLQs, consumidores, alarmes do broker, alvos do Prometheus e tráfego da borda |
-
-Cada dashboard é um JSON em [`observabilidade/dashboards/`](../../../observabilidade/dashboards), com os de negócio separados dos técnicos, como a avaliação da fase 3 pediu, e a descrição de cada painel igual à coluna "Como ler" da documentação ([negócio](../../../observabilidade/negocio.md) e [técnicos](../../../observabilidade/README.md)). Depois do E2E, o CD do `platform` confere no Prometheus a consulta de cada painel de negócio: no CD do `platform` de 20/10/2026 ([run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627)), as 47 voltaram com série. São 21 regras de alerta, cada uma com um caso que dispara e um que não dispara no promtool: DLQ com mensagens, saga parada, compensações acima do normal, 5xx, latência p95, circuito aberto, outbox parada, fila sem consumidor, serviço ou banco fora do ar e as da plataforma ([tabela completa](../../../observabilidade/README.md#regras-de-alerta-pasta-pytstop)).
+Nove dashboards em JSON, em [`observabilidade/dashboards/`](../../../observabilidade/dashboards): quatro de negócio (Atendimento, Orçamentos, Pagamentos e Execução e estoque) e cinco técnicos (Saga, Mensageria dos serviços, Serviços, Bancos e Plataforma). A descrição de cada painel é igual à coluna "Como ler" da documentação ([negócio](../../../observabilidade/negocio.md) e [técnicos](../../../observabilidade/README.md)), como a avaliação da fase 3 pediu. Depois do E2E, o CD do `platform` confere no Prometheus a consulta de cada painel de negócio: no [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), as 47 voltaram com série. São 21 regras de alerta, cada uma com um caso que dispara e um que não dispara no promtool: DLQ com mensagens, saga parada, compensações acima do normal, 5xx, latência p95, circuito aberto, outbox parada, fila sem consumidor, serviço ou banco fora do ar e as da plataforma ([tabela completa](../../../observabilidade/README.md#regras-de-alerta-pasta-pytstop)).
 
 | Evidência | Onde |
 |---|---|
-| Trace da saga nos três serviços: 339 spans numa OS paga e cancelada, 245 no caminho feliz | [Anexo B, B3](#b3--trace-da-saga-no-jaeger) |
-| Alerta de fila sem consumidor disparado e recuperado no kind local, em 19/10/2026 | [Anexo B, B6](#b6--alerta-de-fila-sem-consumidor) |
-| Kind local de 19/10/2026: E2E com as 14 execuções do BDD, 28 pods sem reinício em 600,9 s sem tráfego e `make demo` com seis cenários | [relatório da execução local](evidencias/observabilidade.md) |
-| Nove dashboards sobre um Prometheus com mais de três dias de dados (cinco na janela inteira, quatro nos nove minutos do último `make demo`), capturados em 22/10/2026 (23/10 UTC) depois de sete execuções do `make demo` | [Anexo B, B7](#b7--dashboards-do-grafana) |
+| Trace da saga nos três serviços: 339 spans numa OS paga e cancelada, 245 no caminho feliz | [B3](#b3--trace-da-saga-no-jaeger) |
+| Alerta de fila sem consumidor, disparado e recuperado no kind local | [B6](#b6--alerta-de-fila-sem-consumidor) |
+| Cinco dos nove dashboards, sobre um Prometheus com mais de três dias de dados | [B7](#b7--dashboards-do-grafana) |
+| Kind local: 14 execuções do BDD, 28 pods sem reinício em 600,9 s sem tráfego e a demonstração | [relatório da execução local](evidencias/observabilidade.md) |
 
 ## 12. Rastreabilidade requisito → evidência
 
@@ -826,7 +814,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-035 | Mensageria assíncrona | BDD: consumidor parado sem perder o fluxo |
 | RNF-036 | Sem acesso ao banco de outro serviço | smoke do CD ([platform #25](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/25)) |
 | RNF-037 | Saga justificada no README | [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
-| RNF-038 | Testes unitários | 10.312, 1.731 e 1.475 testes ([seção 8](#8-testes-e-qualidade)) |
+| RNF-038 | Testes unitários | 10.312 casos, 1.731 e 1.475 testes ([seção 8](#8-testes-e-qualidade)) |
 | RNF-039 | Fluxo completo com BDD | 11 cenários e um esquema com 3 exemplos no CD de cada serviço |
 | RNF-040 | Cobertura de 80% | 99,6%, 100% e 100% ([registro](evidencias/coverage.md)) |
 | RNF-041 | SonarQube no CI | gate aprovado nos três, com 0 code smells ([resumo](evidencias/coverage.md#sonarqube); [prints](#b2--sonarqube)) |
@@ -834,7 +822,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-043 | `main` protegida | ruleset nos quatro ([B8](#b8--proteção-da-main); [conferência](evidencias/protecao-da-main.md)) |
 | RNF-044 | Um repositório por serviço | [seção 2](#2-repositórios-e-estado-do-cicd) |
 | RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.2](#42-comunicação-entre-os-serviços)) |
-| RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); nove dashboards sobre um Prometheus com mais de três dias de dados (cinco na janela inteira, quatro nos nove minutos do último `make demo`) no [Anexo B, B7](#b7--dashboards-do-grafana) |
+| RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); capturas no [B7](#b7--dashboards-do-grafana) |
 | RNF-047 | Código-fonte | `src/` de cada serviço |
 | RNF-048 | Dockerfile e manifestos | imagem e deploy em cada CD |
 | RNF-049 | Pipelines de CI/CD | runs da [seção 2](#2-repositórios-e-estado-do-cicd) |
@@ -844,7 +832,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-053 | Vídeo de até 15 minutos | pendente: gravação ([seção 3](#3-link-do-vídeo)) |
 | RNF-054 | PDF com os seis itens | este documento; submissão pendente |
 | RNF-055 | Timeout, retry, DLQ e circuit breaker | BDD de resiliência ([seção 6.3](#63-idempotência-novas-tentativas-e-prazos)) |
-| RNF-056 | Rastreamento distribuído | trace nos três serviços ([Anexo B, B3](#b3--trace-da-saga-no-jaeger)); o do Mercado Pago pendente |
+| RNF-056 | Rastreamento distribuído | trace nos três serviços ([B3](#b3--trace-da-saga-no-jaeger)); o do Mercado Pago pendente |
 | RN-023 | Compensação em qualquer etapa | plano de compensação ([seção 6.2](#62-passos-e-compensações)); quatro cenários BDD |
 | RN-024 | Orçamento recusado ou expirado | BDD: recusa pelo link e expiração |
 | RN-025 | Pagamento recusado ou expirado | BDD: pagamento recusado no simulador |
@@ -860,7 +848,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | Validar o CPF antes da consulta ao banco | O OS Service valida CPF e CNPJ pelo módulo 11 antes de consultar ([CPF](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/src/compartilhado/dominio/cpf.py), [CNPJ](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/src/compartilhado/dominio/cnpj.py)), e o cenário BDD `@validacao` prova a recusa no CD |
 | Commits diretos na `main`; exigir PR | Os quatro repositórios ganharam o ruleset no dia da criação, e nenhum commit direto entrou além do `Initial commit` ([seção 2](#2-repositórios-e-estado-do-cicd) e [B8](#b8--proteção-da-main)) |
 | Dashboards de negócio em JSON separado e documentado | Quatro dashboards de negócio em JSON próprio, cada painel documentado em [`negocio.md`](../../../observabilidade/negocio.md), com teste que reprova a divergência ([seção 11](#11-observabilidade)) |
-| Material muito extenso; concentrar num índice os artefatos pedidos (componentes, sequências, RFCs, ADRs e ER) | O documento abre com o [índice dos artefatos](#índice-dos-artefatos), com seção, página e link, e o detalhe dos READMEs ficou neles |
+| Material muito extenso; concentrar num índice os artefatos pedidos (componentes, sequências, RFCs, ADRs e ER) | O documento abre com o [índice dos artefatos](#índice-dos-artefatos), com seção, página e link; os READMEs dos quatro repositórios têm de 168 a 196 linhas, e os três dos serviços seguem o mesmo esqueleto, com o detalhe em `docs/` |
 | Vídeo, repositório extra e observação geral | Sem pendência; a entrega tem só os quatro repositórios da seção 2 |
 
 ## 14. Pendências até a submissão
