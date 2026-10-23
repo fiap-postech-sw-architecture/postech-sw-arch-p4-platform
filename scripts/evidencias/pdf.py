@@ -43,8 +43,9 @@ ESCALA = 1.25
 # Limite de resolução das imagens na página. As miniaturas do Anexo B, quatro por
 # linha a 40 mm, chegam a 889 ppi e pesam o dobro sem ganho de leitura; 450 ppi só
 # reamostra essas, e as capturas em duas colunas (418 ppi) ficam como estão. Um
-# limite abaixo do ppi da maioria (400, 350, 300) deixava o PDF maior: o
-# weasyprint reamostra com ruído, e o PNG comprime pior.
+# limite abaixo de 418 (400, 350, 300) reamostra também as capturas e deixa o PDF
+# maior que o de 450 (de 25 a 300 KB): o weasyprint reamostra com ruído, e o PNG
+# comprime pior.
 DPI_MAXIMO = 450
 # Linha da tabela de participantes do documento: | Nome | RM123456 | Discord |
 PARTICIPANTE = re.compile(r"^\| ([^|\n]+?) \| (RM\d+) \|", re.M)
