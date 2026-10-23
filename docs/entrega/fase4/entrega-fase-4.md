@@ -32,12 +32,12 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | Diagrama geral: microsserviços, bancos e comunicação | [4.1](#41-diagrama-geral) | [RFC-004, seção 2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#2-diagrama-geral-da-arquitetura) |
 | Estratégia escolhida para o Saga Pattern | [6](#6-estratégia-da-saga) | [ADR-035](../../arquitetura/adr/fase4/035-saga-orquestrada.md); [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
 | Justificativa da divisão dos microsserviços e das tecnologias | [5](#5-divisão-dos-serviços-e-tecnologias) | [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md), [ADR-037](../../arquitetura/adr/fase4/037-banco-por-servico.md) |
-| Diagrama de componentes: processos, filas e integrações | [4.2](#42-componentes-e-integrações) | [RFC-004, processos e integrações](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#processos-e-integrações) |
-| Sequências da saga: caminho feliz, orçamento recusado ou expirado, falta de peça e cancelamento com estorno | [6.3](#63-caminho-feliz) e [6.4](#64-compensações-principais) | [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) |
+| Diagrama de componentes: processos, filas e integrações | [4.3](#43-componentes-e-integrações) | [RFC-004, processos e integrações](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#processos-e-integrações) |
+| Sequências da saga: caminho feliz, orçamento recusado ou expirado, falta de peça e cancelamento com estorno | [6.4](#64-caminho-feliz) e [6.5](#65-compensações-principais) | [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) |
 | RFC-004, o desenho integrado, com os estados da saga e da OS, o mapa de contextos e a topologia do RabbitMQ | só no repositório | [rfc-004-microsservicos-saga.md](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) |
 | ADRs 034 a 043 | [5.3](#53-tecnologias-e-decisões) | [decisões da fase 4](../../arquitetura/adr/fase4/) |
 | Modelo de dados: ER do OS Service e da Execução e modelo dos documentos do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
-| Contratos de mensageria | [4.3](#43-comunicação-entre-os-serviços) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
+| Contratos de mensageria | [4.2](#42-comunicação-entre-os-serviços) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
 | Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [B2](#b2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
 | CI/CD e deploy em Kubernetes | [9](#9-cicd-e-deploy) | [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) |
 | Segurança e relatório de vulnerabilidades | [10](#10-segurança-e-análise-de-vulnerabilidades) | [registro de segurança](evidencias/seguranca.md); [ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md) |
@@ -111,9 +111,19 @@ flowchart TB
     mp -->|webhook| kong
 ```
 
-### 4.2 Componentes e integrações
+### 4.2 Comunicação entre os serviços
 
-Cada serviço roda processos separados, um Deployment para cada: a `api`, o `consumidor` (lê a fila do serviço), o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago). O OS Service tem ainda o `notificador`, que entrega os e-mails ao cliente por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois. O cliente da oficina não tem login: acompanha a OS pela rota pública, decide o orçamento por um link assinado e paga no checkout do Mercado Pago, cujo webhook entra pelo Kong. Cada serviço roda no próprio namespace (`pytstop-os`, `pytstop-billing` e `pytstop-execucao`), e a plataforma, em `pytstop-plataforma`.
+A regra é REST quando quem chama precisa da resposta para continuar e a operação só lê, e mensagem quando a operação muda estado em outro serviço ([ADR-038](../../arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md)).
+
+**Mensageria.** No RabbitMQ 4.3.6 ([ADR-036](../../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)), comandos saem do OS Service pela exchange `pytstop.comandos` para as filas `billing.comandos` e `execucao.comandos`, e eventos voltam pela `pytstop.eventos` para a `os.eventos`, lida só pelo orquestrador. Cada fila de trabalho tem cinco filas de retry por atraso e uma DLQ: 21 filas quorum, declaradas num `definitions.json` do `platform` ([RFC-004, seção 5.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#51-topologia)). Cada serviço conecta com usuário próprio, sem permissão de configure, e só publica as próprias routing keys.
+
+**Contratos.** Toda mensagem usa o mesmo envelope JSON, com `correlation_id` igual ao `ordem_id`, `causation_id` e o `traceparent` nos headers AMQP. São 34 mensagens, 11 comandos e 23 eventos, cada uma com um JSON Schema, reunidos em [AsyncAPI 3.0](../../../contratos/asyncapi.yaml); cada serviço valida os schemas que usa em teste de contrato no CI.
+
+**REST síncrono.** Na conclusão do diagnóstico, a Execução valida os códigos de serviço e de peça no Billing (`POST /api/v1/precos/validacao`), com timeout de 2 s, 2 retries com jitter e circuit breaker que abre com 5 falhas e fica aberto por 30 s; com o circuito aberto, a conclusão responde 503 e não grava nada. A chamada é síncrona porque o mecânico precisa saber na hora que um código não existe.
+
+### 4.3 Componentes e integrações
+
+Cada serviço roda um Deployment por processo: a `api`, o `consumidor` (lê a fila do serviço), o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que entrega os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois. O cliente da oficina não tem login: acompanha a OS por uma rota pública, decide o orçamento por um link assinado e paga no checkout do Mercado Pago. Cada serviço tem o próprio namespace (`pytstop-os`, `pytstop-billing` e `pytstop-execucao`), e a plataforma, o `pytstop-plataforma`.
 
 ```mermaid
 ---
@@ -189,16 +199,6 @@ flowchart TB
     os & exe & bil -.->|"OTLP · /metrics · logs"| obs
 ```
 
-### 4.3 Comunicação entre os serviços
-
-A regra é REST quando quem chama precisa da resposta para continuar e a operação só lê, e mensagem quando a operação muda estado em outro serviço ([ADR-038](../../arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md)).
-
-**Mensageria.** No RabbitMQ 4.3.6 ([ADR-036](../../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)), comandos saem do OS Service pela exchange `pytstop.comandos` para as filas `billing.comandos` e `execucao.comandos`, e eventos voltam pela `pytstop.eventos` para a `os.eventos`, lida só pelo orquestrador. Cada fila de trabalho tem cinco filas de retry por atraso e uma DLQ: 21 filas quorum, declaradas num `definitions.json` do `platform`. Cada serviço conecta com usuário próprio, sem permissão de configure, e só publica as próprias routing keys. A topologia está na [RFC-004, seção 5.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#51-topologia).
-
-**Contratos.** Toda mensagem usa o mesmo envelope JSON, com `correlation_id` igual ao `ordem_id`, `causation_id` e o `traceparent` nos headers AMQP. São 34 mensagens, 11 comandos e 23 eventos, cada uma com um JSON Schema, e o conjunto está em [AsyncAPI 3.0](../../../contratos/asyncapi.yaml); cada serviço valida os schemas que usa em teste de contrato no CI.
-
-**REST síncrono.** Na conclusão do diagnóstico, a Execução valida os códigos de serviço e de peça no Billing (`POST /api/v1/precos/validacao`), com timeout de 2 s, 2 retries com jitter e circuit breaker que abre com 5 falhas e fica aberto por 30 s; com o circuito aberto, a conclusão responde 503 e não grava nada. A chamada é síncrona porque o mecânico precisa saber na hora que um código não existe.
-
 ## 5. Divisão dos serviços e tecnologias
 
 ### 5.1 Critérios do recorte
@@ -250,15 +250,15 @@ Cada ADR traz contexto, decisão, alternativas e consequências, e a [RFC-004](.
 A saga é orquestrada. O OS Service é o orquestrador: envia comandos aos outros dois serviços pelo RabbitMQ, e os participantes respondem com eventos, sem conhecer a saga. A justificativa está no [ADR-035](../../arquitetura/adr/fase4/035-saga-orquestrada.md) e no [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração), como pede o enunciado:
 
 - **O tamanho da saga.** São nove passos (T1 a T9) em três serviços, mais a entrega local (T10), com esperas humanas, um provedor externo e seis compensações. A Aula 02 de SAGA Pattern, citando Richardson, recomenda a coreografia para sagas simples, e esta não é.
-- **Um lugar que sabe a etapa.** Com coreografia, os passos ficariam espalhados, sem um lugar que diga em que etapa a OS está; prazos, ordem das compensações e o ponto sem retorno exigiriam que cada serviço assinasse eventos dos outros dois, com risco de ciclo.
+- **Um lugar que sabe a etapa.** Com coreografia, os passos ficariam espalhados, e prazos, ordem das compensações e o ponto sem retorno exigiriam que cada serviço assinasse eventos dos outros dois, com risco de ciclo.
 - **Orquestrador no serviço que inicia a saga.** Como nos exemplos do material, o orquestrador fica no OS Service, e não num quarto serviço: etapa da saga e status da OS mudam na mesma transação local.
 - **Os contras, contidos.** O orquestrador só conhece a ordem dos passos, as compensações e os prazos; preço, validade e pagamento ficam com os participantes. Ele também não perde estado quando cai: o estado fica no banco, as mensagens em filas duráveis, e o consumidor recriado pelo Kubernetes segue do ponto gravado; com uma réplica, a saga espera a recriação.
 
-Ficaram de fora a coreografia, o orquestrador como quarto serviço (status da OS e etapa da saga em bancos diferentes), um motor de workflow como Temporal, Camunda ou AWS Step Functions (servidor e banco próprios no cluster) e o Apache Camel das aulas (Java, e as rotas do exemplo não guardam estado nem compensam).
+Ficaram de fora a coreografia, o orquestrador como quarto serviço, um motor de workflow (Temporal, Camunda ou AWS Step Functions, com servidor e banco próprios no cluster) e o Apache Camel das aulas (Java, e as rotas do exemplo não guardam estado nem compensam).
 
 ### 6.2 Passos e compensações
 
-Há uma instância da saga por OS (`saga_id = ordem_id`, que também é o `correlation_id` das mensagens), gravada na tabela `sagas`, no mesmo PostgreSQL da outbox. A etapa é o estado do orquestrador; o status é o que o cliente e o atendente veem na OS. Os diagramas de estado das duas estão na [RFC-004, seções 4.1 e 4.2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#41-etapas-da-instância).
+Há uma instância da saga por OS (`saga_id = ordem_id`, também o `correlation_id` das mensagens), na tabela `sagas`, no mesmo PostgreSQL da outbox. A etapa é o estado do orquestrador; o status é o que o cliente e o atendente veem na OS. Os diagramas de estado das duas estão na [RFC-004, seções 4.1 e 4.2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#41-etapas-da-instância).
 
 | Passo (dono) | Comando | Sucesso | Falha de negócio | Compensação |
 |---|---|---|---|---|
@@ -275,7 +275,7 @@ Há uma instância da saga por OS (`saga_id = ordem_id`, que também é o `corre
 
 A reserva (T5) vem antes do pagamento (T6), como no exemplo da Aula 01 de SAGA Pattern, e a OS só entra na fila de execução (T7) com o pagamento confirmado (RN-027): a falta de peça aparece antes da cobrança. O pivot é o início da execução física (T8): depois que o mecânico começa a desmontar o carro, o trabalho não se desfaz por mensagem, e o cancelamento passa a responder 409 `TRANSICAO_STATUS_INVALIDA` (RN-029). Até ali tudo compensa, inclusive o pagamento, por estorno.
 
-As compensações rodam em sequência, cada uma esperando a resposta da anterior, na ordem inversa dos passos. O plano inclui os passos concluídos e o passo em andamento, cujo comando saiu e ainda não teve resposta; o passo que falhou por regra de negócio fica de fora, porque o participante já o encerrou. Todo plano concluído termina com a OS `CANCELADA` e a saga `COMPENSADA`; se uma compensação esgota os reenvios, a saga para em `FALHA_NA_COMPENSACAO` ([6.5](#65-idempotência-novas-tentativas-e-prazos)).
+As compensações rodam em sequência, cada uma esperando a resposta da anterior, na ordem inversa dos passos. O plano inclui os passos concluídos e o passo em andamento, cujo comando saiu e ainda não teve resposta; o passo que falhou por regra de negócio fica de fora, porque o participante já o encerrou. Todo plano concluído termina com a OS `CANCELADA` e a saga `COMPENSADA`; se uma compensação esgota os reenvios, a saga para em `FALHA_NA_COMPENSACAO` ([6.3](#63-idempotência-novas-tentativas-e-prazos)).
 
 | Etapa da saga | Gatilho | Compensações, em ordem |
 |---|---|---|
@@ -293,9 +293,17 @@ As compensações rodam em sequência, cada uma esperando a resposta da anterior
 
 O `EstornarPagamento` compensa o T6 em qualquer estado do pagamento: com a cobrança aberta, o Billing a cancela; com o pagamento confirmado, estorna no Mercado Pago com a chave de idempotência `estorno-{pagamento_id}`. Uma aprovação que chega depois do cancelamento, da expiração ou da recusa é estornada pelo próprio Billing.
 
-### 6.3 Caminho feliz
+### 6.3 Idempotência, novas tentativas e prazos
 
-No caminho feliz, a OS passa pelo diagnóstico, com a validação de preços no Billing, pelo orçamento enviado por e-mail e aprovado pelo cliente, pela reserva de peças e pelo pagamento no Mercado Pago, confirmado pelo webhook ou pela conciliação em até 30 s; depois vêm o agendamento, o início (o pivot), a finalização com a baixa das peças e a entrega. Nos diagramas de sequência, setas de ponta aberta são mensagens assíncronas (outbox, relay, fila e consumidor), e as chamadas REST de fora do cluster passam pelo Kong, omitido. O caminho vem em dois diagramas, de T1 a T4 e de T5 a T10, com a numeração das mensagens contínua.
+**Outbox e consumidor idempotente.** Nos três serviços, a mensagem de saída é gravada na transação do efeito, e o relay só a marca como entregue depois da confirmação do broker; com o broker fora, as mensagens esperam na outbox. O consumidor grava o `id` da mensagem em `mensagens_processadas` na mesma transação do efeito: evento repetido não repete efeito, e comando repetido, pelo `id` ou pela chave de negócio (uma reserva por OS, uma cobrança por orçamento), republica a resposta registrada (RN-028).
+
+**Isolamento.** A saga não tem o "I" do ACID, e o ADR-035 aplica as contramedidas da Aula 03 de SAGA Pattern: cada transição relê a OS e a instância e grava conferindo a versão (lock otimista), o estorno só sai depois de `ExecucaoCancelada`, e a compensação que chega antes do comando original cria o registro já no estado final.
+
+**Novas tentativas, DLQ e prazos.** Erro transitório volta à fila pelas filas de retry de 1, 5, 15, 60 e 300 s; a falha seguinte à quinta, ou um erro permanente, manda a mensagem para a DLQ, que dispara o alerta. O orquestrador espera 120 s pela resposta a cada comando e reenvia até 5 vezes; esgotados os reenvios, a saga compensa. Uma compensação que também esgota os reenvios, ou um estorno recusado, leva a saga a `FALHA_NA_COMPENSACAO`, e o operador retoma pelo [runbook da saga](../../operacao/runbook-saga.md). Os prazos e os parâmetros estão na [RFC-004, seções 4.6 e 10.3](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#103-parâmetros-e-variáveis-de-ambiente).
+
+### 6.4 Caminho feliz
+
+No caminho feliz, a OS passa pelo diagnóstico, com a validação de preços no Billing, pelo orçamento enviado por e-mail e aprovado pelo cliente, pela reserva de peças e pelo pagamento no Mercado Pago, confirmado pelo webhook ou pela conciliação em até 30 s; depois vêm o agendamento, o início (o pivot), a finalização com a baixa das peças e a entrega. O caminho vem em dois diagramas, de T1 a T4 e de T5 a T10, com a numeração das mensagens contínua. Nos diagramas de sequência, setas de ponta aberta são mensagens assíncronas (outbox, relay, fila e consumidor), e as chamadas REST de fora do cluster passam pelo Kong, omitido.
 
 ```mermaid
 sequenceDiagram
@@ -381,7 +389,7 @@ sequenceDiagram
     Note over AT,OS: T10: OS ENTREGUE (fora da saga)
 ```
 
-### 6.4 Compensações principais
+### 6.5 Compensações principais
 
 **Orçamento recusado ou expirado.** O cliente recusa pelo link, ou a validade vence sem decisão. O orçamento já está encerrado no Billing, então a saga só descarta o diagnóstico e cancela a OS (RN-024).
 
@@ -432,8 +440,6 @@ sequenceDiagram
     OS->>OS: OS CANCELADA com motivo, saga COMPENSADA
 ```
 
-**Cancelamento depois do pagamento, com estorno.** Com a OS paga e na fila, o atendente cancela e recebe 202 com a etapa `COMPENSANDO`. A execução sai da fila antes do estorno, para nenhum mecânico começar o reparo de uma OS com o pagamento devolvido. O Billing confere o pagamento no Mercado Pago e estorna; se o provedor recusar o estorno, a saga vai a `FALHA_NA_COMPENSACAO` e espera o operador.
-
 ```mermaid
 sequenceDiagram
     autonumber
@@ -475,21 +481,26 @@ sequenceDiagram
     Note over AT,MP: depois de ExecucaoIniciada (pivot), o mesmo POST responde 409
 ```
 
+**Cancelamento depois do pagamento, com estorno** (diagrama anterior). Com a OS paga e na fila, o atendente cancela e recebe 202 com a etapa `COMPENSANDO`. A execução sai da fila antes do estorno, para nenhum mecânico começar o reparo de uma OS com o pagamento devolvido. O Billing confere o pagamento no Mercado Pago e estorna; se o provedor recusar o estorno, a saga vai a `FALHA_NA_COMPENSACAO` e espera o operador.
+
 **Pagamento recusado ou vencido.** Por padrão, na terceira recusa ou em 60 minutos. Nada foi cobrado, então a saga segue o diagrama do cancelamento com estorno a partir do passo 12, `LiberarReserva`, sem estorno (RN-025), como diz a [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências); o cenário BDD do pagamento recusado confere a ordem ([seção 8](#8-testes-e-qualidade)).
-
-### 6.5 Idempotência, novas tentativas e prazos
-
-**Outbox e consumidor idempotente.** Nos três serviços, a mensagem de saída é gravada na transação do efeito, e o relay só a marca como entregue depois da confirmação do broker; com o broker fora, as mensagens esperam na outbox. O consumidor grava o `id` da mensagem em `mensagens_processadas` na mesma transação do efeito: evento repetido não repete efeito, e comando repetido, pelo `id` ou pela chave de negócio (uma reserva por OS, uma cobrança por orçamento), republica a resposta registrada (RN-028).
-
-**Isolamento.** A saga não tem o "I" do ACID, e o ADR-035 aplica as contramedidas da Aula 03 de SAGA Pattern: cada transição relê a OS e a instância e grava conferindo a versão (lock otimista), o estorno só sai depois de `ExecucaoCancelada`, e a compensação que chega antes do comando original cria o registro já no estado final.
-
-**Novas tentativas, DLQ e prazos.** Erro transitório volta à fila pelas filas de retry de 1, 5, 15, 60 e 300 s; a falha seguinte à quinta, ou um erro permanente, manda a mensagem para a DLQ, que dispara o alerta. O orquestrador espera 120 s pela resposta a cada comando e reenvia até 5 vezes; esgotados os reenvios, a saga compensa. Uma compensação que também esgota os reenvios, ou um estorno recusado, leva a saga a `FALHA_NA_COMPENSACAO`, e o operador retoma pelo [runbook da saga](../../operacao/runbook-saga.md). Os prazos e os parâmetros estão na [RFC-004, seções 4.6 e 10.3](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#103-parâmetros-e-variáveis-de-ambiente).
 
 ## 7. Modelo de dados
 
 Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele, e a NetworkPolicy de cada namespace só deixa o próprio namespace chegar ao banco. Os diagramas mostram as tabelas de que a saga e os contratos dependem; o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
 
 **OS Service (PostgreSQL 16).** Clientes, veículos, consentimentos, usuários e tokens revogados vêm da fase 3; o documento do cliente fica cifrado, com um hash para a busca. A OS ganhou versão para o lock otimista e o resumo do orçamento e do pagamento, copiado dos eventos. O histórico só recebe inserções, `sagas` guarda a instância da saga e `notificacoes`, os e-mails do `notificador`.
+
+**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio.
+
+**Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. A tabela é a das coleções da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7), que traz também o exemplo de documento; o [`docs/arquitetura.md` do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) detalha o modelo campo a campo, com três acréscimos: um índice da outbox, dois campos de `mensagens_processadas` e a coleção `versao_do_banco`.
+
+| Coleção | Índices |
+|---|---|
+| `precos_servicos`, `precos_pecas` | únicos `{codigo: 1}` e `{sku: 1}`; o `sku` liga a peça ao estoque da Execução |
+| `orcamentos` | único `{ordem_id: 1}` (um orçamento por OS, imutável depois de gerado, com os preços congelados nas linhas; RN-013 e RN-016 da fase 3) e `{status: 1, valido_ate: 1}` para a expiração; o subtotal de cada linha não é gravado |
+| `pagamentos` | único e parcial `{orcamento_id: 1}` (uma cobrança por orçamento, RF-032; a lápide não tem orçamento); único `{ordem_id: 1}`, pelo qual a compensação acha a cobrança; único e parcial `{referencia_pagamento: 1}`, para o webhook; `{status: 1, expira_em: 1}` para a expiração e a conciliação |
+| `outbox`, `mensagens_processadas` | `{status: 1, proxima_tentativa_em: 1, _id: 1}` para o *claim*; `_id` igual ao `id` da mensagem; índices TTL (apagam sozinhos) em `entregue_em` (7 dias, só `entregue`), `morta_em` (30 dias, só `dead`) e `processada_em` (30 dias) |
 
 ```mermaid
 ---
@@ -604,9 +615,6 @@ erDiagram
     ordens_de_servico ||--|| sagas : "saga_id = ordem_id"
     ordens_de_servico ||--o{ notificacoes : "e-mails ao cliente"
 ```
-
-**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio.
-
 ```mermaid
 erDiagram
     itens_estoque {
@@ -676,15 +684,6 @@ erDiagram
 
     itens_estoque }o--o{ reservas : "sku nos itens"
 ```
-
-**Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. A tabela é a das coleções da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7), que traz também o exemplo de documento; o [`docs/arquitetura.md` do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) detalha esse modelo campo a campo, com três acréscimos que ele mesmo lista: um índice da outbox, dois campos de `mensagens_processadas` e a coleção `versao_do_banco`.
-
-| Coleção | Índices |
-|---|---|
-| `precos_servicos`, `precos_pecas` | únicos `{codigo: 1}` e `{sku: 1}`; o `sku` liga a peça ao estoque da Execução |
-| `orcamentos` | único `{ordem_id: 1}`: um orçamento por OS, imutável depois de gerado, com os preços congelados nas linhas (RN-013 e RN-016 do p3); `{status: 1, valido_ate: 1}` para a expiração. O subtotal de cada linha não é gravado: é a quantidade vezes o preço |
-| `pagamentos` | único e parcial `{orcamento_id: 1}`, só nos documentos que têm o campo (uma cobrança por orçamento, RF-032; a lápide não tem orçamento); único `{ordem_id: 1}`, pelo qual a compensação acha a cobrança; único e parcial `{referencia_pagamento: 1}`, só quando é texto, para o webhook; `{status: 1, expira_em: 1}` para a expiração e a conciliação |
-| `outbox`, `mensagens_processadas` | `{status: 1, proxima_tentativa_em: 1, _id: 1}` para o *claim*; `_id` igual ao `id` da mensagem; índices TTL (apagam sozinhos) em `entregue_em` (7 dias, só `entregue`), `morta_em` (30 dias, só `dead`) e `processada_em` (30 dias) |
 
 ## 8. Testes e qualidade
 
@@ -834,7 +833,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-042 | Pipeline independente até o Kubernetes | CD aprovado nos três ([seção 9](#9-cicd-e-deploy)) |
 | RNF-043 | `main` protegida | ruleset nos quatro ([B8](#b8--proteção-da-main); [conferência](evidencias/protecao-da-main.md)) |
 | RNF-044 | Um repositório por serviço | [seção 2](#2-repositórios-e-estado-do-cicd) |
-| RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.3](#43-comunicação-entre-os-serviços)) |
+| RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.2](#42-comunicação-entre-os-serviços)) |
 | RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); nove dashboards sobre um Prometheus com mais de três dias de dados (cinco na janela inteira, quatro nos nove minutos do último `make demo`) no [Anexo B, B7](#b7--dashboards-do-grafana) |
 | RNF-047 | Código-fonte | `src/` de cada serviço |
 | RNF-048 | Dockerfile e manifestos | imagem e deploy em cada CD |
@@ -844,7 +843,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-052 | Swagger ou Postman | OpenAPI e collection por serviço; Newman no CD |
 | RNF-053 | Vídeo de até 15 minutos | pendente: gravação ([seção 3](#3-link-do-vídeo)) |
 | RNF-054 | PDF com os seis itens | este documento; submissão pendente |
-| RNF-055 | Timeout, retry, DLQ e circuit breaker | BDD de resiliência ([seção 6.5](#65-idempotência-novas-tentativas-e-prazos)) |
+| RNF-055 | Timeout, retry, DLQ e circuit breaker | BDD de resiliência ([seção 6.3](#63-idempotência-novas-tentativas-e-prazos)) |
 | RNF-056 | Rastreamento distribuído | trace nos três serviços ([Anexo B, B3](#b3--trace-da-saga-no-jaeger)); o do Mercado Pago pendente |
 | RN-023 | Compensação em qualquer etapa | plano de compensação ([seção 6.2](#62-passos-e-compensações)); quatro cenários BDD |
 | RN-024 | Orçamento recusado ou expirado | BDD: recusa pelo link e expiração |
