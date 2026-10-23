@@ -318,7 +318,7 @@
     {
       "id": 6,
       "title": "Duração por etapa (p95)",
-      "description": "Percentil 95 da permanência em cada etapa no período, medido quando a saga sai da etapa.",
+      "description": "Percentil 95 da permanência em cada etapa no período, medido quando a saga sai da etapa. É estimado pelos baldes do histograma (de 50 ms a 7 dias): etapas cujas saídas caíram no mesmo balde mostram o mesmo valor, e com poucas saídas ele só diz em que balde elas caíram.",
       "type": "bargauge",
       "gridPos": {
         "h": 8,

@@ -209,7 +209,7 @@
     {
       "id": 3,
       "title": "Tempo até a decisão",
-      "description": "Tempo entre a geração do orçamento e a decisão pelo link ou pelo atendente, por decisão: média e percentil 90. O orçamento expira em 72 h; expirados não entram aqui (painel 1).",
+      "description": "Tempo entre a geração do orçamento e a decisão pelo link ou pelo atendente, por decisão: média e percentil 90. A média é exata. O percentil é estimado pelos baldes do histograma (de 0,1 s a 72 h) e só aparece com 10 decisões ou mais no período, porque com menos ele só diz em que balde elas caíram. O orçamento expira em 72 h; expirados não entram aqui (painel 1).",
       "type": "bargauge",
       "gridPos": {
         "h": 8,
@@ -273,7 +273,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "histogram_quantile(0.9, sum by (le, decisao) (increase(pytstop_orcamentos_tempo_decisao_segundos_bucket[$__range])))",
+          "expr": "histogram_quantile(0.9, sum by (le, decisao) (increase(pytstop_orcamentos_tempo_decisao_segundos_bucket[$__range]))) and on (decisao) (sum by (decisao) (increase(pytstop_orcamentos_tempo_decisao_segundos_count[$__range])) >= 10)",
           "legendFormat": "p90 {{decisao}}",
           "instant": true
         }
