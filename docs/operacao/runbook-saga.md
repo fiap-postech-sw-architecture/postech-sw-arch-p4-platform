@@ -43,7 +43,7 @@ A API, o banco e as métricas escrevem etapa e status em minúsculas (`falha_na_
    kubectl --context kind-pytstop-p4 -n pytstop-plataforma get secret rabbitmq-credenciais -o jsonpath='{.data.admin-senha}' | base64 -d; echo
    ```
 
-4. Defina os endereços das APIs, que respondem pela borda do kind, e entre como `admin` do OS Service. O e-mail do admin semeado é o `ADMIN_EMAIL` do ConfigMap do serviço, e a senha está na chave `ADMIN_PASSWORD` do Secret `os-admin`, gerado pelo deploy, os dois no namespace `pytstop-os` ([Segredos gerados](../../README.md#segredos-gerados)). O ConfigMap se acha pela chave, sem depender do nome dele. A senha fica numa variável do shell, não exportada, que só o `jq` recebe, no ambiente dele, e sai do shell logo depois do login; ao `curl` ela chega pela entrada padrão, sem aparecer na lista de processos:
+4. Defina os endereços das APIs, que respondem pela borda do kind, e entre como `admin` do OS Service. O e-mail do admin semeado é o `ADMIN_EMAIL` do ConfigMap do serviço, e a senha está na chave `ADMIN_PASSWORD` do Secret `os-admin`, gerado pelo deploy, os dois no namespace `pytstop-os` ([Segredos gerados](../segredos.md#segredos-gerados)). O ConfigMap se acha pela chave, sem depender do nome dele. A senha fica numa variável do shell, não exportada, que só o `jq` recebe, no ambiente dele, e sai do shell logo depois do login; ao `curl` ela chega pela entrada padrão, sem aparecer na lista de processos:
 
    ```bash
    OS=http://localhost/os BILLING=http://localhost/billing EXECUCAO=http://localhost/execucao
@@ -263,7 +263,7 @@ Reprocessar é um `UPDATE` no banco do serviço, uma linha por vez. Não passa p
 
    O `UPDATE` devolve o `id` da linha que mudou, e nenhuma linha se ela já não estava `dead`. Ele não emite `NOTIFY`: o relay a pega no próximo ciclo de poll (`OUTBOX_POLL_SEGUNDOS`).
 
-   No Billing (MongoDB), a linha é um documento da coleção `outbox` do banco `billing`, com o `_id` igual ao `id` da mensagem. O `mongosh` lê o script como arquivo (`--file /dev/stdin`), e o contêiner autentica como root com a variável do próprio contêiner; se a senha do root foi trocada sem reiniciar o StatefulSet, ela está defasada ([troca de senha do banco](../../README.md#troca-de-senha-do-banco)). Primeiro, a leitura:
+   No Billing (MongoDB), a linha é um documento da coleção `outbox` do banco `billing`, com o `_id` igual ao `id` da mensagem. O `mongosh` lê o script como arquivo (`--file /dev/stdin`), e o contêiner autentica como root com a variável do próprio contêiner; se a senha do root foi trocada sem reiniciar o StatefulSet, ela está defasada ([troca de senha do banco](../segredos.md#troca-de-senha-do-banco)). Primeiro, a leitura:
 
    ```bash
    kubectl --context kind-pytstop-p4 -n pytstop-billing exec -i statefulset/billing-mongo -c mongo -- \

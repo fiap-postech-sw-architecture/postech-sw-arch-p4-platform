@@ -2,7 +2,7 @@
 
 > [↑ Raiz do projeto](../../README.md)
 
-Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a `main` de cada repositório) no mesmo cluster kind, com os scripts de implantação e de smoke do [Contrato com os serviços](../../README.md#contrato-com-os-serviços). Mediu a memória e a CPU de cada pod contra o orçamento do [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md).
+Registro do ensaio de 14/10/2026: a plataforma e os três serviços **reais** (a `main` de cada repositório) no mesmo cluster kind, com os scripts de implantação e de smoke do [Contrato com os serviços](../contrato-com-os-servicos.md#contrato-com-os-serviços). Mediu a memória e a CPU de cada pod contra o orçamento do [ADR-042](../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md).
 
 Na época do ensaio, o OS Service ainda não tinha os processos `prazos` e `notificador` na `main`; a medida deles, feita com as branches então abertas, está em [Medida adicional](#medida-adicional-prazos-e-notificador-do-os-service). Os dois já entraram na `main` do OS Service (`notificador` em `b310889`, `prazos` em `593471d`). O que mudou nos repositórios desde o ensaio está em [Depois do ensaio](#depois-do-ensaio).
 
@@ -54,7 +54,7 @@ Antes de fechar a fase, o ensaio deve ser repetido sobre a `main` mais recente d
 | OS Service | `main` em `fda0672` |
 | Billing Service | `main` em `0fed78b` |
 | Execution Service | `main` em `0c34ed7` |
-| Imagens de terceiros | as da [tabela de versões](../../README.md#componentes-e-versões): `postgres:16.15`, `mongo:7.0.43`, `prometheuscommunity/postgres-exporter:v0.20.1`, `percona/mongodb_exporter:0.53.0`, `rabbitmq:4.3.6-management`, `kong:3.9.3`, entre outras |
+| Imagens de terceiros | as da [tabela de versões](../componentes-e-versoes.md#componentes-e-versões): `postgres:16.15`, `mongo:7.0.43`, `prometheuscommunity/postgres-exporter:v0.20.1`, `percona/mongodb_exporter:0.53.0`, `rabbitmq:4.3.6-management`, `kong:3.9.3`, entre outras |
 | Imagens dos serviços | `docker build` do checkout de cada `main`, com o commit como tag (`pytstop-<serviço>:<commit>`), 357 a 437 MB cada (`docker images`, em [Provas avulsas](ensaio-integrado-medidas.md#provas-avulsas)) |
 
 Os números abaixo vêm de uma máquina arm64 com as imagens de terceiros e as camadas do `docker build` já em cache. O runner do CD é amd64, com 4 vCPU e 16 GB, e puxa as imagens a cada job. Por isso:
