@@ -121,7 +121,7 @@ O [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `main`, sob d
 
 ### CD reutilizável dos serviços
 
-O [`cd-servico.yml`](.github/workflows/cd-servico.yml) oferece, por `workflow_call`, os jobs `image` (publica a imagem no GHCR, com SBOM e proveniência), `deploy-kind` (kind efêmero no runner, com smoke e BDD), `deploy-remote` (deploy num cluster persistente, desligado) e `remote-skipped`. Os três serviços o chamam, fixado por SHA, e mantêm só os gatilhos, o CI e a segurança. O SHA é trocado à mão em cada serviço depois do CD do platform verde, porque o platform não publica tag nem release. Os três já tiveram o primeiro CD da `main` aprovado ([provas](docs/entrega/fase4/evidencias/README.md#cd-compartilhado-dos-serviços)).
+O [`cd-servico.yml`](.github/workflows/cd-servico.yml) oferece, por `workflow_call`, os jobs `image` (publica a imagem no GHCR, com SBOM e proveniência), `deploy-kind` (kind efêmero no runner, com smoke e BDD), `deploy-remote` (deploy num cluster persistente, desligado) e `remote-skipped`. Os três serviços o chamam, fixado por SHA, e mantêm só os gatilhos, o CI e a segurança. O SHA é trocado à mão em cada serviço depois do CD do platform verde, porque o platform não publica tag nem release. Os três já tiveram o primeiro CD da `main` aprovado ([provas](docs/entrega/fase4/evidencias/README.md#cd-compartilhado-dos-serviços)). Entradas, permissões e o gancho remoto: [docs/ci-cd.md](docs/ci-cd.md#cd-reutilizável-dos-serviços).
 
 ### Job `e2e`: a saga e a borda com os três serviços
 
