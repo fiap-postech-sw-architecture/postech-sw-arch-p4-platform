@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import math
 import re
+import sys
 from pathlib import Path
 
 import pytest
@@ -142,6 +143,18 @@ def test_so_a_versao_compacta_limita_a_resolucao_das_imagens() -> None:
         "entrega.html",
         "entrega.pdf",
     ]
+
+
+@pytest.mark.parametrize("valor", ["0", "-5"])
+def test_dpi_zero_ou_negativo_e_recusado_antes_do_build(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, valor: str
+) -> None:
+    saida = tmp_path / "entrega.pdf"
+    monkeypatch.setattr(sys, "argv", ["pdf", "--output", str(saida), "--dpi", valor])
+
+    with pytest.raises(SystemExit):
+        pdf.main()
+    assert not saida.exists()
 
 
 def test_a_classe_paisagem_do_gerador_tem_pagina_deitada_no_css() -> None:

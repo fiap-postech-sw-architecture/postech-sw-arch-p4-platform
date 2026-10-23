@@ -172,10 +172,11 @@ def executar(argumentos: list[str]) -> None:
     subprocess.run([ferramenta, *argumentos[1:]], check=True)  # noqa: S603  # nosec B603
 
 
-def comando_weasyprint(html: Path, destino: Path, dpi: int | None) -> list[str]:
+def comando_weasyprint(entrada: Path, destino: Path, dpi: int | None) -> list[str]:
     """Sem ``dpi`` as capturas entram na resolução original; com ele, o weasyprint
     reduz as imagens maiores (a versão compacta, de reserva para o portal)."""
-    return ["weasyprint", *(["-D", str(dpi)] if dpi else []), str(html), str(destino)]
+    limite = ["-D", str(dpi)] if dpi is not None else []
+    return ["weasyprint", *limite, str(entrada), str(destino)]
 
 
 def main() -> int:
@@ -187,6 +188,8 @@ def main() -> int:
         "--dpi", type=int, help="limite de resolução das imagens (versão compacta)"
     )
     args = parser.parse_args()
+    if args.dpi is not None and args.dpi <= 0:
+        parser.error("--dpi precisa ser positivo")
     raiz = Path(__file__).resolve().parents[2]
     destino = args.output.expanduser().resolve()
     if destino.is_relative_to(raiz):
