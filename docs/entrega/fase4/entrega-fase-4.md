@@ -22,7 +22,7 @@ Os repositórios são a fonte de verdade. Este documento traz o que o avaliador 
 
 ## Índice dos artefatos
 
-As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais reúnem os artefatos que a avaliação da fase 3 pediu num índice só (componentes, sequências, RFC, ADRs e modelo de dados), mais testes, CI/CD, segurança e observabilidade. A coluna "Neste PDF" dá a seção e a página, e o [índice da entrega](../../../INDICE-DA-ENTREGA.md), no repositório, liga os mesmos artefatos a cada grupo de requisitos.
+As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais reúnem os artefatos que a avaliação da fase 3 pediu num índice só (componentes, sequências, RFC, ADRs e modelo de dados). A coluna "Neste PDF" dá a seção e a página, e o [índice da entrega](../../../INDICE-DA-ENTREGA.md), no repositório, liga os mesmos artefatos a cada grupo de requisitos.
 
 | Artefato | Neste PDF | No repositório |
 |---|---|---|
@@ -70,9 +70,9 @@ Os quatro repositórios são públicos, e o usuário `soat-architecture` é cola
 | Execution Service ("Execução", no texto)<br>[https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service) | PostgreSQL 16 | [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), commit `5b1bef4`, aprovado |
 | `platform`: RabbitMQ, Kong, observabilidade, contratos, E2E e documentos da entrega<br>[https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform) | nenhum | [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), commit `d703200`, aprovado |
 
-Cada repositório de serviço tem o código em `src/` (camadas `dominio`, `aplicacao`, `infraestrutura` e `interfaces`), o `Dockerfile`, os manifestos em `k8s/`, os workflows de CI/CD, `docs/arquitetura.md` e `docs/api/` (OpenAPI e collection Postman); o README diz como rodar e testar e traz a cobertura com o link do run.
+Cada repositório de serviço tem o código em `src/` (camadas `dominio`, `aplicacao`, `infraestrutura` e `interfaces`), o `Dockerfile`, os manifestos em `k8s/`, os workflows de CI/CD, `docs/arquitetura.md` e `docs/api/` (OpenAPI e collection Postman); o README traz como rodar e testar e a cobertura com o link do run.
 
-**Proteção da `main`.** Os quatro repositórios têm ruleset ativo, visível a quem só tem leitura e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit`, que o GitHub cria com o repositório, entrou por PR; o ruleset veio depois do PR #1, mesclado duas a três horas antes. O [Anexo B, B8](#b8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
+**Proteção da `main`.** Os quatro repositórios têm ruleset ativo e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit` entrou por PR (o ruleset veio depois do PR #1, mesclado duas a três horas antes). O [B8](#b8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
 
 ## 3. Link do vídeo
 
@@ -82,13 +82,13 @@ Vídeo de até 15 minutos, no YouTube, com as quatro demonstrações do enunciad
 |---|---|
 | Vídeo de demonstração (YouTube, não listado) | pendente: gravação e publicação |
 
-O [roteiro](roteiro-video.md) prevê 14 minutos: os integrantes e o diagrama com os bancos separados, o fluxo completo de uma OS pelos três serviços (a demonstração), a saga e as falhas (falta de peça, estorno, 409 depois do início, consumidor parado e circuito aberto), o deploy automatizado de um serviço, do PR ao E2E no kind, e o trace da saga, os logs correlacionados, os dashboards, o alerta e o runbook. O pagamento do vídeo usa o simulador do Mercado Pago, dito na tela; a prova na sandbox real é outra execução ([seção 14](#14-pendências-até-a-submissão)).
+O [roteiro](roteiro-video.md) prevê 14 minutos: o diagrama com os bancos separados, o fluxo completo de uma OS pelos três serviços (a demonstração), a saga e as falhas, o deploy automatizado de um serviço, do PR ao E2E no kind, e o trace, os logs correlacionados, os dashboards e o alerta. O pagamento do vídeo usa o simulador do Mercado Pago, dito na tela; a prova na sandbox real é outra execução ([seção 14](#14-pendências-até-a-submissão)).
 
 ## 4. Desenho da arquitetura
 
 ### 4.1 Diagrama geral
 
-Três serviços, um banco para cada um e dois canais de comunicação: REST pela borda e entre a Execução e o Billing, e mensagens AMQP pelo RabbitMQ. O Kong é a única entrada de fora do cluster, inclusive para o webhook do Mercado Pago. A única chamada síncrona de negócio entre serviços é a validação de preços, da Execução para o Billing; a outra dependência HTTP é a chave pública do JWT (JWKS), que Billing e Execução leem do OS Service com cache de 10 minutos. Só o Billing fala com o Mercado Pago. Tudo roda num cluster Kubernetes kind, na máquina local e no CI; o do CI não tem Grafana nem Loki.
+Três serviços, um banco para cada um e dois canais de comunicação: REST pela borda e entre a Execução e o Billing, e mensagens AMQP pelo RabbitMQ. O Kong é a única entrada de fora do cluster, inclusive para o webhook do Mercado Pago. A única chamada síncrona de negócio entre serviços é a validação de preços, da Execução para o Billing; a outra dependência HTTP é a chave pública do JWT (JWKS), que Billing e Execução leem do OS Service com cache de 10 minutos. Só o Billing fala com o Mercado Pago. Tudo roda num cluster Kubernetes kind, na máquina local e no CI.
 
 ```mermaid
 flowchart TB
@@ -115,7 +115,7 @@ flowchart TB
 
 A regra é REST quando quem chama precisa da resposta para continuar e a operação só lê, e mensagem quando a operação muda estado em outro serviço ([ADR-038](../../arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md)).
 
-**Mensageria.** No RabbitMQ 4.3.6 ([ADR-036](../../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)), comandos saem do OS Service pela exchange `pytstop.comandos` para as filas `billing.comandos` e `execucao.comandos`, e eventos voltam pela `pytstop.eventos` para a `os.eventos`, lida só pelo orquestrador. Cada fila de trabalho tem cinco filas de retry por atraso e uma DLQ: 21 filas quorum, declaradas num `definitions.json` do `platform` ([RFC-004, seção 5.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#51-topologia)). Cada serviço conecta com usuário próprio, sem permissão de configure, e só publica as próprias routing keys.
+**Mensageria.** No RabbitMQ 4.3.6 ([ADR-036](../../arquitetura/adr/fase4/036-mensageria-rabbitmq.md)), comandos saem do OS Service pela exchange `pytstop.comandos` para as filas `billing.comandos` e `execucao.comandos`, e eventos voltam pela `pytstop.eventos` para a `os.eventos`, lida só pelo orquestrador. Cada fila de trabalho tem cinco filas de retry por atraso e uma DLQ: 21 filas quorum ([RFC-004, seção 5.1](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#51-topologia)).
 
 **Contratos.** Toda mensagem usa o mesmo envelope JSON, com `correlation_id` igual ao `ordem_id`, `causation_id` e o `traceparent` nos headers AMQP. São 34 mensagens, 11 comandos e 23 eventos, cada uma com um JSON Schema, reunidos em [AsyncAPI 3.0](../../../contratos/asyncapi.yaml); cada serviço valida os schemas que usa em teste de contrato no CI.
 
@@ -123,7 +123,7 @@ A regra é REST quando quem chama precisa da resposta para continuar e a operaç
 
 ### 4.3 Componentes e integrações
 
-Cada serviço roda um Deployment por processo: a `api`, o `consumidor` (lê a fila do serviço), o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que entrega os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois. O cliente da oficina não tem login: acompanha a OS por uma rota pública, decide o orçamento por um link assinado e paga no checkout do Mercado Pago. Cada serviço tem o próprio namespace (`pytstop-os`, `pytstop-billing` e `pytstop-execucao`), e a plataforma, o `pytstop-plataforma`.
+Cada serviço roda um Deployment por processo: a `api`, o `consumidor`, o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que envia os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois.
 
 ```mermaid
 ---
