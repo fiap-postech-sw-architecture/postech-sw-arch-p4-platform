@@ -117,7 +117,7 @@ A `main` é protegida: tudo entra por PR com squash, e o [ruleset](https://githu
 
 ### CI
 
-O [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `main`, sob demanda e quando o CD o chama, no runner fixo `ubuntu-24.04`, com três jobs. O `manifests` roda shellcheck e actionlint e valida os três overlays e os exemplos de borda (kubeconform e trivy), as configs do Prometheus, Loki e Promtail, as regras de alerta no promtool, o render do Kong, as versões e os dashboards. O `contratos` roda `uv lock --check`, `make lint`, `make test` e `make prova-retry`. O `gitleaks` varre o histórico do commit testado, com uma regra própria para URL AMQP com senha, e o `gitleaks-semanal.yml` varre todas as refs uma vez por semana. Detalhes em [docs/ci-cd.md](docs/ci-cd.md).
+O [`ci.yml`](.github/workflows/ci.yml) roda em pull request para a `main`, sob demanda e quando o CD o chama, no runner fixo `ubuntu-24.04`, com três jobs. O `manifests` roda shellcheck e actionlint e valida os três overlays e os exemplos de borda (kubeconform e trivy), as configs do Prometheus, Loki e Promtail, as regras de alerta no promtool, o render do Kong, as versões e os dashboards. O `contratos` roda `uv lock --check`, `make lint`, `make test` e `make prova-retry`. A cobertura do `make test` é de 99,85% de linhas e ramos do código de teste, com gate de 90%: é só um indicador aqui, porque o que protege os contratos são os negativos gerados dos exemplos ([docs/contratos-de-mensageria.md](docs/contratos-de-mensageria.md)). O `gitleaks` varre o histórico do commit testado, com uma regra própria para URL AMQP com senha, e o `gitleaks-semanal.yml` varre todas as refs uma vez por semana. Detalhes em [docs/ci-cd.md](docs/ci-cd.md).
 
 ### CD reutilizável dos serviços
 
