@@ -161,6 +161,41 @@ def test_github_confere_link_da_fase_3_pela_arvore_coletada(
     assert any("link GitHub ausente" in erro for erro in erros) is quebrado
 
 
+@pytest.mark.parametrize("ref", ["entrega-fase-4", "entrega-fase-3", "b" * 40])
+def test_github_reprova_link_da_fase_3_fora_da_main(pacote: Path, ref: str) -> None:
+    # O congelamento troca main pela tag da fase 4, que o repositório da fase 3 não tem.
+    (pacote / "INDICE-DA-ENTREGA.md").write_text(
+        f"RF-028 a RF-029 [fase 3](https://github.com/{FASE_3}/blob/{ref}/docs/x.md)"
+    )
+    erros = verificar(
+        pacote,
+        github={
+            "repositorios": [],
+            "referencias": [
+                {"repo": FASE_3, "head": "a" * 40, "arvore": ["docs/x.md"]}
+            ],
+        },
+    )
+    assert any("link GitHub ausente" in erro for erro in erros)
+
+
+def test_final_nao_exige_a_fase_3_nem_a_tag_nos_links_dela(pacote: Path) -> None:
+    (pacote / "INDICE-DA-ENTREGA.md").write_text(
+        f"RF-028 a RF-029 [fase 3](https://github.com/{FASE_3}/blob/main/docs/x.md)"
+    )
+    erros = verificar(
+        pacote,
+        final=True,
+        github={
+            "repositorios": [],
+            "referencias": [
+                {"repo": FASE_3, "head": "a" * 40, "arvore": ["docs/x.md"]}
+            ],
+        },
+    )
+    assert not any(FASE_3 in erro or "ainda aponta para main" in erro for erro in erros)
+
+
 @pytest.mark.parametrize(
     ("repo", "reprova"),
     [
