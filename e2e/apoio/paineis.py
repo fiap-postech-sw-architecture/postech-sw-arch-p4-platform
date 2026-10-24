@@ -22,12 +22,12 @@ import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Final
-from urllib.parse import quote
+from typing import TYPE_CHECKING, Final
 
 import yaml
 
-from e2e.apoio.kube import NAMESPACE_DA_PLATAFORMA, ErroDeComandoError, Kubectl
+from e2e.apoio.kube import ErroDeComandoError, Kubectl
+from e2e.apoio.prometheus import consultar
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 RAIZ: Final = Path(__file__).resolve().parents[2]
 OBSERVABILIDADE: Final = RAIZ / "observabilidade"
 CONTEXTO_PADRAO: Final = "kind-pytstop-p4"
-PRAZO_DA_CONSULTA: Final = 30.0
 _TAMANHO_DO_ERRO: Final = 160
 
 
@@ -95,17 +94,7 @@ def carregar(raiz: Path = OBSERVABILIDADE) -> list[Consulta]:
 
 def contar_series(kubectl: Kubectl, expr: str) -> int:
     """Quantas series a consulta devolve agora no Prometheus do kind."""
-    caminho = (
-        f"/api/v1/namespaces/{NAMESPACE_DA_PLATAFORMA}/services/prometheus:9090"
-        f"/proxy/api/v1/query?query={quote(resolver(expr), safe='')}"
-    )
-    resposta: dict[str, Any] = json.loads(
-        kubectl.executar("get", "--raw", caminho, prazo=PRAZO_DA_CONSULTA)
-    )
-    if resposta.get("status") != "success":
-        msg = f"o Prometheus respondeu {str(resposta)[:_TAMANHO_DO_ERRO]}"
-        raise ErroDeComandoError(msg)
-    return len(resposta["data"]["result"])
+    return len(consultar(kubectl, resolver(expr))["result"])
 
 
 def verificar(kubectl: Kubectl, consultas: Sequence[Consulta]) -> list[Resultado]:

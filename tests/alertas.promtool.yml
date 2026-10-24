@@ -1536,3 +1536,52 @@ tests:
         exp_samples:
           - labels: '{decisao="aprovado"}'
             value: 1.8333333333333335
+
+  # ---------------------------------------- consulta do E2E (promql_expr_test)
+  # A espera da raspagem do consumidor do Billing (e2e/apoio/prometheus.py): o pod so cai
+  # depois de o Prometheus ter lido o /metrics dele, para o contador de estornos nao
+  # perder o que contou desde a ultima raspagem. A consulta tem de devolver o instante
+  # da raspagem (o timestamp() de um seletor sozinho; de uma expressao, como
+  # timestamp(up == 1), ele devolveria o da propria consulta e a espera passaria na
+  # hora) e zerar se a ultima raspagem de algum pod falhou (up 0). Os instantes sao os
+  # do teste, de 1 em 1 min.
+  - name: consulta do E2E, a raspagem mais antiga do consumidor do Billing e 0 se alguma falhou
+    interval: 1m
+    input_series:
+      # p1 raspou em 0, 1 e 2 min; a de 3 min falhou (up 0) e a de 4 min voltou.
+      - series: up{job="billing-service-consumidor", namespace="pytstop-billing", pod="p1"}
+        values: 1 1 1 0 1
+      # p2 raspou nos cinco instantes.
+      - series: up{job="billing-service-consumidor", namespace="pytstop-billing", pod="p2"}
+        values: 1 1 1 1 1
+      # Outro alvo do mesmo namespace: nao entra.
+      - series: up{job="billing-service-api", namespace="pytstop-billing", pod="a1"}
+        values: 1 1 1 1 1
+    promql_expr_test:
+      # Em 2m30s a ultima raspagem dos dois e a de 2 min: o instante dela, e nao os 150 s.
+      - expr: min(timestamp(up{job="billing-service-consumidor", namespace="pytstop-billing"}) * up{job="billing-service-consumidor", namespace="pytstop-billing"})
+        eval_time: 2m30s
+        exp_samples:
+          - labels: '{}'
+            value: 120
+      # Em 3m30s a ultima do p1 falhou: zera, e nenhuma raspagem conta ainda.
+      - expr: min(timestamp(up{job="billing-service-consumidor", namespace="pytstop-billing"}) * up{job="billing-service-consumidor", namespace="pytstop-billing"})
+        eval_time: 3m30s
+        exp_samples:
+          - labels: '{}'
+            value: 0
+      # Em 4m30s os dois foram raspados em 4 min.
+      - expr: min(timestamp(up{job="billing-service-consumidor", namespace="pytstop-billing"}) * up{job="billing-service-consumidor", namespace="pytstop-billing"})
+        eval_time: 4m30s
+        exp_samples:
+          - labels: '{}'
+            value: 240
+  - name: consulta do E2E, alvo que ninguem raspa volta sem serie
+    interval: 1m
+    input_series:
+      - series: up{job="billing-service-api", namespace="pytstop-billing", pod="a1"}
+        values: 1 1 1 1 1
+    promql_expr_test:
+      - expr: min(timestamp(up{job="billing-service-consumidor", namespace="pytstop-billing"}) * up{job="billing-service-consumidor", namespace="pytstop-billing"})
+        eval_time: 4m30s
+        exp_samples: []

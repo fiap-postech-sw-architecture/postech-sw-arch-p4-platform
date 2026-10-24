@@ -3,15 +3,18 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import stat
 import sys
 from typing import TYPE_CHECKING, Any
+from urllib.parse import unquote
 
+from e2e.apoio.kube import ErroDeComandoError
 from e2e.apoio.segredos import CREDENCIAIS_DO_AMBIENTE
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Collection, Sequence
     from pathlib import Path
 
 # Credenciais de mentira: o formato imita o do Mercado Pago so para a mascara e a
@@ -181,6 +184,72 @@ class ClusterFalso:
 
     def prontos(self) -> list[str]:
         return [c[c.index("rollout") + 2] for c in self.comandos if "rollout" in c]
+
+
+# O relogio do Prometheus do falso e o do teste mais este tanto: um codigo que
+# comparasse o instante de uma raspagem com o relogio de quem testa passaria a espera
+# na hora.
+DESLOCAMENTO_DO_PROMETHEUS = 1_700_000_000.0
+# O scrape_interval do Prometheus do kind (config/prometheus.yml da plataforma).
+INTERVALO_DA_RASPAGEM = 15.0
+
+
+class PrometheusRaspando:
+    """Executor do kubectl que responde como o Prometheus do kind raspando um alvo.
+
+    A raspagem de referencia caiu ``ha`` s antes da criacao do falso e as outras vem a
+    cada ``INTERVALO_DA_RASPAGEM``, no relogio do teste (``Relogio``). ``parar_em``: o
+    instante, nesse relogio, depois do qual ele nao raspa mais. ``falhas``: as raspagens
+    (1 e a primeira depois da criacao) cujo ``up`` e 0. ``sem_serie``: o alvo nao e
+    raspado. ``erros``: quantas das primeiras consultas o proxy do apiserver recusa.
+    """
+
+    def __init__(
+        self,
+        relogio: Relogio,
+        *,
+        ha: float = 8.0,
+        parar_em: float | None = None,
+        falhas: Collection[int] = (),
+        sem_serie: bool = False,
+        erros: int = 0,
+    ) -> None:
+        self._relogio = relogio
+        self._epoca = relogio() + DESLOCAMENTO_DO_PROMETHEUS - ha
+        self._parar_em = parar_em
+        self._falhas = falhas
+        self._sem_serie = sem_serie
+        self._erros = erros
+        self.caminhos: list[str] = []
+        self.consultas: list[str] = []
+
+    def __call__(self, argumentos: Sequence[str], prazo: float) -> str:
+        del prazo
+        caminho = argumentos[-1]
+        self.caminhos.append(caminho)
+        if len(self.caminhos) <= self._erros:
+            msg = "kubectl get --raw: saiu com 1: o apiserver nao alcancou o Prometheus"
+            raise ErroDeComandoError(msg)
+        consulta = unquote(caminho.split("query=", 1)[1])
+        self.consultas.append(consulta)
+        agora = self._relogio() + DESLOCAMENTO_DO_PROMETHEUS
+        if consulta == "time()":
+            dados = {"resultType": "scalar", "result": [agora, str(agora)]}
+        else:
+            dados = {"resultType": "vector", "result": self._vetor(agora)}
+        return json.dumps({"status": "success", "data": dados})
+
+    def _vetor(self, agora: float) -> list[dict[str, Any]]:
+        """O ``min(timestamp(up) * up)``: a raspagem mais recente, ou 0 se falhou."""
+        if self._sem_serie:
+            return []
+        limite = agora
+        if self._parar_em is not None:
+            limite = min(agora, self._parar_em + DESLOCAMENTO_DO_PROMETHEUS)
+        k = math.floor((limite - self._epoca) / INTERVALO_DA_RASPAGEM)
+        instante = self._epoca + k * INTERVALO_DA_RASPAGEM
+        valor = 0.0 if k in self._falhas else instante
+        return [{"metric": {}, "value": [agora, str(valor)]}]
 
 
 # kubectl falso: "sai" morre com erro; "nao-escuta" fica vivo sem abrir a porta;
