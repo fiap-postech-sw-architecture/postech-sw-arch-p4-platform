@@ -93,14 +93,15 @@ LARGURA_NO_LIMITE = math.ceil(1.1 * ALTURA_NO_LIMITE)
 
 # Os oito primeiros são os tamanhos em px de CSS de diagramas da RFC-004; 1584 é
 # a largura a que o Mermaid reduz o diagrama que não cabe na página. O de
-# componentes e o ER do OS levam espaçamento menor na RFC, que os deixa mais
-# largos que altos; as duas últimas partes do caminho feliz, que o Mermaid não
-# reduz, ficam no retrato.
+# componentes e o ER do OS levam espaçamento menor na RFC e ficam sem o que o
+# texto já descreve (a observabilidade, a outbox e a mensagens_processadas), o
+# que os deixa mais largos que altos; as duas últimas partes do caminho feliz,
+# que o Mermaid não reduz, ficam no retrato.
 @pytest.mark.parametrize(
     ("largura", "altura", "deitado"),
     [
         pytest.param(
-            _pixels(1584), _pixels(1086.4), True, id="sequencia-larga-reduzida"
+            _pixels(1584), _pixels(980.8), True, id="sequencia-larga-reduzida"
         ),
         pytest.param(
             _pixels(1584),
@@ -109,10 +110,10 @@ LARGURA_NO_LIMITE = math.ceil(1.1 * ALTURA_NO_LIMITE)
             id="er-da-execucao-sem-a-infraestrutura",
         ),
         pytest.param(
-            _pixels(1584), _pixels(1020), True, id="componentes-com-espacamento-menor"
+            _pixels(1584), _pixels(924), True, id="componentes-com-espacamento-menor"
         ),
         pytest.param(
-            _pixels(1584), _pixels(1034.4), True, id="er-do-os-com-espacamento-menor"
+            _pixels(1584), _pixels(1036), True, id="er-do-os-sem-a-infraestrutura"
         ),
         pytest.param(
             _pixels(1582.4), _pixels(1147.2), True, id="caminho-feliz-t1-a-t4"
@@ -123,7 +124,7 @@ LARGURA_NO_LIMITE = math.ceil(1.1 * ALTURA_NO_LIMITE)
             _pixels(1584), _pixels(1500), False, id="quase-quadrado-fica-no-retrato"
         ),
         pytest.param(
-            _pixels(1366.4), _pixels(794.4), False, id="largo-que-cabe-no-retrato"
+            _pixels(1366.4), _pixels(738.4), False, id="largo-que-cabe-no-retrato"
         ),
         pytest.param(REDUZIDO, _pixels(480), True, id="no-limite-do-reduzido"),
         pytest.param(
@@ -287,8 +288,8 @@ def test_capa_sem_a_linha_do_grupo_nao_inventa_um(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("largura", "altura", "esperado"),
     [
-        pytest.param(_pixels(1217), _pixels(811), True, id="orcamento-recusado"),
-        pytest.param(_pixels(1366), _pixels(794), True, id="falta-de-peca"),
+        pytest.param(_pixels(1217), _pixels(755), True, id="orcamento-recusado"),
+        pytest.param(_pixels(1366), _pixels(738), True, id="falta-de-peca"),
         pytest.param(_pixels(1169), _pixels(936), False, id="geral-quase-quadrado"),
         pytest.param(1450, 1000, True, id="no-limite-da-proporcao"),
         pytest.param(1449, 1000, False, id="um-pixel-abaixo-da-proporcao"),

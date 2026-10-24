@@ -6,7 +6,7 @@ Documento de entrega da fase 4 do Tech Challenge da Pós-Graduação em Arquitet
 
 ## Como ler este documento
 
-Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega, e o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase. Os números trazem o run, o commit ou a janela de onde saíram, e o [registro de evidências](evidencias/README.md) guarda a origem e as conferências. A demonstração, que o texto chama de `make demo`, são seis cenários do BDD rodados no kind local.
+Os repositórios são a fonte de verdade. Este documento traz o que o avaliador precisa para conferir a entrega, e o que os READMEs e o `docs/arquitetura.md` de cada serviço já explicam aparece aqui numa frase, com o link. Os diagramas são os da [RFC-004](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md), a proposta técnica da fase. Da RFC, que é longa, este documento reproduz os diagramas das seções [2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#2-diagrama-geral-da-arquitetura) (diagrama geral e componentes), [4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) (sequências da saga), [7](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#7-dados) (modelo de dados) e [10.2](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#102-pipeline-e-deploy) (pipeline e deploy); o resto dela fica no repositório. Os números trazem o run, o commit ou a janela de onde saíram, e o [registro de evidências](evidencias/README.md) guarda a origem e as conferências. A demonstração, que o texto chama de `make demo`, são seis cenários do BDD rodados no kind local.
 
 | Sigla | Significado | Sigla | Significado |
 |---|---|---|---|
@@ -128,7 +128,7 @@ A regra é REST quando quem chama precisa da resposta para continuar e a operaç
 config:
   flowchart:
     wrappingWidth: 400
-    nodeSpacing: 20
+    nodeSpacing: 12
     rankSpacing: 40
     padding: 8
 ---
@@ -166,13 +166,6 @@ flowchart TB
 
         evt["RabbitMQ · exchange pytstop.eventos<br/>fila os.eventos (com retry por atraso e .dlq)"]
         mailpit["Mailpit (SMTP)"]
-
-        subgraph obs["Observabilidade"]
-            direction LR
-            grafana["Grafana"] --> jaeger["Jaeger"]
-            grafana --> prom["Prometheus"]
-            grafana --> loki["Loki + Promtail"]
-        end
     end
 
     mp["Mercado Pago (externo)<br/>Checkout Pro · API de pagamentos"]
@@ -194,10 +187,9 @@ flowchart TB
     mp -->|"webhook payment<br/>(x-signature)"| kong
     cliente -->|"paga no checkout"| mp
     os -->|"e-mail pelo notificador (SMTP)"| mailpit
-    os & exe & bil -.->|"OTLP · /metrics · logs"| obs
 ```
 
-**Processos.** Cada serviço roda um Deployment por processo: a `api`, o `consumidor`, o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que envia os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois.
+**Processos.** Cada serviço roda um Deployment por processo: a `api`, o `consumidor`, o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que envia os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois. A telemetria de todos os processos (OTLP, `/metrics` e logs) vai para a observabilidade do diagrama geral ([seção 11](#11-observabilidade)).
 
 ## 5. Divisão dos serviços e tecnologias
 
@@ -403,6 +395,11 @@ sequenceDiagram
 **Orçamento recusado ou expirado.** O cliente recusa pelo link, ou a validade vence sem decisão. O orçamento já está encerrado no Billing, então a saga só descarta o diagnóstico e cancela a OS (RN-024).
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     actor CL as Cliente
@@ -428,6 +425,11 @@ sequenceDiagram
 **Falta de peça na reserva.** A Execução trava os itens com lock pessimista, acha saldo insuficiente e não reserva nada. Nenhum pagamento foi solicitado: a saga cancela o orçamento, descarta o diagnóstico e cancela a OS sem cobrar o cliente (RN-026).
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     actor CL as Cliente
@@ -450,6 +452,12 @@ sequenceDiagram
 ```
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+    boxMargin: 8
+---
 sequenceDiagram
     autonumber
     actor AT as Atendente
@@ -496,11 +504,11 @@ sequenceDiagram
 
 ## 7. Modelo de dados
 
-Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele, e a NetworkPolicy de cada namespace só deixa o próprio namespace chegar ao banco. Os diagramas mostram as tabelas de que a saga e os contratos dependem; o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
+Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele, e a NetworkPolicy de cada namespace só deixa o próprio namespace chegar ao banco. Os diagramas mostram as tabelas de que a saga e os contratos dependem, menos a `outbox` e a `mensagens_processadas` da [seção 6.3](#63-idempotência-novas-tentativas-e-prazos), cujas colunas estão no `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#mensageria-e-e-mail-contexto-compartilhado-e-ordem_servico) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas), que tem o `tipo` da mensagem a mais na outbox; o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
 
 **OS Service (PostgreSQL 16).** Clientes, veículos, consentimentos, usuários e tokens revogados vêm da fase 3; o documento do cliente fica cifrado, com um hash para a busca. A OS ganhou versão para o lock otimista e o resumo do orçamento e do pagamento, copiado dos eventos. O histórico só recebe inserções, `sagas` guarda a instância da saga e `notificacoes`, os e-mails do `notificador`.
 
-**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio. A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e ficam fora do ER: as colunas estão na [seção 3.4 do `docs/arquitetura.md`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
+**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio.
 
 **Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. A tabela é a das coleções da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7), que traz também o exemplo de documento; o [`docs/arquitetura.md` do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) detalha o modelo campo a campo, com três acréscimos: um índice da outbox, dois campos de `mensagens_processadas` e a coleção `versao_do_banco`.
 
@@ -515,7 +523,9 @@ Cada serviço é o único dono do seu banco, com credencial própria montada só
 ---
 config:
   er:
-    entityPadding: 8
+    entityPadding: 3
+    nodeSpacing: 60
+    rankSpacing: 70
 ---
 erDiagram
     clientes {
@@ -575,7 +585,7 @@ erDiagram
         varchar falha "reenvios_esgotados ou estorno_recusado"
         jsonb passos "linha do tempo da saga, só com códigos"
         jsonb passos_concluidos
-        jsonb comando_em_voo "comando com prazo técnico: tipo, dados, enviado_em e mensagem_ids, o id de cada envio (o último é o mais recente)"
+        jsonb comando_em_voo "tipo, dados, enviado_em e mensagem_ids"
         jsonb plano_compensacao
         jsonb itens "do DiagnosticoConcluido"
         int reenvios
@@ -585,18 +595,6 @@ erDiagram
         timestamptz atualizada_em "hora da última transição"
         varchar traceparent
         int versao
-    }
-    outbox {
-        bigint id PK
-        uuid mensagem_id UK
-        uuid correlation_id "ordem_id"
-        varchar exchange
-        varchar routing_key
-        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
-        varchar traceparent
-        varchar tracestate
-        varchar status
-        timestamptz entregue_em
     }
     notificacoes {
         bigint id PK
@@ -610,10 +608,6 @@ erDiagram
         timestamptz proxima_tentativa_em
         timestamptz entregue_em
         text ultimo_erro
-    }
-    mensagens_processadas {
-        uuid mensagem_id PK
-        timestamptz processada_em
     }
 
     clientes ||--o{ veiculos : "possui"
@@ -706,6 +700,9 @@ O ambiente Kubernetes do enunciado é o kind que o CD de cada serviço cria no r
 config:
   flowchart:
     wrappingWidth: 400
+    nodeSpacing: 20
+    rankSpacing: 40
+    padding: 8
 ---
 flowchart TB
     push(["push na main do serviço<br/>(só via PR com os checks verdes)"])

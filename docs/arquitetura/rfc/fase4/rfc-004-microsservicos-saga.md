@@ -14,7 +14,7 @@
 |---|---|
 | Resumo e problema | Seção 1. O monolito modular da fase 3, com banco único e transações ACID (atomicidade, consistência, isolamento e durabilidade) locais, vira três serviços com saga ([gap analysis](../../../requisitos/fase4/gap-analysis-fase-4.md)) |
 | Proposta técnica | Seções 2 a 10 |
-| Impacto esperado | Requisitos funcionais RF-028 a RF-038, regras de negócio RN-023 a RN-029 e requisitos não funcionais RNF-031 a RNF-056; o PDF e o vídeo reaproveitam os diagramas das seções 2 e 4 |
+| Impacto esperado | Requisitos funcionais RF-028 a RF-038, regras de negócio RN-023 a RN-029 e requisitos não funcionais RNF-031 a RNF-056; o PDF reproduz os diagramas das seções 2, 4.8, 7 e 10.2, e o vídeo, os das seções 2 e 4 |
 | Alternativas consideradas | Nos registros de decisão de arquitetura (ADR) 034 a 043, uma decisão por ADR |
 | Pontos em aberto | [Seção 11.2](#112-pontos-em-aberto), itens 1 a 5 |
 
@@ -123,7 +123,7 @@ flowchart TB
 config:
   flowchart:
     wrappingWidth: 400
-    nodeSpacing: 20
+    nodeSpacing: 12
     rankSpacing: 40
     padding: 8
 ---
@@ -161,13 +161,6 @@ flowchart TB
 
         evt["RabbitMQ · exchange pytstop.eventos<br/>fila os.eventos (com retry por atraso e .dlq)"]
         mailpit["Mailpit (SMTP)"]
-
-        subgraph obs["Observabilidade"]
-            direction LR
-            grafana["Grafana"] --> jaeger["Jaeger"]
-            grafana --> prom["Prometheus"]
-            grafana --> loki["Loki + Promtail"]
-        end
     end
 
     mp["Mercado Pago (externo)<br/>Checkout Pro · API de pagamentos"]
@@ -189,10 +182,9 @@ flowchart TB
     mp -->|"webhook payment<br/>(x-signature)"| kong
     cliente -->|"paga no checkout"| mp
     os -->|"e-mail pelo notificador (SMTP)"| mailpit
-    os & exe & bil -.->|"OTLP · /metrics · logs"| obs
 ```
 
-- Linhas cheias são REST, HTTP e mensagens; pontilhadas, telemetria. Comandos saem do relay do OS para o consumidor do participante, e eventos fazem o caminho inverso. Os processos api, consumidor e `prazos` gravam estado e mensagem de saída na mesma transação (outbox), e o relay publica depois.
+- As linhas são REST, HTTP e mensagens. A telemetria de todos os processos (OTLP, `/metrics` e logs) vai para a observabilidade do diagrama anterior, detalhada na [seção 9](#9-observabilidade). Comandos saem do relay do OS para o consumidor do participante, e eventos fazem o caminho inverso. Os processos api, consumidor e `prazos` gravam estado e mensagem de saída na mesma transação (outbox), e o relay publica depois.
 - A única chamada síncrona de negócio entre serviços é a validação de preços da Execução no Billing. A outra dependência HTTP é a chave pública do JWT: Billing e Execução leem o JWKS do OS, com cache de 10 minutos ([ADR-038](../../adr/fase4/038-borda-e-comunicacao-sincrona.md), [ADR-039](../../adr/fase4/039-autenticacao-entre-servicos.md)).
 - O cliente não tem login: usa o acompanhamento público e o link assinado e paga no checkout do Mercado Pago, cujo webhook entra pelo Kong.
 - O `platform` traz RabbitMQ, Kong, observabilidade, Mailpit e metrics-server. A definição do RabbitMQ que ele carrega declara exchanges, filas e bindings, e os serviços só conferem a topologia ([seção 5.1](#51-topologia)). Banco, manifestos, Ingress e pipeline ficam no repositório de cada serviço.
@@ -535,6 +527,11 @@ sequenceDiagram
 #### (b) Orçamento recusado ou expirado
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     actor CL as Cliente
@@ -560,6 +557,11 @@ sequenceDiagram
 #### (c) Falta de peça na reserva
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     actor CL as Cliente
@@ -584,6 +586,12 @@ sequenceDiagram
 #### (d) Cancelamento depois do pagamento, com estorno
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+    boxMargin: 8
+---
 sequenceDiagram
     autonumber
     actor AT as Atendente
@@ -857,7 +865,9 @@ Os estados finais aceitam a compensação repetida sem efeito e republicam a res
 ---
 config:
   er:
-    entityPadding: 8
+    entityPadding: 3
+    nodeSpacing: 60
+    rankSpacing: 70
 ---
 erDiagram
     clientes {
@@ -917,7 +927,7 @@ erDiagram
         varchar falha "reenvios_esgotados ou estorno_recusado"
         jsonb passos "linha do tempo da saga, só com códigos"
         jsonb passos_concluidos
-        jsonb comando_em_voo "comando com prazo técnico: tipo, dados, enviado_em e mensagem_ids, o id de cada envio (o último é o mais recente)"
+        jsonb comando_em_voo "tipo, dados, enviado_em e mensagem_ids"
         jsonb plano_compensacao
         jsonb itens "do DiagnosticoConcluido"
         int reenvios
@@ -927,18 +937,6 @@ erDiagram
         timestamptz atualizada_em "hora da última transição"
         varchar traceparent
         int versao
-    }
-    outbox {
-        bigint id PK
-        uuid mensagem_id UK
-        uuid correlation_id "ordem_id"
-        varchar exchange
-        varchar routing_key
-        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
-        varchar traceparent
-        varchar tracestate
-        varchar status
-        timestamptz entregue_em
     }
     notificacoes {
         bigint id PK
@@ -952,10 +950,6 @@ erDiagram
         timestamptz proxima_tentativa_em
         timestamptz entregue_em
         text ultimo_erro
-    }
-    mensagens_processadas {
-        uuid mensagem_id PK
-        timestamptz processada_em
     }
 
     clientes ||--o{ veiculos : "possui"
@@ -976,6 +970,7 @@ erDiagram
 - `prazo_resposta_em` é gravado pela saga a cada envio do comando em voo (o original, cada reenvio e o da retomada) e vale `agora` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS`. É um limite inferior do vencimento, porque o comando só chega ao participante depois de sair da outbox, e é por ele que o `prazos` acha as candidatas por índice; fica nulo sem comando com prazo e em `FALHA_NA_COMPENSACAO`. O relay é genérico e não conhece a saga: quem decide o vencimento é o `prazos`, que lê a linha da outbox do envio mais recente (o último de `mensagem_ids`) e só vence a instância se ela estiver entregue e `entregue_em` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS` já tiver passado. Envio pendente na outbox, ou entregue há menos que o prazo, não vence. `etapa_desde`, a entrada na etapa atual, dá a idade da instância mais antiga e a duração de cada etapa ([seção 9](#9-observabilidade)); `iniciada_em` é a abertura da saga.
 - A saga guarda só códigos (etapa, motivo da compensação, falha), nunca texto livre. O texto que o atendente escreve no cancelamento vai para `ordens_de_servico.motivo_cancelamento` já no pedido, antes de a compensação terminar, e passa ao histórico quando a OS chega a `CANCELADA` (na corrida do pivot, o pedido é descartado); assim a eliminação de dados da LGPD o alcança sem tocar `sagas`.
 - A outbox é só AMQP: toda linha tem `exchange` e `routing_key`, e o relay não conhece o e-mail nem o cliente. As notificações ao cliente vão para a tabela `notificacoes`, gravada na transação da própria transição, e um processo `notificador` (um Deployment, com laço, heartbeat e readiness próprios) as entrega por SMTP como no p3, lendo o contato por projeção SQL de `nome` e `contato`, sem a `ENCRYPTION_KEY`. Falha de SMTP retenta só aquela linha e não trava a saga nem o relay, e a ordem de entrega vale só entre os e-mails da mesma OS. A tabela é própria por duas razões: um relay de versão anterior (rolling update ou `rollout undo`) nunca vê linha de e-mail, e SMTP lento não prende a conexão AMQP do relay. A tabela (migração `004_notificacoes`) e o `notificador` já estão na `main` do OS Service.
+- A `outbox` e a `mensagens_processadas` ficam fora do diagrama; as colunas estão em [Mensageria e e-mail, no `docs/arquitetura.md` do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#mensageria-e-e-mail-contexto-compartilhado-e-ordem_servico).
 
 ### 7.3 Execution Service (PostgreSQL 16)
 
@@ -1039,7 +1034,7 @@ Ao contrário do p3, reservar não consome o saldo: a reserva move quantidade de
 
 Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent` e o `tracestate` e o `id` do comando que os abriu (`solicitacao_id` e `agendamento_id`), de onde saem o `causation_id` e o pai do trace dos eventos que o mecânico provoca. O diagnóstico guarda o retrato do veículo, com o `veiculo_id`, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois e, no diagnóstico, também `descricao_problema` e `observacoes`, que são texto livre (seção 5.3). Os `itens` do diagnóstico trazem `tipo` (`servico` ou `peca`), `codigo` e `quantidade`. Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
 
-A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e por isso ficam fora do diagrama; as colunas estão na [seção 3.4 do `docs/arquitetura.md` da Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
+A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e também ficam fora do diagrama; as colunas estão na [seção 3.4 do `docs/arquitetura.md` da Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
 
 ### 7.4 Billing Service (MongoDB 7)
 
@@ -1202,6 +1197,9 @@ A independência que o enunciado pede (l. 90) está no que é de cada serviço: 
 config:
   flowchart:
     wrappingWidth: 400
+    nodeSpacing: 20
+    rankSpacing: 40
+    padding: 8
 ---
 flowchart TB
     push(["push na main do serviço<br/>(só via PR com os checks verdes)"])
