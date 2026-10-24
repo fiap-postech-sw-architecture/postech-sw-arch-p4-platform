@@ -11,7 +11,7 @@ Conferido em 20/10/2026 e de novo em 23 e 24/10/2026 com a API do GitHub, nos qu
 
 Os quatro rulesets estão ativos, valem para a branch padrão e não têm exceção: `bypass_actors` vazio e `current_user_can_bypass` igual a `never`, conferidos em 23 e 24/10/2026. Todos têm as mesmas regras: pull request obrigatório, merge só por squash, conversas resolvidas antes do merge, histórico linear, sem force push e sem exclusão da branch. A aprovação de revisão não é exigida (`Required approvals: 0`): o ruleset exige o PR e os checks.
 
-Revisão: em 24/10/2026, 113 dos 122 PRs mesclados do grupo (32 no OS Service, 24 no Billing, 21 na Execução e 45 no `platform`) trazem no corpo o relato da revisão (a caixa "Revisão deep" marcada, uma seção de revisão ou o registro da revisão independente); nos outros nove (o #1 de cada repositório, OS #22 e #26, Billing #23 e Execução #16 e #20) a caixa "Revisão deep" está desmarcada ou ausente, e os do Dependabot (3, 7, 5 e 1) só passam pelos checks. Conferido em cada repositório com `gh pr list --state merged --limit 200 --json number,author,body`.
+Revisão: em 24/10/2026 (até o #36 do OS Service, o #32 do Billing, o #28 da Execução e o #50 do `platform`), 117 dos 126 PRs mesclados do grupo (32 no OS Service, 24 no Billing, 21 na Execução e 49 no `platform`) trazem no corpo o relato da revisão (a caixa "Revisão deep" marcada, uma seção de revisão ou o registro da revisão independente); nos outros nove (o #1 de cada repositório, OS #22 e #26, Billing #23 e Execução #16 e #20) a caixa "Revisão deep" está desmarcada ou ausente, e os do Dependabot (3, 7, 5 e 1) só passam pelos checks. Conferido em cada repositório com `gh pr list --state merged --limit 200 --json number,author,body`.
 
 ## Quando o ruleset veio
 
