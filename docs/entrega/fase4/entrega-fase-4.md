@@ -1044,7 +1044,7 @@ Os quatro rulesets, lidos pela API do GitHub em 24/10/2026 ([conferência](evide
 
 Fonte: [ruleset 24594457](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/rules/24594457), 23/10/2026.
 
-Os PRs passam pelos checks obrigatórios, e os do grupo trazem o registro da revisão no próprio PR; a regra não exige aprovação de outro membro (o print mostra `Required approvals: 0`).
+Desde a criação do ruleset, os PRs passam pelos checks obrigatórios e pelas conversas resolvidas; a regra não exige aprovação de outro membro (o print mostra `Required approvals: 0`).
 
 ![Commits da main do OS Service na captura de 23/10: 29 com o (#N) do PR no título e o Initial commit, que o GitHub cria com o repositório.](evidencias/protecao-commits-main-os-service-2026-10-23.png)
 
