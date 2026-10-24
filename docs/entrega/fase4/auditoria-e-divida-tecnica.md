@@ -1,6 +1,6 @@
 # Auditoria pré-entrega e dívida técnica
 
-Revisão de 20/10/2026, com a observabilidade atualizada em 24/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e pendências registradas nos serviços. Esta auditoria acompanha a versão preliminar do pacote; a revisão final depende dos commits congelados e das evidências listadas abaixo.
+Revisão de 20/10/2026, com as dívidas fechadas até 23/10/2026 e a observabilidade atualizada em 24/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e pendências registradas nos serviços. Esta auditoria acompanha a versão preliminar do pacote; a revisão final depende dos commits congelados e das evidências listadas abaixo.
 
 ## Pendências que afetam a entrega
 
@@ -28,7 +28,7 @@ Todo commit da `main` entrou por pull request, exceto o commit inicial de cada r
 
 ## Ensaio de observabilidade
 
-Em 19/10/2026, o E2E local passou com 14 cenários, e os três da sandbox ficaram fora da seleção; o `smoke-servicos` passou em seguida. O trace `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e o span CLIENT da chamada Execução → Billing. A janela medida de 600,9 s sem tráfego terminou sem reinícios, com 18 grupos de alvos disponíveis e três bancos acessíveis. O alerta controlado de fila disparou e recuperou, e o smoke posterior passou. O [relatório parcial](evidencias/observabilidade.md) preserva os commits, timestamps, trace e capturas do alerta.
+Em 19/10/2026, o E2E local passou com 14 execuções (11 cenários e um esquema com 3 exemplos), e os três cenários da sandbox ficaram fora da seleção; o `smoke-servicos` passou em seguida. O trace `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e o span CLIENT da chamada Execução → Billing. A janela medida de 600,9 s sem tráfego terminou sem reinícios, com 18 grupos de alvos disponíveis e três bancos acessíveis. O alerta controlado de fila disparou e recuperou, e o smoke posterior passou. O [relatório parcial](evidencias/observabilidade.md) preserva os commits, timestamps, trace e capturas do alerta.
 
 O simulador não produz chamada HTTP externa; o span CLIENT Billing → Mercado Pago permanece pendente da sandbox real. Os nove dashboards foram capturados em 24/10/2026, todos na mesma janela (de 14:40 a 16:51 UTC), que cobre seis execuções do `make demo` num kind novo ([Anexo A, A7](entrega-fase-4.md#a7--dashboards-do-grafana)). O painel de volume diário só ganha barra depois de cada meia-noite UTC, limitação descrita no JSON dele, e por isso a captura, de um dia só, não tem barra. O dashboard de bancos usa apenas as séries disponíveis no exporter, sem as `mongodb_ss_*`.
 

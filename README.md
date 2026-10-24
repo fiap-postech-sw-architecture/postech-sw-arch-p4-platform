@@ -109,7 +109,7 @@ São 9 dashboards (4 de negócio e 5 técnicos: plataforma, Saga, Mensageria, Se
 make port-forward
 ```
 
-O comando abre o Grafana em `localhost:3000`, o Jaeger em `localhost:16686`, o Prometheus em `localhost:9090`, o RabbitMQ em `localhost:15672` e o Mailpit em `localhost:8025`. Os painéis de negócio estão em [`observabilidade/negocio.md`](observabilidade/negocio.md), e os técnicos, os alertas, o catálogo de métricas e a retenção, em [`observabilidade/README.md`](observabilidade/README.md). O que o serviço precisa expor (pod anotado, porta `metrics` e logs em JSON) está em [docs/enderecos-e-variaveis.md](docs/enderecos-e-variaveis.md). As capturas dos nove dashboards estão no [Anexo A do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#anexo-a--evidências-visuais).
+O comando abre o Grafana em `localhost:3000`, o Jaeger em `localhost:16686`, o Prometheus em `localhost:9090`, o RabbitMQ em `localhost:15672` e o Mailpit em `localhost:8025`. Os painéis de negócio estão em [`observabilidade/negocio.md`](observabilidade/negocio.md), e os técnicos, os alertas, o catálogo de métricas e a retenção, em [`observabilidade/README.md`](observabilidade/README.md). O que o serviço precisa expor (pod anotado, porta `metrics` e logs em JSON) está em [docs/enderecos-e-variaveis.md](docs/enderecos-e-variaveis.md). As capturas dos nove dashboards: cinco no [A7 do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#a7--dashboards-do-grafana) e quatro no repositório, ligadas do A7.
 
 ## CI/CD
 
@@ -125,7 +125,7 @@ O [`cd-servico.yml`](.github/workflows/cd-servico.yml) oferece, por `workflow_ca
 
 ### Job `e2e`: a saga e a borda com os três serviços
 
-Roda em todo PR e push na `main`, em paralelo com o `deploy-kind`, cada um no próprio kind do runner. Sobe a plataforma e os três serviços construídos do código, cada um no commit do último CD verde, e roda o smoke, o `make e2e`, o `make newman` e o ZAP, guardando relatórios e diagnóstico mesmo com falha. Levou 8 min 46 s no run medido. Os passos, os prazos e como reexecutar uma combinação de commits: [docs/ci-cd.md](docs/ci-cd.md#job-e2e-a-saga-e-a-borda-com-os-três-serviços).
+Roda em todo PR e push na `main`, em paralelo com o `deploy-kind`, cada um no próprio kind do runner. Sobe a plataforma e os três serviços construídos do código, cada um no commit do último CD verde, e roda o smoke, o `make e2e`, o `make newman` e o ZAP, guardando relatórios e diagnóstico mesmo com falha. Levou 9 min 34 s no [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), do CD da `main` de 20/10/2026. Os passos, os prazos e como reexecutar uma combinação de commits: [docs/ci-cd.md](docs/ci-cd.md#job-e2e-a-saga-e-a-borda-com-os-três-serviços).
 
 ## Segurança
 
@@ -144,7 +144,7 @@ A senha de cada papel do PostgreSQL e de cada usuário do MongoDB troca por um p
 
 ### Regras e allowlist
 
-Cada regra do ZAP tem uma linha em [`e2e/zap/regras.conf`](e2e/zap/regras.conf), e a tabela de [docs/zap.md](docs/zap.md#regras-e-allowlist) é a mesma, conferida por um teste. Reprovam o job (`FAIL`) os cabeçalhos `Server` e `X-Powered-By` com versão (10036 e 10037), a falta de `X-Content-Type-Options` (10021) e a falta de anti-clickjacking e de CSP em resposta HTML (10020 e 10038). O HSTS ausente nos 404 que o próprio Kong gera (10035) só avisa, e o `Cache-Control` (10015) é ignorado. No [run 39098307172](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39098307172), nenhuma regra em `FAIL` disparou nos três serviços.
+Cada regra do ZAP tem uma linha em [`e2e/zap/regras.conf`](e2e/zap/regras.conf), e a tabela de [docs/zap.md](docs/zap.md#regras-e-allowlist) é a mesma, conferida por um teste. Reprovam o job (`FAIL`) os cabeçalhos `Server` e `X-Powered-By` com versão (10036 e 10037), a falta de `X-Content-Type-Options` (10021) e a falta de anti-clickjacking e de CSP em resposta HTML (10020 e 10038). O HSTS ausente nos 404 que o próprio Kong gera (10035) só avisa, e o `Cache-Control` (10015) é ignorado. No [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), nenhuma regra em `FAIL` disparou nos três serviços.
 
 ## Entrega e decisões
 

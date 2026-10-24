@@ -22,11 +22,11 @@ Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_R
 
 ## O que o ZAP acusa
 
-Nenhuma regra em `FAIL` dispara com os três serviços na `main`: no run [39098307172](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39098307172) (platform 7b8aff4, OS e2bf48d, Billing d6d2776, Execução 301052a), com as regras da tabela [abaixo](#regras-e-allowlist), o ZAP leu 38 URLs do OS, 38 do Billing e 24 da Execução, com `fail=0` nos três. Ficam os avisos abaixo.
+Nenhuma regra em `FAIL` dispara com os três serviços na `main`: no run [39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627) (platform d703200, OS 3ce582b, Billing 76b5f9b, Execução 5b1bef4), com as regras da tabela [abaixo](#regras-e-allowlist), o ZAP leu 38 URLs do OS, 38 do Billing e 24 da Execução, com `fail=0` nos três. Ficam os avisos abaixo.
 
 | Achado | Onde | Tratamento |
 |---|---|---|
-| 10035, `Strict-Transport-Security` ausente (`WARN`) | Só nos 404 que o próprio Kong gera: `/`, `/<prefixo>`, `/robots.txt` e `/sitemap.xml`, que o spider pede. Toda resposta de serviço (`openapi.json`, `saude`, JWKS) traz o cabeçalho | Fica em `WARN`: o Kong sem rota casada não executa plugin nenhum. A regra só vira `FAIL` quando o Kong mandar o cabeçalho nesses 404 (dívida no MEMORY); um achado numa resposta de serviço é defeito do serviço e se corrige nele |
+| 10035, `Strict-Transport-Security` ausente (`WARN`) | Só nos 404 que o próprio Kong gera: `/`, `/<prefixo>`, `/robots.txt` e `/sitemap.xml`, que o spider pede. Toda resposta de serviço (`openapi.json`, `saude`, JWKS) traz o cabeçalho | Fica em `WARN`: o Kong sem rota casada não executa plugin nenhum. A regra só vira `FAIL` quando o Kong mandar o cabeçalho nesses 404; um achado numa resposta de serviço é defeito do serviço e se corrige nele |
 | 10024, informação sensível na URL (`WARN`) | Billing: o checkout do simulador e o `aprovar` e o `recusar` dele levam o `token` na query | Por desenho do simulador do Mercado Pago ([ADR-040](arquitetura/adr/fase4/040-integracao-mercado-pago.md)), que só existe com `MP_MODE=simulado`; o Promtail mascara o `token=` antes de ele chegar ao Loki ([`make smoke`](../scripts/smoke.sh)). Fica em `WARN`, visível |
 | Respostas 5xx do Billing | Um `POST /billing/api/v1/webhooks/mercadopago` sem assinatura, que o spider monta do `openapi.json` | É a resposta tratada `503 SERVICO_INDISPONIVEL` do serviço (log `http_exception_handled`, nível `warning`), não um `500` |
 
