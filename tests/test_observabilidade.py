@@ -37,6 +37,7 @@ import pytest
 import yaml
 
 from e2e.apoio.paineis import carregar
+from e2e.apoio.prometheus import expressao_da_raspagem
 from e2e.apoio.saga import STATUS_DA_OS
 
 RAIZ = Path(__file__).resolve().parents[1]
@@ -644,11 +645,13 @@ def test_promtool_so_avalia_consulta_que_um_painel_ou_um_alerta_tem(
     nome: str, expr: str
 ) -> None:
     # O script troca $__rate_interval por 5m e $__range por 1h; o caso escreve a
-    # consulta ja trocada, e uma consulta que ninguem mais usa passaria calada.
+    # consulta ja trocada, e uma consulta que ninguem mais usa passaria calada. A unica
+    # que nao e de painel nem de alerta e a que o E2E manda para esperar a raspagem do
+    # consumidor do Billing antes de derruba-lo (e2e/apoio/prometheus.py).
     resolvidas = {
         e.replace("$__rate_interval", "5m").replace("$__range", "1h")
         for _, e in consultas()
-    }
+    } | {expressao_da_raspagem("pytstop-billing", "billing-service-consumidor")}
 
     assert expr in resolvidas, nome
 
