@@ -40,7 +40,7 @@ MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0"
 # pixels (reduzir a paleta quase não muda o arquivo).
 LARGURA_MERMAID = 1600
 ESCALA = 1.25
-# Limite de resolução das imagens na página. As miniaturas do Anexo B, quatro por
+# Limite de resolução das imagens na página. As miniaturas do Anexo A, quatro por
 # linha a 40 mm, chegam a 889 ppi e pesam o dobro sem ganho de leitura; 450 ppi só
 # reamostra essas, e as capturas em duas colunas (418 ppi) ficam como estão. Um
 # limite abaixo de 418 (400, 350, 300) reamostra também as capturas e deixa o PDF

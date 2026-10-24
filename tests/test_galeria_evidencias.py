@@ -17,9 +17,9 @@ PASTA = RAIZ / "docs/entrega/fase4/evidencias"
 DOCUMENTO = RAIZ / "docs/entrega/fase4/entrega-fase-4.md"
 # O PDF de ensaio precisa ficar abaixo de cerca de 6 MB; o resto é texto e diagrama.
 TETO_DOS_PNG = 5_000_000
-# Decisão de volume do PDF: os quatro dashboards que o Anexo B, B7, só lista, as
-# três telas do Swagger (B4), o ruleset do Billing (o B8 mostra o do OS Service) e
-# o print de 20/10 do trace e a busca do mesmo dia (o B3 mostra o de 23/10, com as
+# Decisão de volume do PDF: os quatro dashboards que o Anexo A, A7, só lista, as
+# três telas do Swagger (A4), o ruleset do Billing (o A8 mostra o do OS Service) e
+# o print de 20/10 do trace e a busca do mesmo dia (o A3 mostra o de 23/10, com as
 # compensações, e o caminho feliz). Imagem que sair desta lista passa a ser
 # embutida, e o teste reprova a troca silenciosa de uma imagem por um link.
 SO_COM_LINK = {

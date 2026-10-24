@@ -1,6 +1,6 @@
 # Proteção da `main`
 
-Conferido em 20/10/2026 e de novo em 23 e 24/10/2026 com a API do GitHub, nos quatro repositórios da fase 4; a leitura de 24/10 (GET de `rulesets` e do detalhe de cada um) deu a tabela do B8. O ruleset da `main` é visível a quem tem leitura no repositório, e é ele que exige os checks ([ADR-042](../../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)).
+Conferido em 20/10/2026 e de novo em 23 e 24/10/2026 com a API do GitHub, nos quatro repositórios da fase 4; a leitura de 24/10 (GET de `rulesets` e do detalhe de cada um) deu a tabela do A8. O ruleset da `main` é visível a quem tem leitura no repositório, e é ele que exige os checks ([ADR-042](../../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)).
 
 | Repositório | Ruleset | Criado em (Brasília) | Checks obrigatórios |
 |---|---|---|---|
@@ -30,7 +30,7 @@ Capturas de 23/10/2026, entre 15:59 e 16:04 UTC. Em todos os repositórios só o
 
 A versão anterior do documento de entrega contava 26, 24, 20 e 32 commits, os que cada `main` tinha nos CDs de 20/10/2026 (plataforma `d703200`, OS Service `3ce582b`, Billing `76b5f9b` e Execução `5b1bef4`). A conta sobe a cada merge. Os quatro commits iniciais estão no [registro de evidências](README.md#coleta-e-conferência-reproduzíveis), e o `verificar --final` só aceita esses.
 
-## Prints do Anexo B, B8
+## Prints do Anexo A, A8
 
 - [protecao-ruleset-os-service-2026-10-23.png](protecao-ruleset-os-service-2026-10-23.png): página do ruleset do OS Service, aberta sem login, com os dois "Show additional settings" abertos; capturada em 23/10/2026, 15:59:49 UTC. A página pública não mostra a lista de exceções (o cabeçalho traz "Sign in"); as exceções vêm da API, na tabela acima. O recorte, de 1.400 x 1.893 px e sem reamostragem, termina na regra "Block force pushes": abaixo dela a página traz a seção "Restrictions", das restrições de metadados de commit (mensagem, autor, nome do ramo), vazia nos quatro rulesets, cujas regras, pela API, são só `deletion`, `non_fast_forward`, `required_linear_history`, `pull_request` e `required_status_checks`.
 - [protecao-commits-main-os-service-2026-10-23.png](protecao-commits-main-os-service-2026-10-23.png): lista dos 30 commits da `main` do OS Service, capturada às 15:59:22 UTC. O X de CI do commit `28d6240` (#15, 19/10) foi o job `security-scan / trivy` do run depois do merge: `TOOMANYREQUESTS` ao baixar o banco de vulnerabilidades, limite do registro de imagens e não achado de segurança. Os nove checks do PR #15 passaram, `trivy` inclusive (conferido pela API do GitHub em 23/10/2026).
