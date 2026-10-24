@@ -1021,7 +1021,7 @@ Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. 18 pagamentos de R$
 
 Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. Os códigos SRV-E2E e PEC-E2E são os catálogos que o E2E cria em cada cenário.
 
-![Serviços: requisições, 5xx, taxa de sucesso e latência p95 por serviço; os picos de 5xx, da segunda execução em diante, são a API do Billing parada.](evidencias/grafana-servicos-2026-10-24.png)
+![Serviços: 5xx, sucesso e p95; os cinco picos de 5xx, da 2ª execução em diante, são a API do Billing parada.](evidencias/grafana-servicos-2026-10-24.png)
 
 Fonte: a mesma janela do Atendimento; captura às 16:53 UTC.
 
