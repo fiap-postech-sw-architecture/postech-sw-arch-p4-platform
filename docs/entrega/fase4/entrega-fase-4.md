@@ -40,14 +40,14 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | ADRs 034 a 043 | [5.3](#53-tecnologias-e-decisões) | [decisões da fase 4](../../arquitetura/adr/fase4/) |
 | Modelo de dados: ER do OS Service e da Execução e modelo dos documentos do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
 | Contratos de mensageria | [4.2](#42-comunicação-e-componentes) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
-| Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [B2](#b2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
+| Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [A2](#a2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
 | CI/CD e deploy em Kubernetes | [9](#9-cicd-e-deploy) | [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) |
 | Segurança e relatório de vulnerabilidades | [10](#10-segurança-e-análise-de-vulnerabilidades) | [registro de segurança](evidencias/seguranca.md); [ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md) |
 | Observabilidade: dashboards, alertas e traces | [11](#11-observabilidade) | [técnicos e alertas](../../../observabilidade/README.md), [negócio](../../../observabilidade/negocio.md) |
-| Swagger e collections Postman | [B4](#b4--swagger-pela-borda) | `docs/api/` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api); [fluxo completo](../../api/fluxo-completo.postman_collection.json) |
+| Swagger e collections Postman | [A4](#a4--swagger-pela-borda) | `docs/api/` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api); [fluxo completo](../../api/fluxo-completo.postman_collection.json) |
 | Rastreabilidade dos 44 requisitos | [12](#12-rastreabilidade-requisito--evidência) | [matriz de rastreabilidade](../matriz-de-rastreabilidade.md) |
 | Feedback da fase 3 | [13](#13-feedback-da-fase-3) | [tratamento na fase 3](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/entrega/fase3/feedback-professor.md) |
-| Capturas de tela | [Anexo B](#anexo-b--evidências-visuais) | [registro de evidências](evidencias/README.md#capturas-de-tela) |
+| Capturas de tela | [Anexo A](#anexo-a--evidências-visuais) | [registro de evidências](evidencias/README.md#capturas-de-tela) |
 
 ## 1. Identificação do grupo
 
@@ -74,7 +74,7 @@ Os quatro repositórios são públicos, e o usuário `soat-architecture` é cola
 
 Cada repositório de serviço tem o código em `src/` (camadas `dominio`, `aplicacao`, `infraestrutura` e `interfaces`), o `Dockerfile`, os manifestos em `k8s/`, os workflows de CI/CD, `docs/arquitetura.md` e `docs/api/` (OpenAPI e collection Postman); o README traz como rodar e testar e a cobertura com o link do run.
 
-**Proteção da `main`.** Os quatro repositórios têm ruleset ativo e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit` entrou por PR (em 06/10/2026, horário de Brasília, o PR #1 foi mesclado por volta das 12:00 e o ruleset veio depois: às 13:50 nos serviços e às 14:54 no `platform`). O [B8](#b8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
+**Proteção da `main`.** Os quatro repositórios têm ruleset ativo e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit` entrou por PR (em 06/10/2026, horário de Brasília, o PR #1 foi mesclado por volta das 12:00 e o ruleset veio depois: às 13:50 nos serviços e às 14:54 no `platform`). O [A8](#a8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
 
 ## 3. Link do vídeo
 
@@ -293,7 +293,7 @@ O `EstornarPagamento` compensa o T6 em qualquer estado do pagamento: com a cobra
 
 **Novas tentativas, DLQ e prazos.** Erro transitório volta à fila pelas filas de retry de 1, 5, 15, 60 e 300 s; a falha seguinte à quinta, ou um erro permanente, manda a mensagem para a DLQ, que dispara o alerta. O orquestrador espera 120 s pela resposta a cada comando e reenvia até 5 vezes; esgotados os reenvios, a saga compensa. Uma compensação que também esgota os reenvios, ou um estorno recusado, leva a saga a `FALHA_NA_COMPENSACAO`, e o operador retoma pelo [runbook da saga](../../operacao/runbook-saga.md). Os prazos e os parâmetros estão na [RFC-004, seções 4.6 e 10.3](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#103-parâmetros-e-variáveis-de-ambiente).
 
-**Provas.** Retry: [`prova_retry.py`](../../../scripts/prova_retry.py), no CI do `platform` e no smoke do kind (a cópia volta à fila no atraso de 1 s e de 5 s, sem uma segurar a outra). DLQ: [teste do consumidor do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/integracao/mensageria/test_consumidor.py#L234), com o RabbitMQ real e o TTL das filas de retry em 100 ms (as cinco filas de retry e a DLQ). Prazo e compensação que falha: [BDD de componente do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/bdd/saga_atendimento.feature#L196-L350), com barramento em memória e o prazo recuado no banco (reenvio por prazo, `FALHA_NA_COMPENSACAO` por estorno recusado e por reenvios esgotados, retomada pelo operador). REST (Execução ao Billing): [teste do validador de preços](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/unitarios/diagnostico/test_validador_billing.py#L93-L246) e [timeout de 2 s](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/integracao/test_app_e_seed.py#L235).
+**Provas.** Retry: [`prova_retry.py`](../../../scripts/prova_retry.py), no CI do `platform` e no smoke do kind (a cópia volta à fila no atraso de 1 s e de 5 s, sem uma segurar a outra). No OS Service, com o RabbitMQ real: [teste do consumidor](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/integracao/mensageria/test_consumidor.py#L234) (DLQ, depois das cinco filas de retry, com o TTL delas em 100 ms) e [teste dos prazos](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/integracao/mensageria/test_prazos_com_broker.py#L210-L400) (Billing sem resposta: cinco reenvios e a compensação até a OS cancelada; estorno recusado: `FALHA_NA_COMPENSACAO` e retomada). [BDD de componente](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/bdd/saga_atendimento.feature#L196-L350), com barramento em memória e o prazo recuado no banco: a compensação sem resposta. REST (Execução ao Billing): [teste do validador de preços](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/unitarios/diagnostico/test_validador_billing.py#L93-L246) e [timeout de 2 s](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/integracao/test_app_e_seed.py#L235).
 
 ### 6.4 Caminho feliz
 
@@ -687,11 +687,11 @@ O enunciado pede testes unitários em todos os serviços, ao menos um fluxo comp
 | Execução | 1.475: unitários, integração com PostgreSQL e RabbitMQ reais e contrato | [100%](evidencias/coverage.md#execution-service) (95%) | aprovado; 0, 0 e 0 |
 | `platform` | 3.366: contratos de mensageria, dashboards e alertas, scripts de deploy e smoke, apoio do E2E | 99,85% do código de teste (90%; [CI](../../../README.md#ci)) | não se aplica |
 
-A cobertura soma linhas e ramos, e o código novo de cada PR passa também pelo `diff-cover` (90%). O gate do SonarQube, versionado em `.sonar/quality-gate.json`, exige cobertura de 80%, no máximo 3% de duplicação e nota A em confiabilidade, segurança e manutenibilidade, e passou nos três, com 0 bugs, 0 vulnerabilidades, 0 hotspots e 0 code smells ([resumo](evidencias/coverage.md#sonarqube) e prints no [B2](#b2--sonarqube)). Os PRs que zeraram os code smells (as supressões `# NOSONAR` que já existiam continuam) estão no [registro de cobertura](evidencias/coverage.md#code-smells-por-regra), e o teste de mutação, na [seção Mutação](evidencias/coverage.md#mutação) dele.
+A cobertura soma linhas e ramos, e o código novo de cada PR passa também pelo `diff-cover` (90%). O gate do SonarQube, versionado em `.sonar/quality-gate.json`, exige cobertura de 80%, no máximo 3% de duplicação e nota A em confiabilidade, segurança e manutenibilidade, e passou nos três, com 0 bugs, 0 vulnerabilidades, 0 hotspots e 0 code smells ([resumo](evidencias/coverage.md#sonarqube) e prints no [A2](#a2--sonarqube)). Os PRs que zeraram os code smells (as supressões `# NOSONAR` que já existiam continuam) estão no [registro de cobertura](evidencias/coverage.md#code-smells-por-regra), e o teste de mutação, na [seção Mutação](evidencias/coverage.md#mutação) dele.
 
 **BDD do fluxo completo.** O [`saga_atendimento.feature`](../../../e2e/features/saga_atendimento.feature) do `platform` tem 11 cenários e um esquema de cenário com 3 exemplos, 14 execuções em Gherkin, em português, contra os três serviços no kind; roda no `deploy-kind` do CD de cada serviço e no job `e2e` do CD do `platform`, onde as 14 passaram em 206,65 s ([run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627)). Cobrem o caminho feliz (os oito status, o orçamento de R$ 210,00, a baixa do estoque e o trace nos três serviços), as quatro compensações (orçamento recusado, falta de peça, pagamento recusado e cancelamento com estorno), a expiração do orçamento, o 409 depois do início, a recusa de CPF inválido, o consumidor do Billing parado, a API do Billing parada, com o circuito aberto, e a borda ([resumo do BDD](evidencias/bdd-resumo.md)). O pagamento usa o simulador do Mercado Pago.
 
-**Collection com Newman.** A [collection do fluxo completo](../../api/fluxo-completo.postman_collection.json) leva uma OS pelos três serviços até a entrega, pela borda, com o Newman 6.2.3 no job `e2e` do `platform`: 108 assertions, 49 requisições e nenhuma falha no mesmo run, o das capturas do [B5](#b5--newman-e-zap-no-cd-do-platform) ([execuções anteriores](evidencias/newman-resumo.md)).
+**Collection com Newman.** A [collection do fluxo completo](../../api/fluxo-completo.postman_collection.json) leva uma OS pelos três serviços até a entrega, pela borda, com o Newman 6.2.3 no job `e2e` do `platform`: 108 assertions, 49 requisições e nenhuma falha no mesmo run, o das capturas do [A5](#a5--newman-e-zap-no-cd-do-platform) ([execuções anteriores](evidencias/newman-resumo.md)).
 
 ## 9. CI/CD e deploy
 
@@ -747,7 +747,7 @@ Cada serviço tem três workflows, com jobs de nome estável ([ADR-042](../../ar
 
 Os jobs do CD têm uma definição só, no `.github/workflows/cd-servico.yml` do `platform`, chamada pelo `cd.yml` de cada serviço com o nome dele e quatro SHAs ([platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22)). A independência que o enunciado pede está no que é de cada serviço: build, testes, análise, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e nenhum pipeline publica a imagem de outro. Nos manifestos de cada serviço, a API tem sondas de inicialização, de vida e de prontidão, requests e limits, e um HPA de 1 a 2 réplicas por CPU (70%); o overlay do CD limita o HPA a 1 réplica, para os três serviços caberem no runner. O CD do `platform` implanta a plataforma com o smoke e, no job `e2e`, os três serviços, com o BDD, o Newman e o ZAP. O kind do CI não tem Grafana nem Loki, que só existem no kind local ([seção 11](#11-observabilidade)).
 
-Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no OS Service, no Billing e na Execução; os digests estão no [registro de evidências](evidencias/README.md#imagens-publicadas-nos-cds-de-20102026)). O `deploy-kind` do OS Service levou 7 min 40 s no run de 20/10 e 7 min 28 s no de 23/10 ([B1](#b1--cd-da-main)), e o job `e2e` do `platform`, com o Newman e o ZAP, 9 min 34 s ([B5](#b5--newman-e-zap-no-cd-do-platform)). A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md).
+Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no OS Service, no Billing e na Execução; os digests estão no [registro de evidências](evidencias/README.md#imagens-publicadas-nos-cds-de-20102026)). O `deploy-kind` do OS Service levou 7 min 40 s no run de 20/10 e 7 min 28 s no de 23/10 ([A1](#a1--cd-da-main)), e o job `e2e` do `platform`, com o Newman e o ZAP, 9 min 34 s ([A5](#a5--newman-e-zap-no-cd-do-platform)). A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md).
 
 ## 10. Segurança e análise de vulnerabilidades
 
@@ -775,15 +775,15 @@ A stack da fase 3 passou para o `platform` e serve os três serviços, cada um c
 
 ![Explore de um Grafana local 11.1.0 consultando o Loki do kind: 16 linhas dos três serviços para a mesma OS, com o `trace_id` ligado ao Jaeger.](evidencias/loki-correlacao-os-2026-10-23.png)
 
-Fonte: Loki do kind, 23/10/2026, 09:36 UTC, na mesma OS e no mesmo trace do [B3](#b3--trace-da-saga-no-jaeger). O Explore do Grafana do cluster exige login de admin, por isso o print vem de um Grafana local.
+Fonte: Loki do kind, 23/10/2026, 09:36 UTC, na mesma OS e no mesmo trace do [A3](#a3--trace-da-saga-no-jaeger). O Explore do Grafana do cluster exige login de admin, por isso o print vem de um Grafana local.
 
 Nove dashboards em JSON, em [`observabilidade/dashboards/`](../../../observabilidade/dashboards): quatro de negócio (Atendimento, Orçamentos, Pagamentos e Execução e estoque) e cinco técnicos (Saga, Mensageria dos serviços, Serviços, Bancos e Plataforma). A descrição de cada painel é igual à coluna "Como ler" da documentação ([negócio](../../../observabilidade/negocio.md) e [técnicos](../../../observabilidade/README.md)), como a avaliação da fase 3 pediu. Depois do E2E, o CD do `platform` confere no Prometheus a consulta de cada painel de negócio: no [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), as 47 voltaram com série. São 21 regras de alerta, cada uma com um caso que dispara e um que não dispara no promtool: DLQ com mensagens, saga parada, compensações acima do normal, 5xx, latência p95, circuito aberto, fila sem consumidor e serviço ou banco fora do ar ([tabela completa](../../../observabilidade/README.md#regras-de-alerta-pasta-pytstop)).
 
 | Evidência | Onde |
 |---|---|
-| Trace da saga nos três serviços: 339 spans numa OS paga e cancelada, 245 no caminho feliz | [B3](#b3--trace-da-saga-no-jaeger) |
-| Alerta de fila sem consumidor, disparado e recuperado no kind local | [B6](#b6--alerta-de-fila-sem-consumidor) |
-| Cinco dos nove dashboards, sobre um Prometheus com mais de três dias de dados | [B7](#b7--dashboards-do-grafana) |
+| Trace da saga nos três serviços: 339 spans numa OS paga e cancelada, 245 no caminho feliz | [A3](#a3--trace-da-saga-no-jaeger) |
+| Alerta de fila sem consumidor, disparado e recuperado no kind local | [A6](#a6--alerta-de-fila-sem-consumidor) |
+| Cinco dos nove dashboards, sobre um Prometheus com mais de três dias de dados | [A7](#a7--dashboards-do-grafana) |
 | Kind local: 14 execuções do BDD, 28 pods sem reinício em 600,9 s sem tráfego e a demonstração | [relatório da execução local](evidencias/observabilidade.md) |
 
 ## 12. Rastreabilidade requisito → evidência
@@ -813,12 +813,12 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-038 | Testes unitários | 10.312 casos, 1.731 e 1.475 testes ([seção 8](#8-testes-e-qualidade)) |
 | RNF-039 | Fluxo completo com BDD | 11 cenários e um esquema com 3 exemplos no CD de cada serviço |
 | RNF-040 | Cobertura de 80% | 99,6%, 100% e 100% ([registro](evidencias/coverage.md)) |
-| RNF-041 | SonarQube no CI | gate aprovado nos três, com 0 code smells ([resumo](evidencias/coverage.md#sonarqube); [prints](#b2--sonarqube)) |
+| RNF-041 | SonarQube no CI | gate aprovado nos três, com 0 code smells ([resumo](evidencias/coverage.md#sonarqube); [prints](#a2--sonarqube)) |
 | RNF-042 | Pipeline independente até o Kubernetes | CD aprovado nos três ([seção 9](#9-cicd-e-deploy)) |
-| RNF-043 | `main` protegida | ruleset nos quatro ([B8](#b8--proteção-da-main); [conferência](evidencias/protecao-da-main.md)) |
+| RNF-043 | `main` protegida | ruleset nos quatro ([A8](#a8--proteção-da-main); [conferência](evidencias/protecao-da-main.md)) |
 | RNF-044 | Um repositório por serviço | [seção 2](#2-repositórios-e-estado-do-cicd) |
 | RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.2](#42-comunicação-e-componentes)) |
-| RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); capturas no [B7](#b7--dashboards-do-grafana) |
+| RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); capturas no [A7](#a7--dashboards-do-grafana) |
 | RNF-047 | Código-fonte | `src/` de cada serviço |
 | RNF-048 | Dockerfile e manifestos | `Dockerfile` e `k8s/` de cada serviço; imagem e deploy em cada CD ([seção 9](#9-cicd-e-deploy)) |
 | RNF-049 | Pipelines de CI/CD | runs da [seção 2](#2-repositórios-e-estado-do-cicd) |
@@ -827,8 +827,8 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-052 | Swagger ou Postman | OpenAPI e collection por serviço; Newman no CD |
 | RNF-053 | Vídeo de até 15 minutos | pendente: gravação ([seção 3](#3-link-do-vídeo)) |
 | RNF-054 | PDF com os seis itens | este documento; submissão pendente |
-| RNF-055 | Timeout, retry, DLQ e circuit breaker | [`prova_retry.py`](../../../scripts/prova_retry.py) (retry); [teste](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/integracao/mensageria/test_consumidor.py#L234) e [BDD](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/bdd/saga_atendimento.feature#L234-L257) do OS Service (DLQ e prazo); [teste](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/unitarios/diagnostico/test_validador_billing.py#L93-L246) da Execução (REST); BDD de resiliência |
-| RNF-056 | Rastreamento distribuído | trace nos três serviços ([B3](#b3--trace-da-saga-no-jaeger)); o do Mercado Pago pendente |
+| RNF-055 | Timeout, retry, DLQ e circuit breaker | [`prova_retry.py`](../../../scripts/prova_retry.py) (retry); OS Service: [consumidor](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/integracao/mensageria/test_consumidor.py#L234) (DLQ); [prazos](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/integracao/mensageria/test_prazos_com_broker.py#L210-L400) e [BDD](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/bdd/saga_atendimento.feature#L234-L257) (prazo); [teste](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/unitarios/diagnostico/test_validador_billing.py#L93-L246) da Execução (REST); BDD de resiliência |
+| RNF-056 | Rastreamento distribuído | trace nos três serviços ([A3](#a3--trace-da-saga-no-jaeger)); o do Mercado Pago pendente |
 | RN-023 | Compensação em qualquer etapa | plano de compensação ([seção 6.2](#62-passos-e-compensações)); quatro cenários BDD; falha e retomada no [BDD do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/bdd/saga_atendimento.feature#L196-L350) |
 | RN-024 | Orçamento recusado ou expirado | BDD: recusa pelo link e expiração |
 | RN-025 | Pagamento recusado ou expirado | BDD: pagamento recusado no simulador |
@@ -842,7 +842,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | Ponto da avaliação da fase 3 | Como a fase 4 trata |
 |---|---|
 | Validar o CPF antes da consulta ao banco | O OS Service valida CPF e CNPJ pelo módulo 11 antes de consultar ([CPF](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/src/compartilhado/dominio/cpf.py), [CNPJ](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/src/compartilhado/dominio/cnpj.py)), e o cenário BDD `@validacao` prova a recusa no CD |
-| Commits diretos na `main`; exigir PR | Os quatro repositórios ganharam o ruleset no dia da criação, e nenhum commit direto entrou além do `Initial commit` ([seção 2](#2-repositórios-e-estado-do-cicd) e [B8](#b8--proteção-da-main)) |
+| Commits diretos na `main`; exigir PR | Os quatro repositórios ganharam o ruleset no dia da criação, e nenhum commit direto entrou além do `Initial commit` ([seção 2](#2-repositórios-e-estado-do-cicd) e [A8](#a8--proteção-da-main)) |
 | Dashboards de negócio em JSON separado e documentado | Quatro dashboards de negócio em JSON próprio, cada painel documentado em [`negocio.md`](../../../observabilidade/negocio.md), com teste que reprova a divergência ([seção 11](#11-observabilidade)) |
 | Material muito extenso; concentrar num índice os artefatos pedidos (componentes, sequências, RFCs, ADRs e ER) | O documento abre com o [índice dos artefatos](#índice-dos-artefatos), com seção, página e link, e os READMEs dos quatro repositórios ficaram com cerca de 170 a 200 linhas, com o detalhe em `docs/` |
 | Vídeo, repositório extra e observação geral | O vídeo da fase 3 não tinha pendência; o da fase 4 está pendente ([seção 3](#3-link-do-vídeo)). A entrega tem só os quatro repositórios da seção 2 |
@@ -855,14 +855,14 @@ A dívida técnica aceita está na [auditoria pré-entrega](auditoria-e-divida-t
 |---|---|
 | Vídeo de até 15 minutos | O grupo grava pelo [roteiro](roteiro-video.md) e põe o link do YouTube (não listado) na seção 3 e no índice |
 | Prova na sandbox real do Mercado Pago | Um integrante com as credenciais de teste roda `make mp-sandbox` no kind local ([README](../../../README.md#mercado-pago-na-sandbox)) |
-| Tag `entrega-fase-4` nos quatro repositórios | O grupo cria a tag nos commits da entrega, repete as provas do CD, refaz as capturas do Anexo B sobre esses commits e gera o PDF final |
+| Tag `entrega-fase-4` nos quatro repositórios | O grupo cria a tag nos commits da entrega, repete as provas do CD, refaz as capturas do Anexo A sobre esses commits e gera o PDF final |
 | Submissão do PDF no portal | O grupo submete o PDF final depois da tag e do vídeo |
 
-# Anexo B — Evidências visuais
+# Anexo A — Evidências visuais
 
-As capturas vêm de páginas públicas do GitHub, de um SonarQube local (B2) e do kind local, onde cada captura só fez leituras. O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem, a data e a janela de cada arquivo.
+As capturas vêm de páginas públicas do GitHub, de um SonarQube local (A2) e do kind local, onde cada captura só fez leituras. O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem, a data e a janela de cada arquivo.
 
-## B1 — CD da `main`
+## A1 — CD da `main`
 
 CI, segurança, SonarQube, imagem e implantação no kind verdes. O deploy entregue é o `deploy-kind`, e os passos dele vêm primeiro; o `deploy-remote` cinza dos grafos é o gancho opcional, desligado. O "push" de cada run é o do merge do PR citado.
 
@@ -901,9 +901,9 @@ Fonte: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech
 </div>
 </div>
 
-## B2 — SonarQube
+## A2 — SonarQube
 
-O job `ci / sonarqube` verde de cada CD de serviço está no [B1](#b1--cd-da-main) e roda a análise no CI. Os três prints do painel do SonarQube (aba Overall Code: quality gate aprovado, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, cobertura e duplicação) são de um servidor local, com as mesmas imagens do CI e o quality gate do repositório; as medidas são as do job. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol`, que o `.coveragerc` omite ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
+O job `ci / sonarqube` verde de cada CD de serviço está no [A1](#a1--cd-da-main) e roda a análise no CI. Os três prints do painel do SonarQube (aba Overall Code: quality gate aprovado, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, cobertura e duplicação) são de um servidor local, com as mesmas imagens do CI e o quality gate do repositório; as medidas são as do job. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol`, que o `.coveragerc` omite ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
 
 <div class="grade">
 <div>
@@ -939,7 +939,7 @@ Fonte: commit `0ec76fe`, 21/10/2026; [run 39536414057](https://github.com/fiap-p
 </div>
 </div>
 
-## B3 — Trace da saga no Jaeger
+## A3 — Trace da saga no Jaeger
 
 Os traces são do Jaeger do kind local. O das compensações vem de um ensaio com o simulador do Mercado Pago, não do provedor real, e a mesma OS está no Loki ([seção 11](#11-observabilidade)). O do caminho feliz, de 19/10/2026, foi aberto pela aba Upload de um Jaeger avulso. A busca de 20/10/2026 (três traces, cada um nos três serviços) e o trace `bfe21ce701ea69d6afc008a870d2ce21`, do mesmo cenário das compensações, estão em [busca](evidencias/jaeger-busca-saga-2026-10-20.png) e [trace](evidencias/jaeger-trace-saga-2026-10-20.png).
 
@@ -951,11 +951,11 @@ Fonte: [trace-estorno-2026-10-23.json](evidencias/trace-estorno-2026-10-23.json)
 
 Fonte: [trace-saga-2026-10-19.json](evidencias/trace-saga-2026-10-19.json), trace `af146ea716424dfc2ac5b25960b8e9ae`.
 
-## B4 — Swagger pela borda
+## A4 — Swagger pela borda
 
 O Swagger de cada serviço pelo Kong do kind, em `https://localhost/<prefixo>/docs` (o campo Servers mostra o prefixo), tem print no repositório: [OS Service](evidencias/swagger-os-service-2026-10-20.png), [Billing](evidencias/swagger-billing-service-2026-10-20.png) e [Execução](evidencias/swagger-execution-service-2026-10-20.png), de 20/10/2026. O OpenAPI e a collection Postman de cada serviço estão em `docs/api/` ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api)).
 
-## B5 — Newman e ZAP no CD do `platform`
+## A5 — Newman e ZAP no CD do `platform`
 
 O job `e2e` roda o BDD, o Newman e o ZAP no mesmo kind; os resumos são páginas montadas com os números dos artefatos do run.
 
@@ -980,7 +980,7 @@ Fonte: artefato `zap-baseline` do mesmo run.
 </div>
 </div>
 
-## B6 — Alerta de fila sem consumidor
+## A6 — Alerta de fila sem consumidor
 
 Com o consumidor do Billing parado por quatro minutos no kind local, a regra `pytstop-fila-sem-consumidor` disparou para `billing.comandos` e voltou ao normal depois da restauração ([horários](evidencias/observabilidade.md#alertas-e-recuperação)).
 
@@ -1001,7 +1001,7 @@ Fonte: Grafana do kind, 19/10/2026, 00:58 (Brasília).
 </div>
 </div>
 
-## B7 — Dashboards do Grafana
+## A7 — Dashboards do Grafana
 
 Dashboards do Grafana do kind local, abertos sem login, só para leitura; as janelas, o histórico do Prometheus e as execuções da demonstração estão no [relatório de observabilidade](evidencias/observabilidade.md#dashboards-e-histórico). Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos. Os outros quatro dashboards estão no repositório: [Saga](evidencias/grafana-saga-2026-10-22.png), [Mensageria](evidencias/grafana-mensageria-2026-10-22.png), [Bancos](evidencias/grafana-bancos-2026-10-22.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-22.png).
 
@@ -1025,7 +1025,7 @@ Fonte: a mesma janela do Atendimento. Os códigos SRV-E2E e PEC-E2E são os cat�
 
 Fonte: Grafana do kind, de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta da demonstração. O pico de 5xx é o cenário da API do Billing parada.
 
-## B8 — Proteção da `main`
+## A8 — Proteção da `main`
 
 Os quatro rulesets, lidos pela API do GitHub em 24/10/2026 ([conferência](evidencias/protecao-da-main.md)); a página pública não mostra o bypass, que a API devolve vazio.
 
