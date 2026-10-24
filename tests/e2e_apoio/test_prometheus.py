@@ -1,10 +1,11 @@
 """A espera de uma raspagem do Prometheus antes de derrubar um pod.
 
 O contador de um pod mora na memoria dele e so chega ao Prometheus na raspagem (15 s).
-O cenario do consumidor do Billing parado derrubava o pod 8 a 9 s depois do estorno do
-cenario anterior, e o estorno ficava de fora do painel Pagamentos (6 do Billing contra 8
-do OS). Aqui o Prometheus e um falso que raspa a cada 15 s no relogio do teste, e a
-espera tem de durar o que falta para a raspagem seguinte, nem mais nem menos.
+No make demo, o cenario do consumidor do Billing parado derrubava o pod 8 a 9 s depois
+do estorno do @estorno (dois cenarios antes), e a causa provavel (inferida pelos tempos,
+nao medida) dos 6 estornos do Billing contra 8 do OS no painel Pagamentos e esse
+incremento perdido. Aqui o Prometheus e um falso que raspa a cada 15 s no relogio do
+teste, e a espera tem de durar o que falta para a raspagem seguinte, nem mais nem menos.
 """
 
 from __future__ import annotations
@@ -53,7 +54,7 @@ def esperar(
 def test_espera_so_a_raspagem_que_falta_quando_a_ultima_foi_antes_do_inicio(
     relogio: Relogio,
 ) -> None:
-    # A ultima raspagem foi ha 8 s (o estorno do cenario anterior, antes do pod cair):
+    # A ultima raspagem foi ha 8 s, antes do estorno que o pod ainda so tem na memoria:
     # a seguinte vem 7 s depois, e a espera nao dorme um segundo a mais nem a menos.
     esperar(PrometheusRaspando(relogio, ha=8), relogio)
 

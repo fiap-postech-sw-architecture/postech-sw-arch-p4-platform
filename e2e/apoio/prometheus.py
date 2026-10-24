@@ -79,10 +79,11 @@ def esperar_raspagem(
 
     O contador de um pod mora na memoria dele e so chega ao Prometheus na raspagem, a
     cada 15 s: o pod derrubado antes da seguinte leva o que contou desde a ultima, e o
-    painel mostra menos que o servico que nao caiu (6 estornos no Billing contra 8 no
-    OS). Quem vai derrubar um pod espera aqui. "Agora" e o ``time()`` do proprio
-    Prometheus e a raspagem e a que ele registrou: o relogio de quem roda o E2E (um
-    runner, ou um Mac com a VM do Docker) nao entra na comparacao.
+    painel pode mostrar menos que o servico que nao caiu (a causa provavel, nao medida,
+    dos 6 estornos no Billing contra 8 no OS). Quem vai derrubar um pod espera aqui.
+    "Agora" e o ``time()`` do proprio Prometheus e a raspagem e a que ele registrou: o
+    relogio de quem roda o E2E (um runner, ou um Mac com a VM do Docker) nao entra na
+    comparacao.
     """
     descricao = (
         f"raspagem de {job} ({namespace}) pelo Prometheus depois do inicio da espera"

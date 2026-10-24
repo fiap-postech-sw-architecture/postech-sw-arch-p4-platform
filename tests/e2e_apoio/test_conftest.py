@@ -138,7 +138,8 @@ def test_o_passo_do_consumidor_parado_so_derruba_o_pod_depois_de_o_prometheus_ra
 ) -> None:
     # O passo de verdade, com as fixtures de verdade e um cluster falso: o pod do
     # consumidor so cai depois de o Prometheus ter raspado o consumidor. Sem a espera
-    # o estorno do cenario anterior some do contador do Billing (6 contra 8 do OS).
+    # o que o pod contou desde a ultima raspagem some do contador do Billing (no make
+    # demo, o estorno de dois cenarios antes: a causa provavel dos 6 contra 8 do OS).
     testes = """\
 from e2e.test_saga import _consumidor_parado
 

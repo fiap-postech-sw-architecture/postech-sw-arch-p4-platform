@@ -513,9 +513,11 @@ def _prazo_sem_decisao(api: Api, cenario: Cenario) -> None:
 @given("o consumidor do Billing parado")
 def _consumidor_parado(escalas: Escalas, kubectl: Kubectl, cenario: Cenario) -> None:
     cenario.filas_mortas_antes = cenario.filas_mortas_antes or kubectl.filas_mortas()
-    # O pod derrubado leva o que contou desde a ultima raspagem (15 s): o estorno do
-    # cenario anterior, 8 a 9 s antes, sumia do contador do Billing (6 estornos contra
-    # 8 do OS no painel Pagamentos). So derruba depois de uma raspagem nova.
+    # O pod derrubado leva o que contou desde a ultima raspagem (15 s). No make demo o
+    # estorno do cenario @estorno acontece 8 a 9 s antes deste passo (dois cenarios
+    # antes, com o do 409 no meio); a causa provavel (nao medida) dos 6 estornos do
+    # Billing contra 8 do OS no painel Pagamentos e esse estorno ter ficado fora do
+    # contador. So derruba depois de uma raspagem nova.
     narrar("      . esperando o Prometheus raspar o consumidor do Billing")
     inicio = time.monotonic()
     esperar_raspagem(
