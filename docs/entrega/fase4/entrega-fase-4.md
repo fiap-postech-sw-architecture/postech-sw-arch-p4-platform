@@ -1025,12 +1025,25 @@ Fonte: Grafana do kind, de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta da demo
 
 ## B8 — Proteção da `main`
 
-O ruleset da `main` do OS Service, aberto sem login, e a lista dos commits dela: todo commit tem o `(#N)` do PR no título, menos o `Initial commit` que o GitHub cria com o repositório. O Billing tem o mesmo ruleset ([print](evidencias/protecao-ruleset-billing-service-2026-10-23.png)). A página pública não mostra a lista de exceções, que a API devolve vazia nos quatro repositórios ([conferência](evidencias/protecao-da-main.md)).
+Os quatro rulesets, lidos pela API do GitHub em 24/10/2026 ([conferência](evidencias/protecao-da-main.md)); a página pública não mostra o bypass, que a API devolve vazio.
 
-![Ruleset da main do OS Service: ativo, PR obrigatório e nove checks obrigatórios.](evidencias/protecao-ruleset-os-service-2026-10-23.png)
+<div class="inteira">
+
+| Repositório | Ruleset | Regras | Checks obrigatórios | Bypass | Criado em (Brasília) |
+|---|---|---|---|---|---|
+| OS Service | [24594457](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/rules/24594457) | PR só por squash e com as conversas resolvidas, checks, histórico linear, sem force push nem exclusão | 9 | nenhum | 06/10/2026&nbsp;13:50 |
+| Billing | [24594468](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/rules/24594468)&nbsp;([print](evidencias/protecao-ruleset-billing-service-2026-10-23.png)) | as mesmas | 9 | nenhum | 06/10/2026&nbsp;13:50 |
+| Execução | [24594458](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/rules/24594458) | as mesmas | 9 | nenhum | 06/10/2026&nbsp;13:50 |
+| `platform` | [24599837](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837) | as mesmas | 4 | nenhum | 06/10/2026&nbsp;14:54 |
+
+</div>
+
+![Ruleset da main do OS Service, aberto sem login: ativo, PR obrigatório e nove checks obrigatórios.](evidencias/protecao-ruleset-os-service-2026-10-23.png)
 
 Fonte: [ruleset 24594457](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/rules/24594457), 23/10/2026.
 
-![Commits da main do OS Service na captura de 23/10: 29 de PR e o Initial commit.](evidencias/protecao-commits-main-os-service-2026-10-23.png)
+Os PRs passam pelos checks obrigatórios, e os do grupo trazem o registro da revisão no próprio PR; a regra não exige aprovação de outro membro (o print mostra `Required approvals: 0`).
+
+![Commits da main do OS Service na captura de 23/10: 29 com o (#N) do PR no título e o Initial commit, que o GitHub cria com o repositório.](evidencias/protecao-commits-main-os-service-2026-10-23.png)
 
 Fonte: [commits da main](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/commits/main), 23/10/2026. O × do #15 é o `trivy` do run depois do merge, que bateu no limite de pulls do registro de imagens; os checks do PR passaram.

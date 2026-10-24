@@ -71,8 +71,14 @@ figure img { display: block; max-width: 100%; max-height: 88mm; margin: 0 auto; 
 figure img[src*="grafana-"], figure img[src*="loki-"], figure img[src*="jaeger-estorno"] {
   max-width: 88%; max-height: 200mm; }
 figure img[src*="grafana-"] { max-width: 80%; }
-/* Ruleset e lista de commits: telas altas de GitHub, uma por página. */
+/* Ruleset e lista de commits: telas altas de GitHub, uma por página. O ruleset
+   fica em 170 mm para caber na página do título do B8 e da tabela dos quatro
+   rulesets, que não se parte (.inteira), quando a tabela não couber no pé da
+   página anterior: com 200 mm ele pularia para a página seguinte, e a lista de
+   commits, para mais uma. */
 figure img[src*="protecao-"] { max-height: 200mm; }
+figure img[src*="protecao-ruleset"] { max-height: 170mm; }
+.inteira { break-inside: avoid; }
 /* Passos do deploy-kind: o texto da interface (14 px) sai com 6,8 pt na largura
    toda; no teto de 88 mm seriam 5 pt, e na grade de duas colunas, 2,4 pt. */
 figure img[src*="cd-deploy-kind"] { max-height: 125mm; }

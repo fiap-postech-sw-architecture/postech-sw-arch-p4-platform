@@ -1,6 +1,6 @@
 # Proteção da `main`
 
-Conferido em 20/10/2026 e de novo em 23/10/2026 com a API do GitHub, nos quatro repositórios da fase 4. O ruleset da `main` é visível a quem tem leitura no repositório, e é ele que exige os checks ([ADR-042](../../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)).
+Conferido em 20/10/2026 e de novo em 23 e 24/10/2026 com a API do GitHub, nos quatro repositórios da fase 4; a leitura de 24/10 (GET de `rulesets` e do detalhe de cada um) deu a tabela do B8. O ruleset da `main` é visível a quem tem leitura no repositório, e é ele que exige os checks ([ADR-042](../../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)).
 
 | Repositório | Ruleset | Criado em (Brasília) | Checks obrigatórios |
 |---|---|---|---|
@@ -9,7 +9,9 @@ Conferido em 20/10/2026 e de novo em 23/10/2026 com a API do GitHub, nos quatro 
 | Execution Service | [24594458](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/rules/24594458) | 06/10/2026, 13:50 | `lint`, `type-check`, `security`, `test`, `sonarqube`, `build`, `pip-audit`, `gitleaks`, `trivy` |
 | Plataforma | [24599837](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837) | 06/10/2026, 14:54 | `manifests`, `contratos`, `gitleaks`, `deploy-kind` |
 
-Os quatro rulesets estão ativos, valem para a branch padrão e não têm exceção: `bypass_actors` vazio e `current_user_can_bypass` igual a `never`, conferidos em 23/10/2026. Todos têm as mesmas regras: pull request obrigatório, merge só por squash, conversas resolvidas antes do merge, histórico linear, sem force push e sem exclusão da branch. A aprovação de revisão não é exigida (`Required approvals: 0`): o ruleset exige o PR e os checks.
+Os quatro rulesets estão ativos, valem para a branch padrão e não têm exceção: `bypass_actors` vazio e `current_user_can_bypass` igual a `never`, conferidos em 23 e 24/10/2026. Todos têm as mesmas regras: pull request obrigatório, merge só por squash, conversas resolvidas antes do merge, histórico linear, sem force push e sem exclusão da branch. A aprovação de revisão não é exigida (`Required approvals: 0`): o ruleset exige o PR e os checks.
+
+Revisão: em 24/10/2026, os PRs mesclados do grupo (32 no OS Service, 24 no Billing, 21 na Execução e 45 no `platform`) trazem no corpo o registro da revisão, e os do Dependabot (3, 7, 5 e 1) só passam pelos checks. Conferido em cada repositório com `gh pr list --state merged --json author,reviews,body`.
 
 ## Quando o ruleset veio
 
