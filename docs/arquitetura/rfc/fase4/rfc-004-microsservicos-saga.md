@@ -14,7 +14,7 @@
 |---|---|
 | Resumo e problema | Seção 1. O monolito modular da fase 3, com banco único e transações ACID (atomicidade, consistência, isolamento e durabilidade) locais, vira três serviços com saga ([gap analysis](../../../requisitos/fase4/gap-analysis-fase-4.md)) |
 | Proposta técnica | Seções 2 a 10 |
-| Impacto esperado | Requisitos funcionais RF-028 a RF-038, regras de negócio RN-023 a RN-029 e requisitos não funcionais RNF-031 a RNF-056; o PDF e o vídeo reaproveitam os diagramas das seções 2 e 4 |
+| Impacto esperado | Requisitos funcionais RF-028 a RF-038, regras de negócio RN-023 a RN-029 e requisitos não funcionais RNF-031 a RNF-056; o PDF reproduz os diagramas das seções 2, 4.8, 7 e 10.2, e o vídeo, os das seções 2 e 4 |
 | Alternativas consideradas | Nos registros de decisão de arquitetura (ADR) 034 a 043, uma decisão por ADR |
 | Pontos em aberto | [Seção 11.2](#112-pontos-em-aberto), itens 1 a 5 |
 
