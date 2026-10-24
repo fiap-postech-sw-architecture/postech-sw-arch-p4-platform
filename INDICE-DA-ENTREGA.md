@@ -41,7 +41,7 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | Todo commit por pull request | [Proteção da `main` e origem dos commits](docs/entrega/fase4/evidencias/protecao-da-main.md) |
 | Dashboards de negócio em JSON separado e documentado, com volume diário de OS e tempo médio por status | [JSON do atendimento](observabilidade/dashboards/pytstop-negocio-atendimento.json) e [documentação painel a painel](observabilidade/negocio.md) |
 | Índice único dos artefatos | Este índice e o [índice dos artefatos](docs/entrega/fase4/entrega-fase-4.md#índice-dos-artefatos) que abre o PDF, com a seção e a página de cada um |
-| Painéis de taxa de sucesso, latência e erros | [JSON dos serviços](observabilidade/dashboards/pytstop-servicos.json), com taxa de sucesso, latência p95 e erro 5xx por serviço ([como ler](observabilidade/README.md#dashboard-pytstop---serviços-pytstop-servicos)) |
+| Vídeo, repositório extra e observação geral | O vídeo da fase 3 não tinha pendência; o da fase 4 está pendente ([seção 3](docs/entrega/fase4/entrega-fase-4.md#3-link-do-vídeo)). A entrega tem só os [quatro repositórios](#repositórios) |
 
 ## Dashboards
 
@@ -53,7 +53,7 @@ Cada repositório de serviço contém `Dockerfile`, `k8s/`, `.github/workflows/`
 | Negócio — Execução | [execução](observabilidade/dashboards/pytstop-negocio-execucao.json) | [painéis de negócio](observabilidade/negocio.md) | [captura](docs/entrega/fase4/evidencias/grafana-execucao-2026-10-24.png) |
 | Saga | [saga](observabilidade/dashboards/pytstop-saga.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-saga-2026-10-24.png) |
 | Mensageria dos serviços | [mensageria](observabilidade/dashboards/pytstop-mensageria.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-mensageria-2026-10-24.png) |
-| Serviços | [serviços](observabilidade/dashboards/pytstop-servicos.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-servicos-2026-10-24.png) |
+| Serviços: taxa de sucesso, latência p95 e erro 5xx por serviço | [serviços](observabilidade/dashboards/pytstop-servicos.json) | [painéis técnicos](observabilidade/README.md#dashboard-pytstop---serviços-pytstop-servicos) | [captura](docs/entrega/fase4/evidencias/grafana-servicos-2026-10-24.png) |
 | Bancos | [bancos](observabilidade/dashboards/pytstop-bancos.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-bancos-2026-10-24.png) |
 | Plataforma: broker, borda e alvos | [plataforma](observabilidade/dashboards/pytstop-plataforma.json) | [painéis técnicos](observabilidade/README.md) | [captura](docs/entrega/fase4/evidencias/grafana-plataforma-2026-10-24.png) |
 
