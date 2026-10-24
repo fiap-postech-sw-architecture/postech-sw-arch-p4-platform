@@ -1,6 +1,6 @@
 # BDD integrado — 19/10/2026
 
-O [CD da main da plataforma, run 39231733886](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39231733886), job `e2e`, executou `make -C platform e2e` em kind descartável do runner, overlay kind-ci e Billing simulado. Os 14 cenários selecionados passaram; os três cenários de sandbox real ficaram fora dessa seleção. O resumo do artefato informa 200 s somados. O passo do workflow ocorreu entre 09:50:28 e 09:54:00 UTC, incluindo o trabalho do alvo.
+O [CD da main da plataforma, run 39231733886](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39231733886), job `e2e`, executou `make -C platform e2e` em kind descartável do runner, overlay kind-ci e Billing simulado. As 14 execuções selecionadas (11 cenários e um esquema com 3 exemplos) passaram; os três cenários de sandbox real ficaram fora dessa seleção. O resumo do artefato informa 200 s somados. O passo do workflow ocorreu entre 09:50:28 e 09:54:00 UTC, incluindo o trabalho do alvo.
 
 | Checkout efetivamente exercitado | Commit |
 |---|---|
