@@ -109,7 +109,7 @@ São 9 dashboards (4 de negócio e 5 técnicos: plataforma, Saga, Mensageria, Se
 make port-forward
 ```
 
-O comando abre o Grafana em `localhost:3000`, o Jaeger em `localhost:16686`, o Prometheus em `localhost:9090`, o RabbitMQ em `localhost:15672` e o Mailpit em `localhost:8025`. Os painéis de negócio estão em [`observabilidade/negocio.md`](observabilidade/negocio.md), e os técnicos, os alertas, o catálogo de métricas e a retenção, em [`observabilidade/README.md`](observabilidade/README.md). O que o serviço precisa expor (pod anotado, porta `metrics` e logs em JSON) está em [docs/enderecos-e-variaveis.md](docs/enderecos-e-variaveis.md). As capturas dos nove dashboards estão no [Anexo A do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#anexo-a--evidências-visuais).
+O comando abre o Grafana em `localhost:3000`, o Jaeger em `localhost:16686`, o Prometheus em `localhost:9090`, o RabbitMQ em `localhost:15672` e o Mailpit em `localhost:8025`. Os painéis de negócio estão em [`observabilidade/negocio.md`](observabilidade/negocio.md), e os técnicos, os alertas, o catálogo de métricas e a retenção, em [`observabilidade/README.md`](observabilidade/README.md). O que o serviço precisa expor (pod anotado, porta `metrics` e logs em JSON) está em [docs/enderecos-e-variaveis.md](docs/enderecos-e-variaveis.md). As capturas dos nove dashboards: cinco no [A7 do documento de entrega](docs/entrega/fase4/entrega-fase-4.md#a7--dashboards-do-grafana) e quatro no repositório, ligadas do A7.
 
 ## CI/CD
 
