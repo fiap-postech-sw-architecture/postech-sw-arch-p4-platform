@@ -9,6 +9,7 @@ cada cenario e da sessao, o que o cenario derrubou. Nada disso aparece num
 
 from __future__ import annotations
 
+import ast
 import json
 import os
 
@@ -24,7 +25,7 @@ import pytest
 
 from e2e import ambiente
 from e2e import conftest as conftest_do_e2e
-from e2e_apoio.falsos import criar_cluster_falso
+from e2e_apoio.falsos import INTERVALO_DA_RASPAGEM, criar_cluster_falso
 
 RAIZ = Path(__file__).resolve().parents[2]
 INI = RAIZ / "e2e" / "pytest.ini"
@@ -140,12 +141,18 @@ def test_o_passo_do_consumidor_parado_so_derruba_o_pod_depois_de_o_prometheus_ra
     # consumidor so cai depois de o Prometheus ter raspado o consumidor. Sem a espera
     # o que o pod contou desde a ultima raspagem some do contador do Billing (no make
     # demo, o estorno de dois cenarios antes: a causa provavel dos 6 contra 8 do OS).
+    # O Prometheus falso responde duas vezes com a raspagem de antes do pedido e so na
+    # terceira com uma posterior; o passo espera por ela (10 ms entre as perguntas, no
+    # lugar do 1 s de verdade).
+    (estado / "raspagens-antigas").write_text("2")
     testes = """\
-from e2e.test_saga import _consumidor_parado
+from e2e import test_saga
+from e2e.apoio import prometheus
 
 
-def test_passo(escalas, kubectl, cenario):
-    _consumidor_parado(escalas, kubectl, cenario)
+def test_passo(monkeypatch, escalas, kubectl, cenario):
+    monkeypatch.setattr(prometheus, "INTERVALO_DA_ESPERA", 0.01)
+    test_saga._consumidor_parado(escalas, kubectl, cenario)
 """
 
     resultado = _rodar(tmp_path, estado, testes)
@@ -158,9 +165,64 @@ def test_passo(escalas, kubectl, cenario):
     )
     assert ao_prometheus, "o passo derrubou o consumidor sem perguntar ao Prometheus"
     assert max(ao_prometheus) < derrubada
-    ultima = unquote(chamadas[ao_prometheus[-1]].split("query=")[1])
-    assert 'job="billing-service-consumidor"' in ultima
-    assert 'namespace="pytstop-billing"' in ultima
+    perguntas = [unquote(chamadas[i].split("query=")[1]) for i in ao_prometheus]
+    # O time(), as duas raspagens antigas e a posterior: espera ate a que vale, e para.
+    assert perguntas[0] == "time()"
+    assert len(perguntas) == 1 + 3, perguntas
+    for pergunta in perguntas[1:]:
+        assert 'job="billing-service-consumidor"' in pergunta
+        assert 'namespace="pytstop-billing"' in pergunta
+
+
+def test_passo_do_consumidor_parado_reprova_e_nao_derruba_se_o_prometheus_nao_raspa(
+    tmp_path: Path, estado: Path
+) -> None:
+    # O Prometheus falso nunca traz uma raspagem posterior ao pedido: o passo reprova no
+    # prazo e o pod do consumidor continua de pe. Quem engole o estouro derruba o pod
+    # sem a raspagem. O prazo aqui e de 0,5 s; o de verdade e o PRAZO_DA_RASPAGEM, e a
+    # mensagem diz o prazo que o passo passou a espera.
+    (estado / "raspagens-antigas").write_text("1000000")
+    testes = """\
+from e2e import test_saga
+from e2e.apoio import prometheus
+
+
+def test_passo(monkeypatch, escalas, kubectl, cenario):
+    monkeypatch.setattr(prometheus, "INTERVALO_DA_ESPERA", 0.01)
+    monkeypatch.setattr(test_saga, "PRAZO_DA_RASPAGEM", 0.5)
+    test_saga._consumidor_parado(escalas, kubectl, cenario)
+"""
+
+    resultado = _rodar(tmp_path, estado, testes)
+
+    assert resultado.returncode == 1, resultado.stdout
+    assert "nao ocorreu em 0.5 s" in resultado.stdout
+    derrubadas = [c for c in _escalas(estado) if "--replicas=0" in c]
+    assert not derrubadas, "o passo derrubou o consumidor sem a raspagem"
+
+
+def _prazo_da_raspagem_do_passo() -> float:
+    """O ``PRAZO_DA_RASPAGEM`` de ``e2e/test_saga.py``, lido do codigo.
+
+    O modulo so importa com os markers do E2E (``-c e2e/pytest.ini``): aqui, com os do
+    repositorio, o ``--strict-markers`` recusa as tags do Gherkin.
+    """
+    fonte = (RAIZ / "e2e" / "test_saga.py").read_text(encoding="utf-8")
+    (valor,) = (
+        no.value
+        for no in ast.parse(fonte).body
+        if isinstance(no, ast.AnnAssign)
+        and isinstance(no.target, ast.Name)
+        and no.target.id == "PRAZO_DA_RASPAGEM"
+        and no.value is not None
+    )
+    return float(ast.literal_eval(valor))
+
+
+def test_o_prazo_do_passo_cobre_duas_raspagens_do_prometheus() -> None:
+    # Com a raspagem a cada 15 s, um prazo menor que dois intervalos reprovaria o CI de
+    # verdade num runner que atrasa a raspagem seguinte.
+    assert _prazo_da_raspagem_do_passo() >= 2 * INTERVALO_DA_RASPAGEM
 
 
 def test_inicio_da_sessao_religa_o_que_a_execucao_anterior_deixou_em_zero(

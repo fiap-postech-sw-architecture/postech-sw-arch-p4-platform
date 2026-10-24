@@ -309,7 +309,8 @@ def processo_vivo(pid: int) -> bool:
 
 # kubectl e docker falsos de um cluster kind-ci: respondem ao que a sessao do E2E
 # pergunta antes e durante os cenarios e anotam cada chamada em ``chamadas``.
-# O estado (replicas, ConfigMap do Billing, DLQs) vive em arquivos de ``estado``.
+# O estado (replicas, ConfigMap do Billing, DLQs, quantas respostas do Prometheus ainda
+# trazem a raspagem de antes do pedido) vive em arquivos de ``estado``.
 _CLUSTER_FALSO = """\
 #!{python}
 import json, os, sys, time
@@ -326,13 +327,19 @@ juntos = " ".join(args)
 if nome == "docker":
     print("127.0.0.1:443")
 elif "get --raw" in juntos and "prometheus:9090" in juntos:
-    # O Prometheus do kind: a raspagem que a consulta pede e sempre posterior ao
-    # time(), para a espera passar de primeira.
+    # O Prometheus do kind: a raspagem que a consulta pede e posterior ao time(), para
+    # a espera passar de primeira, salvo as primeiras N respostas, com N lido do arquivo
+    # raspagens-antigas do estado: essas ainda trazem a raspagem de 30 s antes.
     agora = time.time()
     if unquote(juntos.split("query=")[1]) == "time()":
         dados = {"resultType": "scalar", "result": [agora, str(agora)]}
     else:
-        item = {"metric": {}, "value": [agora, str(agora + 1)]}
+        antigas = estado / "raspagens-antigas"
+        restam = int(antigas.read_text()) if antigas.exists() else 0
+        if restam:
+            antigas.write_text(str(restam - 1))
+        instante = agora - 30 if restam else agora + 1
+        item = {"metric": {}, "value": [agora, str(instante)]}
         dados = {"resultType": "vector", "result": [item]}
     print(json.dumps({"status": "success", "data": dados}))
 elif "get nodes" in juntos:
