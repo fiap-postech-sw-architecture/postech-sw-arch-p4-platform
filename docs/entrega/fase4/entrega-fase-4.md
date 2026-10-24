@@ -697,6 +697,8 @@ A cobertura soma linhas e ramos, e o código novo de cada PR passa também pelo 
 
 O ambiente Kubernetes do enunciado é o kind que o CD de cada serviço cria no runner, e o CD só fica verde depois do smoke e do BDD nele. A cada push na `main`, o CD cria o cluster descartável, implanta a plataforma e os três serviços, gera os Secrets no próprio run e roda o smoke de cada namespace e o E2E BDD pela borda, com a imagem que o serviço acabou de publicar. O enunciado pede deploy automatizado em Kubernetes e não exige nuvem: nenhuma credencial de nuvem fica no GitHub, e o deploy não depende da credencial de 4 horas do AWS Academy ([ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md#deploy-remoto-opcional-e-desligado)).
 
+A imagem sai do `Dockerfile` de cada serviço ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/Dockerfile), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/Dockerfile) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/Dockerfile)), e os manifestos Kubernetes ficam em `k8s/`, numa base e nos overlays `kind`, `kind-ci` e `k3s` ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/k8s), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/k8s) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/k8s)).
+
 ```mermaid
 ---
 config:
@@ -818,7 +820,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-045 | Mensageria na orquestração | comandos e eventos no RabbitMQ ([seção 4.2](#42-comunicação-e-componentes)) |
 | RNF-046 | Observabilidade da fase 3 | 9 dashboards e 21 alertas ([seção 11](#11-observabilidade)); capturas no [B7](#b7--dashboards-do-grafana) |
 | RNF-047 | Código-fonte | `src/` de cada serviço |
-| RNF-048 | Dockerfile e manifestos | imagem e deploy em cada CD |
+| RNF-048 | Dockerfile e manifestos | `Dockerfile` e `k8s/` de cada serviço; imagem e deploy em cada CD ([seção 9](#9-cicd-e-deploy)) |
 | RNF-049 | Pipelines de CI/CD | runs da [seção 2](#2-repositórios-e-estado-do-cicd) |
 | RNF-050 | Evidências de cobertura | seção Cobertura de cada README |
 | RNF-051 | Arquitetura do serviço | `docs/arquitetura.md` de cada serviço |
