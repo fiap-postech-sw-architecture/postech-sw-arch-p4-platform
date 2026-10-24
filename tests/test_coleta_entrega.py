@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
-from typing import Any
+import json
+import sys
+from typing import TYPE_CHECKING, Any
 
 import pytest
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from scripts.evidencias import coletar
 from scripts.evidencias.verificar import verificar_github
@@ -169,3 +174,21 @@ def test_arvore_truncada_interrompe_coleta(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(coletar, "api", api)
     with pytest.raises(RuntimeError, match="truncada"):
         coletar.coletar("grupo/repo")
+
+
+def test_fase_3_entra_so_com_a_arvore_e_sem_exigencias_de_fechamento(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(coletar, "coletar", lambda repo: {"repo": repo})
+    monkeypatch.setattr(coletar, "arvore_da_main", lambda repo: ("h", ["docs/x.md"]))
+    saida = tmp_path / "github.json"
+    monkeypatch.setattr(sys, "argv", ["coletar", "--output", str(saida)])
+    assert coletar.main() == 0
+    snapshot = json.loads(saida.read_text())
+    assert [r["repo"] for r in snapshot["repositorios"]] == list(coletar.REPOS)
+    assert snapshot["referencias"] == [
+        {"repo": coletar.REFERENCIAS[0], "head": "h", "arvore": ["docs/x.md"]}
+    ]
+    erros = verificar_github(snapshot, final=True)
+    assert erros
+    assert not any(erro.startswith(f"{coletar.REFERENCIAS[0]}:") for erro in erros)

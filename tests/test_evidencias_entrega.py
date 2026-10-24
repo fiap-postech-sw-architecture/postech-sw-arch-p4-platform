@@ -140,6 +140,80 @@ def test_final_reprova_main_inclusive_raiz_da_arvore(
     )
 
 
+FASE_3 = "fiap-postech-sw-architecture/postech-sw-arch-p3"
+
+
+@pytest.mark.parametrize(("arvore", "quebrado"), [(["docs/x.md"], False), ([], True)])
+def test_github_confere_link_da_fase_3_pela_arvore_coletada(
+    pacote: Path, arvore: list[str], quebrado: bool
+) -> None:
+    (pacote / "INDICE-DA-ENTREGA.md").write_text(
+        f"RF-028 a RF-029 [fase 3](https://github.com/{FASE_3}/blob/main/docs/x.md)"
+    )
+    erros = verificar(
+        pacote,
+        github={
+            "repositorios": [],
+            "referencias": [{"repo": FASE_3, "head": "a" * 40, "arvore": arvore}],
+        },
+    )
+    assert not any("metadados GitHub ausentes" in erro for erro in erros)
+    assert any("link GitHub ausente" in erro for erro in erros) is quebrado
+
+
+@pytest.mark.parametrize("ref", ["entrega-fase-4", "entrega-fase-3", "b" * 40])
+def test_github_reprova_link_da_fase_3_fora_da_main(pacote: Path, ref: str) -> None:
+    # O congelamento troca main pela tag da fase 4, que o repositório da fase 3 não tem.
+    (pacote / "INDICE-DA-ENTREGA.md").write_text(
+        f"RF-028 a RF-029 [fase 3](https://github.com/{FASE_3}/blob/{ref}/docs/x.md)"
+    )
+    erros = verificar(
+        pacote,
+        github={
+            "repositorios": [],
+            "referencias": [
+                {"repo": FASE_3, "head": "a" * 40, "arvore": ["docs/x.md"]}
+            ],
+        },
+    )
+    assert any("link GitHub ausente" in erro for erro in erros)
+
+
+def test_final_nao_exige_a_fase_3_nem_a_tag_nos_links_dela(pacote: Path) -> None:
+    (pacote / "INDICE-DA-ENTREGA.md").write_text(
+        f"RF-028 a RF-029 [fase 3](https://github.com/{FASE_3}/blob/main/docs/x.md)"
+    )
+    erros = verificar(
+        pacote,
+        final=True,
+        github={
+            "repositorios": [],
+            "referencias": [
+                {"repo": FASE_3, "head": "a" * 40, "arvore": ["docs/x.md"]}
+            ],
+        },
+    )
+    assert not any(FASE_3 in erro or "ainda aponta para main" in erro for erro in erros)
+
+
+@pytest.mark.parametrize(
+    ("repo", "reprova"),
+    [
+        (FASE_3, False),
+        (f"{FASE_3}-infra-k8s", True),
+        ("fiap-postech-sw-architecture/postech-sw-arch-p4-platform", True),
+    ],
+)
+def test_final_so_aceita_main_no_repositorio_da_fase_3(
+    pacote: Path, repo: str, reprova: bool
+) -> None:
+    (pacote / "INDICE-DA-ENTREGA.md").write_text(
+        f"RF-028 a RF-029 [código](https://github.com/{repo}/blob/main/README.md)"
+    )
+    erros = verificar(pacote, final=True)
+    assert ("final: link de código ainda aponta para main" in erros) is reprova
+
+
 def test_github_reprova_pr_citado_inexistente(pacote: Path) -> None:
     (pacote / "INDICE-DA-ENTREGA.md").write_text(
         "RF-028 a RF-029 [PR](https://github.com/grupo/repo/pull/99)"

@@ -145,9 +145,8 @@ def verificar(
                 )
                 if github is not None and url.netloc == "github.com" and match:
                     repo, _, ref, caminho = match.groups()
-                    prova = next(
-                        (r for r in github["repositorios"] if r["repo"] == repo), None
-                    )
+                    citados = (*github["repositorios"], *github.get("referencias", []))
+                    prova = next((r for r in citados if r["repo"] == repo), None)
                     if prova is None:
                         erros.append(f"metadados GitHub ausentes: {repo}")
                     elif (
@@ -193,7 +192,7 @@ def verificar(
     if github is not None:
         erros.extend(verificar_github(github, final=final))
     if final:
-        from scripts.evidencias.coletar import REPOS
+        from scripts.evidencias.coletar import REFERENCIAS, REPOS
 
         presentes = {r["repo"] for r in (github or {}).get("repositorios", [])}
         for repo in sorted(set(REPOS) - presentes):
@@ -225,9 +224,12 @@ def verificar(
             texto,
         ):
             erros.append("final: link do vídeo ausente")
+        # A tag é da fase 4; o repositório da fase 3 continua citado pela main.
+        fora = "|".join(map(re.escape, REFERENCIAS))
         if any(
             re.search(
-                r"https://github\.com/[^/]+/[^/]+/(?:blob|tree)/main(?:[/)#?\s]|$)",
+                rf"https://github\.com/(?!(?:{fora})/)[^/]+/[^/]+/(?:blob|tree)/main"
+                r"(?:[/)#?\s]|$)",
                 p.read_text(),
             )
             for p in arquivos
