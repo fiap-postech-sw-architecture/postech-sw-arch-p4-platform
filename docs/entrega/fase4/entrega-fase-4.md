@@ -90,7 +90,7 @@ O [roteiro](roteiro-video.md) prevê 14 minutos: o diagrama com os bancos separa
 
 ### 4.1 Diagrama geral
 
-Três serviços, um banco para cada um e dois canais de comunicação: REST pela borda e entre a Execução e o Billing, e mensagens AMQP pelo RabbitMQ. O Kong é a única entrada de fora do cluster, inclusive para o webhook do Mercado Pago. A única chamada síncrona de negócio entre serviços é a validação de preços, da Execução para o Billing; a outra dependência HTTP é a chave pública do JWT (JWKS), que Billing e Execução leem do OS Service com cache de 10 minutos. Só o Billing fala com o Mercado Pago. Tudo roda num cluster Kubernetes kind, na máquina local e no CI.
+Três serviços, um banco para cada um e dois canais de comunicação: REST pela borda e entre a Execução e o Billing, e mensagens AMQP pelo RabbitMQ. O Kong é a única entrada de fora do cluster, inclusive para o webhook do Mercado Pago, e ocupa o papel do Amazon API Gateway da fase 3, já que a fase 4 não tem AWS ([ADR-038](../../arquitetura/adr/fase4/038-borda-e-comunicacao-sincrona.md)). A Lambda de autenticação por CPF sai de escopo e, com ela, o token de cliente: o cliente acompanha a OS pelo acompanhamento público e decide o orçamento por link assinado ([ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)). A única chamada síncrona de negócio entre serviços é a validação de preços, da Execução para o Billing; a outra dependência HTTP é a chave pública do JWT (JWKS), que Billing e Execução leem do OS Service com cache de 10 minutos. Só o Billing fala com o Mercado Pago. Tudo roda num cluster Kubernetes kind, na máquina local e no CI.
 
 ```mermaid
 flowchart TB
