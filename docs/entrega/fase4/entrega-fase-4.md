@@ -764,7 +764,7 @@ A segurança é verificada no CI de cada serviço, em todo PR, a cada push na `m
 
 - **Identidade.** JWT RS256 emitido só pelo OS Service, com validade de 15 minutos; Billing e Execução validam pelo JWKS, e a matriz de papel por rota (admin, atendente e mecânico) vira teste de 401 e 403 em cada serviço ([ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md)).
 - **Canais públicos.** O link de decisão do orçamento é assinado com HMAC-SHA256 e vale uma vez; o webhook do Mercado Pago confere o `x-signature` e lê o estado na API do provedor, nunca no corpo da notificação.
-- **Borda e rede.** O Kong não revela produto nem versão, barra `/metrics` e `/api/v1/admin/*` e limita a taxa por IP do cliente. A NetworkPolicy de cada namespace nega toda entrada e libera só o previsto, e o smoke do CD prova que o banco recusa conexão de outro namespace.
+- **Borda e rede.** O Kong não revela produto nem versão, barra `/metrics` e `/api/v1/admin/*` e limita a taxa por IP do cliente. A NetworkPolicy de cada namespace nega toda entrada e libera só o previsto, e o smoke do CD prova que outro namespace não chega ao banco.
 - **Bancos, broker, segredos e LGPD.** Cada PostgreSQL tem um papel por uso, o MongoDB separa o usuário do serviço e o do exporter, e o RabbitMQ tem um usuário por serviço. Nenhum segredo de produção nem credencial do Mercado Pago fica no GitHub: as senhas e chaves do cluster nascem nele, no primeiro deploy. O compose local traz só valores de demonstração, e o OS Service recusa no boot, fora de `development` e `test`, a chave RSA do JWT, a chave Fernet e a senha do admin de demonstração. O documento do cliente fica cifrado, as mensagens não levam nome, documento nem contato, e a eliminação de dados anonimiza a placa também na Execução. As APIs rodam sem root e com a raiz somente leitura.
 
 Riscos aceitos: tráfego interno do cluster sem TLS, contido pela NetworkPolicy; token revogado ainda válido por até 15 minutos no Billing e na Execução; Mailpit sem autenticação, só com dados fictícios; controller do Kong com leitura dos Secrets dos quatro namespaces; e imagens da plataforma herdadas da fase 3 (Prometheus 2.54.1, Loki 2.9.8 e kube-state-metrics 2.13.0) com CVE HIGH e CRITICAL sem correção na própria linha, que rodam só dentro do cluster, sem Ingress. O tratamento está no [README do `platform`](../../../README.md#decisões-e-limites) e na [RFC-004, seção 11](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#11-riscos-limitações-e-pontos-em-aberto).
@@ -798,7 +798,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RF-031 | Orçamento para aprovação | BDD: orçamento de R$ 210,00 e e-mail com o link |
 | RF-032 | Registro e verificação do pagamento | BDD: confirmado, recusado e estornado |
 | RF-033 | Status após o pagamento | BDD e Newman |
-| RF-034 | Mercado Pago | adapter do Mercado Pago com teste de contrato ([Billing #2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/2) e [Billing #9](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/9); [`test_mercadopago.py`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/unitarios/test_mercadopago.py)); sandbox real pendente |
+| RF-034 | Mercado Pago | adapter testado com o Mercado Pago simulado por HTTP ([`test_mercadopago.py`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/unitarios/test_mercadopago.py); [Billing #2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/2) e [#9](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/9)); sandbox real pendente |
 | RF-035 | Fila de execução | BDD: a OS só entra na fila depois do pagamento |
 | RF-036 | Status no diagnóstico e no reparo | BDD: diagnóstico, execução e finalização |
 | RF-037 | Finalização ao OS Service | BDD: baixa do estoque e saga concluída |
@@ -808,7 +808,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-033 | Banco não relacional | MongoDB 7 ([seção 7](#7-modelo-de-dados)) |
 | RNF-034 | REST síncrono | BDD: API do Billing parada, 503 e circuito aberto |
 | RNF-035 | Mensageria assíncrona | BDD: consumidor parado sem perder o fluxo |
-| RNF-036 | Sem acesso ao banco de outro serviço | smoke do CD ([platform #25](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/25)) |
+| RNF-036 | Sem acesso ao banco de outro serviço | NetworkPolicy por namespace; na [sonda do smoke do CD](../../../scripts/ci/smoke-servicos.sh#L262-L297), a conexão de outro namespace ao banco esgota o prazo |
 | RNF-037 | Saga justificada no README | [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
 | RNF-038 | Testes unitários | 10.312 casos, 1.731 e 1.475 testes ([seção 8](#8-testes-e-qualidade)) |
 | RNF-039 | Fluxo completo com BDD | 11 cenários e um esquema com 3 exemplos no CD de cada serviço |
