@@ -1003,11 +1003,11 @@ Fonte: Grafana do kind, 19/10/2026, 00:58 (Brasília).
 
 ## A7 — Dashboards do Grafana
 
-Dashboards do Grafana do kind local, abertos sem login, todos na janela das seis execuções do `make demo` de 24/10/2026, com o código da `main` ([execuções, commits e consultas](evidencias/observabilidade.md#dashboards-e-histórico)). Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos. O volume diário e o faturamento por dia só mostram dias fechados, à meia-noite UTC, e estão vazios. Os outros quatro dashboards estão no repositório: [Saga](evidencias/grafana-saga-2026-10-24.png), [Mensageria](evidencias/grafana-mensageria-2026-10-24.png), [Bancos](evidencias/grafana-bancos-2026-10-24.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-24.png).
+Dashboards do kind local, sem login, na janela das seis execuções do `make demo` de 24/10/2026, com o código da `main` ([execuções, commits e consultas](evidencias/observabilidade.md#dashboards-e-histórico)). Amplie o PDF para ler os rótulos (1.400 px). O "Volume diário de OS" e o "Faturamento por dia" estão sem barra (a janela é de um dia só); as barras do kind anterior (19 a 22/10, código de antes dos baldes novos) estão nos prints do [Atendimento](evidencias/grafana-atendimento-2026-10-22.png) e dos [Pagamentos](evidencias/grafana-pagamentos-2026-10-22.png). Os outros quatro estão no repositório: [Saga](evidencias/grafana-saga-2026-10-24.png), [Mensageria](evidencias/grafana-mensageria-2026-10-24.png), [Bancos](evidencias/grafana-bancos-2026-10-24.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-24.png).
 
 ![Atendimento: funil de 36 OS abertas a 6 execuções finalizadas e sagas com 24 compensadas e 6 concluídas.](evidencias/grafana-atendimento-2026-10-24.png)
 
-Fonte: Grafana do kind, 24/10/2026, de 14:40 a 16:51 UTC; captura às 16:52 UTC.
+Fonte: Grafana do kind, 24/10/2026, de 14:40 a 16:51 UTC; captura às 16:52 UTC. O "Volume diário de OS" está vazio porque a barra de um dia só aparece às 00:00 UTC do dia seguinte. "Finalizada" é 0 porque as 6 OS finalizadas já foram entregues, e as 6 "Em execução" são o cenário do 409 ([como os números fecham](evidencias/observabilidade.md#como-os-números-dos-prints-fecham)).
 
 ![Orçamentos: 36 gerados, 24 aprovados e 12 expirados (67%); p90 de 1,78 s e média de 774 ms nos aprovados.](evidencias/grafana-orcamentos-2026-10-24.png)
 
@@ -1015,7 +1015,7 @@ Fonte: a mesma janela do Atendimento; captura às 16:52 UTC.
 
 ![Pagamentos: 18 pagas e 6 estornadas, e os 6 estornos que o Billing contou fecham com elas.](evidencias/grafana-pagamentos-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento; captura às 16:53 UTC.
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. 18 pagamentos de R$ 210,00 somam R$ 3.780,00; o bruto de R$ 3.835,35 e o estornado de R$ 1.286,35 (6 x R$ 210,00 = R$ 1.260,00) trazem o acréscimo do `increase()` sobre os pods que o cenário troca a cada execução. O "Faturamento por dia" está vazio pelo mesmo motivo do volume diário.
 
 ![Execução e estoque: 6 OS em execução (cenário do 409), 18 reservas atendidas e 6 recusadas por falta de peça.](evidencias/grafana-execucao-2026-10-24.png)
 
