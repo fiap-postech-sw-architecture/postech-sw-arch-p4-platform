@@ -783,7 +783,7 @@ Nove dashboards em JSON, em [`observabilidade/dashboards/`](../../../observabili
 |---|---|
 | Trace da saga nos três serviços: 339 spans numa OS paga e cancelada, 245 no caminho feliz | [A3](#a3--trace-da-saga-no-jaeger) |
 | Alerta de fila sem consumidor, disparado e recuperado no kind local | [A6](#a6--alerta-de-fila-sem-consumidor) |
-| Cinco dos nove dashboards, sobre um Prometheus com mais de três dias de dados | [A7](#a7--dashboards-do-grafana) |
+| Cinco dos nove dashboards, numa janela só, com seis execuções da demonstração | [A7](#a7--dashboards-do-grafana) |
 | Kind local: 14 execuções do BDD, 28 pods sem reinício em 600,9 s sem tráfego e a demonstração | [relatório da execução local](evidencias/observabilidade.md) |
 
 ## 12. Rastreabilidade requisito → evidência
@@ -1003,27 +1003,27 @@ Fonte: Grafana do kind, 19/10/2026, 00:58 (Brasília).
 
 ## A7 — Dashboards do Grafana
 
-Dashboards do Grafana do kind local, abertos sem login, só para leitura; as janelas, o histórico do Prometheus e as execuções da demonstração estão no [relatório de observabilidade](evidencias/observabilidade.md#dashboards-e-histórico). Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos. Os outros quatro dashboards estão no repositório: [Saga](evidencias/grafana-saga-2026-10-22.png), [Mensageria](evidencias/grafana-mensageria-2026-10-22.png), [Bancos](evidencias/grafana-bancos-2026-10-22.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-22.png).
+Dashboards do Grafana do kind local, abertos sem login, todos na janela das seis execuções do `make demo` de 24/10/2026, com o código da `main` ([execuções, commits e consultas](evidencias/observabilidade.md#dashboards-e-histórico)). Os prints têm 1.400 px de largura: amplie o PDF para ler os rótulos. O volume diário e o faturamento por dia só mostram dias fechados, à meia-noite UTC, e estão vazios. Os outros quatro dashboards estão no repositório: [Saga](evidencias/grafana-saga-2026-10-24.png), [Mensageria](evidencias/grafana-mensageria-2026-10-24.png), [Bancos](evidencias/grafana-bancos-2026-10-24.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-24.png).
 
-![Atendimento: volume diário de OS, funil de 53 OS abertas a 10 finalizadas e sagas com 33 compensadas e 10 concluídas.](evidencias/grafana-atendimento-2026-10-22.png)
+![Atendimento: funil de 36 OS abertas a 6 execuções finalizadas e sagas com 24 compensadas e 6 concluídas.](evidencias/grafana-atendimento-2026-10-24.png)
 
-Fonte: Grafana do kind, de 19/10/2026, 00:00 UTC, até a captura (23/10, 00:10 UTC).
+Fonte: Grafana do kind, 24/10/2026, de 14:40 a 16:51 UTC; captura às 16:52 UTC.
 
-![Orçamentos: 53 gerados, 35 aprovados, 1 recusado, 15 expirados; aprovação de 69%. O p90 de 54 s é o primeiro balde (60 s); a média, 1 s, é o tempo real.](evidencias/grafana-orcamentos-2026-10-22.png)
+![Orçamentos: 36 gerados, 24 aprovados e 12 expirados (67%); p90 de 1,78 s e média de 774 ms nos aprovados.](evidencias/grafana-orcamentos-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento. A correção dos baldes está no [Billing #30](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/30); a explicação, no [registro](evidencias/observabilidade.md#como-os-números-dos-prints-fecham).
+Fonte: a mesma janela do Atendimento; captura às 16:52 UTC.
 
-![Pagamentos: bruto de R$ 5.481,47, estornado de R$ 1.267,16 e líquido de R$ 4.214,31; 26 pagas, 1 recusada, 8 estornadas. Os 6 do painel de estornos são do Billing, que provavelmente perdeu 2 ao reiniciar o pod.](evidencias/grafana-pagamentos-2026-10-22.png)
+![Pagamentos: 18 pagas e 6 estornadas, e os 6 estornos que o Billing contou fecham com elas.](evidencias/grafana-pagamentos-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento. A causa provável e as consultas que a provam estão no [registro](evidencias/observabilidade.md#como-os-números-dos-prints-fecham).
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC.
 
-![Execução e estoque: 8 OS em execução, espera de 6,66 s até o diagnóstico e de 415 ms na fila de execução, 27 reservas atendidas e 8 recusadas.](evidencias/grafana-execucao-2026-10-22.png)
+![Execução e estoque: 6 OS em execução (cenário do 409), 18 reservas atendidas e 6 recusadas por falta de peça.](evidencias/grafana-execucao-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento. Os códigos SRV-E2E e PEC-E2E são os catálogos que o E2E cria em cada cenário.
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. Os códigos SRV-E2E e PEC-E2E são os catálogos que o E2E cria em cada cenário.
 
-![Serviços: requisições, erro 5xx, taxa de sucesso e latência p95 por serviço, circuitos, Mercado Pago e CPU e memória por pod.](evidencias/grafana-servicos-2026-10-22.png)
+![Serviços: requisições, 5xx, taxa de sucesso e latência p95 por serviço; os picos de 5xx, da segunda execução em diante, são a API do Billing parada.](evidencias/grafana-servicos-2026-10-24.png)
 
-Fonte: Grafana do kind, de 23/10/2026, 00:03:31 a 00:12:21 UTC, em volta da demonstração. O pico de 5xx é o cenário da API do Billing parada.
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC.
 
 ## A8 — Proteção da `main`
 
