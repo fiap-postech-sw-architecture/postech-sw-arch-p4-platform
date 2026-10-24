@@ -24,7 +24,7 @@ Os repositórios são a fonte de verdade. Este documento traz o que o avaliador 
 
 ## Índice dos artefatos
 
-As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais reúnem os artefatos que a avaliação da fase 3 pediu num índice só (componentes, sequências, RFC, ADRs e modelo de dados). A coluna "Neste PDF" dá a seção e a página, e o [índice da entrega](../../../INDICE-DA-ENTREGA.md), no repositório, liga os mesmos artefatos a cada grupo de requisitos.
+As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais reúnem os outros entregáveis do enunciado e os artefatos que a avaliação da fase 3 pediu num índice só (componentes, sequências, RFC, ADRs e modelo de dados). A coluna "Neste PDF" dá a seção e a página em que ela começa; o diagrama, quando há, vem nessa página ou nas seguintes. O [índice da entrega](../../../INDICE-DA-ENTREGA.md), no repositório, liga os mesmos artefatos a cada grupo de requisitos.
 
 | Artefato | Neste PDF | No repositório |
 |---|---|---|
@@ -40,6 +40,7 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | ADRs 034 a 043 | [5.3](#53-tecnologias-e-decisões) | [decisões da fase 4](../../arquitetura/adr/fase4/) |
 | Modelo de dados: ER do OS Service e da Execução e modelo dos documentos do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
 | Contratos de mensageria | [4.2](#42-comunicação-e-componentes) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
+| Código-fonte, Dockerfile e manifestos Kubernetes | [2](#2-repositórios-e-estado-do-cicd) e [9](#9-cicd-e-deploy) | `src/`, `Dockerfile` e `k8s/` de cada serviço |
 | Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [A2](#a2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
 | CI/CD e deploy em Kubernetes | [9](#9-cicd-e-deploy) | [ADR-042](../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md) |
 | Segurança e relatório de vulnerabilidades | [10](#10-segurança-e-análise-de-vulnerabilidades) | [registro de segurança](evidencias/seguranca.md); [ADR-039](../../arquitetura/adr/fase4/039-autenticacao-entre-servicos.md) |
