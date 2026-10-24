@@ -41,9 +41,9 @@ Os testes seguem o [ADR-041](041-estrategia-de-testes-e-qualidade.md). Os nomes 
 
 ### Proteção da `main` (RNF-043)
 
-Cada repositório nasce com `auto_init`, o único commit fora de PR, e recebe em seguida a proteção da `main`: PR obrigatório, administradores incluídos, histórico linear, conversas resolvidas, sem force push nem exclusão, só squash merge. Não se exige aprovação de revisor, mas toda thread de revisão, inclusive do Copilot, precisa ser resolvida. Os checks viram obrigatórios assim que o primeiro workflow existe, e a entrega confere que todo commit first-parent da `main` referencia um PR.
+Cada repositório nasce com `auto_init`, o único commit fora de PR, e ganha a proteção da `main` no dia da criação: PR obrigatório, administradores incluídos, histórico linear, conversas resolvidas, sem force push nem exclusão, só squash merge. Não se exige aprovação de revisor, mas toda thread de revisão, inclusive do Copilot, precisa ser resolvida. Os checks viram obrigatórios assim que o primeiro workflow existe, e a entrega confere que todo commit first-parent da `main` referencia um PR.
 
-Além da proteção clássica, cada repositório tem um ruleset na `main` com PR obrigatório, os checks obrigatórios pelos nomes exatos dos jobs, histórico linear e bloqueio de force push e de exclusão. Ruleset ativo é visível a quem tem leitura no repositório, ao contrário da proteção clássica. A evidência para a banca é o link do ruleset no índice da entrega e o resumo da saída de `gh api` em [`protecao-da-main.md`](../../../entrega/fase4/evidencias/protecao-da-main.md).
+Além da proteção clássica, cada repositório tem um ruleset na `main`, criado em 06/10/2026 depois do PR #1 (às 13:50 nos serviços e às 14:54 no `platform`, horário de Brasília), com PR obrigatório, os checks obrigatórios pelos nomes exatos dos jobs, histórico linear e bloqueio de force push e de exclusão. Ruleset ativo é visível a quem tem leitura no repositório, ao contrário da proteção clássica. A evidência para a banca é o link do ruleset no índice da entrega e o resumo da saída de `gh api` em [`protecao-da-main.md`](../../../entrega/fase4/evidencias/protecao-da-main.md).
 
 ### CD a cada commit na `main` (RNF-042)
 
@@ -225,7 +225,7 @@ Descartado pelo enunciado: deploy manual, porque a l. 94 pede deploy automatizad
 ## Notas
 
 * Material: Estrutura de Microsserviços Parte II, Aulas 04 e 05; Estrutura de Microsserviços, Aula 01 (pipeline próprio por serviço como benefício)
-* Configuração da proteção conferida pela API do GitHub em 06/10/2026 nos quatro repositórios da fase 4
+* Configuração da proteção conferida pela API do GitHub em 06/10/2026 nos quatro repositórios da fase 4 e, no ruleset, de novo em 20, 23 e 24/10/2026
 * Rulesets visíveis a quem tem leitura: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets; k3s: https://docs.k3s.io/; Rolling Update: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#rolling-update-deployment
 
 ## Emenda de 18/10/2026
