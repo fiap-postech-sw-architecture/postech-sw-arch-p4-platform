@@ -140,6 +140,45 @@ def test_final_reprova_main_inclusive_raiz_da_arvore(
     )
 
 
+FASE_3 = "fiap-postech-sw-architecture/postech-sw-arch-p3"
+
+
+@pytest.mark.parametrize(("arvore", "quebrado"), [(["docs/x.md"], False), ([], True)])
+def test_github_confere_link_da_fase_3_pela_arvore_coletada(
+    pacote: Path, arvore: list[str], quebrado: bool
+) -> None:
+    (pacote / "INDICE-DA-ENTREGA.md").write_text(
+        f"RF-028 a RF-029 [fase 3](https://github.com/{FASE_3}/blob/main/docs/x.md)"
+    )
+    erros = verificar(
+        pacote,
+        github={
+            "repositorios": [],
+            "referencias": [{"repo": FASE_3, "head": "a" * 40, "arvore": arvore}],
+        },
+    )
+    assert not any("metadados GitHub ausentes" in erro for erro in erros)
+    assert any("link GitHub ausente" in erro for erro in erros) is quebrado
+
+
+@pytest.mark.parametrize(
+    ("repo", "reprova"),
+    [
+        (FASE_3, False),
+        (f"{FASE_3}-infra-k8s", True),
+        ("fiap-postech-sw-architecture/postech-sw-arch-p4-platform", True),
+    ],
+)
+def test_final_so_aceita_main_no_repositorio_da_fase_3(
+    pacote: Path, repo: str, reprova: bool
+) -> None:
+    (pacote / "INDICE-DA-ENTREGA.md").write_text(
+        f"RF-028 a RF-029 [código](https://github.com/{repo}/blob/main/README.md)"
+    )
+    erros = verificar(pacote, final=True)
+    assert ("final: link de código ainda aponta para main" in erros) is reprova
+
+
 def test_github_reprova_pr_citado_inexistente(pacote: Path) -> None:
     (pacote / "INDICE-DA-ENTREGA.md").write_text(
         "RF-028 a RF-029 [PR](https://github.com/grupo/repo/pull/99)"
