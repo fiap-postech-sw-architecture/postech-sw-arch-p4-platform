@@ -17,7 +17,8 @@ PASTA = RAIZ / "docs/entrega/fase4/evidencias"
 DOCUMENTO = RAIZ / "docs/entrega/fase4/entrega-fase-4.md"
 # O PDF de ensaio precisa ficar abaixo de cerca de 6 MB; o resto é texto e diagrama.
 TETO_DOS_PNG = 5_000_000
-# Decisão de volume do PDF: os quatro dashboards que o Anexo A, A7, só lista, as
+# Decisão de volume do PDF: os quatro dashboards que o Anexo A, A7, só lista, os dois
+# de 22/10 que ele liga pelas barras diárias (os do A7, de 24/10, saem sem barra), as
 # três telas do Swagger (A4), o ruleset do Billing (o A8 mostra o do OS Service) e
 # o print de 20/10 do trace e a busca do mesmo dia (o A3 mostra o de 23/10, com as
 # compensações, e o caminho feliz). Imagem que sair desta lista passa a ser
@@ -27,10 +28,12 @@ SO_COM_LINK = {
     "swagger-os-service-2026-10-20.png",
     "swagger-billing-service-2026-10-20.png",
     "swagger-execution-service-2026-10-20.png",
-    "grafana-saga-2026-10-22.png",
-    "grafana-mensageria-2026-10-22.png",
-    "grafana-bancos-2026-10-22.png",
-    "grafana-plataforma-2026-10-22.png",
+    "grafana-saga-2026-10-24.png",
+    "grafana-mensageria-2026-10-24.png",
+    "grafana-bancos-2026-10-24.png",
+    "grafana-plataforma-2026-10-24.png",
+    "grafana-atendimento-2026-10-22.png",
+    "grafana-pagamentos-2026-10-22.png",
     "protecao-ruleset-billing-service-2026-10-23.png",
     "jaeger-trace-saga-2026-10-20.png",
 }
