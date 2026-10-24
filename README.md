@@ -144,7 +144,7 @@ A senha de cada papel do PostgreSQL e de cada usuário do MongoDB troca por um p
 
 ### Regras e allowlist
 
-Cada regra do ZAP tem uma linha em [`e2e/zap/regras.conf`](e2e/zap/regras.conf), e a tabela de [docs/zap.md](docs/zap.md#regras-e-allowlist) é a mesma, conferida por um teste. Reprovam o job (`FAIL`) os cabeçalhos `Server` e `X-Powered-By` com versão (10036 e 10037), a falta de `X-Content-Type-Options` (10021) e a falta de anti-clickjacking e de CSP em resposta HTML (10020 e 10038). O HSTS ausente nos 404 que o próprio Kong gera (10035) só avisa, e o `Cache-Control` (10015) é ignorado. No [run 39098307172](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39098307172), nenhuma regra em `FAIL` disparou nos três serviços.
+Cada regra do ZAP tem uma linha em [`e2e/zap/regras.conf`](e2e/zap/regras.conf), e a tabela de [docs/zap.md](docs/zap.md#regras-e-allowlist) é a mesma, conferida por um teste. Reprovam o job (`FAIL`) os cabeçalhos `Server` e `X-Powered-By` com versão (10036 e 10037), a falta de `X-Content-Type-Options` (10021) e a falta de anti-clickjacking e de CSP em resposta HTML (10020 e 10038). O HSTS ausente nos 404 que o próprio Kong gera (10035) só avisa, e o `Cache-Control` (10015) é ignorado. No [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), nenhuma regra em `FAIL` disparou nos três serviços.
 
 ## Entrega e decisões
 

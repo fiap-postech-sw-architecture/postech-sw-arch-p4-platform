@@ -22,7 +22,7 @@ Roda no Linux do runner. Em outro arranjo, `BORDA` (`https://localhost`), `ZAP_R
 
 ## O que o ZAP acusa
 
-Nenhuma regra em `FAIL` dispara com os três serviços na `main`: no run [39098307172](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39098307172) (platform 7b8aff4, OS e2bf48d, Billing d6d2776, Execução 301052a), com as regras da tabela [abaixo](#regras-e-allowlist), o ZAP leu 38 URLs do OS, 38 do Billing e 24 da Execução, com `fail=0` nos três. Ficam os avisos abaixo.
+Nenhuma regra em `FAIL` dispara com os três serviços na `main`: no run [39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627) (platform d703200, OS 3ce582b, Billing 76b5f9b, Execução 5b1bef4), com as regras da tabela [abaixo](#regras-e-allowlist), o ZAP leu 38 URLs do OS, 38 do Billing e 24 da Execução, com `fail=0` nos três. Ficam os avisos abaixo.
 
 | Achado | Onde | Tratamento |
 |---|---|---|
