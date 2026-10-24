@@ -488,11 +488,11 @@ sequenceDiagram
 
 ## 7. Modelo de dados
 
-Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele, e a NetworkPolicy de cada namespace só deixa o próprio namespace chegar ao banco. Os diagramas mostram as tabelas de que a saga e os contratos dependem; o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
+Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele, e a NetworkPolicy de cada namespace só deixa o próprio namespace chegar ao banco. Os diagramas mostram as tabelas de que a saga e os contratos dependem, menos a `outbox` e a `mensagens_processadas` da [seção 6.3](#63-idempotência-novas-tentativas-e-prazos); o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
 
 **OS Service (PostgreSQL 16).** Clientes, veículos, consentimentos, usuários e tokens revogados vêm da fase 3; o documento do cliente fica cifrado, com um hash para a busca. A OS ganhou versão para o lock otimista e o resumo do orçamento e do pagamento, copiado dos eventos. O histórico só recebe inserções, `sagas` guarda a instância da saga e `notificacoes`, os e-mails do `notificador`.
 
-**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio. A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e ficam fora do ER: as colunas estão na [seção 3.4 do `docs/arquitetura.md`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
+**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio.
 
 **Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. A tabela é a das coleções da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7), que traz também o exemplo de documento; o [`docs/arquitetura.md` do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) detalha o modelo campo a campo, com três acréscimos: um índice da outbox, dois campos de `mensagens_processadas` e a coleção `versao_do_banco`.
 
@@ -507,7 +507,9 @@ Cada serviço é o único dono do seu banco, com credencial própria montada só
 ---
 config:
   er:
-    entityPadding: 8
+    entityPadding: 3
+    nodeSpacing: 60
+    rankSpacing: 70
 ---
 erDiagram
     clientes {
@@ -567,7 +569,7 @@ erDiagram
         varchar falha "reenvios_esgotados ou estorno_recusado"
         jsonb passos "linha do tempo da saga, só com códigos"
         jsonb passos_concluidos
-        jsonb comando_em_voo "comando com prazo técnico: tipo, dados, enviado_em e mensagem_ids, o id de cada envio (o último é o mais recente)"
+        jsonb comando_em_voo "tipo, dados, enviado_em e mensagem_ids"
         jsonb plano_compensacao
         jsonb itens "do DiagnosticoConcluido"
         int reenvios
@@ -577,18 +579,6 @@ erDiagram
         timestamptz atualizada_em "hora da última transição"
         varchar traceparent
         int versao
-    }
-    outbox {
-        bigint id PK
-        uuid mensagem_id UK
-        uuid correlation_id "ordem_id"
-        varchar exchange
-        varchar routing_key
-        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
-        varchar traceparent
-        varchar tracestate
-        varchar status
-        timestamptz entregue_em
     }
     notificacoes {
         bigint id PK
@@ -602,10 +592,6 @@ erDiagram
         timestamptz proxima_tentativa_em
         timestamptz entregue_em
         text ultimo_erro
-    }
-    mensagens_processadas {
-        uuid mensagem_id PK
-        timestamptz processada_em
     }
 
     clientes ||--o{ veiculos : "possui"

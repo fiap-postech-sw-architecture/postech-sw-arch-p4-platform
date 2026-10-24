@@ -849,7 +849,9 @@ Os estados finais aceitam a compensação repetida sem efeito e republicam a res
 ---
 config:
   er:
-    entityPadding: 8
+    entityPadding: 3
+    nodeSpacing: 60
+    rankSpacing: 70
 ---
 erDiagram
     clientes {
@@ -909,7 +911,7 @@ erDiagram
         varchar falha "reenvios_esgotados ou estorno_recusado"
         jsonb passos "linha do tempo da saga, só com códigos"
         jsonb passos_concluidos
-        jsonb comando_em_voo "comando com prazo técnico: tipo, dados, enviado_em e mensagem_ids, o id de cada envio (o último é o mais recente)"
+        jsonb comando_em_voo "tipo, dados, enviado_em e mensagem_ids"
         jsonb plano_compensacao
         jsonb itens "do DiagnosticoConcluido"
         int reenvios
@@ -919,18 +921,6 @@ erDiagram
         timestamptz atualizada_em "hora da última transição"
         varchar traceparent
         int versao
-    }
-    outbox {
-        bigint id PK
-        uuid mensagem_id UK
-        uuid correlation_id "ordem_id"
-        varchar exchange
-        varchar routing_key
-        jsonb envelope "a mensagem inteira, no formato da seção 5.2"
-        varchar traceparent
-        varchar tracestate
-        varchar status
-        timestamptz entregue_em
     }
     notificacoes {
         bigint id PK
@@ -944,10 +934,6 @@ erDiagram
         timestamptz proxima_tentativa_em
         timestamptz entregue_em
         text ultimo_erro
-    }
-    mensagens_processadas {
-        uuid mensagem_id PK
-        timestamptz processada_em
     }
 
     clientes ||--o{ veiculos : "possui"
@@ -968,6 +954,7 @@ erDiagram
 - `prazo_resposta_em` é gravado pela saga a cada envio do comando em voo (o original, cada reenvio e o da retomada) e vale `agora` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS`. É um limite inferior do vencimento, porque o comando só chega ao participante depois de sair da outbox, e é por ele que o `prazos` acha as candidatas por índice; fica nulo sem comando com prazo e em `FALHA_NA_COMPENSACAO`. O relay é genérico e não conhece a saga: quem decide o vencimento é o `prazos`, que lê a linha da outbox do envio mais recente (o último de `mensagem_ids`) e só vence a instância se ela estiver entregue e `entregue_em` + `SAGA_PRAZO_RESPOSTA_SEGUNDOS` já tiver passado. Envio pendente na outbox, ou entregue há menos que o prazo, não vence. `etapa_desde`, a entrada na etapa atual, dá a idade da instância mais antiga e a duração de cada etapa ([seção 9](#9-observabilidade)); `iniciada_em` é a abertura da saga.
 - A saga guarda só códigos (etapa, motivo da compensação, falha), nunca texto livre. O texto que o atendente escreve no cancelamento vai para `ordens_de_servico.motivo_cancelamento` já no pedido, antes de a compensação terminar, e passa ao histórico quando a OS chega a `CANCELADA` (na corrida do pivot, o pedido é descartado); assim a eliminação de dados da LGPD o alcança sem tocar `sagas`.
 - A outbox é só AMQP: toda linha tem `exchange` e `routing_key`, e o relay não conhece o e-mail nem o cliente. As notificações ao cliente vão para a tabela `notificacoes`, gravada na transação da própria transição, e um processo `notificador` (um Deployment, com laço, heartbeat e readiness próprios) as entrega por SMTP como no p3, lendo o contato por projeção SQL de `nome` e `contato`, sem a `ENCRYPTION_KEY`. Falha de SMTP retenta só aquela linha e não trava a saga nem o relay, e a ordem de entrega vale só entre os e-mails da mesma OS. A tabela é própria por duas razões: um relay de versão anterior (rolling update ou `rollout undo`) nunca vê linha de e-mail, e SMTP lento não prende a conexão AMQP do relay. A tabela (migração `004_notificacoes`) e o `notificador` já estão na `main` do OS Service.
+- A `outbox` e a `mensagens_processadas` ficam fora do diagrama; as colunas estão em [Mensageria e e-mail, no `docs/arquitetura.md` do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#mensageria-e-e-mail-contexto-compartilhado-e-ordem_servico).
 
 ### 7.3 Execution Service (PostgreSQL 16)
 
@@ -1031,7 +1018,7 @@ Ao contrário do p3, reservar não consome o saldo: a reserva move quantidade de
 
 Diagnóstico e execução são os registros que esperam o mecânico, por isso guardam o `traceparent` e o `tracestate` e o `id` do comando que os abriu (`solicitacao_id` e `agendamento_id`), de onde saem o `causation_id` e o pai do trace dos eventos que o mecânico provoca. O diagnóstico guarda o retrato do veículo, com o `veiculo_id`, e a execução recebe uma cópia dele no agendamento, para que a fila mostre placa, marca, modelo e ano; `AnonimizarVeiculo` troca a placa nos dois e, no diagnóstico, também `descricao_problema` e `observacoes`, que são texto livre (seção 5.3). Os `itens` do diagnóstico trazem `tipo` (`servico` ou `peca`), `codigo` e `quantidade`. Na fila, `alta` passa à frente de `normal`, e dentro da mesma prioridade vale a ordem de agendamento.
 
-A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e por isso ficam fora do diagrama; as colunas estão na [seção 3.4 do `docs/arquitetura.md` da Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
+A `outbox` e a `mensagens_processadas` da Execução repetem as do OS Service, com o `tipo` da mensagem a mais na outbox, e também ficam fora do diagrama; as colunas estão na [seção 3.4 do `docs/arquitetura.md` da Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#34-mensageria-outbox-e-mensagens_processadas).
 
 ### 7.4 Billing Service (MongoDB 7)
 
