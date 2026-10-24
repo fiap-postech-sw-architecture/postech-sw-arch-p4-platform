@@ -808,7 +808,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RNF-033 | Banco não relacional | MongoDB 7 ([seção 7](#7-modelo-de-dados)) |
 | RNF-034 | REST síncrono | BDD: API do Billing parada, 503 e circuito aberto |
 | RNF-035 | Mensageria assíncrona | BDD: consumidor parado sem perder o fluxo |
-| RNF-036 | Sem acesso ao banco de outro serviço | NetworkPolicy por namespace; na [sonda do smoke do CD](../../../scripts/ci/smoke-servicos.sh#L262-L297), a conexão de outro namespace ao banco esgota o prazo |
+| RNF-036 | Sem acesso ao banco de outro serviço | NetworkPolicy por namespace; na [sonda do smoke do CD](../../../scripts/ci/smoke-servicos.sh#L262-L297), o pod do RabbitMQ (outro namespace) esgota o prazo no banco |
 | RNF-037 | Saga justificada no README | [README do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#por-que-orquestração) |
 | RNF-038 | Testes unitários | 10.312 casos, 1.731 e 1.475 testes ([seção 8](#8-testes-e-qualidade)) |
 | RNF-039 | Fluxo completo com BDD | 11 cenários e um esquema com 3 exemplos no CD de cada serviço |
