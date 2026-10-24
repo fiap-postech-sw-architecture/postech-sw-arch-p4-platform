@@ -128,7 +128,7 @@ A regra é REST quando quem chama precisa da resposta para continuar e a operaç
 config:
   flowchart:
     wrappingWidth: 400
-    nodeSpacing: 20
+    nodeSpacing: 12
     rankSpacing: 40
     padding: 8
 ---
@@ -166,13 +166,6 @@ flowchart TB
 
         evt["RabbitMQ · exchange pytstop.eventos<br/>fila os.eventos (com retry por atraso e .dlq)"]
         mailpit["Mailpit (SMTP)"]
-
-        subgraph obs["Observabilidade"]
-            direction LR
-            grafana["Grafana"] --> jaeger["Jaeger"]
-            grafana --> prom["Prometheus"]
-            grafana --> loki["Loki + Promtail"]
-        end
     end
 
     mp["Mercado Pago (externo)<br/>Checkout Pro · API de pagamentos"]
@@ -194,10 +187,9 @@ flowchart TB
     mp -->|"webhook payment<br/>(x-signature)"| kong
     cliente -->|"paga no checkout"| mp
     os -->|"e-mail pelo notificador (SMTP)"| mailpit
-    os & exe & bil -.->|"OTLP · /metrics · logs"| obs
 ```
 
-**Processos.** Cada serviço roda um Deployment por processo: a `api`, o `consumidor`, o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que envia os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois.
+**Processos.** Cada serviço roda um Deployment por processo: a `api`, o `consumidor`, o `relay` (publica a outbox no RabbitMQ) e, no OS Service e no Billing, o `prazos` (prazos técnicos, validade do orçamento e do pagamento e conciliação com o Mercado Pago); o OS Service tem ainda o `notificador`, que envia os e-mails por SMTP (o Mailpit, na demonstração). O processo que muda estado grava o efeito e a mensagem de saída na mesma transação (a outbox), e o relay publica depois. A telemetria de todos os processos (OTLP, `/metrics` e logs) vai para a observabilidade do diagrama geral ([seção 11](#11-observabilidade)).
 
 ## 5. Divisão dos serviços e tecnologias
 

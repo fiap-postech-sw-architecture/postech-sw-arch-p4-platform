@@ -123,7 +123,7 @@ flowchart TB
 config:
   flowchart:
     wrappingWidth: 400
-    nodeSpacing: 20
+    nodeSpacing: 12
     rankSpacing: 40
     padding: 8
 ---
@@ -161,13 +161,6 @@ flowchart TB
 
         evt["RabbitMQ · exchange pytstop.eventos<br/>fila os.eventos (com retry por atraso e .dlq)"]
         mailpit["Mailpit (SMTP)"]
-
-        subgraph obs["Observabilidade"]
-            direction LR
-            grafana["Grafana"] --> jaeger["Jaeger"]
-            grafana --> prom["Prometheus"]
-            grafana --> loki["Loki + Promtail"]
-        end
     end
 
     mp["Mercado Pago (externo)<br/>Checkout Pro · API de pagamentos"]
@@ -189,10 +182,9 @@ flowchart TB
     mp -->|"webhook payment<br/>(x-signature)"| kong
     cliente -->|"paga no checkout"| mp
     os -->|"e-mail pelo notificador (SMTP)"| mailpit
-    os & exe & bil -.->|"OTLP · /metrics · logs"| obs
 ```
 
-- Linhas cheias são REST, HTTP e mensagens; pontilhadas, telemetria. Comandos saem do relay do OS para o consumidor do participante, e eventos fazem o caminho inverso. Os processos api, consumidor e `prazos` gravam estado e mensagem de saída na mesma transação (outbox), e o relay publica depois.
+- As linhas são REST, HTTP e mensagens. A telemetria de todos os processos (OTLP, `/metrics` e logs) vai para a observabilidade do diagrama anterior, detalhada na [seção 9](#9-observabilidade). Comandos saem do relay do OS para o consumidor do participante, e eventos fazem o caminho inverso. Os processos api, consumidor e `prazos` gravam estado e mensagem de saída na mesma transação (outbox), e o relay publica depois.
 - A única chamada síncrona de negócio entre serviços é a validação de preços da Execução no Billing. A outra dependência HTTP é a chave pública do JWT: Billing e Execução leem o JWKS do OS, com cache de 10 minutos ([ADR-038](../../adr/fase4/038-borda-e-comunicacao-sincrona.md), [ADR-039](../../adr/fase4/039-autenticacao-entre-servicos.md)).
 - O cliente não tem login: usa o acompanhamento público e o link assinado e paga no checkout do Mercado Pago, cujo webhook entra pelo Kong.
 - O `platform` traz RabbitMQ, Kong, observabilidade, Mailpit e metrics-server. A definição do RabbitMQ que ele carrega declara exchanges, filas e bindings, e os serviços só conferem a topologia ([seção 5.1](#51-topologia)). Banco, manifestos, Ingress e pipeline ficam no repositório de cada serviço.
