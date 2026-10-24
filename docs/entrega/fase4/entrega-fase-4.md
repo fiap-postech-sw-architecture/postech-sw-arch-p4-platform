@@ -395,6 +395,11 @@ sequenceDiagram
 **Orçamento recusado ou expirado.** O cliente recusa pelo link, ou a validade vence sem decisão. O orçamento já está encerrado no Billing, então a saga só descarta o diagnóstico e cancela a OS (RN-024).
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     actor CL as Cliente
@@ -420,6 +425,11 @@ sequenceDiagram
 **Falta de peça na reserva.** A Execução trava os itens com lock pessimista, acha saldo insuficiente e não reserva nada. Nenhum pagamento foi solicitado: a saga cancela o orçamento, descarta o diagnóstico e cancela a OS sem cobrar o cliente (RN-026).
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     actor CL as Cliente
@@ -442,6 +452,12 @@ sequenceDiagram
 ```
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+    boxMargin: 8
+---
 sequenceDiagram
     autonumber
     actor AT as Atendente
@@ -684,6 +700,9 @@ O ambiente Kubernetes do enunciado é o kind que o CD de cada serviço cria no r
 config:
   flowchart:
     wrappingWidth: 400
+    nodeSpacing: 20
+    rankSpacing: 40
+    padding: 8
 ---
 flowchart TB
     push(["push na main do serviço<br/>(só via PR com os checks verdes)"])

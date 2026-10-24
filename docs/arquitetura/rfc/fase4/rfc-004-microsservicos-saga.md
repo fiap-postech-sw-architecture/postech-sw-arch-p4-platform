@@ -527,6 +527,11 @@ sequenceDiagram
 #### (b) Orçamento recusado ou expirado
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     actor CL as Cliente
@@ -552,6 +557,11 @@ sequenceDiagram
 #### (c) Falta de peça na reserva
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+---
 sequenceDiagram
     autonumber
     actor CL as Cliente
@@ -576,6 +586,12 @@ sequenceDiagram
 #### (d) Cancelamento depois do pagamento, com estorno
 
 ```mermaid
+---
+config:
+  sequence:
+    mirrorActors: false
+    boxMargin: 8
+---
 sequenceDiagram
     autonumber
     actor AT as Atendente
@@ -1181,6 +1197,9 @@ A independência que o enunciado pede (l. 90) está no que é de cada serviço: 
 config:
   flowchart:
     wrappingWidth: 400
+    nodeSpacing: 20
+    rankSpacing: 40
+    padding: 8
 ---
 flowchart TB
     push(["push na main do serviço<br/>(só via PR com os checks verdes)"])
