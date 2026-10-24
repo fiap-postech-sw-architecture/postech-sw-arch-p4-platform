@@ -21,6 +21,9 @@ REPOS = tuple(
     f"fiap-postech-sw-architecture/postech-sw-arch-p4-{nome}"
     for nome in ("os-service", "billing-service", "execution-service", "platform")
 )
+# Só citados no pacote: a árvore da main confere os links, sem as exigências de
+# fechamento dos quatro repositórios da fase 4.
+REFERENCIAS = ("fiap-postech-sw-architecture/postech-sw-arch-p3",)
 
 
 def api(caminho: str, filtro: str = ".") -> Any:
@@ -68,16 +71,23 @@ def primeiro_pai(repo: str, head: str) -> list[dict[str, Any]]:
     return commits
 
 
-def coletar(repo: str) -> dict[str, Any]:
-    """Preserva apenas campos necessários à conferência de fechamento."""
+def arvore_da_main(repo: str) -> tuple[str, list[str]]:
+    """HEAD da main e todos os caminhos da árvore dele."""
     base = f"repos/{repo}"
-    metadados = api(base, "{visibility}")
     head = api(f"{base}/commits/main", "{sha}")["sha"]
     arvore = api(
         f"{base}/git/trees/{head}?recursive=1", "{truncated, tree: [.tree[] | {path}]}"
     )
     if arvore["truncated"]:
         raise RuntimeError(f"árvore GitHub truncada: {repo}")
+    return head, [item["path"] for item in arvore["tree"]]
+
+
+def coletar(repo: str) -> dict[str, Any]:
+    """Preserva apenas campos necessários à conferência de fechamento."""
+    base = f"repos/{repo}"
+    metadados = api(base, "{visibility}")
+    head, caminhos = arvore_da_main(repo)
     # Ausência de workflow/tag é uma lacuna, não erro de transporte.
     workflows = api(
         f"{base}/actions/workflows?per_page=100",
@@ -154,7 +164,7 @@ def coletar(repo: str) -> dict[str, Any]:
             for job in jobs
         ],
         "tag": tag,
-        "arvore": [item["path"] for item in arvore["tree"]],
+        "arvore": caminhos,
     }
 
 
@@ -165,10 +175,17 @@ def main() -> int:
     resultado: dict[str, Any] = {
         "coletado_em": datetime.now(UTC).isoformat(),
         "repositorios": [],
+        "referencias": [],
     }
     for repo in REPOS:
         print(f"Coletando {repo}", flush=True)
         resultado["repositorios"].append(coletar(repo))
+    for repo in REFERENCIAS:
+        print(f"Coletando a árvore de {repo}", flush=True)
+        head, caminhos = arvore_da_main(repo)
+        resultado["referencias"].append(
+            {"repo": repo, "head": head, "arvore": caminhos}
+        )
     args.output.write_text(json.dumps(resultado, ensure_ascii=False, indent=2) + "\n")
     return 0
 
