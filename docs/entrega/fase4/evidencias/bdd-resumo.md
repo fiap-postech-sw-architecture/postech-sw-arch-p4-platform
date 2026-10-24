@@ -1,6 +1,6 @@
 # BDD integrado — 19/10/2026
 
-O [CD da main da plataforma, run 39231733886](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39231733886), job `e2e`, executou `make -C platform e2e` em kind descartável do runner, overlay kind-ci e Billing simulado. As 14 execuções selecionadas (11 cenários e um esquema com 3 exemplos) passaram; os três cenários de sandbox real ficaram fora dessa seleção. O resumo do artefato informa 200 s somados. O passo do workflow ocorreu entre 09:50:28 e 09:54:00 UTC, incluindo o trabalho do alvo.
+O [CD da main da plataforma, run 39231733886](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39231733886), job `e2e`, executou `make -C platform e2e` em kind descartável do runner, overlay kind-ci e Billing simulado. As 14 execuções selecionadas (11 cenários e um esquema com 3 exemplos) passaram; os três cenários de sandbox real ficaram fora dessa seleção. O resumo do artefato informa 200 s somados. O passo do workflow ocorreu entre 09:50:28 e 09:54:00 UTC, incluindo o trabalho do alvo. No CD da `main` de 20/10/2026 ([run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), plataforma `d703200`, o do A5 do documento de entrega), o mesmo alvo passou as 14 execuções em 206,65 s, valor lido na linha final do pytest no log do job `e2e`; a tabela abaixo é a do run de 19/10.
 
 | Checkout efetivamente exercitado | Commit |
 |---|---|
