@@ -125,7 +125,7 @@ O [`cd-servico.yml`](.github/workflows/cd-servico.yml) oferece, por `workflow_ca
 
 ### Job `e2e`: a saga e a borda com os três serviços
 
-Roda em todo PR e push na `main`, em paralelo com o `deploy-kind`, cada um no próprio kind do runner. Sobe a plataforma e os três serviços construídos do código, cada um no commit do último CD verde, e roda o smoke, o `make e2e`, o `make newman` e o ZAP, guardando relatórios e diagnóstico mesmo com falha. Levou 8 min 46 s no run medido. Os passos, os prazos e como reexecutar uma combinação de commits: [docs/ci-cd.md](docs/ci-cd.md#job-e2e-a-saga-e-a-borda-com-os-três-serviços).
+Roda em todo PR e push na `main`, em paralelo com o `deploy-kind`, cada um no próprio kind do runner. Sobe a plataforma e os três serviços construídos do código, cada um no commit do último CD verde, e roda o smoke, o `make e2e`, o `make newman` e o ZAP, guardando relatórios e diagnóstico mesmo com falha. Levou 9 min 34 s no [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), do CD da `main` de 20/10/2026. Os passos, os prazos e como reexecutar uma combinação de commits: [docs/ci-cd.md](docs/ci-cd.md#job-e2e-a-saga-e-a-borda-com-os-três-serviços).
 
 ## Segurança
 
