@@ -18,6 +18,7 @@ import sys
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import unquote
 
 import pytest
 
@@ -130,6 +131,35 @@ def derruba_no_fim(escalas):
 
     assert resultado.returncode == 0, resultado.stdout
     assert (estado / f"replicas-{API}").read_text() == "1"
+
+
+def test_o_passo_do_consumidor_parado_so_derruba_o_pod_depois_de_o_prometheus_raspa_lo(
+    tmp_path: Path, estado: Path
+) -> None:
+    # O passo de verdade, com as fixtures de verdade e um cluster falso: o pod do
+    # consumidor so cai depois de o Prometheus ter raspado o consumidor. Sem a espera
+    # o estorno do cenario anterior some do contador do Billing (6 contra 8 do OS).
+    testes = """\
+from e2e.test_saga import _consumidor_parado
+
+
+def test_passo(escalas, kubectl, cenario):
+    _consumidor_parado(escalas, kubectl, cenario)
+"""
+
+    resultado = _rodar(tmp_path, estado, testes)
+
+    assert resultado.returncode == 0, resultado.stdout
+    chamadas = _chamadas(estado)
+    ao_prometheus = [i for i, c in enumerate(chamadas) if "prometheus:9090" in c]
+    derrubada = next(
+        i for i, c in enumerate(chamadas) if " scale " in c and "--replicas=0" in c
+    )
+    assert ao_prometheus, "o passo derrubou o consumidor sem perguntar ao Prometheus"
+    assert max(ao_prometheus) < derrubada
+    ultima = unquote(chamadas[ao_prometheus[-1]].split("query=")[1])
+    assert 'job="billing-service-consumidor"' in ultima
+    assert 'namespace="pytstop-billing"' in ultima
 
 
 def test_inicio_da_sessao_religa_o_que_a_execucao_anterior_deixou_em_zero(

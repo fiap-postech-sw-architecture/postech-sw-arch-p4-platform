@@ -37,6 +37,7 @@ from e2e.apoio.jaeger import (
     validar_trace_id,
 )
 from e2e.apoio.metricas import valor_da_serie
+from e2e.apoio.prometheus import esperar_raspagem
 from e2e.apoio.saga import (
     STATUS_EM_ORDEM,
     achar_acesso,
@@ -68,6 +69,8 @@ PRAZO_DA_MEIA_ABERTURA: Final = 60.0
 PRAZO_DA_LEITURA_DO_CIRCUITO: Final = 15.0
 PRAZO_DO_LOG: Final = 30.0
 PRAZO_DA_EXPIRACAO: Final = 180.0
+# Quatro intervalos de raspagem do Prometheus (15 s), para o runner lento.
+PRAZO_DA_RASPAGEM: Final = 60.0
 PRAZO_DO_TRACE: Final = 90.0
 DURACAO_DA_AMOSTRA_DAS_DLQ: Final = 8.0
 CIRCUITO_ABERTO: Final = 1.0
@@ -510,6 +513,15 @@ def _prazo_sem_decisao(api: Api, cenario: Cenario) -> None:
 @given("o consumidor do Billing parado")
 def _consumidor_parado(escalas: Escalas, kubectl: Kubectl, cenario: Cenario) -> None:
     cenario.filas_mortas_antes = cenario.filas_mortas_antes or kubectl.filas_mortas()
+    # O pod derrubado leva o que contou desde a ultima raspagem (15 s): o estorno do
+    # cenario anterior, 8 a 9 s antes, sumia do contador do Billing (6 estornos contra
+    # 8 do OS no painel Pagamentos). So derruba depois de uma raspagem nova.
+    narrar("      . esperando o Prometheus raspar o consumidor do Billing")
+    inicio = time.monotonic()
+    esperar_raspagem(
+        kubectl, NAMESPACE_BILLING, CONSUMIDOR_DO_BILLING, prazo=PRAZO_DA_RASPAGEM
+    )
+    narrar(f"      . raspado depois de {time.monotonic() - inicio:.0f} s")
     escalas.zerar(NAMESPACE_BILLING, CONSUMIDOR_DO_BILLING)
     narrar("      . consumidor do Billing em 0 replicas")
 
