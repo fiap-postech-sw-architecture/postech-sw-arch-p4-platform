@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 PRAZO_DA_CONSULTA: Final = 30.0
 INTERVALO_DA_ESPERA: Final = 1.0
-_TAMANHO_DO_ERRO: Final = 160
+TAMANHO_DO_ERRO: Final = 160
 
 
 def consultar(kubectl: Kubectl, expr: str) -> dict[str, Any]:
@@ -36,7 +36,7 @@ def consultar(kubectl: Kubectl, expr: str) -> dict[str, Any]:
         kubectl.executar("get", "--raw", caminho, prazo=PRAZO_DA_CONSULTA)
     )
     if resposta.get("status") != "success":
-        msg = f"o Prometheus respondeu {str(resposta)[:_TAMANHO_DO_ERRO]}"
+        msg = f"o Prometheus respondeu {str(resposta)[:TAMANHO_DO_ERRO]}"
         raise ErroDeComandoError(msg)
     dados: dict[str, Any] = resposta["data"]
     return dados

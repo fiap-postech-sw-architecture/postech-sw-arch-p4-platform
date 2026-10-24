@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Final
 import yaml
 
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
-from e2e.apoio.prometheus import consultar
+from e2e.apoio.prometheus import TAMANHO_DO_ERRO, consultar
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -35,7 +35,6 @@ if TYPE_CHECKING:
 RAIZ: Final = Path(__file__).resolve().parents[2]
 OBSERVABILIDADE: Final = RAIZ / "observabilidade"
 CONTEXTO_PADRAO: Final = "kind-pytstop-p4"
-_TAMANHO_DO_ERRO: Final = 160
 
 
 @dataclass(frozen=True)
@@ -105,7 +104,7 @@ def verificar(kubectl: Kubectl, consultas: Sequence[Consulta]) -> list[Resultado
                 Resultado(consulta, contar_series(kubectl, consulta.expr))
             )
         except (ErroDeComandoError, ValueError, KeyError) as erro:
-            resultados.append(Resultado(consulta, None, str(erro)[:_TAMANHO_DO_ERRO]))
+            resultados.append(Resultado(consulta, None, str(erro)[:TAMANHO_DO_ERRO]))
     return resultados
 
 
