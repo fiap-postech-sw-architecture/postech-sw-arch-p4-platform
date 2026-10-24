@@ -319,13 +319,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - secrets
-  verbs:
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - services
   verbs:
   - get
@@ -680,13 +673,6 @@ rules:
   - pods
   verbs:
   - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
   - list
   - watch
 - apiGroups:
@@ -1051,13 +1037,6 @@ rules:
 - apiGroups:
   - ""
   resources:
-  - secrets
-  verbs:
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
   - services
   verbs:
   - get
@@ -1412,13 +1391,6 @@ rules:
   - pods
   verbs:
   - get
-  - list
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - secrets
-  verbs:
   - list
   - watch
 - apiGroups:
