@@ -1,6 +1,6 @@
 # Auditoria pré-entrega e dívida técnica
 
-Revisão de 20/10/2026, com a observabilidade atualizada em 24/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e pendências registradas nos serviços. Esta auditoria acompanha a versão preliminar do pacote; a revisão final depende dos commits congelados e das evidências listadas abaixo.
+Revisão de 20/10/2026, com as dívidas fechadas até 23/10/2026 e a observabilidade atualizada em 24/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e pendências registradas nos serviços. Esta auditoria acompanha a versão preliminar do pacote; a revisão final depende dos commits congelados e das evidências listadas abaixo.
 
 ## Pendências que afetam a entrega
 
