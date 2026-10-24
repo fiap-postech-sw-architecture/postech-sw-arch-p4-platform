@@ -17,9 +17,9 @@
 #
 #   scripts/ci/smoke-servicos.sh [<servico>...]   (sem argumento, os tres)
 #
-# A tabela Service | Stage | Result sai na saida e, no GitHub Actions, no
-# summary do job; o script sai com status 1 nomeando os servicos que falharam,
-# e com 2 se falta jq, curl, timeout ou perl.
+# Cada prova sai numa linha na saida, e a tabela Service | Stage | Result, so no
+# summary do job do GitHub Actions; o script sai com status 1 nomeando os
+# servicos que falharam, e com 2 se falta jq, curl, timeout ou perl.
 set -euo pipefail
 
 CLUSTER="${CLUSTER:-pytstop-p4}"

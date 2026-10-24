@@ -97,7 +97,7 @@ Cada CI sobe um SonarQube efêmero no runner, analisa o código com o `coverage.
 
 ### Code smells por regra
 
-Histórico. No CD da `main` de 20/10/2026 os três serviços somavam 247 code smells (138, 91 e 18). Os PRs [OS #27](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/pull/27), [Billing #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/24) e [Execução #21](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/pull/21) zeraram todos, sem `# NOSONAR` e sem mudar o comportamento, e o CD de 21/10/2026 (UTC) mostra 0 nos três (tabela acima). A contagem por regra abaixo é a de 20/10, antes das correções.
+Histórico. No CD da `main` de 20/10/2026 os três serviços somavam 247 code smells (138, 91 e 18). Os PRs [OS #27](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/pull/27), [Billing #24](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/24) e [Execução #21](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/pull/21) zeraram todos, sem `# NOSONAR` e sem mudar o comportamento, e o CD de 21/10/2026 (UTC) mostra 0 nos três (tabela acima). As 15 supressões `# NOSONAR` que já existiam, 9 no Billing e 6 na Execução (handlers `async` de propósito, regra S7503, e heartbeats em `/tmp`), têm o motivo no código. A contagem por regra abaixo é a de 20/10, antes das correções.
 
 O artefato guarda só as medidas, e o log não lista os avisos. Para saber o que são os code smells, a análise foi refeita em 20/10/2026 numa máquina local, com as mesmas imagens do CI (`sonarqube:26.9.0.129388-community` e `sonarsource/sonar-scanner-cli:12.2.0.4256_8.1.0`, perfil padrão Sonar way), sobre os mesmos commits e sem o `coverage.xml`, que não muda a contagem. Deu os mesmos 138, 91 e 18 code smells e as mesmas linhas (11.107, 7.790 e 6.077), sem bug nem vulnerabilidade. Os nomes das regras são os da API do mesmo servidor.
 
@@ -117,6 +117,10 @@ O artefato guarda só as medidas, e o log não lista os avisos. Para saber o que
 | python:S1135 | acompanhar as marcas `TODO` | 1 | 0 | 0 |
 | Total em 20/10/2026 | | 138 | 91 | 18 |
 | Total no CD de 21/10/2026 (UTC) | | 0 | 0 | 0 |
+
+## Mutação
+
+A mutação usa mutantes escritos à mão nos módulos críticos, sem gate de CI ([ADR-041](../../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#teste-de-mutação)): o resultado está na seção Mutação do README de cada serviço ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/README.md#mutação), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/README.md#mutação) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/README.md#mutação)), e a lista dos mutantes, em `scripts/mutantes.toml` e em `docs/` de cada um.
 
 ## Reprodução
 

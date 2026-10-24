@@ -1108,7 +1108,7 @@ Resumo; o detalhe está no [ADR-039](../../adr/fase4/039-autenticacao-entre-serv
 - Simulador só com `MP_MODE=simulado`, que o boot recusa com `ENVIRONMENT=production` sem `SIMULADOR_PERMITIDO=true`; as rotas dele exigem o token HMAC do `checkout_url` e têm rate limit.
 - Broker com usuário por serviço, permissão só nas próprias routing keys e `user_id` conferido ([seção 5.1](#51-topologia)). NetworkPolicy de entrada por namespace, que libera só o tráfego previsto; o tráfego interno sem TLS (criptografia da conexão) é risco aceito do ambiente de demonstração.
 - LGPD e auditoria: placa e textos livres na Execução com anonimização por comando ([seção 5.3](#53-catálogo-de-comandos-e-eventos)), retenção limitada ([seção 5.4](#54-garantias-de-entrega)) e texto livre fora dos logs; `decidido_por` na decisão em nome do cliente, `ator` no histórico e log de auditoria nas ações privilegiadas.
-- Segredos: nenhum segredo de aplicação fica no GitHub; os de runtime nascem no cluster, só se ausentes, e a tabela, com a regra de rotação, está no ADR-042.
+- Segredos: nenhum segredo de produção nem credencial do Mercado Pago fica no GitHub; os de runtime nascem no cluster, só se ausentes, e a tabela, com a regra de rotação, está no ADR-042. O compose local traz só valores de demonstração, e o OS Service recusa no boot, fora de `development` e `test`, a chave RSA do JWT, a chave Fernet e as senhas de demonstração do admin, do banco e do broker.
 
 ## 9. Observabilidade
 
