@@ -221,8 +221,8 @@ O enunciado pede banco próprio por serviço, com pelo menos um relacional e um 
 
 | Camada | Tecnologia | Por quê | Decisão |
 |---|---|---|---|
-| Linguagem e API | Python 3.14, uv, FastAPI, Pydantic v2 | domínio da fase 3 recortado sem reescrita | ADR-001 e ADR-014 da fase 3 |
-| Arquitetura interna | DDD com camadas Onion, conferidas pelo import-linter | fronteira entre camadas vira gate de CI | ADR-003 da fase 3 |
+| Linguagem e API | Python 3.14, uv, FastAPI, Pydantic v2 | domínio da fase 3 recortado sem reescrita | [ADR-001](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/001-framework-fastapi.md) e [ADR-014](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/014-gerenciador-pacotes-uv.md) da fase 3 |
+| Arquitetura interna | DDD com camadas Onion, conferidas pelo import-linter | fronteira entre camadas vira gate de CI | [ADR-003](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/003-arquitetura-ddd-onion.md) da fase 3 |
 | Divisão | três serviços e uma plataforma | capacidades do enunciado e contextos da fase 3 | [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md) |
 | Coordenação | saga orquestrada pelo OS Service | um lugar que sabe a etapa de cada OS | [ADR-035](../../arquitetura/adr/fase4/035-saga-orquestrada.md) |
 | Mensageria | RabbitMQ 4.3.6, outbox e consumidor idempotente; AsyncAPI 3.0 | retry, DLQ e permissões por configuração | [ADR-036](../../arquitetura/adr/fase4/036-mensageria-rabbitmq.md) |
