@@ -748,7 +748,7 @@ Cada serviço tem três workflows, com jobs de nome estável ([ADR-042](../../ar
 
 Os jobs do CD têm uma definição só, no `.github/workflows/cd-servico.yml` do `platform`, chamada pelo `cd.yml` de cada serviço com o nome dele e quatro SHAs ([platform #22](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/pull/22)). A independência que o enunciado pede está no que é de cada serviço: build, testes, análise, imagem e deploy saem do pipeline dele, disparados pelo commit dele, e nenhum pipeline publica a imagem de outro. Nos manifestos de cada serviço, a API tem sondas de inicialização, de vida e de prontidão, requests e limits, e um HPA de 1 a 2 réplicas por CPU (70%); o overlay do CD limita o HPA a 1 réplica, para os três serviços caberem no runner. O CD do `platform` implanta a plataforma com o smoke e, no job `e2e`, os três serviços, com o BDD, o Newman e o ZAP. O kind do CI não tem Grafana nem Loki, que só existem no kind local ([seção 11](#11-observabilidade)).
 
-Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no OS Service, no Billing e na Execução; os digests estão no [registro de evidências](evidencias/README.md#imagens-publicadas-nos-cds-de-20102026)). O `deploy-kind` do OS Service levou 7 min 40 s no run de 20/10 e 7 min 28 s no de 23/10 ([A1](#a1--cd-da-main)), e o job `e2e` do `platform`, com o Newman e o ZAP, 9 min 34 s ([A5](#a5--newman-e-zap-no-cd-do-platform)). A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md).
+Cada CD publica a imagem com o SHA do commit e o SBOM (171, 147 e 162 pacotes no OS Service, no Billing e na Execução; os digests estão no [registro de evidências](evidencias/README.md#imagens-publicadas-nos-cds-de-20102026)). O `deploy-kind` levou de 6 min 59 s a 7 min 15 s nos três serviços em 24/10 ([A1](#a1--cd-da-main)), e o job `e2e` do `platform`, com o Newman e o ZAP, 9 min 34 s em 20/10 ([A5](#a5--newman-e-zap-no-cd-do-platform)). A memória por pod está na [medição integrada no kind](../../operacao/ensaio-integrado.md).
 
 ## 10. Segurança e análise de vulnerabilidades
 
@@ -861,50 +861,36 @@ A dívida técnica aceita está na [auditoria pré-entrega](auditoria-e-divida-t
 
 # Anexo A — Evidências visuais
 
+<div class="pagina-paisagem">
+
 As capturas vêm de páginas públicas do GitHub, de um SonarQube local (A2) e do kind local, onde cada captura só fez leituras. O [registro de evidências](evidencias/README.md#capturas-de-tela) dá a origem, a data e a janela de cada arquivo.
+
+</div>
 
 ## A1 — CD da `main`
 
-CI, segurança, SonarQube, imagem e implantação no kind verdes. O deploy entregue é o `deploy-kind`, e os passos dele vêm primeiro; o `deploy-remote` cinza dos grafos é o gancho opcional, desligado. O "push" de cada run é o do merge do PR citado.
+<div class="pagina-paisagem">
 
-![Passos do deploy-kind do OS Service: plataforma e serviços no kind, smoke por namespace e E2E BDD, em 7 min 28 s.](evidencias/cd-deploy-kind-os-service-2026-10-23.png)
+CD da `main` de 24/10/2026, verde nos quatro repositórios: nos serviços, CI, segurança, SonarQube, imagem e implantação no kind; no `platform`, CI, implantação no kind e E2E com Newman e ZAP. O "push" de cada run é o do merge do PR citado no título do commit.
 
-Fonte: [job do run 39957080878](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39957080878/job/120430471330), commit `a51d83e`, merge do PR #29, 23/10/2026; recorte do painel dos passos.
+| Repositório | Run | Commit | Jobs | `deploy-kind` | Smoke | E2E BDD |
+|---|---|---|---|---|---|---|
+| OS Service | [40132580561](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/40132580561) | [`711744f`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/commit/711744fff4926073161031ef79b73b633e62014b) docs: README e docs/ batem com o ruleset, a saga e a auditoria (#37) | 12 verdes, 1 pulado | 7 min 3 s | 25 s | 14 passaram em 3 min 33 s |
+| Billing Service | [40132596049](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/40132596049) | [`e9e9a24`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/commit/e9e9a243b6a1eb954662e7aa67b0b897a4fdd8d4) docs: README diz quando o ruleset da main passou a valer (#33) | 12 verdes, 1 pulado | 6 min 59 s | 15 s | 14 passaram em 3 min 28 s |
+| Execution Service | [40132610564](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/40132610564) | [`765f319`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/commit/765f319eb5f0846dbc45b1df8b920553b0e5f851) docs: README e docs/ batem com o ruleset, a DLQ e o boot (#29) | 12 verdes, 1 pulado | 7 min 15 s | 21 s | 14 passaram em 3 min 44 s |
+| `platform` | [40137678363](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/40137678363) | [`53fd6e3`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/commit/53fd6e3b59f9e839a9198517cae8933f62ec9eb1) docs: dívidas do Kong (Secrets e HSTS) na auditoria, com a prova (#52) | 5 verdes | 3 min 55 s | 16 s | 14 passaram em 3 min 38 s |
 
-<div class="grade">
-<div>
+A tabela vem da API pública do GitHub ([como conferir](evidencias/README.md#a1-tabela-e-grafo-do-cd)). Smoke e E2E BDD são passos do `deploy-kind`; no `platform`, do job `e2e`, e o `deploy-kind` dele implanta só a plataforma. O registro guarda também os grafos dos CDs de 20/10 ([OS Service](evidencias/cd-os-service-main-2026-10-20.png), [Billing](evidencias/cd-billing-service-main-2026-10-20.png), [Execução](evidencias/cd-execution-service-main-2026-10-20.png) e [platform](evidencias/cd-platform-main-2026-10-20.png)) e os [passos do `deploy-kind`](evidencias/cd-deploy-kind-os-service-2026-10-23.png) do OS Service no run de 23/10.
 
-![CD do OS Service: todos os jobs verdes, inclusive o `ci / sonarqube`.](evidencias/cd-os-service-main-2026-10-20.png)
+![CD do OS Service na `main`: CI, segurança, SonarQube, imagem e `deploy-kind` (o deploy entregue) verdes; o `deploy-remote` pulado é o gancho opcional, desligado.](evidencias/cd-os-service-main-2026-10-24.png)
 
-Fonte: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), commit `3ce582b`, merge do PR #24, 20/10/2026.
+Fonte: [run 40132580561](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/40132580561), commit `711744f`, merge do PR #37, 24/10/2026; recorte do grafo, na página pública do run.
 
-</div>
-<div>
-
-![CD do Billing Service: todos os jobs verdes.](evidencias/cd-billing-service-main-2026-10-20.png)
-
-Fonte: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), commit `76b5f9b`, merge do PR #21, 20/10/2026.
-
-</div>
-<div>
-
-![CD do Execution Service: todos os jobs verdes.](evidencias/cd-execution-service-main-2026-10-20.png)
-
-Fonte: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), commit `5b1bef4`, merge do PR #18, 20/10/2026.
-
-</div>
-<div>
-
-![CD do platform: CI, deploy-kind e e2e verdes.](evidencias/cd-platform-main-2026-10-20.png)
-
-Fonte: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), commit `d703200`, merge do PR #31, 20/10/2026.
-
-</div>
 </div>
 
 ## A2 — SonarQube
 
-O job `ci / sonarqube` verde de cada CD de serviço está no [A1](#a1--cd-da-main) e roda a análise no CI. Os três prints do painel do SonarQube (aba Overall Code: quality gate aprovado, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, cobertura e duplicação) são de um servidor local, com as mesmas imagens do CI e o quality gate do repositório; as medidas são as do job. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol`, que o `.coveragerc` omite ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
+O job `ci / sonarqube` roda a análise no CI e está verde no CD dos três serviços ([A1](#a1--cd-da-main)). Os três prints do painel do SonarQube (aba Overall Code: quality gate aprovado, 0 problemas abertos em segurança, confiabilidade e manutenibilidade, 0 hotspots, cobertura e duplicação) são de um servidor local, com as mesmas imagens do CI e o quality gate do repositório; as medidas são as do job. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol`, que o `.coveragerc` omite ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md#sonarqube-efêmero-no-ci-rnf-041)).
 
 <div class="grade">
 <div>

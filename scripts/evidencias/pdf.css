@@ -57,6 +57,20 @@ h1 { break-before: page; }
 .paisagem { page: paisagem; break-before: page; break-after: page; width: 100%; }
 .paisagem img { max-height: 17cm; }
 .legenda { font-style: italic; font-size: 9.5pt; text-align: center; margin-top: 3mm; }
+/* Página paisagem com texto (A1): título do anexo, abertura, tabela dos quatro runs e o grafo do
+   CD na mesma página. A letra dos nós do grafo (8 px na página do GitHub) só se lê na largura da
+   paisagem: a 250 mm sai com 6,2 pt, e no retrato (174 mm), com 4,3 pt. Os títulos ficam fora de
+   qualquer <div> (o pandoc monta o sumário pelos títulos do nível de cima, e o GitHub mostraria
+   atributo no título), então a página vem do id deles; o texto, de um <div> sem título. A página
+   é justa, com uns 6 mm de folga: espaços menores, e o teto de altura do grafo define a largura
+   dele (cada mm de altura vale 3,3 mm de largura). */
+[id="anexo-a--evidências-visuais"], [id="a1--cd-da-main"], .pagina-paisagem { page: paisagem; }
+[id="anexo-a--evidências-visuais"] { margin-top: 0; }
+[id="a1--cd-da-main"] { margin-top: 0.6em; }
+.pagina-paisagem p { margin: 0.5em 0; }
+.pagina-paisagem table { margin: 0.5em 0 0; }
+.pagina-paisagem table + p { font-size: 8.5pt; color: #555; margin: 1.5mm 0 0; }
+.pagina-paisagem figure img[src*="cd-os-service"] { max-height: 76mm; }
 
 /* Galeria de evidências: imagem, legenda e linha de fonte juntas, duas por
    página, inclusive as telas altas do Swagger. */
@@ -79,10 +93,7 @@ figure img[src*="grafana-"] { max-width: 80%; }
 figure img[src*="protecao-"] { max-height: 200mm; }
 figure img[src*="protecao-ruleset"] { max-height: 170mm; }
 .inteira { break-inside: avoid; }
-/* Passos do deploy-kind: o texto da interface (14 px) sai com 6,8 pt na largura
-   toda; no teto de 88 mm seriam 5 pt, e na grade de duas colunas, 2,4 pt. */
-figure img[src*="cd-deploy-kind"] { max-height: 125mm; }
-/* Prints de status lado a lado (a grade do Anexo A): de duas a quatro por linha,
+/* Prints de status lado a lado (a grade do Anexo A): duas por linha,
    cada uma com a legenda e a fonte. É tabela, e não flex: o weasyprint 69
    levava a linha inteira para a página seguinte quando sobrava espaço. */
 .grade { display: table; table-layout: fixed; border-spacing: 4mm 0; margin: 4mm -4mm;

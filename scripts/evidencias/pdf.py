@@ -40,12 +40,12 @@ MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0"
 # pixels (reduzir a paleta quase não muda o arquivo).
 LARGURA_MERMAID = 1600
 ESCALA = 1.25
-# Limite de resolução das imagens na página. As miniaturas do Anexo A, quatro por
-# linha a 40 mm, chegam a 889 ppi e pesam o dobro sem ganho de leitura; 450 ppi só
-# reamostra essas, e as capturas em duas colunas (418 ppi) ficam como estão. Um
-# limite abaixo de 418 (400, 350, 300) reamostra também as capturas e deixa o PDF
-# maior que o de 450 (de 25 a 300 KB): o weasyprint reamostra com ruído, e o PNG
-# comprime pior.
+# Limite de resolução das imagens na página. Hoje nenhuma passa de 450 ppi (as
+# capturas em duas colunas chegam a 418 ppi); ele segura a imagem que volte a sair
+# pequena na página, como as miniaturas de quatro por linha, que chegavam a 889 ppi e
+# pesavam o dobro sem ganho de leitura. Um limite abaixo de 418 (400, 350, 300)
+# reamostra também as capturas e deixa o PDF maior que o de 450 (de 25 a 300 KB): o
+# weasyprint reamostra com ruído, e o PNG comprime pior.
 DPI_MAXIMO = 450
 # Linha da tabela de participantes do documento: | Nome | RM123456 | Discord |
 PARTICIPANTE = re.compile(r"^\| ([^|\n]+?) \| (RM\d+) \|", re.M)

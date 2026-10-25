@@ -186,6 +186,29 @@ def test_a_classe_paisagem_do_gerador_tem_pagina_deitada_no_css() -> None:
     assert re.search(r"\.paisagem\s*\{[^}]*page:\s*paisagem", css)
 
 
+def test_a_pagina_paisagem_do_a1_nao_se_desmonta() -> None:
+    # A página do A1 (título do Anexo A, abertura, tabela dos quatro runs e grafo) não
+    # vem de atributo nos títulos, que o GitHub mostraria: vem do slug deles escrito à
+    # mão no pdf.css e de um <div> sem título logo depois de cada um. Renomear um
+    # título, apagar um <div> ou tirar um id da regra desmonta a página sem que outro
+    # teste olhe o CSS: a conferência de links só acusa a âncora que algum arquivo cita.
+    raiz = Path(pdf.__file__).resolve().parents[2]
+    css = Path(pdf.__file__).with_name("pdf.css").read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    documento = (raiz / pdf.DOCUMENTO).read_text(encoding="utf-8")
+
+    assert re.search(r"\.pagina-paisagem[^{}]*\{[^{}]*page:\s*paisagem", css), (
+        ".pagina-paisagem sem `page: paisagem` no pdf.css"
+    )
+    for titulo in ("# Anexo A — Evidências visuais", "## A1 — CD da `main`"):
+        abertura = f'\n{titulo}\n\n<div class="pagina-paisagem">\n'
+        assert abertura in documento, f"{titulo!r} sem o <div> logo depois"
+        # A âncora do pandoc com gfm_auto_identifiers, como a do verificar.py.
+        ancora = re.sub(r"[^\w -]", "", titulo.lstrip("# ").lower()).replace(" ", "-")
+        regra = rf'\[id="{re.escape(ancora)}"\][^{{}}]*\{{[^{{}}]*page:\s*paisagem'
+        assert re.search(regra, css), f'[id="{ancora}"] sem `page: paisagem` no pdf.css'
+
+
 def test_legenda_traz_a_secao_da_rfc_que_contem_o_diagrama() -> None:
     rfc = f"## 2. Geral\n\n{GERAL}\n\n#### (a) `Caminho` feliz\n\n{SAGA}\n"
     assert pdf.secao_da_rfc(rfc, "sequenceDiagram\n A->>B: oi\n") == (
