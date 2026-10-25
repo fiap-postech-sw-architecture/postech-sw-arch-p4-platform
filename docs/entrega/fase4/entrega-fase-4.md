@@ -964,7 +964,7 @@ O Swagger de cada serviço abre pelo Kong do kind, em `https://localhost/<prefix
 
 ![Swagger do Billing em `/billing/docs`, pela borda: o campo Servers mostra o prefixo `/billing`.](evidencias/swagger-billing-service-2026-10-20.png)
 
-Fonte: Kong do kind, 20/10/2026.
+Fonte: Kong do kind, 20/10/2026. Amplie o PDF para ler as rotas (print de 1.400 px).
 
 ## A5 — Newman e ZAP no CD do `platform`
 
@@ -1022,19 +1022,19 @@ Fonte: Grafana do kind, 24/10/2026, de 14:40 a 16:51 UTC; captura às 16:52 UTC.
 
 ![Volume diário de OS: as barras de 19 a 22/10 (UTC), do kind anterior.](evidencias/grafana-atendimento-volume-diario-2026-10-22.png)
 
-Fonte: recorte, sem reamostrar, do [print de 22/10](evidencias/grafana-atendimento-2026-10-22.png) (captura de 23/10, 00:10 UTC), de um kind anterior. Os baldes novos dos histogramas não mudam este painel, que soma por dia o contador `pytstop_os_criadas_total`.
+Fonte: recorte, sem reamostrar, do [print de 22/10](evidencias/grafana-atendimento-2026-10-22.png) (captura de 23/10, 00:10 UTC), de um kind anterior. A [troca dos baldes de 23/10](evidencias/observabilidade.md#dashboards-e-histórico) não muda este painel, que soma por dia o contador `pytstop_os_criadas_total`.
 
 ![Orçamentos: 36 gerados, 24 aprovados e 12 expirados (67%); p90 de 1,78 s e média de 774 ms nos aprovados.](evidencias/grafana-orcamentos-2026-10-24.png)
 
 Fonte: a mesma janela do Atendimento; captura às 16:52 UTC.
 
-![Pagamentos: o bruto de R$ 3.835,35 fica acima de 18 x R$ 210,00 = R$ 3.780,00 porque o `increase()` extrapola a série de cada pod trocado pelo cenário; 18 pagas e 6 estornadas, e os 6 estornos do Billing fecham com elas.](evidencias/grafana-pagamentos-2026-10-24.png)
+![Pagamentos: 18 pagas e 6 estornadas; os 6 estornos do Billing fecham com elas.](evidencias/grafana-pagamentos-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. O estornado de R$ 1.286,35 também passa de 6 x R$ 210,00 = R$ 1.260,00, pelo mesmo acréscimo, e a conta por pod está no [registro](evidencias/observabilidade.md#como-os-números-dos-prints-fecham).
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. Os valores passam da conta exata (R$ 3.835,35 contra 18 x R$ 210,00 = R$ 3.780,00; R$ 1.286,35 contra R$ 1.260,00; líquido R$ 2.549,00 contra R$ 2.520,00) porque o `increase()` extrapola a série de cada pod trocado pelo cenário; a conta por pod está no [registro](evidencias/observabilidade.md#como-os-números-dos-prints-fecham).
 
 ![Faturamento por dia: as barras de 19 a 22/10 (UTC), do kind anterior.](evidencias/grafana-pagamentos-faturamento-por-dia-2026-10-22.png)
 
-Fonte: recorte, sem reamostrar, do [print de 22/10](evidencias/grafana-pagamentos-2026-10-22.png) (captura de 23/10, 00:10 UTC), de um kind anterior. Os baldes novos dos histogramas não mudam este painel, que soma por dia o contador `pytstop_pagamentos_valor_centavos_total`.
+Fonte: recorte, sem reamostrar, do [print de 22/10](evidencias/grafana-pagamentos-2026-10-22.png) (captura de 23/10, 00:10 UTC), de um kind anterior. A [troca dos baldes de 23/10](evidencias/observabilidade.md#dashboards-e-histórico) não muda este painel, que soma por dia o contador `pytstop_pagamentos_valor_centavos_total`.
 
 ![Execução e estoque: 6 OS em execução (cenário do 409), 18 reservas atendidas e 6 recusadas por falta de peça.](evidencias/grafana-execucao-2026-10-24.png)
 
