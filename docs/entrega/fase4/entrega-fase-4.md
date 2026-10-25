@@ -940,7 +940,11 @@ Fonte: [trace-saga-2026-10-19.json](evidencias/trace-saga-2026-10-19.json), trac
 
 ## A4 — Swagger pela borda
 
-O Swagger de cada serviço pelo Kong do kind, em `https://localhost/<prefixo>/docs` (o campo Servers mostra o prefixo), tem print no repositório: [OS Service](evidencias/swagger-os-service-2026-10-20.png), [Billing](evidencias/swagger-billing-service-2026-10-20.png) e [Execução](evidencias/swagger-execution-service-2026-10-20.png), de 20/10/2026. O OpenAPI e a collection Postman de cada serviço estão em `docs/api/` ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api)).
+O Swagger de cada serviço abre pelo Kong do kind, em `https://localhost/<prefixo>/docs`; o print é o do Billing, e os do [OS Service](evidencias/swagger-os-service-2026-10-20.png) e da [Execução](evidencias/swagger-execution-service-2026-10-20.png) estão no repositório. O OpenAPI e a collection Postman de cada serviço estão em `docs/api/` ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api)).
+
+![Swagger do Billing em `/billing/docs`, pela borda: o campo Servers mostra o prefixo `/billing`.](evidencias/swagger-billing-service-2026-10-20.png)
+
+Fonte: Kong do kind, 20/10/2026.
 
 ## A5 — Newman e ZAP no CD do `platform`
 
