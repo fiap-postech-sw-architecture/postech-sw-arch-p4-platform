@@ -14,6 +14,8 @@ Cada serviço tem um run só: o CD da `main` de 21/10/2026 (UTC), o primeiro apr
 
 O CD da Execução no commit do #21 (`ec4721b`, [run 39531912471](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39531912471)) reprovou no job `ci / test` por um teste de integração instável do relay (`test_bloqueio_no_meio_do_lote_devolve_as_linhas_que_sobraram`). O [Execução #23](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/pull/23) corrigiu o teste, sem mudar o código do serviço, e o run citado é o do commit seguinte, `0ec76fe`, que traz as duas mudanças.
 
+O `platform`, que não tem serviço, cita o run 39458619627 (CD da `main` de 20/10, commit `d703200`), na seção Platform abaixo.
+
 A coleta final repete a medida sobre os commits das tags.
 
 ## OS Service
