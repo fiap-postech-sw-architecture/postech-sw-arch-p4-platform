@@ -20,6 +20,13 @@ tr { break-inside: avoid; }
 td a[href^="#"]::after { content: ", p. " target-counter(attr(href), page); }
 img { max-width: 100%; }
 pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 8.5pt; }
+/* Exemplo de documento do Billing (seção 7), com o realce do pandoc: corpo de 6,5 pt e linhas
+   juntas, para a página dele (texto, exemplo e tabela das coleções) não passar de uma. Vale
+   para todo bloco de código do documento. */
+div.sourceCode { margin: 0.3em 0; break-inside: avoid; }
+div.sourceCode pre { font-size: 6.5pt; line-height: 1.1; }
+div.sourceCode pre > code { font-size: 6.5pt; }
+pre > code.sourceCode > span { line-height: 1.1; }
 @page { size: A4; margin: 17mm 18mm 18mm; @bottom-center { content: counter(page); font-size: 9pt; color: #555; } }
 @page :first { @bottom-center { content: none; } }
 h1 { bookmark-level: 1; }

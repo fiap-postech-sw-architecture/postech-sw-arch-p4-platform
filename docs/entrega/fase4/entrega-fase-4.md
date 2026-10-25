@@ -38,7 +38,7 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | Sequências da saga: caminho feliz, orçamento recusado ou expirado, falta de peça e cancelamento com estorno | [6.4](#64-caminho-feliz) e [6.5](#65-compensações-principais) | [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) |
 | RFC-004, o desenho integrado, com os estados da saga e da OS, o mapa de contextos e a topologia do RabbitMQ | só no repositório | [rfc-004-microsservicos-saga.md](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) |
 | ADRs 034 a 043 | [5.3](#53-tecnologias-e-decisões) | [decisões da fase 4](../../arquitetura/adr/fase4/) |
-| Modelo de dados: ER do OS Service e da Execução e modelo dos documentos do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
+| Modelo de dados: ER do OS Service e da Execução; documento de exemplo e índices das coleções do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
 | Contratos de mensageria | [4.2](#42-comunicação-e-componentes) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
 | Código-fonte, Dockerfile e manifestos Kubernetes | [2](#2-repositórios-e-estado-do-cicd) e [9](#9-cicd-e-deploy) | `src/`, `Dockerfile` e `k8s/` de cada serviço |
 | Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [A2](#a2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
@@ -507,13 +507,34 @@ sequenceDiagram
 
 ## 7. Modelo de dados
 
-Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele, e a NetworkPolicy de cada namespace só deixa o próprio namespace chegar ao banco. Os diagramas do OS Service e da Execução mostram as tabelas de que a saga e os contratos dependem, sem a `outbox` e a `mensagens_processadas` da [seção 6.3](#63-idempotência-novas-tentativas-e-prazos); o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
+Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele ([seção 10](#10-segurança-e-análise-de-vulnerabilidades)). Os diagramas do OS Service e da Execução mostram as tabelas de que a saga e os contratos dependem, sem a `outbox` e a `mensagens_processadas` da [seção 6.3](#63-idempotência-novas-tentativas-e-prazos); o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
 
 **OS Service (PostgreSQL 16).** Clientes, veículos, consentimentos, usuários e tokens revogados vêm da fase 3; o documento do cliente fica cifrado, com um hash para a busca. A OS ganhou versão para o lock otimista e o resumo do orçamento e do pagamento, copiado dos eventos. O histórico só recebe inserções, `sagas` guarda a instância da saga e `notificacoes`, os e-mails do `notificador`.
 
-**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio.
+**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução (idempotentes por OS); os dois últimos guardam o retrato do veículo para o mecânico achar o carro.
 
-**Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. A tabela é a das coleções da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7), que traz também o exemplo de documento; o [`docs/arquitetura.md` do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) detalha o modelo campo a campo.
+**Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. O exemplo (um orçamento) e a tabela das coleções vêm da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7).
+
+```json
+{
+  "_id": "6d2a9b14-8c3e-4f5a-a7b6-1c9d0e2f3a45",
+  "ordem_id": "3c9a7e10-5b2f-4f6d-8a41-0e2d9b7c6f55",
+  "status": "APROVADO",
+  "linhas": [
+    {"tipo": "servico", "codigo": "SRV-TROCA-OLEO", "descricao": "Troca de óleo", "quantidade": 1,
+     "preco_unitario": {"valor": {"$numberDecimal": "120.00"}, "moeda": "BRL"}},
+    {"tipo": "peca", "codigo": "PEC-OLEO-5W30", "descricao": "Óleo 5W30, 1 litro", "quantidade": 4,
+     "preco_unitario": {"valor": {"$numberDecimal": "45.00"}, "moeda": "BRL"}}
+  ],
+  "total": {"valor": {"$numberDecimal": "300.00"}, "moeda": "BRL"},
+  "criado_em": {"$date": "2026-10-06T14:32:06Z"},
+  "valido_ate": {"$date": "2026-10-09T14:32:06Z"},
+  "decisao": {"canal": "link", "decidido_em": {"$date": "2026-10-06T15:02:11Z"}, "decidido_por": null},
+  "motivo_cancelamento": null,
+  "aberto_por": {"mensagem_id": "8f6b1c2e-4d3a-4e8b-9f1a-2b7c5d9e0a13",
+                 "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+}
+```
 
 | Coleção | Índices |
 |---|---|
