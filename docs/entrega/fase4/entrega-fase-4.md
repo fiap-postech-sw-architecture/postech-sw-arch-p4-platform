@@ -1000,9 +1000,9 @@ Fonte: Grafana do kind, 24/10/2026, de 14:40 a 16:51 UTC; captura às 16:52 UTC.
 
 Fonte: a mesma janela do Atendimento; captura às 16:52 UTC.
 
-![Pagamentos: 18 pagas e 6 estornadas, e os 6 estornos que o Billing contou fecham com elas.](evidencias/grafana-pagamentos-2026-10-24.png)
+![Pagamentos: o bruto de R$ 3.835,35 fica acima de 18 x R$ 210,00 = R$ 3.780,00 porque o `increase()` extrapola a série de cada pod trocado pelo cenário; 18 pagas e 6 estornadas, e os 6 estornos do Billing fecham com elas.](evidencias/grafana-pagamentos-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. 18 pagamentos de R$ 210,00 somam R$ 3.780,00; o bruto de R$ 3.835,35 e o estornado de R$ 1.286,35 (6 x R$ 210,00 = R$ 1.260,00) trazem o acréscimo do `increase()` sobre os pods que o cenário troca a cada execução. O "Faturamento por dia" está vazio pelo mesmo motivo do volume diário.
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. O estornado de R$ 1.286,35 também passa de 6 x R$ 210,00 = R$ 1.260,00, pelo mesmo acréscimo, e a conta por pod está no [registro](evidencias/observabilidade.md#como-os-números-dos-prints-fecham).
 
 ![Execução e estoque: 6 OS em execução (cenário do 409), 18 reservas atendidas e 6 recusadas por falta de peça.](evidencias/grafana-execucao-2026-10-24.png)
 
