@@ -835,7 +835,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RN-025 | Pagamento recusado ou expirado | BDD: pagamento recusado no simulador |
 | RN-026 | Falta de peça; cancelamento pago | BDD: falta de peça e cancelamento com estorno |
 | RN-027 | Fila só com pagamento confirmado | BDD: a OS não está na fila antes do pagamento |
-| RN-028 | Reentrega sem repetir efeito | testes de reentrega no [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/unitarios/ordem_servico/test_orquestrador.py#L473), no [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/integracao/test_consumidor.py#L700) e na [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/unitarios/execucao/test_use_cases_execucao.py#L512) |
+| RN-028 | Reentrega sem repetir efeito | testes de reentrega no [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/unitarios/ordem_servico/test_orquestrador.py#L473), no [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/integracao/test_consumidor.py#L700) e na [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/integracao/test_mensageria.py#L189-L233) |
 | RN-029 | Pivot: sem cancelamento depois do início | BDD: 409 `TRANSICAO_STATUS_INVALIDA` |
 
 ## 13. Feedback da fase 3
