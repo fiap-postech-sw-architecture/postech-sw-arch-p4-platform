@@ -85,6 +85,10 @@ Tabela gerada a partir do `coverage.xml` do [run 39536414057 do CI](https://gith
 | `src/execucao/interfaces` | 84 | 84 | 100.0% |
 | **total** | 3682 | 3682 | 100.0% |
 
+## Platform
+
+O `platform` não tem serviço (nem domínio, API de negócio ou banco), e o `make test` roda no job `ci / contratos`. No [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627) (CD da `main` de 20/10/2026, commit `d703200`), o pytest coletou e aprovou 3.366 testes em 315,85 s, com 99,85% de linhas e ramos cobertos (12.377 linhas, 8 sem cobertura, e 1.196 ramos, 13 parciais; gate de 90%). Os testes cobrem os contratos de mensageria, os dashboards e alertas, os scripts de deploy e smoke e o apoio do E2E. A cobertura é a do código de teste, e não a de um serviço: o que protege os contratos são os negativos gerados dos exemplos ([contratos de mensageria](../../../contratos-de-mensageria.md)).
+
 ## SonarQube
 
 Cada CI sobe um SonarQube efêmero no runner, analisa o código com o `coverage.xml` do job `test` e reprova o run se o quality gate falhar. O gate versionado em `.sonar/quality-gate.json` é o mesmo nos três serviços: cobertura de pelo menos 80%, no máximo 3% de linhas duplicadas e nota A em confiabilidade, segurança e manutenibilidade. Resultado no CD da `main` de 21/10/2026 (UTC) de cada serviço, o que o documento de entrega cita: o gate e os arquivos indexados vêm do log do job `ci / sonarqube`, e as medidas, do artefato `sonarqube` do run, que expira em 90 dias. Os três têm 0 code smells: o CD de 20/10 mostrava 247, e os PRs citados em [Code smells por regra](#code-smells-por-regra) os zeraram. Os prints do painel de cada serviço estão no [Anexo A, A2](../entrega-fase-4.md#a2--sonarqube) do documento de entrega. A cobertura do SonarQube é menor que a do gate porque ele conta também as linhas dos módulos só com `Protocol` (`repository.py`, `ports.py` e `unit_of_work.py`), que o `.coveragerc` omite por não terem lógica.
