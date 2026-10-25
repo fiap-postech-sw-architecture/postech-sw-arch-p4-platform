@@ -79,6 +79,18 @@ def test_os_diagramas_do_documento_sao_os_da_rfc_e_o_geral_o_do_readme() -> None
     )
 
 
+def test_o_json_de_exemplo_do_documento_e_copia_de_um_da_rfc() -> None:
+    # O exemplo do Billing mora na RFC-004 (seção 7.4) e na seção 7 do documento: a
+    # cópia não pode divergir, e o índice dos artefatos promete que ela está lá.
+    raiz = Path(pdf.__file__).resolve().parents[2]
+    bloco = re.compile(r"```json\n(.*?)```", re.S)
+    no_documento = bloco.findall((raiz / pdf.DOCUMENTO).read_text(encoding="utf-8"))
+    na_rfc = bloco.findall((raiz / pdf.RFC).read_text(encoding="utf-8"))
+
+    assert no_documento
+    assert all(exemplo in na_rfc for exemplo in no_documento)
+
+
 def _pixels(css: float) -> int:
     """Lado do PNG de um diagrama de `css` px de CSS, na escala do gerador."""
     return round(css * pdf.ESCALA)

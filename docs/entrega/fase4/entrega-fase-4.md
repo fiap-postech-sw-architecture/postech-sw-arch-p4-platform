@@ -38,7 +38,7 @@ As seis primeiras linhas são os itens que o enunciado pede no PDF; as demais re
 | Sequências da saga: caminho feliz, orçamento recusado ou expirado, falta de peça e cancelamento com estorno | [6.4](#64-caminho-feliz) e [6.5](#65-compensações-principais) | [RFC-004, seção 4.8](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#48-sequências) |
 | RFC-004, o desenho integrado, com os estados da saga e da OS, o mapa de contextos e a topologia do RabbitMQ | só no repositório | [rfc-004-microsservicos-saga.md](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md) |
 | ADRs 034 a 043 | [5.3](#53-tecnologias-e-decisões) | [decisões da fase 4](../../arquitetura/adr/fase4/) |
-| Modelo de dados: ER do OS Service e da Execução e modelo dos documentos do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
+| Modelo de dados: ER do OS Service e da Execução; documento de exemplo e índices das coleções do Billing | [7](#7-modelo-de-dados) | `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) |
 | Contratos de mensageria | [4.2](#42-comunicação-e-componentes) | [AsyncAPI e JSON Schemas](../../../contratos/asyncapi.yaml) |
 | Código-fonte, Dockerfile e manifestos Kubernetes | [2](#2-repositórios-e-estado-do-cicd) e [9](#9-cicd-e-deploy) | `src/`, `Dockerfile` e `k8s/` de cada serviço |
 | Testes, cobertura, BDD e SonarQube | [8](#8-testes-e-qualidade) e [A2](#a2--sonarqube) | [cobertura e SonarQube](evidencias/coverage.md), [BDD no CD](evidencias/bdd-resumo.md) |
@@ -75,7 +75,7 @@ Os quatro repositórios são públicos, e o usuário `soat-architecture` é cola
 
 Cada repositório de serviço tem o código em `src/` (camadas `dominio`, `aplicacao`, `infraestrutura` e `interfaces`), o `Dockerfile`, os manifestos em `k8s/`, os workflows de CI/CD, `docs/arquitetura.md` e `docs/api/` (OpenAPI e collection Postman); o README traz como rodar e testar e a cobertura com o link do run.
 
-**Proteção da `main`.** Os quatro repositórios têm ruleset ativo e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit` entrou por PR (em 06/10/2026, horário de Brasília, o PR #1 foi mesclado por volta das 12:00 e o ruleset veio depois: às 13:50 nos serviços e às 14:54 no `platform`). O [A8](#a8--proteção-da-main) mostra o ruleset e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
+**Proteção da `main`.** Os quatro repositórios têm ruleset ativo e sem exceção para nenhum ator: PR obrigatório, merge só por squash, conversas resolvidas, histórico linear, sem force push nem exclusão da branch. Os checks obrigatórios são os nove jobs de CI e segurança nos serviços e `manifests`, `contratos`, `gitleaks` e `deploy-kind` no `platform`. Os repositórios ganharam o ruleset no dia da criação, e todo commit depois do `Initial commit` entrou por PR, o PR #1 de cada um inclusive. O [A8](#a8--proteção-da-main) mostra o ruleset, com a hora em que foi criado, e a lista de commits, e a [conferência](evidencias/protecao-da-main.md) traz as datas e as contagens.
 
 ## 3. Link do vídeo
 
@@ -221,8 +221,8 @@ O enunciado pede banco próprio por serviço, com pelo menos um relacional e um 
 
 | Camada | Tecnologia | Por quê | Decisão |
 |---|---|---|---|
-| Linguagem e API | Python 3.14, uv, FastAPI, Pydantic v2 | domínio da fase 3 recortado sem reescrita | ADR-001 e ADR-014 da fase 3 |
-| Arquitetura interna | DDD com camadas Onion, conferidas pelo import-linter | fronteira entre camadas vira gate de CI | ADR-003 da fase 3 |
+| Linguagem e API | Python 3.14, uv, FastAPI, Pydantic v2 | domínio da fase 3 recortado sem reescrita | [ADR-001](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/001-framework-fastapi.md) e [ADR-014](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/014-gerenciador-pacotes-uv.md) da fase 3 |
+| Arquitetura interna | DDD com camadas Onion, conferidas pelo import-linter | fronteira entre camadas vira gate de CI | [ADR-003](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p3/blob/main/docs/arquitetura/adr/003-arquitetura-ddd-onion.md) da fase 3 |
 | Divisão | três serviços e uma plataforma | capacidades do enunciado e contextos da fase 3 | [ADR-034](../../arquitetura/adr/fase4/034-decomposicao-em-microsservicos.md) |
 | Coordenação | saga orquestrada pelo OS Service | um lugar que sabe a etapa de cada OS | [ADR-035](../../arquitetura/adr/fase4/035-saga-orquestrada.md) |
 | Mensageria | RabbitMQ 4.3.6, outbox e consumidor idempotente; AsyncAPI 3.0 | retry, DLQ e permissões por configuração | [ADR-036](../../arquitetura/adr/fase4/036-mensageria-rabbitmq.md) |
@@ -507,13 +507,34 @@ sequenceDiagram
 
 ## 7. Modelo de dados
 
-Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele, e a NetworkPolicy de cada namespace só deixa o próprio namespace chegar ao banco. Os diagramas do OS Service e da Execução mostram as tabelas de que a saga e os contratos dependem, sem a `outbox` e a `mensagens_processadas` da [seção 6.3](#63-idempotência-novas-tentativas-e-prazos); o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
+Cada serviço é o único dono do seu banco, com credencial própria montada só nos pods dele ([seção 10](#10-segurança-e-análise-de-vulnerabilidades)). Os diagramas do OS Service e da Execução mostram as tabelas de que a saga e os contratos dependem, sem a `outbox` e a `mensagens_processadas` da [seção 6.3](#63-idempotência-novas-tentativas-e-prazos); o modelo completo, com colunas, índices e estados, está na seção 3 do `docs/arquitetura.md` do [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/docs/arquitetura.md#3-modelo-de-dados), do [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) e da [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/docs/arquitetura.md#3-modelo-de-dados).
 
 **OS Service (PostgreSQL 16).** Clientes, veículos, consentimentos, usuários e tokens revogados vêm da fase 3; o documento do cliente fica cifrado, com um hash para a busca. A OS ganhou versão para o lock otimista e o resumo do orçamento e do pagamento, copiado dos eventos. O histórico só recebe inserções, `sagas` guarda a instância da saga e `notificacoes`, os e-mails do `notificador`.
 
-**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução, o que torna os três idempotentes por OS, e diagnóstico e execução guardam o retrato do veículo, para o mecânico achar o carro no pátio.
+**Execution Service (PostgreSQL 16).** A reserva move quantidade de disponível para reservada, a liberação devolve e a finalização dá baixa. O `ordem_id` é único em reserva, diagnóstico e execução (idempotentes por OS); os dois últimos guardam o retrato do veículo para o mecânico achar o carro.
 
-**Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. A tabela é a das coleções da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7), que traz também o exemplo de documento; o [`docs/arquitetura.md` do Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/docs/arquitetura.md#3-modelo-de-dados) detalha o modelo campo a campo.
+**Billing Service (MongoDB 7).** Orçamento e pagamento são documentos lidos e gravados inteiros, com dinheiro em `Decimal128` e sem nenhum dado do pagador ou do cartão; o orçamento leva as linhas embutidas, com o preço congelado na geração. A lápide é o registro que a compensação grava quando chega antes do comando original: o comando atrasado a acha pelo índice único de `ordem_id` e é descartado. O exemplo (um orçamento) e a tabela das coleções vêm da [RFC-004, seção 7.4](../../arquitetura/rfc/fase4/rfc-004-microsservicos-saga.md#74-billing-service-mongodb-7).
+
+```json
+{
+  "_id": "6d2a9b14-8c3e-4f5a-a7b6-1c9d0e2f3a45",
+  "ordem_id": "3c9a7e10-5b2f-4f6d-8a41-0e2d9b7c6f55",
+  "status": "APROVADO",
+  "linhas": [
+    {"tipo": "servico", "codigo": "SRV-TROCA-OLEO", "descricao": "Troca de óleo", "quantidade": 1,
+     "preco_unitario": {"valor": {"$numberDecimal": "120.00"}, "moeda": "BRL"}},
+    {"tipo": "peca", "codigo": "PEC-OLEO-5W30", "descricao": "Óleo 5W30, 1 litro", "quantidade": 4,
+     "preco_unitario": {"valor": {"$numberDecimal": "45.00"}, "moeda": "BRL"}}
+  ],
+  "total": {"valor": {"$numberDecimal": "300.00"}, "moeda": "BRL"},
+  "criado_em": {"$date": "2026-10-06T14:32:06Z"},
+  "valido_ate": {"$date": "2026-10-09T14:32:06Z"},
+  "decisao": {"canal": "link", "decidido_em": {"$date": "2026-10-06T15:02:11Z"}, "decidido_por": null},
+  "motivo_cancelamento": null,
+  "aberto_por": {"mensagem_id": "8f6b1c2e-4d3a-4e8b-9f1a-2b7c5d9e0a13",
+                 "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
+}
+```
 
 | Coleção | Índices |
 |---|---|
@@ -679,20 +700,19 @@ erDiagram
 
 ## 8. Testes e qualidade
 
-O enunciado pede testes unitários em todos os serviços, ao menos um fluxo completo com BDD, cobertura mínima de 80% por serviço e SonarQube ou similar no CI ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)). A tabela traz os testes, a cobertura e o SonarQube do CD da `main` de cada serviço, de 21/10/2026 (UTC): [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39531343409), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39531974299) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39536414057); a linha do `platform` é do [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627). A cobertura por contexto e por camada de cada run está no [registro de cobertura](evidencias/coverage.md); a seção Cobertura do README de cada serviço mostra o run que ele cita.
+O enunciado pede testes unitários em todos os serviços, ao menos um fluxo completo com BDD, cobertura mínima de 80% por serviço e SonarQube ou similar no CI ([ADR-041](../../arquitetura/adr/fase4/041-estrategia-de-testes-e-qualidade.md)). A tabela traz os testes, a cobertura e o SonarQube do CD da `main` de cada serviço, de 21/10/2026 (UTC): [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39531343409), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39531974299) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39536414057). A cobertura por contexto e por camada de cada run está no [registro de cobertura](evidencias/coverage.md); a seção Cobertura do README de cada serviço mostra o run que ele cita. Os testes do `platform`, que não é serviço, estão no mesmo registro.
 
 | Repositório | Testes no CD | Cobertura (gate) | SonarQube |
 |---|---|---|---|
-| OS Service | 10.312 casos (3.000 deles de sementes de 3 testes de propriedade): unitários, integração com PostgreSQL e RabbitMQ reais, contrato e [BDD de componente](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/tests/bdd) (28 cenários e 7 esquemas) | [99,6%](evidencias/coverage.md#os-service) (95%) | aprovado; 0 bugs, 0 vulnerabilidades, 0 code smells |
-| Billing | 1.731: unitários, integração com MongoDB e RabbitMQ reais e contrato | [100%](evidencias/coverage.md#billing-service) (95%) | aprovado; 0, 0 e 0 |
-| Execução | 1.475: unitários, integração com PostgreSQL e RabbitMQ reais e contrato | [100%](evidencias/coverage.md#execution-service) (95%) | aprovado; 0, 0 e 0 |
-| `platform` | 3.366: contratos de mensageria, dashboards e alertas, scripts de deploy e smoke, apoio do E2E | 99,85% do código de teste (90%; [CI](../../../README.md#ci)) | não se aplica |
+| OS Service | 10.312 testes (3.000 deles vêm de 3 testes de propriedade, rodados em mil sementes cada um): unitários, integração com PostgreSQL e RabbitMQ reais, contrato e [BDD de componente](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/tests/bdd) (28 cenários e 7 esquemas) | [99,6%](evidencias/coverage.md#os-service) (95%) | aprovado; 0 bugs, 0 vulnerabilidades, 0 code smells |
+| Billing | 1.731 testes: unitários, integração com MongoDB e RabbitMQ reais e contrato | [100%](evidencias/coverage.md#billing-service) (95%) | aprovado; 0, 0 e 0 |
+| Execução | 1.475 testes: unitários, integração com PostgreSQL e RabbitMQ reais e contrato | [100%](evidencias/coverage.md#execution-service) (95%) | aprovado; 0, 0 e 0 |
 
 A cobertura soma linhas e ramos, e o código novo de cada PR passa também pelo `diff-cover` (90%). O gate do SonarQube, versionado em `.sonar/quality-gate.json`, exige cobertura de 80%, no máximo 3% de duplicação e nota A em confiabilidade, segurança e manutenibilidade, e passou nos três, com 0 bugs, 0 vulnerabilidades, 0 hotspots e 0 code smells ([resumo](evidencias/coverage.md#sonarqube) e prints no [A2](#a2--sonarqube)). Os PRs que zeraram os code smells (as supressões `# NOSONAR` que já existiam continuam) estão no [registro de cobertura](evidencias/coverage.md#code-smells-por-regra), e o teste de mutação, na [seção Mutação](evidencias/coverage.md#mutação) dele.
 
 **BDD do fluxo completo.** O [`saga_atendimento.feature`](../../../e2e/features/saga_atendimento.feature) do `platform` tem 11 cenários e um esquema de cenário com 3 exemplos, 14 execuções em Gherkin, em português, contra os três serviços no kind; roda no `deploy-kind` do CD de cada serviço e no job `e2e` do CD do `platform`, onde as 14 passaram em 206,65 s ([run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627)). Cobrem o caminho feliz (os oito status, o orçamento de R$ 210,00, a baixa do estoque e o trace nos três serviços), as quatro compensações (orçamento recusado, falta de peça, pagamento recusado e cancelamento com estorno), a expiração do orçamento, o 409 depois do início, a recusa de CPF inválido, o consumidor do Billing parado, a API do Billing parada, com o circuito aberto, e a borda ([resumo por cenário](evidencias/bdd-resumo.md), do [run 39231733886](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39231733886), de 19/10, com as mesmas 14). O pagamento usa o simulador do Mercado Pago.
 
-**Collection com Newman.** A [collection do fluxo completo](../../api/fluxo-completo.postman_collection.json) leva uma OS pelos três serviços até a entrega, pela borda, com o Newman 6.2.3 no job `e2e` do `platform`: 108 assertions, 49 requisições e nenhuma falha no mesmo run, o das capturas do [A5](#a5--newman-e-zap-no-cd-do-platform) ([execuções anteriores](evidencias/newman-resumo.md)).
+**Collection com Newman.** A [collection do fluxo completo](../../api/fluxo-completo.postman_collection.json) leva uma OS pelos três serviços até a entrega, pela borda, com o Newman 6.2.3 no job `e2e` do `platform`: 108 assertions, 49 requisições e nenhuma falha no mesmo run, o das capturas do [A5](#a5--newman-e-zap-no-cd-do-platform); o [registro](evidencias/newman-resumo.md) traz outras quatro, de 19/10: duas no kind local, a do CI do `platform` #24 e a do CD da `main`.
 
 ## 9. CI/CD e deploy
 
@@ -835,7 +855,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RN-025 | Pagamento recusado ou expirado | BDD: pagamento recusado no simulador |
 | RN-026 | Falta de peça; cancelamento pago | BDD: falta de peça e cancelamento com estorno |
 | RN-027 | Fila só com pagamento confirmado | BDD: a OS não está na fila antes do pagamento |
-| RN-028 | Reentrega sem repetir efeito | testes de reentrega no [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/unitarios/ordem_servico/test_orquestrador.py#L473), no [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/integracao/test_consumidor.py#L700) e na [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/unitarios/execucao/test_use_cases_execucao.py#L512) |
+| RN-028 | Reentrega sem repetir efeito | testes de reentrega no [OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/unitarios/ordem_servico/test_orquestrador.py#L473), no [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/integracao/test_consumidor.py#L700) e na [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/blob/main/tests/integracao/test_mensageria.py#L189-L233) |
 | RN-029 | Pivot: sem cancelamento depois do início | BDD: 409 `TRANSICAO_STATUS_INVALIDA` |
 
 ## 13. Feedback da fase 3
@@ -940,7 +960,11 @@ Fonte: [trace-saga-2026-10-19.json](evidencias/trace-saga-2026-10-19.json), trac
 
 ## A4 — Swagger pela borda
 
-O Swagger de cada serviço pelo Kong do kind, em `https://localhost/<prefixo>/docs` (o campo Servers mostra o prefixo), tem print no repositório: [OS Service](evidencias/swagger-os-service-2026-10-20.png), [Billing](evidencias/swagger-billing-service-2026-10-20.png) e [Execução](evidencias/swagger-execution-service-2026-10-20.png), de 20/10/2026. O OpenAPI e a collection Postman de cada serviço estão em `docs/api/` ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api)).
+O Swagger de cada serviço abre pelo Kong do kind, em `https://localhost/<prefixo>/docs`; o print é o do Billing, e os do [OS Service](evidencias/swagger-os-service-2026-10-20.png) e da [Execução](evidencias/swagger-execution-service-2026-10-20.png) estão no repositório. O OpenAPI e a collection Postman de cada serviço estão em `docs/api/` ([OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/tree/main/docs/api), [Billing](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/tree/main/docs/api) e [Execução](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/tree/main/docs/api)).
+
+![Swagger do Billing em `/billing/docs`, pela borda: o campo Servers mostra o prefixo `/billing`.](evidencias/swagger-billing-service-2026-10-20.png)
+
+Fonte: Kong do kind, 20/10/2026. Amplie o PDF para ler as rotas (print de 1.400 px).
 
 ## A5 — Newman e ZAP no CD do `platform`
 
@@ -990,19 +1014,27 @@ Fonte: Grafana do kind, 19/10/2026, 00:58 (Brasília).
 
 ## A7 — Dashboards do Grafana
 
-Dashboards do kind local, sem login, na janela das seis execuções do `make demo` de 24/10/2026, com o código da `main` ([execuções, commits e consultas](evidencias/observabilidade.md#dashboards-e-histórico)). Amplie o PDF para ler os rótulos (1.400 px). O "Volume diário de OS" e o "Faturamento por dia" estão sem barra (a janela é de um dia só); as barras do kind anterior (19 a 22/10, código de antes dos baldes novos) estão nos prints do [Atendimento](evidencias/grafana-atendimento-2026-10-22.png) e dos [Pagamentos](evidencias/grafana-pagamentos-2026-10-22.png). Os outros quatro estão no repositório: [Saga](evidencias/grafana-saga-2026-10-24.png), [Mensageria](evidencias/grafana-mensageria-2026-10-24.png), [Bancos](evidencias/grafana-bancos-2026-10-24.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-24.png).
+Dashboards do kind local, sem login, na janela das seis execuções do `make demo` de 24/10/2026, com o código da `main` ([execuções, commits e consultas](evidencias/observabilidade.md#dashboards-e-histórico)). Amplie o PDF para ler os rótulos (1.400 px). O "Volume diário de OS" e o "Faturamento por dia" estão sem barra (a janela é de um dia só); as barras de 19 a 22/10, do kind anterior, estão nos recortes abaixo dos prints do Atendimento e dos Pagamentos. Os outros quatro estão no repositório: [Saga](evidencias/grafana-saga-2026-10-24.png), [Mensageria](evidencias/grafana-mensageria-2026-10-24.png), [Bancos](evidencias/grafana-bancos-2026-10-24.png) e [Plataforma](evidencias/grafana-plataforma-2026-10-24.png).
 
 ![Atendimento: funil de 36 OS abertas a 6 execuções finalizadas e sagas com 24 compensadas e 6 concluídas.](evidencias/grafana-atendimento-2026-10-24.png)
 
 Fonte: Grafana do kind, 24/10/2026, de 14:40 a 16:51 UTC; captura às 16:52 UTC. O "Volume diário de OS" está vazio porque a barra de um dia só aparece às 00:00 UTC do dia seguinte. "Finalizada" é 0 porque as 6 OS finalizadas já foram entregues, e as 6 "Em execução" são o cenário do 409 ([como os números fecham](evidencias/observabilidade.md#como-os-números-dos-prints-fecham)).
 
+![Volume diário de OS: as barras de 19 a 22/10 (UTC), do kind anterior.](evidencias/grafana-atendimento-volume-diario-2026-10-22.png)
+
+Fonte: recorte, sem reamostrar, do [print de 22/10](evidencias/grafana-atendimento-2026-10-22.png) (captura de 23/10, 00:10 UTC), de um kind anterior. A [troca dos baldes de 23/10](evidencias/observabilidade.md#dashboards-e-histórico) não muda este painel, que soma por dia o contador `pytstop_os_criadas_total`.
+
 ![Orçamentos: 36 gerados, 24 aprovados e 12 expirados (67%); p90 de 1,78 s e média de 774 ms nos aprovados.](evidencias/grafana-orcamentos-2026-10-24.png)
 
 Fonte: a mesma janela do Atendimento; captura às 16:52 UTC.
 
-![Pagamentos: 18 pagas e 6 estornadas, e os 6 estornos que o Billing contou fecham com elas.](evidencias/grafana-pagamentos-2026-10-24.png)
+![Pagamentos: 18 pagas e 6 estornadas; os 6 estornos do Billing fecham com elas.](evidencias/grafana-pagamentos-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. 18 pagamentos de R$ 210,00 somam R$ 3.780,00; o bruto de R$ 3.835,35 e o estornado de R$ 1.286,35 (6 x R$ 210,00 = R$ 1.260,00) trazem o acréscimo do `increase()` sobre os pods que o cenário troca a cada execução. O "Faturamento por dia" está vazio pelo mesmo motivo do volume diário.
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. Os valores passam da conta exata (R$ 3.835,35 contra 18 x R$ 210,00 = R$ 3.780,00; R$ 1.286,35 contra R$ 1.260,00; líquido R$ 2.549,00 contra R$ 2.520,00) porque o `increase()` extrapola a série de cada pod trocado pelo cenário; a conta por pod está no [registro](evidencias/observabilidade.md#como-os-números-dos-prints-fecham).
+
+![Faturamento por dia: as barras de 19 a 22/10 (UTC), do kind anterior.](evidencias/grafana-pagamentos-faturamento-por-dia-2026-10-22.png)
+
+Fonte: recorte, sem reamostrar, do [print de 22/10](evidencias/grafana-pagamentos-2026-10-22.png) (captura de 23/10, 00:10 UTC), de um kind anterior. A [troca dos baldes de 23/10](evidencias/observabilidade.md#dashboards-e-histórico) não muda este painel, que soma por dia o contador `pytstop_pagamentos_valor_centavos_total`.
 
 ![Execução e estoque: 6 OS em execução (cenário do 409), 18 reservas atendidas e 6 recusadas por falta de peça.](evidencias/grafana-execucao-2026-10-24.png)
 
@@ -1010,7 +1042,7 @@ Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. Os códigos SRV-E2E
 
 ![Serviços: 5xx, sucesso e p95; os cinco picos de 5xx, da 2ª execução em diante, são a API do Billing parada.](evidencias/grafana-servicos-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento; captura às 16:53 UTC.
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. O painel "Borda: 401, 403 e 429 por rota" está sem dado porque a borda não devolveu nenhuma dessas respostas na janela.
 
 ## A8 — Proteção da `main`
 
