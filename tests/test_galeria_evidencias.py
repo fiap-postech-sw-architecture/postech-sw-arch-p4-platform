@@ -20,8 +20,9 @@ DOCUMENTO = RAIZ / "docs/entrega/fase4/entrega-fase-4.md"
 # O PDF de ensaio precisa ficar abaixo de cerca de 6 MB; o resto é texto e diagrama.
 TETO_DOS_PNG = 5_000_000
 # Decisão de volume do PDF: os quatro dashboards que o Anexo A, A7, só lista, os dois
-# de 22/10 que ele liga pelas barras diárias (os do A7, de 24/10, saem sem barra), as
-# três telas do Swagger (A4), o ruleset do Billing (o A8 mostra o do OS Service) e
+# prints inteiros de 22/10 (o A7 embute só o recorte do painel de barras de cada um,
+# porque os de 24/10 saem sem barra), as três telas do Swagger (A4), o ruleset do
+# Billing (o A8 mostra o do OS Service) e
 # o print de 20/10 do trace e a busca do mesmo dia (o A3 mostra o de 23/10, com as
 # compensações, e o caminho feliz), os grafos dos CDs de 20/10 e os passos do
 # deploy-kind de 23/10 (o A1 mostra o grafo do CD de 24/10 e a tabela dos quatro

@@ -85,6 +85,9 @@ figure img { display: block; max-width: 100%; max-height: 88mm; margin: 0 auto; 
 figure img[src*="grafana-"], figure img[src*="loki-"], figure img[src*="jaeger-estorno"] {
   max-width: 88%; max-height: 200mm; }
 figure img[src*="grafana-"] { max-width: 80%; }
+/* Recortes de painel (A7): 60% da largura, com a letra do painel uma vez e meia maior que a do
+   print inteiro. */
+figure img[src*="grafana-"][src*="-2026-10-22"] { max-width: 60%; }
 /* Ruleset e lista de commits: telas altas de GitHub, uma por página. O ruleset
    fica em 170 mm para caber na página do título do A8 e da tabela dos quatro
    rulesets, que não se parte (.inteira), quando a tabela não couber no pé da
