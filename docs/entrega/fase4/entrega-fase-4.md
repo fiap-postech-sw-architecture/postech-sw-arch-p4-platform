@@ -1043,7 +1043,7 @@ Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. Os códigos SRV-E2E
 
 ![Serviços: 5xx, sucesso e p95; os cinco picos de 5xx, da 2ª execução em diante, são a API do Billing parada.](evidencias/grafana-servicos-2026-10-24.png)
 
-Fonte: a mesma janela do Atendimento; captura às 16:53 UTC.
+Fonte: a mesma janela do Atendimento; captura às 16:53 UTC. O painel "Borda: 401, 403 e 429 por rota" está sem dado porque a borda não devolveu nenhuma dessas respostas na janela.
 
 ## A8 — Proteção da `main`
 
