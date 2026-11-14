@@ -20,6 +20,7 @@ import httpx
 
 from e2e.apoio import diagnostico
 from e2e.apoio.conferencias import (
+    LIVE_MODE_DE_CONTA_DE_TESTE,
     DivergenciaComOMercadoPagoError,
     conferir_aprovado,
     conferir_estornado,
@@ -382,10 +383,14 @@ class Prova:
             pagamento_id=pagamento["id"],
             valor=pagamento["valor"],
             moeda=pagamento["moeda"],
+            conta_de_teste=self.sandbox.conta_de_teste,
         )
         if nao_provada:
             self.registro.observacoes.append(nao_provada)
             self._avisar(f"[mp-sandbox] atenção: {nao_provada}")
+        if mp.live_mode is True:
+            # So chega aqui com o dono do token provado de teste (senao reprovou).
+            self.registro.observacoes.append(LIVE_MODE_DE_CONTA_DE_TESTE)
         live = "ausente" if mp.live_mode is None else mp.live_mode
         self.registro.anotar(f"Mercado Pago: {mp.status}, live_mode={live}")
 

@@ -17,6 +17,15 @@ if TYPE_CHECKING:
     from e2e.apoio.mercadopago import PagamentoMp, PreferenciaMp
 
 APROVADO: Final = "approved"
+# O que a evidencia registra quando o pagamento volta com ``live_mode=true`` e o dono
+# do token e conta de teste: no Checkout Pro isso e o esperado, e nao cobranca real.
+LIVE_MODE_DE_CONTA_DE_TESTE: Final = (
+    "o Mercado Pago marcou o pagamento com `live_mode=true`, o esperado no Checkout "
+    "Pro: o teste roda no ambiente de produção com contas fictícias, e o Access "
+    "Token de teste é a credencial da conta Vendedor de teste. A natureza de teste "
+    "foi provada pelo dono do token (`GET /users/me` com a tag `test_user`), "
+    "conferido antes do pagamento"
+)
 
 
 class DivergenciaComOMercadoPagoError(AssertionError):
@@ -31,14 +40,24 @@ def _mesmo_valor(mp: Decimal | None, billing: str) -> bool:
 
 
 def conferir_aprovado(
-    mp: PagamentoMp, *, pagamento_id: str, valor: str, moeda: str
+    mp: PagamentoMp,
+    *,
+    pagamento_id: str,
+    valor: str,
+    moeda: str,
+    conta_de_teste: bool | None = None,
 ) -> str | None:
     """Aprovado, desta cobranca, no valor e na moeda do orcamento, e de teste.
 
     Reprova a divergencia. ``None`` se tudo confere; senao, o motivo pelo qual a
     consulta nao prova que o pagamento e de teste: sem ``live_mode`` na resposta
-    (ou nao booleano) nao ha o que afirmar, e e a unica barreira contra um token
-    de producao (o prefixo do token nao distingue).
+    (ou nao booleano) nao ha o que afirmar.
+
+    ``live_mode=true`` so passa com ``conta_de_teste`` verdadeiro, o dono do token
+    conferido no preflight (``ClienteMercadoPago.conta_de_teste``). No Checkout
+    Pro o pagamento de teste volta com ``live_mode=true`` (o teste roda em
+    producao, com contas ficticias), e o prefixo do token nao distingue teste de
+    producao: sem a prova do dono, ``live_mode=true`` continua reprovando.
     """
     problemas = []
     if mp.status != APROVADO:
@@ -58,7 +77,7 @@ def conferir_aprovado(
         )
     if mp.moeda != moeda:
         problemas.append(f"a moeda no Mercado Pago é {mp.moeda} e a esperada, {moeda}")
-    if mp.live_mode is True:
+    if mp.live_mode is True and conta_de_teste is not True:
         problemas.append(
             f"o Mercado Pago marca o pagamento {mp.id} como de PRODUÇÃO "
             "(live_mode=true). Confira primeiro no painel do Vendedor de teste (id do "

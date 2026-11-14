@@ -58,6 +58,9 @@ class MercadoPagoFalso:
         if self.erro:
             raise self.erro
 
+    def conta_de_teste(self) -> bool:
+        return True
+
     def fechar(self) -> None:
         self.fechado = True
 

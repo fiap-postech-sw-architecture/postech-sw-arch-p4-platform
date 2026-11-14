@@ -12,7 +12,10 @@ import httpx
 import pytest
 
 from e2e.apoio import segredos
-from e2e.apoio.conferencias import DivergenciaComOMercadoPagoError
+from e2e.apoio.conferencias import (
+    LIVE_MODE_DE_CONTA_DE_TESTE,
+    DivergenciaComOMercadoPagoError,
+)
 from e2e.apoio.espera import TempoEsgotadoError
 from e2e.apoio.evidencia import RegistroDoCenario, descricao_do_trace
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
@@ -172,6 +175,7 @@ def _prova(
     numeros: Any = None,
     descrever: Callable[[Api, Cenario], str] | None = None,
     filas_mortas_antes: dict[str, int] | None = None,
+    conta_de_teste: bool | None = None,
 ) -> tuple[Prova, list[str], list[str]]:
     avisos: list[str] = []
     esperas: list[str] = []
@@ -181,6 +185,7 @@ def _prova(
         max_recusas=3,
         mercadopago=mundo.mercado_pago() if real else None,
         url_de_notificacao=URL_DE_NOTIFICACAO_PADRAO if real else "",
+        conta_de_teste=conta_de_teste,
     )
 
     def esperar_status(api: Api, cenario: Cenario, status: str) -> Json:
@@ -685,6 +690,38 @@ def test_live_mode_falso_nao_deixa_ressalva(relogio: Relogio) -> None:
 
     assert prova.registro.observacoes == []
     assert avisos == []
+
+
+def test_live_mode_true_com_dono_de_teste_passa_e_a_evidencia_explica_por_que(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.mp_pagamento = lambda _: {**_pagamento_mp(), "live_mode": True}
+    prova, avisos, _ = _prova(mundo, relogio, real=True, conta_de_teste=True)
+
+    prova.conferir_aprovado(_pagamento_billing(referencia_pagamento=999))
+
+    assert prova.registro.observacoes == [LIVE_MODE_DE_CONTA_DE_TESTE]
+    assert avisos == []
+    assert (
+        prova.registro.transicoes[-1][1]
+        == "script: Mercado Pago: approved, live_mode=True"
+    )
+
+
+def test_live_mode_true_sem_dono_de_teste_reprova_e_guarda_o_que_o_mp_disse(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.mp_pagamento = lambda _: {**_pagamento_mp(), "live_mode": True}
+    prova, _, _ = _prova(mundo, relogio, real=True)
+
+    with pytest.raises(DivergenciaComOMercadoPagoError, match="PRODUÇÃO"):
+        prova.conferir_aprovado(_pagamento_billing(referencia_pagamento=999))
+
+    assert prova.registro.mercadopago is not None
+    assert prova.registro.mercadopago["live_mode"] is True
+    assert prova.registro.observacoes == []
 
 
 @pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])

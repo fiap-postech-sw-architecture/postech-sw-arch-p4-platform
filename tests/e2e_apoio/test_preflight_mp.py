@@ -117,14 +117,27 @@ def _borda(
 
 
 class MercadoPagoFalso:
-    def __init__(self, erro: Exception | None = None) -> None:
+    def __init__(
+        self,
+        erro: Exception | None = None,
+        *,
+        conta_de_teste: bool | None = True,
+        erro_da_conta: Exception | None = None,
+    ) -> None:
         self.erro = erro
         self.fechado = False
         self.chave: str | None = None
+        self._conta_de_teste = conta_de_teste
+        self.erro_da_conta = erro_da_conta
 
     def validar_token(self) -> None:
         if self.erro:
             raise self.erro
+
+    def conta_de_teste(self) -> bool | None:
+        if self.erro_da_conta:
+            raise self.erro_da_conta
+        return self._conta_de_teste
 
     def fechar(self) -> None:
         self.fechado = True
@@ -601,6 +614,74 @@ def test_preparar_sandbox_real_devolve_o_que_a_sessao_precisa(relogio: Relogio) 
     assert sandbox.max_recusas == 3
     assert id(sandbox.mercadopago) == id(mp)
     assert mp.chave == CHAVE_DO_MP
+    assert sandbox.conta_de_teste is True
+
+
+def test_dono_do_token_de_teste_e_dito_no_terminal(relogio: Relogio) -> None:
+    avisos: list[str] = []
+
+    _preparar(
+        _kubectl(),
+        _borda(relogio),
+        AMBIENTE,
+        cliente=_fabrica(MercadoPagoFalso()),
+        avisar=avisos.append,
+    )
+
+    assert "[mp-sandbox] dono do token: conta de teste (tag test_user)" in avisos
+
+
+def test_dono_do_token_real_recusa_antes_de_qualquer_cobranca(
+    relogio: Relogio,
+) -> None:
+    mp = MercadoPagoFalso(conta_de_teste=False)
+
+    with pytest.raises(PreflightDoSandboxError) as erro:
+        _preparar(_kubectl(), _borda(relogio), AMBIENTE, cliente=_fabrica(mp))
+
+    texto = str(erro.value)
+    assert "não é uma conta de teste" in texto
+    assert "o pagamento seria de verdade" in texto
+    assert "Credenciais de teste" in texto
+    assert CHAVE_DO_MP not in texto
+    assert mp.fechado
+
+
+@pytest.mark.parametrize(
+    ("falso", "trecho"),
+    [
+        pytest.param(
+            MercadoPagoFalso(conta_de_teste=None),
+            "não trouxe tags",
+            id="sem-tags",
+        ),
+        pytest.param(
+            MercadoPagoFalso(
+                erro_da_conta=ErroDoMercadoPagoError("GET /users/me: HTTP 404")
+            ),
+            "a consulta do dono do token respondeu GET /users/me: HTTP 404",
+            id="erro-na-consulta",
+        ),
+    ],
+)
+def test_dono_do_token_desconhecido_avisa_e_segue_sem_liberar_o_live_mode(
+    falso: MercadoPagoFalso, trecho: str, relogio: Relogio
+) -> None:
+    avisos: list[str] = []
+
+    sandbox = _preparar(
+        _kubectl(),
+        _borda(relogio),
+        AMBIENTE,
+        cliente=_fabrica(falso),
+        avisar=avisos.append,
+    )
+
+    assert sandbox.conta_de_teste is None
+    assert not falso.fechado
+    aviso = next(a for a in avisos if trecho in a)
+    assert aviso.startswith("[mp-sandbox] atenção:")
+    assert "live_mode=true reprova o cenário" in aviso
 
 
 def test_modo_real_sem_url_usa_a_padrao_publica_e_diz_qual(relogio: Relogio) -> None:

@@ -579,6 +579,44 @@ def test_validar_token_recusado_levanta_token_recusado() -> None:
         cliente.validar_token()
 
 
+@pytest.mark.parametrize(
+    ("tags", "esperado"),
+    [
+        pytest.param(["normal", "test_user"], True, id="conta-de-teste"),
+        pytest.param(["normal", "user_info_verified"], False, id="conta-real"),
+        pytest.param([], False, id="lista-vazia"),
+    ],
+)
+def test_conta_de_teste_le_a_tag_test_user_do_dono_do_token(
+    tags: list[str], esperado: bool
+) -> None:
+    visto: list[httpx.Request] = []
+    cliente = _cliente(lambda _: _json({"id": 1, "tags": tags}), visto)
+
+    assert cliente.conta_de_teste() is esperado
+    assert visto[0].method == "GET"
+    assert visto[0].url.path == "/users/me"
+
+
+@pytest.mark.parametrize(
+    "corpo",
+    [
+        pytest.param({"id": 1}, id="sem-tags"),
+        pytest.param({"id": 1, "tags": "test_user"}, id="tags-texto"),
+        pytest.param([], id="corpo-lista"),
+    ],
+)
+def test_conta_de_teste_sem_tags_em_lista_nao_afirma_nada(corpo: object) -> None:
+    assert _cliente(lambda _: _json(corpo)).conta_de_teste() is None
+
+
+def test_conta_de_teste_com_token_recusado_levanta_token_recusado() -> None:
+    cliente = _cliente(lambda _: _json({"message": "invalid access token"}, 401))
+
+    with pytest.raises(TokenRecusadoError):
+        cliente.conta_de_teste()
+
+
 def test_fechar_fecha_o_cliente_http() -> None:
     cliente = _cliente(lambda _: _json(PAGAMENTO))
 

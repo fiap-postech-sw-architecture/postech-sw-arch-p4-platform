@@ -77,6 +77,9 @@ class Sandbox:
     url_de_notificacao: str = ""
     max_recusas: int = 3
     mercadopago: ClienteMercadoPago | None = field(default=None, repr=False)
+    # O dono do token e conta de teste (``True``), real (o preflight recusa antes)
+    # ou nao se sabe (``None``): e o que deixa ``live_mode=true`` passar.
+    conta_de_teste: bool | None = None
 
     @property
     def real(self) -> bool:
@@ -350,6 +353,7 @@ def preparar_sandbox(
         raise PreflightDoSandboxError(msg) from None
     conferir_servicos(borda, relogio=relogio, dormir=dormir)
     mercadopago = _validar_token(cliente, credenciais[0], avisar) if real else None
+    conta_de_teste = _conferir_conta(mercadopago, avisar) if mercadopago else None
     if real:
         avisar(
             f"[mp-sandbox] notification_url: {sem_consulta(url)} ({origem}); "
@@ -364,6 +368,7 @@ def preparar_sandbox(
         url_de_notificacao=url,
         max_recusas=max_recusas,
         mercadopago=mercadopago,
+        conta_de_teste=conta_de_teste,
     )
 
 
@@ -434,3 +439,40 @@ def _validar_token(
         msg = f"não consegui falar com o Mercado Pago (api.mercadopago.com): {erro}"
         raise PreflightDoSandboxError(msg) from None
     return mercadopago
+
+
+def _conferir_conta(
+    mercadopago: ClienteMercadoPago, avisar: Callable[[str], None]
+) -> bool | None:
+    """O dono do token, antes de qualquer cobranca: conta de teste ou nao.
+
+    No Checkout Pro o pagamento de teste volta com ``live_mode=true``, entao o
+    freio contra um token de producao passa a ser o dono do token, e vem antes do
+    link de pagamento. Conta real recusa aqui, sem cobranca. Sem resposta legivel
+    (``None``) o roteiro segue com aviso, e ``live_mode=true`` continua reprovando
+    o cenario depois do pagamento, como antes.
+    """
+    try:
+        conta_de_teste = mercadopago.conta_de_teste()
+    except ErroDoMercadoPagoError as erro:
+        avisar(
+            f"[mp-sandbox] atenção: a consulta do dono do token respondeu {erro}; o "
+            "roteiro segue, e um pagamento com live_mode=true reprova o cenário"
+        )
+        return None
+    if conta_de_teste is False:
+        mercadopago.fechar()
+        msg = (
+            "o dono do MP_ACCESS_TOKEN não é uma conta de teste (GET /users/me sem a "
+            "tag test_user): com ele o pagamento seria de verdade. Use o Access Token "
+            "de Testes > Credenciais de teste da aplicação, e não o de produção"
+        )
+        raise PreflightDoSandboxError(msg)
+    if conta_de_teste is None:
+        avisar(
+            "[mp-sandbox] atenção: o GET /users/me não trouxe tags; o roteiro segue, "
+            "e um pagamento com live_mode=true reprova o cenário"
+        )
+        return None
+    avisar("[mp-sandbox] dono do token: conta de teste (tag test_user)")
+    return True
