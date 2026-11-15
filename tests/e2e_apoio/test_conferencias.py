@@ -129,6 +129,48 @@ def test_pagamento_de_producao_manda_conferir_no_painel_antes_de_trocar() -> Non
     assert "estorne pelo painel e troque as credenciais" in texto
 
 
+def test_live_mode_true_com_dono_do_token_de_teste_passa() -> None:
+    # Checkout Pro: o teste roda em producao com contas ficticias, e o pagamento de
+    # teste volta com live_mode=true; o dono do token (test_user) e a prova.
+    motivo = conferir_aprovado(
+        _mp(live_mode=True),
+        pagamento_id="p-1",
+        valor="210.00",
+        moeda="BRL",
+        conta_de_teste=True,
+    )
+
+    assert motivo is None
+
+
+@pytest.mark.parametrize(
+    "conta_de_teste",
+    [pytest.param(None, id="dono-desconhecido"), pytest.param(False, id="dono-real")],
+)
+def test_live_mode_true_sem_dono_de_teste_provado_continua_reprovando(
+    conta_de_teste: bool | None,
+) -> None:
+    with pytest.raises(DivergenciaComOMercadoPagoError, match="PRODUÇÃO"):
+        conferir_aprovado(
+            _mp(live_mode=True),
+            pagamento_id="p-1",
+            valor="210.00",
+            moeda="BRL",
+            conta_de_teste=conta_de_teste,
+        )
+
+
+def test_dono_de_teste_nao_esconde_as_outras_divergencias() -> None:
+    with pytest.raises(DivergenciaComOMercadoPagoError, match="valor no Mercado Pago"):
+        conferir_aprovado(
+            _mp(live_mode=True, valor=Decimal("100.00")),
+            pagamento_id="p-1",
+            valor="210.00",
+            moeda="BRL",
+            conta_de_teste=True,
+        )
+
+
 def test_estornado_pelo_status_ou_pelo_valor_passa() -> None:
     conferir_estornado(_mp(status="refunded", status_detail="refunded"))
     conferir_estornado(_mp(valor_estornado=Decimal("210.00")))

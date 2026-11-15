@@ -21,7 +21,7 @@ from e2e.apoio.kube import FILA_MORTA_DO_BILLING
 from e2e.apoio.segredos import mascarar
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
 
     from e2e.apoio.mercadopago import PagamentoMp
 
@@ -50,6 +50,15 @@ CAMPOS_DO_LOG: Final = (
 # contrato com o Billing: operacao, status_http, erro e causas (codigos curtos).
 EVENTO_DE_REJEICAO: Final = "mercadopago_request_rejected"
 EVENTOS_QUE_INTERESSAM: Final = frozenset({EVENTO_DE_REJEICAO})
+# A recusa do estorno pela sandbox do Checkout Pro: ``POST /v1/payments/{id}/refunds``
+# com 401 e a causa 7 ("Unauthorized use of live credentials"). O Mercado Pago nao
+# aceita estorno pela API nem com as credenciais de teste do app nem com as de
+# producao da conta Vendedor de teste (14/11/2026); a conta de teste nem pode ter
+# credenciais de teste. E o unico caso que o cenario do estorno aceita como falha
+# esperada.
+OPERACAO_DO_ESTORNO: Final = "estornar"
+HTTP_DA_RECUSA_DO_ESTORNO: Final = "401"
+CAUSA_DA_CREDENCIAL_LIVE: Final = "7"
 # As ``operacao`` que o Billing diz nesse evento (``_enviar`` do adaptador do Mercado
 # Pago) e o que cada uma faz la, para a dica dizer qual chamada foi recusada.
 OPERACAO_DA_CRIACAO: Final = "criar_cobranca"
@@ -165,6 +174,21 @@ def _linha(bruta: str) -> LinhaDeLog | None:
     return LinhaDeLog(quando, nivel, evento, campos)
 
 
+def estorno_bloqueado_pela_sandbox(linhas: Iterable[LinhaDeLog]) -> bool:
+    """O log do Billing traz a recusa do estorno que so a sandbox faz.
+
+    ``mercadopago_request_rejected`` com ``operacao=estornar``, ``status_http=401`` e
+    ``causas=7``, e nada mais: outro HTTP, outra causa ou outra operacao nao conta.
+    """
+    return any(
+        linha.evento == EVENTO_DE_REJEICAO
+        and linha.campos.get("operacao") == OPERACAO_DO_ESTORNO
+        and linha.campos.get("status_http") == HTTP_DA_RECUSA_DO_ESTORNO
+        and linha.campos.get("causas") == CAUSA_DA_CREDENCIAL_LIVE
+        for linha in linhas
+    )
+
+
 def filtrar_log(saida: str, *, ultimas: int = LINHAS_DE_LOG) -> list[LinhaDeLog]:
     """As ``ultimas`` linhas do log, so as que ajudam a achar a causa."""
     achadas = (_linha(bruta) for bruta in saida.splitlines()[-ultimas:])
@@ -272,6 +296,15 @@ def _rejeicao_do_mp(sinais: Sinais) -> LinhaDeLog | None:
 def _dica_do_token(sinais: Sinais, chamadas: list[tuple[str, str, int]]) -> str | None:
     if not _token_recusado(sinais, chamadas):
         return None
+    if estorno_bloqueado_pela_sandbox(
+        linha for linhas in sinais.logs.values() for linha in linhas
+    ):
+        return (
+            'O Mercado Pago recusou o estorno com 401, causa 7 ("Unauthorized use of '
+            'live credentials"): a sandbox do Checkout Pro não aceita estorno pela API '
+            "com nenhuma das credenciais de teste. Não é o token: o cenário do estorno "
+            "termina como falha esperada (veja docs/mercado-pago-na-sandbox.md)."
+        )
     return (
         "O Mercado Pago não aceitou o token (HTTP 401 ou 403): é de produção, de "
         "outra aplicação, está revogado ou tem espaço no fim. Leia de novo com "

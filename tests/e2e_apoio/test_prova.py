@@ -12,7 +12,10 @@ import httpx
 import pytest
 
 from e2e.apoio import segredos
-from e2e.apoio.conferencias import DivergenciaComOMercadoPagoError
+from e2e.apoio.conferencias import (
+    LIVE_MODE_DE_CONTA_DE_TESTE,
+    DivergenciaComOMercadoPagoError,
+)
 from e2e.apoio.espera import TempoEsgotadoError
 from e2e.apoio.evidencia import RegistroDoCenario, descricao_do_trace
 from e2e.apoio.kube import ErroDeComandoError, Kubectl
@@ -20,7 +23,9 @@ from e2e.apoio.mercadopago import ClienteMercadoPago, ErroDoMercadoPagoError
 from e2e.apoio.modo_billing import URL_DE_NOTIFICACAO_PADRAO
 from e2e.apoio.preflight_mp import Sandbox
 from e2e.apoio.prova import (
+    ESTORNO_BLOQUEADO_PELA_SANDBOX,
     PRAZO_DO_ESTORNO,
+    RESULTADO_DA_FALHA_ESPERADA,
     SEM_CONSULTA,
     DlqDoBillingCresceuError,
     Prova,
@@ -172,6 +177,7 @@ def _prova(
     numeros: Any = None,
     descrever: Callable[[Api, Cenario], str] | None = None,
     filas_mortas_antes: dict[str, int] | None = None,
+    conta_de_teste: bool | None = None,
 ) -> tuple[Prova, list[str], list[str]]:
     avisos: list[str] = []
     esperas: list[str] = []
@@ -181,6 +187,7 @@ def _prova(
         max_recusas=3,
         mercadopago=mundo.mercado_pago() if real else None,
         url_de_notificacao=URL_DE_NOTIFICACAO_PADRAO if real else "",
+        conta_de_teste=conta_de_teste,
     )
 
     def esperar_status(api: Api, cenario: Cenario, status: str) -> Json:
@@ -685,6 +692,38 @@ def test_live_mode_falso_nao_deixa_ressalva(relogio: Relogio) -> None:
 
     assert prova.registro.observacoes == []
     assert avisos == []
+
+
+def test_live_mode_true_com_dono_de_teste_passa_e_a_evidencia_explica_por_que(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.mp_pagamento = lambda _: {**_pagamento_mp(), "live_mode": True}
+    prova, avisos, _ = _prova(mundo, relogio, real=True, conta_de_teste=True)
+
+    prova.conferir_aprovado(_pagamento_billing(referencia_pagamento=999))
+
+    assert prova.registro.observacoes == [LIVE_MODE_DE_CONTA_DE_TESTE]
+    assert avisos == []
+    assert (
+        prova.registro.transicoes[-1][1]
+        == "script: Mercado Pago: approved, live_mode=True"
+    )
+
+
+def test_live_mode_true_sem_dono_de_teste_reprova_e_guarda_o_que_o_mp_disse(
+    relogio: Relogio,
+) -> None:
+    mundo = Mundo()
+    mundo.mp_pagamento = lambda _: {**_pagamento_mp(), "live_mode": True}
+    prova, _, _ = _prova(mundo, relogio, real=True)
+
+    with pytest.raises(DivergenciaComOMercadoPagoError, match="PRODUÇÃO"):
+        prova.conferir_aprovado(_pagamento_billing(referencia_pagamento=999))
+
+    assert prova.registro.mercadopago is not None
+    assert prova.registro.mercadopago["live_mode"] is True
+    assert prova.registro.observacoes == []
 
 
 @pytest.mark.parametrize("real", [True, False], ids=["real", "ensaio"])
@@ -1616,3 +1655,116 @@ def test_a_evidencia_da_sessao_grava_o_arquivo_do_trace_ao_lado_do_resumo(
     assert json.loads(escrito)["data"][0]["traceID"] == TRACE_ID_FALSO
     assert DADO_DO_TRACE not in escrito
     assert f"arquivo `{nome}`" in (tmp_path / "resumo.md").read_text()
+
+
+# --- o estorno que so a sandbox recusa ------------------------------------------------
+
+_RECUSA_DA_SANDBOX = json.dumps(
+    {
+        "event": "mercadopago_request_rejected",
+        "level": "warning",
+        "timestamp": "2026-11-15T01:55:15.000000Z",
+        "operacao": "estornar",
+        "status_http": 401,
+        "erro": "unauthorized",
+        "causas": [7],
+    }
+)
+_SAGA_DO_ESTORNO_RECUSADO = {
+    "etapa": "falha_na_compensacao",
+    "falha": "estorno_recusado",
+    "motivo": "cancelamento",
+    "passos": [],
+}
+
+
+def _prova_do_estorno(
+    relogio: Relogio,
+    *,
+    real: bool = True,
+    saga: dict[str, Any] | None = None,
+    log: str = _RECUSA_DA_SANDBOX,
+) -> Prova:
+    mundo = Mundo()
+    mundo.saga = dict(saga if saga is not None else _SAGA_DO_ESTORNO_RECUSADO)
+    prova, _, _ = _prova(
+        mundo, relogio, real=real, executor=_executor_do_cluster(consumidor=log)
+    )
+    return prova
+
+
+def test_estorno_bloqueado_pela_sandbox_vira_falha_esperada_e_vai_para_a_evidencia(
+    relogio: Relogio,
+) -> None:
+    prova = _prova_do_estorno(relogio)
+
+    motivo = prova.estorno_bloqueado_pela_sandbox()
+
+    assert motivo == ESTORNO_BLOQUEADO_PELA_SANDBOX
+    assert "401, causa 7" in motivo
+    assert prova.registro.observacoes == [ESTORNO_BLOQUEADO_PELA_SANDBOX]
+
+
+@pytest.mark.parametrize(
+    "troca",
+    [
+        pytest.param({"etapa": "compensando"}, id="saga-noutra-etapa"),
+        pytest.param({"falha": "reenvios_esgotados"}, id="outra-falha"),
+        pytest.param({"motivo": "orcamento_recusado"}, id="outro-motivo"),
+    ],
+)
+def test_saga_que_nao_parou_pelo_estorno_recusado_nao_e_falha_esperada(
+    troca: dict[str, Any], relogio: Relogio
+) -> None:
+    prova = _prova_do_estorno(relogio, saga={**_SAGA_DO_ESTORNO_RECUSADO, **troca})
+
+    assert prova.estorno_bloqueado_pela_sandbox() is None
+    assert prova.registro.observacoes == []
+
+
+def test_estorno_recusado_por_outro_motivo_nao_e_falha_esperada(
+    relogio: Relogio,
+) -> None:
+    outra = _RECUSA_DA_SANDBOX.replace('"causas": [7]', '"causas": [2]')
+    prova = _prova_do_estorno(relogio, log=outra)
+
+    assert prova.estorno_bloqueado_pela_sandbox() is None
+    assert prova.falha_esperada == ""
+
+
+def test_no_ensaio_nada_e_falha_esperada(relogio: Relogio) -> None:
+    prova = _prova_do_estorno(relogio, real=False)
+    assert prova.estorno_bloqueado_pela_sandbox() is None
+
+
+def test_concluir_da_falha_esperada_diz_a_limitacao_e_o_passo(relogio: Relogio) -> None:
+    prova = _prova_do_estorno(relogio)
+    prova.estorno_bloqueado_pela_sandbox()
+    prova.falhou = 'Então a saga terminou como "compensada" pelo motivo "cancelamento"'
+
+    prova.concluir("skipped")
+
+    assert prova.registro.resultado == RESULTADO_DA_FALHA_ESPERADA
+    assert prova.registro.observacoes[:2] == [
+        ESTORNO_BLOQUEADO_PELA_SANDBOX,
+        (
+            'parou no passo: Então a saga terminou como "compensada" pelo motivo '
+            '"cancelamento"'
+        ),
+    ]
+
+
+def test_falha_esperada_que_o_pytest_deu_como_falha_continua_falha(
+    relogio: Relogio,
+) -> None:
+    prova = _prova_do_estorno(relogio)
+    prova.estorno_bloqueado_pela_sandbox()
+    prova.falhou = "Então o Mercado Pago informa o pagamento como estornado"
+
+    prova.concluir("failed")
+
+    assert prova.registro.resultado == "falhou"
+    assert (
+        "falhou no passo: Então o Mercado Pago informa o pagamento como estornado"
+        in prova.registro.observacoes
+    )

@@ -20,6 +20,7 @@ import httpx
 
 from e2e.apoio import diagnostico
 from e2e.apoio.conferencias import (
+    LIVE_MODE_DE_CONTA_DE_TESTE,
     DivergenciaComOMercadoPagoError,
     conferir_aprovado,
     conferir_estornado,
@@ -108,6 +109,24 @@ PRINTS_DO_ENSAIO: Final = (
     "Nenhum: o ensaio não fala com o Mercado Pago. Os prints são do `make mp-sandbox`.",
 )
 SEM_CONSULTA: Final = "[ensaio] sem consulta ao Mercado Pago neste passo"
+# O estorno que so a sandbox recusa (``diagnostico.estorno_bloqueado_pela_sandbox``):
+# o cenario sai como falha esperada, e a evidencia diz por que.
+ETAPA_DA_FALHA_NA_COMPENSACAO: Final = "falha_na_compensacao"
+FALHA_DO_ESTORNO_RECUSADO: Final = "estorno_recusado"
+MOTIVO_DO_CANCELAMENTO: Final = "cancelamento"
+CONSUMIDOR_DO_BILLING: Final = "billing-service-consumidor"
+LINHAS_DO_ESTORNO: Final = 200
+RESULTADO_DA_FALHA_ESPERADA: Final = "falha esperada (limitação da sandbox)"
+ESTORNO_BLOQUEADO_PELA_SANDBOX: Final = (
+    'o Mercado Pago recusou o estorno pela API com 401, causa 7 ("Unauthorized use '
+    'of live credentials"): a sandbox do Checkout Pro não aceita estorno pela API '
+    "nem com as credenciais de teste da aplicação nem com as de produção da conta "
+    "Vendedor de teste, e a conta de teste não pode ter credenciais de teste. O "
+    "Billing pediu o estorno de verdade e, recusado, respondeu "
+    "`EstornoDePagamentoFalhou`; a saga parou em `falha_na_compensacao` com "
+    "`estorno_recusado`, sem marcar o pagamento como estornado. O estorno completo "
+    "e a retomada da compensação estão provados no E2E com o simulador"
+)
 
 
 class DlqDoBillingCresceuError(AssertionError):
@@ -198,6 +217,8 @@ class Prova:
         self.cenario = cenario
         self.registro = registro
         self.falhou = ""
+        # O motivo da falha esperada (a recusa do estorno pela sandbox), se houve.
+        self.falha_esperada = ""
         self._esperar_status = esperar_status
         self._descrever_estado = descrever_estado
         self._traces_da_ordem = traces_da_ordem
@@ -382,10 +403,14 @@ class Prova:
             pagamento_id=pagamento["id"],
             valor=pagamento["valor"],
             moeda=pagamento["moeda"],
+            conta_de_teste=self.sandbox.conta_de_teste,
         )
         if nao_provada:
             self.registro.observacoes.append(nao_provada)
             self._avisar(f"[mp-sandbox] atenção: {nao_provada}")
+        if mp.live_mode is True:
+            # So chega aqui com o dono do token provado de teste (senao reprovou).
+            self.registro.observacoes.append(LIVE_MODE_DE_CONTA_DE_TESTE)
         live = "ausente" if mp.live_mode is None else mp.live_mode
         self.registro.anotar(f"Mercado Pago: {mp.status}, live_mode={live}")
 
@@ -449,6 +474,40 @@ class Prova:
         else:
             self.registro.anotar("Mercado Pago mostra a preferência expirada")
 
+    def estorno_bloqueado_pela_sandbox(self) -> str | None:
+        """Real: o motivo da falha esperada, se o estorno parou so pela sandbox.
+
+        Vale so com tudo isto junto: modo real, saga em ``falha_na_compensacao`` com
+        ``falha=estorno_recusado`` e motivo ``cancelamento``, e o log do consumidor do
+        Billing com a recusa exata do Mercado Pago (``estornar``, 401, causa 7). Fora
+        disso devolve ``None`` e a falha do cenario continua falha. Quando vale, a
+        evidencia registra o motivo.
+        """
+        if not self.real or not self.cenario.ordem_id:
+            return None
+        saga = diagnostico.coletar(lambda: self.api.os.saga(self.cenario.ordem_id))
+        if not saga or (saga.get("etapa"), saga.get("falha"), saga.get("motivo")) != (
+            ETAPA_DA_FALHA_NA_COMPENSACAO,
+            FALHA_DO_ESTORNO_RECUSADO,
+            MOTIVO_DO_CANCELAMENTO,
+        ):
+            return None
+        saida = diagnostico.coletar(
+            partial(
+                self.kubectl.ultimas_linhas,
+                NAMESPACE_BILLING,
+                CONSUMIDOR_DO_BILLING,
+                container="consumidor",
+                quantidade=LINHAS_DO_ESTORNO,
+            )
+        )
+        linhas = diagnostico.filtrar_log(saida or "", ultimas=LINHAS_DO_ESTORNO)
+        if not diagnostico.estorno_bloqueado_pela_sandbox(linhas):
+            return None
+        self.falha_esperada = ESTORNO_BLOQUEADO_PELA_SANDBOX
+        self.registro.observacoes.append(ESTORNO_BLOQUEADO_PELA_SANDBOX)
+        return ESTORNO_BLOQUEADO_PELA_SANDBOX
+
     def falha_no_passo(self, passo: str, erro: Exception) -> None:
         """Marca a falha e imprime o diagnostico (estado, logs e dica provavel)."""
         self.falhou = passo
@@ -499,11 +558,15 @@ class Prova:
     def concluir(self, desfecho: str | None) -> None:
         """No fim do cenario: duracao, resultado e o que os servicos registraram.
 
-        ``desfecho`` e o que o pytest registrou para a chamada (``passed`` ou
-        ``failed``); ``None`` e o cenario que parou antes do fim (Ctrl-C).
+        ``desfecho`` e o que o pytest registrou para a chamada (``passed``,
+        ``failed`` ou ``skipped``, que e o ``xfail`` da falha esperada); ``None`` e o
+        cenario que parou antes do fim (Ctrl-C).
         """
         self.registro.duracao = self._relogio() - self.cenario.inicio
-        if self.falhou or desfecho == "failed":
+        esperada = bool(self.falha_esperada) and desfecho == "skipped"
+        if esperada:
+            self.registro.resultado = RESULTADO_DA_FALHA_ESPERADA
+        elif self.falhou or desfecho == "failed":
             self.registro.resultado = "falhou"
         elif desfecho == "passed":
             self.registro.resultado = "passou"
@@ -513,8 +576,10 @@ class Prova:
                 "a execução parou antes do fim deste cenário"
             )
         self.registro.ordem_id = self.cenario.ordem_id
-        if self.falhou:
+        if self.falhou and not esperada:
             self.registro.observacoes.append(f"falhou no passo: {self.falhou}")
+        elif self.falhou:
+            self.registro.observacoes.append(f"parou no passo: {self.falhou}")
         if not self.cenario.ordem_id:
             return
         pagamento: Json = {}

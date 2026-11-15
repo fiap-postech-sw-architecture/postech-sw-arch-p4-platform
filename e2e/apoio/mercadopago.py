@@ -40,6 +40,9 @@ _PREFIXO_DA_CONTA: Final = re.compile(r"^\d{6,}-(?=[0-9a-fA-F]{8}-)")
 # O Mercado Pago responde a data de expiracao com fuso (``-04:00``); a margem cobre
 # a diferenca de relogio entre esta maquina e a dele.
 MARGEM_DO_RELOGIO: Final = timedelta(minutes=5)
+# A marca que o ``GET /users/me`` traz em ``tags`` quando o dono do token e uma conta
+# de teste (as contas Vendedor e Comprador do painel "Contas de teste").
+TAG_DE_CONTA_DE_TESTE: Final = "test_user"
 
 
 class ErroDoMercadoPagoError(AssertionError):
@@ -335,3 +338,23 @@ class ClienteMercadoPago:
         efeito e sem dado de ninguem.
         """
         self.buscar_por_referencia(str(uuid.uuid4()))
+
+    def conta_de_teste(self) -> bool | None:
+        """``GET /users/me``: o dono do token e uma conta de teste?
+
+        ``True`` se as ``tags`` trazem ``test_user``, ``False`` se trazem uma lista
+        sem ela, ``None`` se a resposta nao traz ``tags`` como lista (nao ha o que
+        afirmar). Da resposta so se le ``tags``: o id, o apelido e o e-mail da conta
+        nem saem deste metodo.
+
+        Por que existe: no Checkout Pro, o "Access Token de teste" do painel e a
+        credencial da conta Vendedor de teste, e o teste roda no ambiente de
+        producao com contas ficticias. O pagamento de teste volta com
+        ``live_mode=true``, entao o ``live_mode`` sozinho nao separa teste de
+        producao; o dono do token separa.
+        """
+        corpo = self._ler("/users/me")
+        tags = corpo.get("tags") if isinstance(corpo, dict) else None
+        if not isinstance(tags, list):
+            return None
+        return TAG_DE_CONTA_DE_TESTE in tags
