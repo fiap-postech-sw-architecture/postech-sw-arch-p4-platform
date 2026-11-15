@@ -41,7 +41,7 @@ Cópias exatas da pasta `reports/mp-sandbox` da execução, depois da varredura 
 
 - [resumo.md](mercadopago-sandbox/resumo.md): cada cenário, as transições observadas, os campos permitidos do Mercado Pago e as observações;
 - [evidencia.json](mercadopago-sandbox/evidencia.json): o mesmo em JSON;
-- [relatorio-e2e.md](mercadopago-sandbox/relatorio-e2e.md) e [junit.xml](mercadopago-sandbox/junit.xml): o resultado do pytest;
+- [relatorio-e2e.md](mercadopago-sandbox/relatorio-e2e.md): o resultado do pytest;
 - os traces higienizados de cada cenário: [pagamento](mercadopago-sandbox/trace-pagamento-5a50b705314ddcaf8f243b03e930b3dd.json), [estorno](mercadopago-sandbox/trace-estorno-22bb9e4a1647631a35599aa878779c27.json) e [cobrança aberta](mercadopago-sandbox/trace-cobranca-aberta-7602cffe07f1b6fdc2d4102fcdcff337.json).
 
 Do Mercado Pago entram só `id`, `status`, `transaction_amount`, `currency_id`, `date_approved`, `external_reference` e `live_mode`, e da preferência, só o uuid, sem o User ID da conta vendedora. Nenhum dado do pagador, do cartão ou das credenciais.
