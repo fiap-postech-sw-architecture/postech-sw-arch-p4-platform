@@ -1,6 +1,6 @@
 # Documento de Entrega
 
-> Versão de 24/10/2026. O vídeo, a prova na sandbox real do Mercado Pago e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
+> Versão de 24/10/2026. O vídeo e a tag `entrega-fase-4` estão pendentes ([seção 14](#14-pendências-até-a-submissão)).
 
 Documento de entrega da fase 4 do Tech Challenge da Pós-Graduação em Arquitetura de Software (FIAP). O PytStop é o sistema de gestão de uma oficina mecânica: registra cada ordem de serviço (OS) da abertura à entrega do veículo. Nas fases 1 a 3 ele foi um monólito modular; na fase 4 virou três microsserviços, cada um com repositório, banco e pipeline próprios, coordenados por uma saga orquestrada. O OS Service cuida da OS, dos clientes e da identidade e orquestra a saga; o Billing Service, dos preços, do orçamento e do pagamento no Mercado Pago; o Execution Service, do diagnóstico, do estoque de peças e da execução do reparo.
 
@@ -819,7 +819,7 @@ Cada requisito tem um ID na [gap analysis](../../requisitos/fase4/gap-analysis-f
 | RF-031 | Orçamento para aprovação | BDD: orçamento de R$ 210,00 e e-mail com o link |
 | RF-032 | Registro e verificação do pagamento | BDD: confirmado, recusado e estornado |
 | RF-033 | Status após o pagamento | BDD e Newman |
-| RF-034 | Mercado Pago | adapter testado com o Mercado Pago simulado por HTTP ([`test_mercadopago.py`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/unitarios/test_mercadopago.py); [Billing #2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/2) e [#9](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/9)); sandbox real pendente |
+| RF-034 | Mercado Pago | adapter testado com o Mercado Pago simulado por HTTP ([`test_mercadopago.py`](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/main/tests/unitarios/test_mercadopago.py); [Billing #2](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/2) e [#9](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/pull/9)); sandbox real em 15/11/2026, com cobrança, pagamento, conciliação e expiração do checkout no provedor, e o estorno pela API recusado pela sandbox e tratado pela saga ([evidência](evidencias/mp-sandbox.md)) |
 | RF-035 | Fila de execução | BDD: a OS só entra na fila depois do pagamento |
 | RF-036 | Status no diagnóstico e no reparo | BDD: diagnóstico, execução e finalização |
 | RF-037 | Finalização ao OS Service | BDD: baixa do estoque e saga concluída |
@@ -875,7 +875,6 @@ A dívida técnica aceita está na [auditoria pré-entrega](auditoria-e-divida-t
 | Pendência | Quem fecha e como |
 |---|---|
 | Vídeo de até 15 minutos | O grupo grava pelo [roteiro](roteiro-video.md) e põe o link do YouTube (não listado) na seção 3 e no índice |
-| Prova na sandbox real do Mercado Pago | Um integrante com as credenciais de teste roda `make mp-sandbox` no kind local ([README](../../../README.md#mercado-pago-na-sandbox)) |
 | Tag `entrega-fase-4` nos quatro repositórios | O grupo cria a tag nos commits da entrega, repete as provas do CD, refaz as capturas do Anexo A sobre esses commits e gera o PDF final |
 | Submissão do PDF no portal | O grupo submete o PDF final depois da tag e do vídeo |
 

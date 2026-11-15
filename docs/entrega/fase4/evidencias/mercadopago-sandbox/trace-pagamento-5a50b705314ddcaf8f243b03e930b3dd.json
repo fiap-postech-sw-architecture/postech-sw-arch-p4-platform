@@ -1,0 +1,5838 @@
+{
+  "data": [
+    {
+      "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+      "spans": [
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "f04a8100ae303dd4",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684544507,
+          "duration": 543,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6019dc843ae7e478",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "50a40492afae2eab"
+            }
+          ],
+          "startTime": 1794712623764697,
+          "duration": 953,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "5b64af708942ec90",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623164489,
+          "duration": 1111,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d7c89f33d6a19c0a",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623179250,
+          "duration": 703,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "fc1c79e2507c3138",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626695960,
+          "duration": 855,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "aa0832a587323153",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625601286,
+          "duration": 1577,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "a7a12ac0b630294c",
+          "operationName": "UPDATE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "28c3b96f6e253e22"
+            }
+          ],
+          "startTime": 1794712684617706,
+          "duration": 5259,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "9d91ffac782398c8",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e594427fe694d178"
+            }
+          ],
+          "startTime": 1794712684510952,
+          "duration": 871,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6219525b4e597cf8",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "58f9a04b3bad25ba"
+            }
+          ],
+          "startTime": 1794712623803111,
+          "duration": 748,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d20ed94baac36d65",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624534005,
+          "duration": 1870,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "951ca50b4025252f",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624540318,
+          "duration": 2414,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "8210f89032854847",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626800485,
+          "duration": 1173,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "cfece668aeeff925",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628697739,
+          "duration": 925,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "2d3f6e952e506afa",
+          "operationName": "billing.update",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "c3fc3c0d4356a752"
+            }
+          ],
+          "startTime": 1794712628693319,
+          "duration": 5940,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p7"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "f4b157810dfd91a8",
+          "operationName": "billing.update",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712627644961,
+          "duration": 1711,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "1692e131988f4afa",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712683965389,
+          "duration": 57039,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "50a40492afae2eab",
+          "operationName": "iniciar diagnostico",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            },
+            {
+              "refType": "FOLLOWS_FROM",
+              "traceID": "83c9bec2136123c35d09befa5ee3d784",
+              "spanID": "635d63ccf5203a0e"
+            }
+          ],
+          "startTime": 1794712623763568,
+          "duration": 16499,
+          "tags": [
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "internal"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "cb56572bd27ac106",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625603990,
+          "duration": 1231,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b3410c43b1fa5370",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626630410,
+          "duration": 1386,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "a865a96283cfacbb",
+          "operationName": "publish OrcamentoGerado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712625583962,
+          "duration": 20142,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p7"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "ecc27914169c0eb8",
+          "operationName": "POST",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712626900926,
+          "duration": 727894,
+          "tags": [
+            {
+              "key": "http.method",
+              "type": "string",
+              "value": "POST"
+            },
+            {
+              "key": "http.status_code",
+              "type": "int64",
+              "value": 201
+            },
+            {
+              "key": "http.url",
+              "type": "string",
+              "value": "https://api.mercadopago.com/checkout/preferences"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "88209d3c5cc4d62a",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684223532,
+          "duration": 739,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "c1b9ac040b992e7f",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684514371,
+          "duration": 1283,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "bf1b7bb0c404c703",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684534810,
+          "duration": 1268,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "9f09f7b8d66b71a1",
+          "operationName": "publish SolicitarPagamento",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626840155,
+          "duration": 154581,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "57ff9470904307e7",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624509298,
+          "duration": 703,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b9b31e7d25fdfd01",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626635456,
+          "duration": 1189,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "2a5a41eae61e4314",
+          "operationName": "process DiagnosticoIniciado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "58f9a04b3bad25ba"
+            }
+          ],
+          "startTime": 1794712623803837,
+          "duration": 332386,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "os.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "1de5cbcc1a46d697",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623157004,
+          "duration": 927,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d73a7320a460fdb7",
+          "operationName": "billing.update",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712624684689,
+          "duration": 99394,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "aa4b3aa268bcf0eb",
+          "operationName": "process SolicitarDiagnostico",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "71a0f0415ce4b76e"
+            }
+          ],
+          "startTime": 1794712623289576,
+          "duration": 111634,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "execucao.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "5cb1540a102312e9",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626794309,
+          "duration": 1386,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d9c31c729a3c062b",
+          "operationName": "process PecasReservadas",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "8a790d1650ca9465"
+            }
+          ],
+          "startTime": 1794712626788891,
+          "duration": 36246,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "os.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "36fcf9f6762756e9",
+          "operationName": "process PagamentoConfirmado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "caf7683e05c5a882"
+            }
+          ],
+          "startTime": 1794712683923621,
+          "duration": 305903,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "os.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4b43df5419f28463",
+          "operationName": "SAVEPOINT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684524339,
+          "duration": 677,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "412878232398366d",
+          "operationName": "POST /api/v1/precos/validacao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "585a2aef010e1164"
+            }
+          ],
+          "startTime": 1794712624385643,
+          "duration": 75931,
+          "tags": [
+            {
+              "key": "http.method",
+              "type": "string",
+              "value": "POST"
+            },
+            {
+              "key": "http.route",
+              "type": "string",
+              "value": "/api/v1/precos/validacao"
+            },
+            {
+              "key": "http.status_code",
+              "type": "int64",
+              "value": 200
+            },
+            {
+              "key": "http.url",
+              "type": "string",
+              "value": "http://REDACTED/api/v1/precos/validacao"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "server"
+            }
+          ],
+          "processID": "p9"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "1ceb3fd025a26cd3",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624374131,
+          "duration": 944,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "803bb027981ae169",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624466783,
+          "duration": 1464,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "0eb25e15c6dfb76a",
+          "operationName": "billing.update",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "87a3686b986a1316"
+            }
+          ],
+          "startTime": 1794712626622175,
+          "duration": 5183,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p7"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6e4df2a01a7f4ad6",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626711020,
+          "duration": 3789,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e159317d58245828",
+          "operationName": "concluir diagnostico",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            },
+            {
+              "refType": "FOLLOWS_FROM",
+              "traceID": "0b035c7d132bf7f487438931d1631418",
+              "spanID": "ef96160e4c172d33"
+            }
+          ],
+          "startTime": 1794712624369930,
+          "duration": 111098,
+          "tags": [
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "internal"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "08dfe5863a03362e",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625617335,
+          "duration": 1297,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b350e088e3438dc8",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628707886,
+          "duration": 1448,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "dee18b7ff71bf08d",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "caddc030d32479c1"
+            }
+          ],
+          "startTime": 1794712684634058,
+          "duration": 1236,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "98da4a26ece8f081",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "caddc030d32479c1"
+            }
+          ],
+          "startTime": 1794712684645209,
+          "duration": 1876,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6ab415da1a9073c6",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623390174,
+          "duration": 937,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "02764f903ec94365",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623392564,
+          "duration": 1315,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "3f8efe2359993c9f",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624371012,
+          "duration": 1295,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4cc01c33b609a3c2",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625624674,
+          "duration": 1493,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "820fc389b4703a4e",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626648442,
+          "duration": 796,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6ac3245359944343",
+          "operationName": "process OrcamentoAprovado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "87a3686b986a1316"
+            }
+          ],
+          "startTime": 1794712626621825,
+          "duration": 36053,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "os.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "aa5f32101e216f4d",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712626894953,
+          "duration": 1440,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e425bba44c25d77e",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684538544,
+          "duration": 1445,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "23bbcc75ddbb22d0",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "9f09f7b8d66b71a1"
+            }
+          ],
+          "startTime": 1794712626890061,
+          "duration": 101649,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "2946896d0d2c3a4f",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626701481,
+          "duration": 1182,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "f01556428b618802",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626704525,
+          "duration": 979,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "417dcc8f4d845fdd",
+          "operationName": "RELEASE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626718627,
+          "duration": 382,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "143023e1865d949d",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628720811,
+          "duration": 1486,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b51eee1c0b8a1259",
+          "operationName": "process DiagnosticoConcluido",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "22733998bf0b343e"
+            }
+          ],
+          "startTime": 1794712624505260,
+          "duration": 44873,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "os.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "40e070606679ac08",
+          "operationName": "process AgendarExecucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e594427fe694d178"
+            }
+          ],
+          "startTime": 1794712684511363,
+          "duration": 82535,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "execucao.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e91fcc5bb11a89fa",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "50a40492afae2eab"
+            }
+          ],
+          "startTime": 1794712623773562,
+          "duration": 1883,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "cc0e9865e9d7381b",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712623827473,
+          "duration": 96173,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "545accd11f1c8cee",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712624625487,
+          "duration": 29136,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "7046406530e6d283",
+          "operationName": "publish GerarOrcamento",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624608305,
+          "duration": 89338,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "fc6228bf6297d9aa",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684139727,
+          "duration": 82637,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "9907b7ab4c871bce",
+          "operationName": "SET execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684516328,
+          "duration": 654,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "485ac804d8d6cac0",
+          "operationName": "RELEASE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684547018,
+          "duration": 42787,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "5700dafdfa795c17",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "caddc030d32479c1"
+            }
+          ],
+          "startTime": 1794712684641590,
+          "duration": 1017,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4549adb4d2539d62",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626690999,
+          "duration": 995,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "26aed90ba67b1e0f",
+          "operationName": "RELEASE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626717216,
+          "duration": 576,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "43283c989f38a5a0",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628700124,
+          "duration": 1144,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b872c713bd283918",
+          "operationName": "billing.update",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712627633820,
+          "duration": 4850,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "cdda3025af41a5ad",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712623928935,
+          "duration": 33542,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "aebdee4ea4cdb1ea",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712624064852,
+          "duration": 58007,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "401e15991e5a4fe4",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712624127666,
+          "duration": 1289,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e4f0bf6cc823a219",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623181677,
+          "duration": 1472,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "c803f7404465294c",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "7046406530e6d283"
+            }
+          ],
+          "startTime": 1794712624613734,
+          "duration": 77968,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d7e429c8a52bf3e0",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624517663,
+          "duration": 1187,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "52276ec0848d4ad0",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626625281,
+          "duration": 900,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "bb03f004fe726e36",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626810955,
+          "duration": 780,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6ef6baa7027f9939",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712624129875,
+          "duration": 807,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "11ac0e7418191905",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623148649,
+          "duration": 863,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "c9aeed41757e8a27",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623161913,
+          "duration": 1636,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "58f9a04b3bad25ba",
+          "operationName": "publish DiagnosticoIniciado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "50a40492afae2eab"
+            }
+          ],
+          "startTime": 1794712623796960,
+          "duration": 12462,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "3cdd04f9b0cbf25f",
+          "operationName": "process GerarOrcamento",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "7046406530e6d283"
+            }
+          ],
+          "startTime": 1794712624620359,
+          "duration": 176165,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "billing.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "a629de839efabeea",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626627239,
+          "duration": 1087,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "249149e7c3c852e1",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626791708,
+          "duration": 1004,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "34df829ec80653d9",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626818865,
+          "duration": 1239,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "31e294754797650a",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "50a40492afae2eab"
+            }
+          ],
+          "startTime": 1794712623776353,
+          "duration": 632,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "24c32971eb5d1122",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623150569,
+          "duration": 1122,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b03e7921064e4948",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "9f09f7b8d66b71a1"
+            }
+          ],
+          "startTime": 1794712626888499,
+          "duration": 930,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "1a1614ea0e9add6b",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623299952,
+          "duration": 910,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b1d4b24891ff509e",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624521405,
+          "duration": 1231,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "8361982bd1313eee",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712626897266,
+          "duration": 1144,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "05ed880f273fd2db",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684029245,
+          "duration": 1125,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "63607d6abd5f7794",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712624622387,
+          "duration": 1396,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "dbf011d9a4709494",
+          "operationName": "RELEASE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623396207,
+          "duration": 600,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "551fd3046c564848",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624464900,
+          "duration": 904,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "8a790d1650ca9465",
+          "operationName": "publish PecasReservadas",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626761091,
+          "duration": 34246,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "53c06290ff932fd7",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684131177,
+          "duration": 1640,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "28c3b96f6e253e22",
+          "operationName": "publish ExecucaoAgendada",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684607510,
+          "duration": 20045,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "062e698769267912",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684532131,
+          "duration": 934,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d6821321a091de7b",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684542049,
+          "duration": 1595,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "ea3348e0c741defe",
+          "operationName": "POST /api/v1/ordens-de-servico",
+          "references": [],
+          "startTime": 1794712623141873,
+          "duration": 49893,
+          "tags": [
+            {
+              "key": "http.method",
+              "type": "string",
+              "value": "POST"
+            },
+            {
+              "key": "http.route",
+              "type": "string",
+              "value": "/api/v1/ordens-de-servico"
+            },
+            {
+              "key": "http.status_code",
+              "type": "int64",
+              "value": 201
+            },
+            {
+              "key": "http.url",
+              "type": "string",
+              "value": "/api/v1/ordens-de-servico"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "server"
+            },
+            {
+              "key": "url.full",
+              "type": "string",
+              "value": "/api/v1/ordens-de-servico"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "56b8eee711f030c5",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626708175,
+          "duration": 778,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "0f8d0880d18ddca6",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626814008,
+          "duration": 1825,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b7062eec6fff4386",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684136317,
+          "duration": 1327,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "f84d451cb47faace",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684527070,
+          "duration": 1077,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "603bc39e2513b955",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623175802,
+          "duration": 2609,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "ba52f1d48c757dd1",
+          "operationName": "SAVEPOINT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623303549,
+          "duration": 85968,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "f94ba1c2757bcb8a",
+          "operationName": "SET execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626694250,
+          "duration": 462,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "3a9799be9810e3d0",
+          "operationName": "SAVEPOINT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626699830,
+          "duration": 485,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e0df43f2cfd2664f",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "caddc030d32479c1"
+            }
+          ],
+          "startTime": 1794712684636909,
+          "duration": 1237,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "caddc030d32479c1",
+          "operationName": "process ExecucaoAgendada",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "28c3b96f6e253e22"
+            }
+          ],
+          "startTime": 1794712684614588,
+          "duration": 38347,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "os.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "fdf5a373ec54e4c6",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712624124417,
+          "duration": 1299,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "70788c94d7a706c8",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623154915,
+          "duration": 957,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p3"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d4c0f0ece841a625",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "71a0f0415ce4b76e"
+            }
+          ],
+          "startTime": 1794712623209584,
+          "duration": 1429,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4d545f393fc64117",
+          "operationName": "SET execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626692620,
+          "duration": 1003,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "a5f4dea05ea5bc36",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628724354,
+          "duration": 1148,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "53998591fa2ce0da",
+          "operationName": "admin.commitTransaction",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712627647690,
+          "duration": 4075,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "5d08eed73f87be50",
+          "operationName": "UPDATE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "50a40492afae2eab"
+            }
+          ],
+          "startTime": 1794712623768738,
+          "duration": 1578,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "bfb87b70f242770f",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712624026481,
+          "duration": 37503,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "ec45a9fc5d76bf4d",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "412878232398366d"
+            }
+          ],
+          "startTime": 1794712624398508,
+          "duration": 55226,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p9"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e3f520d6dd317ff0",
+          "operationName": "billing.insert",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712624682105,
+          "duration": 1593,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d8d8fa8f97370e38",
+          "operationName": "SET execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623296572,
+          "duration": 1044,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6b3bfcc90e199507",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625610057,
+          "duration": 941,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "7e9264d14c9eabf4",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "8a790d1650ca9465"
+            }
+          ],
+          "startTime": 1794712626788493,
+          "duration": 1127,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6ce8e13f4e6033fa",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712626892272,
+          "duration": 1490,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "3fb8845e82dcd585",
+          "operationName": "UPDATE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "58f9a04b3bad25ba"
+            }
+          ],
+          "startTime": 1794712623804548,
+          "duration": 1597,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d92d96b4defa8ef8",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712624658603,
+          "duration": 1528,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "1573a624d4cd5d58",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "7046406530e6d283"
+            }
+          ],
+          "startTime": 1794712624692265,
+          "duration": 1686,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "177bbc40c6a16cb9",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625612985,
+          "duration": 888,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "5bfb433836a56ae7",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626797347,
+          "duration": 1177,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4e3ae91c80c225bd",
+          "operationName": "process OrcamentoGerado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "a865a96283cfacbb"
+            }
+          ],
+          "startTime": 1794712625597310,
+          "duration": 38518,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "os.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "f1efbf8816762ae4",
+          "operationName": "process SolicitarPagamento",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "9f09f7b8d66b71a1"
+            }
+          ],
+          "startTime": 1794712626890949,
+          "duration": 762930,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "billing.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "5781da0c24ad3b9e",
+          "operationName": "billing.update",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "caf7683e05c5a882"
+            }
+          ],
+          "startTime": 1794712683892968,
+          "duration": 64218,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p7"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e1fe3f26dfc3a6f2",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712623925666,
+          "duration": 1244,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "9ca8ee360de7b0c3",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "22733998bf0b343e"
+            }
+          ],
+          "startTime": 1794712624504270,
+          "duration": 1061,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4f2df0e8bff035db",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626803922,
+          "duration": 1278,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "71390757ab513843",
+          "operationName": "publish ReservarPecas",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626685658,
+          "duration": 10889,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "befaf76ae41a32ae",
+          "operationName": "SET execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623298250,
+          "duration": 527,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "2eeb2460d9616a40",
+          "operationName": "process ReservarPecas",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "71390757ab513843"
+            }
+          ],
+          "startTime": 1794712626689792,
+          "duration": 33149,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "execucao.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6cb2ce2bb5e0c886",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684133812,
+          "duration": 1296,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d30880695883de63",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684521295,
+          "duration": 1188,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "cbc16b98e8b25856",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "caddc030d32479c1"
+            }
+          ],
+          "startTime": 1794712684619015,
+          "duration": 6483,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "176e95929f229330",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "caddc030d32479c1"
+            }
+          ],
+          "startTime": 1794712684630400,
+          "duration": 1504,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "5f3ead0008d7066d",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712623824804,
+          "duration": 1193,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "1a45632f4dddb1a1",
+          "operationName": "UPDATE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "22733998bf0b343e"
+            }
+          ],
+          "startTime": 1794712624505781,
+          "duration": 1868,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "785ccd29917d97f3",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623294778,
+          "duration": 1145,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "f1e89b9edcb65bff",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626715690,
+          "duration": 699,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "df2a99e9b7ea13ab",
+          "operationName": "UPDATE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624469789,
+          "duration": 1371,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "0adb83e6a69d60d7",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625607328,
+          "duration": 1065,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "20180e9d9ebc1401",
+          "operationName": "process PagamentoSolicitado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "c3fc3c0d4356a752"
+            }
+          ],
+          "startTime": 1794712628693320,
+          "duration": 38019,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "os.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "process"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "consumer"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "ec29b02253281680",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712683927172,
+          "duration": 946,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "ce40f9b33c64fddf",
+          "operationName": "RELEASE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623394930,
+          "duration": 572,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "fe66c24ae636cce9",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624514225,
+          "duration": 1224,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "64fd47d4e04c0250",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626639521,
+          "duration": 1221,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "f79768c5fa3c3489",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712683929552,
+          "duration": 33772,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "caf7683e05c5a882",
+          "operationName": "publish PagamentoConfirmado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            },
+            {
+              "refType": "FOLLOWS_FROM",
+              "traceID": "5c98bb628337279bf2e59f299008320b",
+              "spanID": "d548fbc41331943c"
+            }
+          ],
+          "startTime": 1794712683865362,
+          "duration": 92829,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p7"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "2fc1aeec3e1f62e9",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e594427fe694d178"
+            }
+          ],
+          "startTime": 1794712684512433,
+          "duration": 1664,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6229aee9442dd702",
+          "operationName": "RELEASE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684545801,
+          "duration": 561,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "585a2aef010e1164",
+          "operationName": "POST",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624377580,
+          "duration": 84614,
+          "tags": [
+            {
+              "key": "http.method",
+              "type": "string",
+              "value": "POST"
+            },
+            {
+              "key": "http.status_code",
+              "type": "int64",
+              "value": 200
+            },
+            {
+              "key": "http.url",
+              "type": "string",
+              "value": "http://billing-service.pytstop-billing.svc.cluster.local:8000/api/v1/precos/validacao"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "1f37392df29fb4da",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625629975,
+          "duration": 574,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "23e11b17f86da4be",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626816541,
+          "duration": 1298,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "87a3686b986a1316",
+          "operationName": "publish OrcamentoAprovado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            },
+            {
+              "refType": "FOLLOWS_FROM",
+              "traceID": "7d873615177884f640d3c254cf474f68",
+              "spanID": "d018af20debc7705"
+            }
+          ],
+          "startTime": 1794712626616649,
+          "duration": 12117,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p7"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e6ac129c94cf7aa3",
+          "operationName": "SAVEPOINT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684525737,
+          "duration": 517,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "7cc62acdc0fb8cb3",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "412878232398366d"
+            }
+          ],
+          "startTime": 1794712624455719,
+          "duration": 1888,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p9"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "06cb331d8630e8c5",
+          "operationName": "billing.find",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712624655616,
+          "duration": 1656,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4bf45ad97326ad29",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "d9c31c729a3c062b"
+            }
+          ],
+          "startTime": 1794712626808858,
+          "duration": 1276,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "3cbe6f703fac334d",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628712619,
+          "duration": 1407,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "30fa182395c0fbc7",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684125233,
+          "duration": 2493,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4f2b9c55e14cdc0a",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625619468,
+          "duration": 3358,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "321e3afb61337a1c",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "4e3ae91c80c225bd"
+            }
+          ],
+          "startTime": 1794712625628206,
+          "duration": 1034,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "643bd491acf9f42a",
+          "operationName": "UPDATE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "8a790d1650ca9465"
+            }
+          ],
+          "startTime": 1794712626790238,
+          "duration": 1600,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "82559c3693570246",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684128599,
+          "duration": 629,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "22a4e16cfbd33da6",
+          "operationName": "billing.update",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712624662334,
+          "duration": 12527,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "cbe24145760eff92",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "71a0f0415ce4b76e"
+            }
+          ],
+          "startTime": 1794712623207842,
+          "duration": 1010,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "021e5eb561164bae",
+          "operationName": "INSERT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624475410,
+          "duration": 1340,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e1cc234152f56030",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626651426,
+          "duration": 1564,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b791548eac12134f",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628718373,
+          "duration": 1532,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "95bf6f5824e3b973",
+          "operationName": "billing.update",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "a865a96283cfacbb"
+            }
+          ],
+          "startTime": 1794712625597397,
+          "duration": 5528,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p7"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "7c9307efd63aef30",
+          "operationName": "billing.insert",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712627642476,
+          "duration": 1520,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "201fb5c834a41709",
+          "operationName": "SET execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684517757,
+          "duration": 623,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "71a0f0415ce4b76e",
+          "operationName": "publish SolicitarDiagnostico",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "ea3348e0c741defe"
+            }
+          ],
+          "startTime": 1794712623202824,
+          "duration": 11461,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b135f3d00b9cfa24",
+          "operationName": "SAVEPOINT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626698529,
+          "duration": 453,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6eb7b0e784a983d9",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624477630,
+          "duration": 660,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p2"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "7e9f429b0769b0bb",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "6ac3245359944343"
+            }
+          ],
+          "startTime": 1794712626646431,
+          "duration": 1153,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e2ecfb59fce2a9d5",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628726492,
+          "duration": 807,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "c3fc3c0d4356a752",
+          "operationName": "publish PagamentoSolicitado",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "f1efbf8816762ae4"
+            }
+          ],
+          "startTime": 1794712628645334,
+          "duration": 55161,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p7"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "ec8b21f2892117aa",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "28c3b96f6e253e22"
+            }
+          ],
+          "startTime": 1794712684613730,
+          "duration": 3408,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4c7723399e8d40fa",
+          "operationName": "SELECT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "40e070606679ac08"
+            }
+          ],
+          "startTime": 1794712684529481,
+          "duration": 1217,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "4e77dbd04bce1f4a",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2a5a41eae61e4314"
+            }
+          ],
+          "startTime": 1794712623964517,
+          "duration": 57797,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "22733998bf0b343e",
+          "operationName": "publish DiagnosticoConcluido",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "e159317d58245828"
+            }
+          ],
+          "startTime": 1794712624499565,
+          "duration": 11373,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.eventos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p5"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "ed92af67863522fb",
+          "operationName": "connect",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "71390757ab513843"
+            }
+          ],
+          "startTime": 1794712626689968,
+          "duration": 834,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "df92fec8d639a95e",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624536989,
+          "duration": 907,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "e594427fe694d178",
+          "operationName": "publish AgendarExecucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684506486,
+          "duration": 11288,
+          "tags": [
+            {
+              "key": "messaging.destination.name",
+              "type": "string",
+              "value": "pytstop.comandos"
+            },
+            {
+              "key": "messaging.operation.type",
+              "type": "string",
+              "value": "send"
+            },
+            {
+              "key": "messaging.system",
+              "type": "string",
+              "value": "rabbitmq"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "producer"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6786812d78177df8",
+          "operationName": "admin.commitTransaction",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "3cdd04f9b0cbf25f"
+            }
+          ],
+          "startTime": 1794712624785334,
+          "duration": 8835,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "mongodb"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p8"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "6bec6ddca36896e6",
+          "operationName": "UPDATE os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "71390757ab513843"
+            }
+          ],
+          "startTime": 1794712626691389,
+          "duration": 1537,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p6"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "7b03e72f4050e9dc",
+          "operationName": "SAVEPOINT execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "aa4b3aa268bcf0eb"
+            }
+          ],
+          "startTime": 1794712623302401,
+          "duration": 505,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "48ee6cdc08159a1c",
+          "operationName": "UPDATE execucao",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "2eeb2460d9616a40"
+            }
+          ],
+          "startTime": 1794712626706629,
+          "duration": 835,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p1"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "b2e3a758ac810b49",
+          "operationName": "INSERT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "b51eee1c0b8a1259"
+            }
+          ],
+          "startTime": 1794712624511224,
+          "duration": 1147,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "d595dc2b98ce550e",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "20180e9d9ebc1401"
+            }
+          ],
+          "startTime": 1794712628702989,
+          "duration": 1154,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        },
+        {
+          "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+          "spanID": "2a818bd42e24ee12",
+          "operationName": "SELECT os",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "5a50b705314ddcaf8f243b03e930b3dd",
+              "spanID": "36fcf9f6762756e9"
+            }
+          ],
+          "startTime": 1794712684024997,
+          "duration": 1340,
+          "tags": [
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "postgresql"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "processID": "p4"
+        }
+      ],
+      "processes": {
+        "p1": {
+          "serviceName": "execution-service"
+        },
+        "p2": {
+          "serviceName": "execution-service"
+        },
+        "p3": {
+          "serviceName": "os-service"
+        },
+        "p4": {
+          "serviceName": "os-service"
+        },
+        "p5": {
+          "serviceName": "execution-service"
+        },
+        "p6": {
+          "serviceName": "os-service"
+        },
+        "p7": {
+          "serviceName": "billing-service"
+        },
+        "p8": {
+          "serviceName": "billing-service"
+        },
+        "p9": {
+          "serviceName": "billing-service"
+        }
+      }
+    }
+  ]
+}
