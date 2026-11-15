@@ -1,0 +1,713 @@
+{
+  "modo": "real",
+  "contexto": "kind-pytstop-p4",
+  "cenarios": [
+    {
+      "cenario": "Pagamento no checkout do Mercado Pago é confirmado pela conciliação",
+      "resultado": "passou",
+      "duracao_s": 121.7,
+      "ordem_id": "ec0bf2a0-6a88-4e98-b077-352684b8e586",
+      "pagamento_id": "d8f25ffb-ed82-4423-adf3-76767020124a",
+      "pagamento_mercadopago_id": "189744991570",
+      "transicoes": [
+        {
+          "hora": "2026-11-15T03:17:03.159816+00:00",
+          "evento": "OS: (abertura) -> recebida (atendimento)"
+        },
+        {
+          "hora": "2026-11-15T03:17:03.159816+00:00",
+          "evento": "saga: abertura, envia SolicitarDiagnostico"
+        },
+        {
+          "hora": "2026-11-15T03:17:04.023827+00:00",
+          "evento": "saga: DiagnosticoIniciado"
+        },
+        {
+          "hora": "2026-11-15T03:17:04.023859+00:00",
+          "evento": "OS: recebida -> em_diagnostico (execucao)"
+        },
+        {
+          "hora": "2026-11-15T03:17:04.524076+00:00",
+          "evento": "saga: DiagnosticoConcluido, envia GerarOrcamento"
+        },
+        {
+          "hora": "2026-11-15T03:17:05.614832+00:00",
+          "evento": "saga: OrcamentoGerado"
+        },
+        {
+          "hora": "2026-11-15T03:17:05.615119+00:00",
+          "evento": "OS: em_diagnostico -> aguardando_aprovacao (billing)"
+        },
+        {
+          "hora": "2026-11-15T03:17:06.642285+00:00",
+          "evento": "saga: OrcamentoAprovado, envia ReservarPecas"
+        },
+        {
+          "hora": "2026-11-15T03:17:06.806249+00:00",
+          "evento": "saga: PecasReservadas, envia SolicitarPagamento"
+        },
+        {
+          "hora": "2026-11-15T03:17:06.806280+00:00",
+          "evento": "OS: aguardando_aprovacao -> aguardando_pagamento (execucao)"
+        },
+        {
+          "hora": "2026-11-15T03:17:06.899000+00:00",
+          "evento": "Billing: cobrança criada (SOLICITADO)"
+        },
+        {
+          "hora": "2026-11-15T03:17:08.715796+00:00",
+          "evento": "saga: PagamentoSolicitado"
+        },
+        {
+          "hora": "2026-11-15T03:17:13.779747+00:00",
+          "evento": "script: cobrança criada no provedor; link do checkout pronto"
+        },
+        {
+          "hora": "2026-11-15T03:17:13.784191+00:00",
+          "evento": "script: link impresso; esperando o comprador de teste"
+        },
+        {
+          "hora": "2026-11-15T03:18:03.153000+00:00",
+          "evento": "Billing: pagamento CONFIRMADO"
+        },
+        {
+          "hora": "2026-11-15T03:18:04.122288+00:00",
+          "evento": "saga: PagamentoConfirmado, envia AgendarExecucao"
+        },
+        {
+          "hora": "2026-11-15T03:18:04.122462+00:00",
+          "evento": "OS: aguardando_pagamento -> aguardando_execucao (billing)"
+        },
+        {
+          "hora": "2026-11-15T03:18:04.643752+00:00",
+          "evento": "saga: ExecucaoAgendada"
+        },
+        {
+          "hora": "2026-11-15T03:18:07.371786+00:00",
+          "evento": "script: Billing mostra o pagamento CONFIRMADO"
+        },
+        {
+          "hora": "2026-11-15T03:18:08.306765+00:00",
+          "evento": "script: Mercado Pago: approved, live_mode=True"
+        }
+      ],
+      "billing": {
+        "id": "d8f25ffb-ed82-4423-adf3-76767020124a",
+        "ordem_id": "ec0bf2a0-6a88-4e98-b077-352684b8e586",
+        "status": "CONFIRMADO",
+        "orcamento_id": "dc008d32-63bf-4812-bca3-0e44a8db8efc",
+        "valor": "210.00",
+        "moeda": "BRL",
+        "provedor": "mercadopago",
+        "referencia_preferencia": "ed8dd7de-466b-44e0-8876-7bfcd789d649",
+        "expira_em": "2026-11-15T04:17:06.899000Z",
+        "criado_em": "2026-11-15T03:17:06.899000Z",
+        "recusas": 0,
+        "referencia_pagamento": "189744991570",
+        "confirmado_em": "2026-11-15T03:18:03.153000Z",
+        "encerrado_em": null,
+        "motivo": null,
+        "estornado_em": null,
+        "motivo_estorno": null,
+        "notificacoes": [
+          {
+            "recebida_em": "2026-11-15T03:18:03.153000Z",
+            "referencia_pagamento": "189744991570",
+            "status_provedor": "approved"
+          }
+        ]
+      },
+      "mercadopago": {
+        "id": "189744991570",
+        "status": "approved",
+        "transaction_amount": "210",
+        "currency_id": "BRL",
+        "date_approved": "2026-11-14T23:17:44.000-04:00",
+        "external_reference": "d8f25ffb-ed82-4423-adf3-76767020124a",
+        "live_mode": true
+      },
+      "preferencia": {},
+      "saga": {
+        "etapa": "aguardando_inicio",
+        "motivo": null,
+        "passos": [
+          {
+            "seq": 1,
+            "em": "2026-11-15T03:17:03.159816Z",
+            "de": null,
+            "para": "aguardando_diagnostico",
+            "gatilho": "abertura",
+            "comando": "SolicitarDiagnostico"
+          },
+          {
+            "seq": 2,
+            "em": "2026-11-15T03:17:04.023827Z",
+            "de": "aguardando_diagnostico",
+            "para": "aguardando_diagnostico",
+            "gatilho": "DiagnosticoIniciado",
+            "comando": null
+          },
+          {
+            "seq": 3,
+            "em": "2026-11-15T03:17:04.524076Z",
+            "de": "aguardando_diagnostico",
+            "para": "aguardando_orcamento",
+            "gatilho": "DiagnosticoConcluido",
+            "comando": "GerarOrcamento"
+          },
+          {
+            "seq": 4,
+            "em": "2026-11-15T03:17:05.614832Z",
+            "de": "aguardando_orcamento",
+            "para": "aguardando_decisao",
+            "gatilho": "OrcamentoGerado",
+            "comando": null
+          },
+          {
+            "seq": 5,
+            "em": "2026-11-15T03:17:06.642285Z",
+            "de": "aguardando_decisao",
+            "para": "aguardando_reserva",
+            "gatilho": "OrcamentoAprovado",
+            "comando": "ReservarPecas"
+          },
+          {
+            "seq": 6,
+            "em": "2026-11-15T03:17:06.806249Z",
+            "de": "aguardando_reserva",
+            "para": "aguardando_pagamento",
+            "gatilho": "PecasReservadas",
+            "comando": "SolicitarPagamento"
+          },
+          {
+            "seq": 7,
+            "em": "2026-11-15T03:17:08.715796Z",
+            "de": "aguardando_pagamento",
+            "para": "aguardando_pagamento",
+            "gatilho": "PagamentoSolicitado",
+            "comando": null
+          },
+          {
+            "seq": 8,
+            "em": "2026-11-15T03:18:04.122288Z",
+            "de": "aguardando_pagamento",
+            "para": "aguardando_agendamento",
+            "gatilho": "PagamentoConfirmado",
+            "comando": "AgendarExecucao"
+          },
+          {
+            "seq": 9,
+            "em": "2026-11-15T03:18:04.643752Z",
+            "de": "aguardando_agendamento",
+            "para": "aguardando_inicio",
+            "gatilho": "ExecucaoAgendada",
+            "comando": null
+          }
+        ]
+      },
+      "observacoes": [
+        "o Mercado Pago marcou o pagamento com `live_mode=true`, o esperado no Checkout Pro: o teste roda no ambiente de produção com contas fictícias, e o Access Token de teste é a credencial da conta Vendedor de teste. A natureza de teste foi provada pelo dono do token (`GET /users/me` com a tag `test_user`), conferido antes do pagamento"
+      ],
+      "trace": {
+        "encontrado": true,
+        "trace_id": "5a50b705314ddcaf8f243b03e930b3dd",
+        "arquivo": "trace-pagamento-5a50b705314ddcaf8f243b03e930b3dd.json",
+        "servicos": [
+          "billing-service",
+          "execution-service",
+          "os-service"
+        ],
+        "span_client_do_billing_para_mercadopago": true
+      }
+    },
+    {
+      "cenario": "Cancelar a OS depois do pagamento estorna o valor no Mercado Pago",
+      "resultado": "falha esperada (limitação da sandbox)",
+      "duracao_s": 115.5,
+      "ordem_id": "56b1e5b1-d6fb-429f-a008-f42c5592502a",
+      "pagamento_id": "d06b67fd-4af3-4876-b55d-b388f3ef50d0",
+      "pagamento_mercadopago_id": "189745145564",
+      "transicoes": [
+        {
+          "hora": "2026-11-15T03:18:21.755507+00:00",
+          "evento": "OS: (abertura) -> recebida (atendimento)"
+        },
+        {
+          "hora": "2026-11-15T03:18:21.755507+00:00",
+          "evento": "saga: abertura, envia SolicitarDiagnostico"
+        },
+        {
+          "hora": "2026-11-15T03:18:22.406478+00:00",
+          "evento": "saga: DiagnosticoIniciado"
+        },
+        {
+          "hora": "2026-11-15T03:18:22.406527+00:00",
+          "evento": "OS: recebida -> em_diagnostico (execucao)"
+        },
+        {
+          "hora": "2026-11-15T03:18:23.184986+00:00",
+          "evento": "saga: DiagnosticoConcluido, envia GerarOrcamento"
+        },
+        {
+          "hora": "2026-11-15T03:18:24.295184+00:00",
+          "evento": "saga: OrcamentoGerado"
+        },
+        {
+          "hora": "2026-11-15T03:18:24.295400+00:00",
+          "evento": "OS: em_diagnostico -> aguardando_aprovacao (billing)"
+        },
+        {
+          "hora": "2026-11-15T03:18:25.410243+00:00",
+          "evento": "saga: OrcamentoAprovado, envia ReservarPecas"
+        },
+        {
+          "hora": "2026-11-15T03:18:25.557975+00:00",
+          "evento": "saga: PecasReservadas, envia SolicitarPagamento"
+        },
+        {
+          "hora": "2026-11-15T03:18:25.558011+00:00",
+          "evento": "OS: aguardando_aprovacao -> aguardando_pagamento (execucao)"
+        },
+        {
+          "hora": "2026-11-15T03:18:25.656000+00:00",
+          "evento": "Billing: cobrança criada (SOLICITADO)"
+        },
+        {
+          "hora": "2026-11-15T03:18:26.509602+00:00",
+          "evento": "saga: PagamentoSolicitado"
+        },
+        {
+          "hora": "2026-11-15T03:18:33.904796+00:00",
+          "evento": "script: cobrança criada no provedor; link do checkout pronto"
+        },
+        {
+          "hora": "2026-11-15T03:18:33.905103+00:00",
+          "evento": "script: link impresso; esperando o comprador de teste"
+        },
+        {
+          "hora": "2026-11-15T03:19:35.466000+00:00",
+          "evento": "Billing: pagamento CONFIRMADO"
+        },
+        {
+          "hora": "2026-11-15T03:19:35.620920+00:00",
+          "evento": "saga: PagamentoConfirmado, envia AgendarExecucao"
+        },
+        {
+          "hora": "2026-11-15T03:19:35.621052+00:00",
+          "evento": "OS: aguardando_pagamento -> aguardando_execucao (billing)"
+        },
+        {
+          "hora": "2026-11-15T03:19:35.798901+00:00",
+          "evento": "saga: ExecucaoAgendada"
+        },
+        {
+          "hora": "2026-11-15T03:19:39.579404+00:00",
+          "evento": "script: Billing mostra o pagamento CONFIRMADO"
+        },
+        {
+          "hora": "2026-11-15T03:19:40.318518+00:00",
+          "evento": "script: Mercado Pago: approved, live_mode=True"
+        },
+        {
+          "hora": "2026-11-15T03:19:40.380709+00:00",
+          "evento": "saga: cancelamento_solicitado, envia CancelarExecucao"
+        },
+        {
+          "hora": "2026-11-15T03:19:40.482059+00:00",
+          "evento": "saga: ExecucaoCancelada, envia EstornarPagamento"
+        },
+        {
+          "hora": "2026-11-15T03:19:43.182294+00:00",
+          "evento": "saga: EstornoDePagamentoFalhou"
+        }
+      ],
+      "billing": {
+        "id": "d06b67fd-4af3-4876-b55d-b388f3ef50d0",
+        "ordem_id": "56b1e5b1-d6fb-429f-a008-f42c5592502a",
+        "status": "CONFIRMADO",
+        "orcamento_id": "7fea4a41-1154-4157-a5fc-b9d30d51f28a",
+        "valor": "210.00",
+        "moeda": "BRL",
+        "provedor": "mercadopago",
+        "referencia_preferencia": "fcb887ef-b3ee-4858-b94a-a8e070a4d823",
+        "expira_em": "2026-11-15T04:18:25.656000Z",
+        "criado_em": "2026-11-15T03:18:25.656000Z",
+        "recusas": 0,
+        "referencia_pagamento": "189745145564",
+        "confirmado_em": "2026-11-15T03:19:35.466000Z",
+        "encerrado_em": null,
+        "motivo": null,
+        "estornado_em": null,
+        "motivo_estorno": null,
+        "notificacoes": [
+          {
+            "recebida_em": "2026-11-15T03:19:35.466000Z",
+            "referencia_pagamento": "189745145564",
+            "status_provedor": "approved"
+          }
+        ]
+      },
+      "mercadopago": {
+        "id": "189745145564",
+        "status": "approved",
+        "transaction_amount": "210",
+        "currency_id": "BRL",
+        "date_approved": "2026-11-14T23:19:19.000-04:00",
+        "external_reference": "d06b67fd-4af3-4876-b55d-b388f3ef50d0",
+        "live_mode": true
+      },
+      "preferencia": {},
+      "saga": {
+        "etapa": "falha_na_compensacao",
+        "motivo": "cancelamento",
+        "passos": [
+          {
+            "seq": 1,
+            "em": "2026-11-15T03:18:21.755507Z",
+            "de": null,
+            "para": "aguardando_diagnostico",
+            "gatilho": "abertura",
+            "comando": "SolicitarDiagnostico"
+          },
+          {
+            "seq": 2,
+            "em": "2026-11-15T03:18:22.406478Z",
+            "de": "aguardando_diagnostico",
+            "para": "aguardando_diagnostico",
+            "gatilho": "DiagnosticoIniciado",
+            "comando": null
+          },
+          {
+            "seq": 3,
+            "em": "2026-11-15T03:18:23.184986Z",
+            "de": "aguardando_diagnostico",
+            "para": "aguardando_orcamento",
+            "gatilho": "DiagnosticoConcluido",
+            "comando": "GerarOrcamento"
+          },
+          {
+            "seq": 4,
+            "em": "2026-11-15T03:18:24.295184Z",
+            "de": "aguardando_orcamento",
+            "para": "aguardando_decisao",
+            "gatilho": "OrcamentoGerado",
+            "comando": null
+          },
+          {
+            "seq": 5,
+            "em": "2026-11-15T03:18:25.410243Z",
+            "de": "aguardando_decisao",
+            "para": "aguardando_reserva",
+            "gatilho": "OrcamentoAprovado",
+            "comando": "ReservarPecas"
+          },
+          {
+            "seq": 6,
+            "em": "2026-11-15T03:18:25.557975Z",
+            "de": "aguardando_reserva",
+            "para": "aguardando_pagamento",
+            "gatilho": "PecasReservadas",
+            "comando": "SolicitarPagamento"
+          },
+          {
+            "seq": 7,
+            "em": "2026-11-15T03:18:26.509602Z",
+            "de": "aguardando_pagamento",
+            "para": "aguardando_pagamento",
+            "gatilho": "PagamentoSolicitado",
+            "comando": null
+          },
+          {
+            "seq": 8,
+            "em": "2026-11-15T03:19:35.620920Z",
+            "de": "aguardando_pagamento",
+            "para": "aguardando_agendamento",
+            "gatilho": "PagamentoConfirmado",
+            "comando": "AgendarExecucao"
+          },
+          {
+            "seq": 9,
+            "em": "2026-11-15T03:19:35.798901Z",
+            "de": "aguardando_agendamento",
+            "para": "aguardando_inicio",
+            "gatilho": "ExecucaoAgendada",
+            "comando": null
+          },
+          {
+            "seq": 10,
+            "em": "2026-11-15T03:19:40.380709Z",
+            "de": "aguardando_inicio",
+            "para": "compensando",
+            "gatilho": "cancelamento_solicitado",
+            "comando": "CancelarExecucao"
+          },
+          {
+            "seq": 11,
+            "em": "2026-11-15T03:19:40.482059Z",
+            "de": "compensando",
+            "para": "compensando",
+            "gatilho": "ExecucaoCancelada",
+            "comando": "EstornarPagamento"
+          },
+          {
+            "seq": 12,
+            "em": "2026-11-15T03:19:43.182294Z",
+            "de": "compensando",
+            "para": "falha_na_compensacao",
+            "gatilho": "EstornoDePagamentoFalhou",
+            "comando": null
+          }
+        ]
+      },
+      "observacoes": [
+        "o Mercado Pago marcou o pagamento com `live_mode=true`, o esperado no Checkout Pro: o teste roda no ambiente de produção com contas fictícias, e o Access Token de teste é a credencial da conta Vendedor de teste. A natureza de teste foi provada pelo dono do token (`GET /users/me` com a tag `test_user`), conferido antes do pagamento",
+        "o Mercado Pago recusou o estorno pela API com 401, causa 7 (\"Unauthorized use of live credentials\"): a sandbox do Checkout Pro não aceita estorno pela API nem com as credenciais de teste da aplicação nem com as de produção da conta Vendedor de teste, e a conta de teste não pode ter credenciais de teste. O Billing pediu o estorno de verdade e, recusado, respondeu `EstornoDePagamentoFalhou`; a saga parou em `falha_na_compensacao` com `estorno_recusado`, sem marcar o pagamento como estornado. O estorno completo e a retomada da compensação estão provados no E2E com o simulador"
+      ],
+      "trace": {
+        "encontrado": true,
+        "trace_id": "22bb9e4a1647631a35599aa878779c27",
+        "arquivo": "trace-estorno-22bb9e4a1647631a35599aa878779c27.json",
+        "servicos": [
+          "billing-service",
+          "execution-service",
+          "os-service"
+        ],
+        "span_client_do_billing_para_mercadopago": true
+      }
+    },
+    {
+      "cenario": "Cancelar a OS sem pagar fecha a cobrança e expira a preferência no Mercado Pago",
+      "resultado": "passou",
+      "duracao_s": 23.5,
+      "ordem_id": "1071b194-d179-485f-b759-ed69e4743584",
+      "pagamento_id": "7f0cd0d9-0348-40d3-8104-f5aa62e905b5",
+      "pagamento_mercadopago_id": "",
+      "transicoes": [
+        {
+          "hora": "2026-11-15T03:20:21.792590+00:00",
+          "evento": "OS: (abertura) -> recebida (atendimento)"
+        },
+        {
+          "hora": "2026-11-15T03:20:21.792590+00:00",
+          "evento": "saga: abertura, envia SolicitarDiagnostico"
+        },
+        {
+          "hora": "2026-11-15T03:20:22.437769+00:00",
+          "evento": "saga: DiagnosticoIniciado"
+        },
+        {
+          "hora": "2026-11-15T03:20:22.437800+00:00",
+          "evento": "OS: recebida -> em_diagnostico (execucao)"
+        },
+        {
+          "hora": "2026-11-15T03:20:23.190642+00:00",
+          "evento": "saga: DiagnosticoConcluido, envia GerarOrcamento"
+        },
+        {
+          "hora": "2026-11-15T03:20:24.575998+00:00",
+          "evento": "saga: OrcamentoGerado"
+        },
+        {
+          "hora": "2026-11-15T03:20:24.576247+00:00",
+          "evento": "OS: em_diagnostico -> aguardando_aprovacao (billing)"
+        },
+        {
+          "hora": "2026-11-15T03:20:25.687433+00:00",
+          "evento": "saga: OrcamentoAprovado, envia ReservarPecas"
+        },
+        {
+          "hora": "2026-11-15T03:20:25.884636+00:00",
+          "evento": "saga: PecasReservadas, envia SolicitarPagamento"
+        },
+        {
+          "hora": "2026-11-15T03:20:25.884691+00:00",
+          "evento": "OS: aguardando_aprovacao -> aguardando_pagamento (execucao)"
+        },
+        {
+          "hora": "2026-11-15T03:20:26.002000+00:00",
+          "evento": "Billing: cobrança criada (SOLICITADO)"
+        },
+        {
+          "hora": "2026-11-15T03:20:27.812066+00:00",
+          "evento": "saga: PagamentoSolicitado"
+        },
+        {
+          "hora": "2026-11-15T03:20:34.588330+00:00",
+          "evento": "script: cobrança criada no provedor; link do checkout pronto"
+        },
+        {
+          "hora": "2026-11-15T03:20:34.626922+00:00",
+          "evento": "saga: cancelamento_solicitado, envia EstornarPagamento"
+        },
+        {
+          "hora": "2026-11-15T03:20:35.375000+00:00",
+          "evento": "Billing: cobrança encerrada"
+        },
+        {
+          "hora": "2026-11-15T03:20:36.398992+00:00",
+          "evento": "saga: PagamentoCancelado, envia LiberarReserva"
+        },
+        {
+          "hora": "2026-11-15T03:20:36.608850+00:00",
+          "evento": "saga: ReservaLiberada, envia CancelarOrcamento"
+        },
+        {
+          "hora": "2026-11-15T03:20:37.426826+00:00",
+          "evento": "saga: OrcamentoCancelado, envia DescartarDiagnostico"
+        },
+        {
+          "hora": "2026-11-15T03:20:37.550991+00:00",
+          "evento": "saga: DiagnosticoDescartado"
+        },
+        {
+          "hora": "2026-11-15T03:20:37.551282+00:00",
+          "evento": "OS: aguardando_pagamento -> cancelada (saga)"
+        },
+        {
+          "hora": "2026-11-15T03:20:38.575649+00:00",
+          "evento": "script: Mercado Pago mostra a preferência expirada"
+        }
+      ],
+      "billing": {
+        "id": "7f0cd0d9-0348-40d3-8104-f5aa62e905b5",
+        "ordem_id": "1071b194-d179-485f-b759-ed69e4743584",
+        "status": "CANCELADO",
+        "orcamento_id": "b24e3584-5789-48f2-b2fc-3881c1f3f6fd",
+        "valor": "210.00",
+        "moeda": "BRL",
+        "provedor": "mercadopago",
+        "referencia_preferencia": "432f13a6-e7c8-4ce9-89e3-54fa77c9c349",
+        "expira_em": "2026-11-15T04:20:26.002000Z",
+        "criado_em": "2026-11-15T03:20:26.002000Z",
+        "recusas": 0,
+        "referencia_pagamento": null,
+        "confirmado_em": null,
+        "encerrado_em": "2026-11-15T03:20:35.375000Z",
+        "motivo": "cancelamento",
+        "estornado_em": null,
+        "motivo_estorno": null,
+        "notificacoes": []
+      },
+      "mercadopago": {},
+      "preferencia": {
+        "id": "432f13a6-e7c8-4ce9-89e3-54fa77c9c349",
+        "expires": true,
+        "expiration_date_to": "2026-11-15T03:21:34.697000+00:00"
+      },
+      "saga": {
+        "etapa": "compensada",
+        "motivo": "cancelamento",
+        "passos": [
+          {
+            "seq": 1,
+            "em": "2026-11-15T03:20:21.792590Z",
+            "de": null,
+            "para": "aguardando_diagnostico",
+            "gatilho": "abertura",
+            "comando": "SolicitarDiagnostico"
+          },
+          {
+            "seq": 2,
+            "em": "2026-11-15T03:20:22.437769Z",
+            "de": "aguardando_diagnostico",
+            "para": "aguardando_diagnostico",
+            "gatilho": "DiagnosticoIniciado",
+            "comando": null
+          },
+          {
+            "seq": 3,
+            "em": "2026-11-15T03:20:23.190642Z",
+            "de": "aguardando_diagnostico",
+            "para": "aguardando_orcamento",
+            "gatilho": "DiagnosticoConcluido",
+            "comando": "GerarOrcamento"
+          },
+          {
+            "seq": 4,
+            "em": "2026-11-15T03:20:24.575998Z",
+            "de": "aguardando_orcamento",
+            "para": "aguardando_decisao",
+            "gatilho": "OrcamentoGerado",
+            "comando": null
+          },
+          {
+            "seq": 5,
+            "em": "2026-11-15T03:20:25.687433Z",
+            "de": "aguardando_decisao",
+            "para": "aguardando_reserva",
+            "gatilho": "OrcamentoAprovado",
+            "comando": "ReservarPecas"
+          },
+          {
+            "seq": 6,
+            "em": "2026-11-15T03:20:25.884636Z",
+            "de": "aguardando_reserva",
+            "para": "aguardando_pagamento",
+            "gatilho": "PecasReservadas",
+            "comando": "SolicitarPagamento"
+          },
+          {
+            "seq": 7,
+            "em": "2026-11-15T03:20:27.812066Z",
+            "de": "aguardando_pagamento",
+            "para": "aguardando_pagamento",
+            "gatilho": "PagamentoSolicitado",
+            "comando": null
+          },
+          {
+            "seq": 8,
+            "em": "2026-11-15T03:20:34.626922Z",
+            "de": "aguardando_pagamento",
+            "para": "compensando",
+            "gatilho": "cancelamento_solicitado",
+            "comando": "EstornarPagamento"
+          },
+          {
+            "seq": 9,
+            "em": "2026-11-15T03:20:36.398992Z",
+            "de": "compensando",
+            "para": "compensando",
+            "gatilho": "PagamentoCancelado",
+            "comando": "LiberarReserva"
+          },
+          {
+            "seq": 10,
+            "em": "2026-11-15T03:20:36.608850Z",
+            "de": "compensando",
+            "para": "compensando",
+            "gatilho": "ReservaLiberada",
+            "comando": "CancelarOrcamento"
+          },
+          {
+            "seq": 11,
+            "em": "2026-11-15T03:20:37.426826Z",
+            "de": "compensando",
+            "para": "compensando",
+            "gatilho": "OrcamentoCancelado",
+            "comando": "DescartarDiagnostico"
+          },
+          {
+            "seq": 12,
+            "em": "2026-11-15T03:20:37.550991Z",
+            "de": "compensando",
+            "para": "compensada",
+            "gatilho": "DiagnosticoDescartado",
+            "comando": null
+          }
+        ]
+      },
+      "observacoes": [],
+      "trace": {
+        "encontrado": true,
+        "trace_id": "7602cffe07f1b6fdc2d4102fcdcff337",
+        "arquivo": "trace-cobranca-aberta-7602cffe07f1b6fdc2d4102fcdcff337.json",
+        "servicos": [
+          "billing-service",
+          "execution-service",
+          "os-service"
+        ],
+        "span_client_do_billing_para_mercadopago": true
+      }
+    }
+  ]
+}
