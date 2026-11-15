@@ -19,7 +19,7 @@ A rota de métricas devolveu 401 sem token, 403 para atendente e mecânico e 200
 
 Os JSONs são cópias exatas dos resumos sanitizados do runner: nomes e rotas estáticos, códigos, tempos, assertions e sete provas com campos permitidos. Não incluem JWT, HMAC, credenciais, corpos de requisição/resposta, URLs resolvidas ou mensagens livres de erro. Passaram pela varredura existente e pelo gitleaks antes da preparação para publicação.
 
-O passo integrado preserva smoke, BDD, ZAP, varredura e artefatos. A prova real do provedor e a atualização dos commits do congelamento continuam pendentes.
+O passo integrado preserva smoke, BDD, ZAP, varredura e artefatos. A prova real do provedor está em [Mercado Pago na sandbox](mp-sandbox.md); a atualização dos commits do congelamento continua pendente.
 
 ## Execução no CI do platform #24
 
