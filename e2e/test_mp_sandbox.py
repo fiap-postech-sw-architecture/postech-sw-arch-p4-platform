@@ -50,9 +50,6 @@ given(parsers.parse("que o estoque tem {quantidade:d} unidades da peça"))(saga.
 given("que o cliente tem um veículo cadastrado")(saga._cliente_com_veiculo)
 when(parsers.parse('o atendente cancela a OS com o motivo "{motivo}"'))(saga._cancelar)
 then(parsers.parse('a OS fica com status "{status}"'))(saga._status)
-then(parsers.parse('a saga terminou como "{etapa}" pelo motivo "{motivo}"'))(
-    saga._saga_terminou_pelo_motivo
-)
 then(parsers.parse('as compensações enviadas foram, nesta ordem: "{lista}"'))(
     saga._ordem_das_compensacoes
 )
@@ -158,6 +155,24 @@ def _billing_confirma(prova: Prova) -> Json:
 @then("o Mercado Pago informa o pagamento como aprovado, no valor do orçamento")
 def _mp_aprovado(prova: Prova, cobranca: Json) -> None:
     prova.conferir_aprovado(cobranca)
+
+
+@then(parsers.parse('a saga terminou como "{etapa}" pelo motivo "{motivo}"'))
+def _saga_terminou_pelo_motivo(
+    api: Api, cenario: Cenario, prova: Prova, etapa: str, motivo: str
+) -> None:
+    """O passo do E2E; a recusa do estorno que so a sandbox faz vira ``xfail``.
+
+    So a recusa exata (``Prova.estorno_bloqueado_pela_sandbox``) muda o resultado:
+    qualquer outra falha continua reprovando o cenario.
+    """
+    try:
+        saga._saga_terminou_pelo_motivo(api, cenario, etapa, motivo)
+    except AssertionError:
+        motivo_da_sandbox = prova.estorno_bloqueado_pela_sandbox()
+        if motivo_da_sandbox is None:
+            raise
+        pytest.xfail(motivo_da_sandbox)
 
 
 @then("o Mercado Pago informa o pagamento como estornado")

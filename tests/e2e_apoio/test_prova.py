@@ -23,7 +23,9 @@ from e2e.apoio.mercadopago import ClienteMercadoPago, ErroDoMercadoPagoError
 from e2e.apoio.modo_billing import URL_DE_NOTIFICACAO_PADRAO
 from e2e.apoio.preflight_mp import Sandbox
 from e2e.apoio.prova import (
+    ESTORNO_BLOQUEADO_PELA_SANDBOX,
     PRAZO_DO_ESTORNO,
+    RESULTADO_DA_FALHA_ESPERADA,
     SEM_CONSULTA,
     DlqDoBillingCresceuError,
     Prova,
@@ -1653,3 +1655,116 @@ def test_a_evidencia_da_sessao_grava_o_arquivo_do_trace_ao_lado_do_resumo(
     assert json.loads(escrito)["data"][0]["traceID"] == TRACE_ID_FALSO
     assert DADO_DO_TRACE not in escrito
     assert f"arquivo `{nome}`" in (tmp_path / "resumo.md").read_text()
+
+
+# --- o estorno que so a sandbox recusa ------------------------------------------------
+
+_RECUSA_DA_SANDBOX = json.dumps(
+    {
+        "event": "mercadopago_request_rejected",
+        "level": "warning",
+        "timestamp": "2026-11-15T01:55:15.000000Z",
+        "operacao": "estornar",
+        "status_http": 401,
+        "erro": "unauthorized",
+        "causas": [7],
+    }
+)
+_SAGA_DO_ESTORNO_RECUSADO = {
+    "etapa": "falha_na_compensacao",
+    "falha": "estorno_recusado",
+    "motivo": "cancelamento",
+    "passos": [],
+}
+
+
+def _prova_do_estorno(
+    relogio: Relogio,
+    *,
+    real: bool = True,
+    saga: dict[str, Any] | None = None,
+    log: str = _RECUSA_DA_SANDBOX,
+) -> Prova:
+    mundo = Mundo()
+    mundo.saga = dict(saga if saga is not None else _SAGA_DO_ESTORNO_RECUSADO)
+    prova, _, _ = _prova(
+        mundo, relogio, real=real, executor=_executor_do_cluster(consumidor=log)
+    )
+    return prova
+
+
+def test_estorno_bloqueado_pela_sandbox_vira_falha_esperada_e_vai_para_a_evidencia(
+    relogio: Relogio,
+) -> None:
+    prova = _prova_do_estorno(relogio)
+
+    motivo = prova.estorno_bloqueado_pela_sandbox()
+
+    assert motivo == ESTORNO_BLOQUEADO_PELA_SANDBOX
+    assert "401, causa 7" in motivo
+    assert prova.registro.observacoes == [ESTORNO_BLOQUEADO_PELA_SANDBOX]
+
+
+@pytest.mark.parametrize(
+    "troca",
+    [
+        pytest.param({"etapa": "compensando"}, id="saga-noutra-etapa"),
+        pytest.param({"falha": "reenvios_esgotados"}, id="outra-falha"),
+        pytest.param({"motivo": "orcamento_recusado"}, id="outro-motivo"),
+    ],
+)
+def test_saga_que_nao_parou_pelo_estorno_recusado_nao_e_falha_esperada(
+    troca: dict[str, Any], relogio: Relogio
+) -> None:
+    prova = _prova_do_estorno(relogio, saga={**_SAGA_DO_ESTORNO_RECUSADO, **troca})
+
+    assert prova.estorno_bloqueado_pela_sandbox() is None
+    assert prova.registro.observacoes == []
+
+
+def test_estorno_recusado_por_outro_motivo_nao_e_falha_esperada(
+    relogio: Relogio,
+) -> None:
+    outra = _RECUSA_DA_SANDBOX.replace('"causas": [7]', '"causas": [2]')
+    prova = _prova_do_estorno(relogio, log=outra)
+
+    assert prova.estorno_bloqueado_pela_sandbox() is None
+    assert prova.falha_esperada == ""
+
+
+def test_no_ensaio_nada_e_falha_esperada(relogio: Relogio) -> None:
+    prova = _prova_do_estorno(relogio, real=False)
+    assert prova.estorno_bloqueado_pela_sandbox() is None
+
+
+def test_concluir_da_falha_esperada_diz_a_limitacao_e_o_passo(relogio: Relogio) -> None:
+    prova = _prova_do_estorno(relogio)
+    prova.estorno_bloqueado_pela_sandbox()
+    prova.falhou = 'Então a saga terminou como "compensada" pelo motivo "cancelamento"'
+
+    prova.concluir("skipped")
+
+    assert prova.registro.resultado == RESULTADO_DA_FALHA_ESPERADA
+    assert prova.registro.observacoes[:2] == [
+        ESTORNO_BLOQUEADO_PELA_SANDBOX,
+        (
+            'parou no passo: Então a saga terminou como "compensada" pelo motivo '
+            '"cancelamento"'
+        ),
+    ]
+
+
+def test_falha_esperada_que_o_pytest_deu_como_falha_continua_falha(
+    relogio: Relogio,
+) -> None:
+    prova = _prova_do_estorno(relogio)
+    prova.estorno_bloqueado_pela_sandbox()
+    prova.falhou = "Então o Mercado Pago informa o pagamento como estornado"
+
+    prova.concluir("failed")
+
+    assert prova.registro.resultado == "falhou"
+    assert (
+        "falhou no passo: Então o Mercado Pago informa o pagamento como estornado"
+        in prova.registro.observacoes
+    )

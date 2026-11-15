@@ -465,7 +465,8 @@ def _conferir_conta(
         msg = (
             "o dono do MP_ACCESS_TOKEN não é uma conta de teste (GET /users/me sem a "
             "tag test_user): com ele o pagamento seria de verdade. Use o Access Token "
-            "de Testes > Credenciais de teste da aplicação, e não o de produção"
+            "de Testes > Credenciais de teste da aplicação, ou o de Credenciais de "
+            "produção da conta Vendedor de teste, e nunca o de produção da sua conta"
         )
         raise PreflightDoSandboxError(msg)
     if conta_de_teste is None:

@@ -18,6 +18,7 @@ from e2e.apoio.diagnostico import (
     Sinais,
     coletar,
     dicas,
+    estorno_bloqueado_pela_sandbox,
     filtrar_log,
     montar,
 )
@@ -1015,3 +1016,59 @@ def test_requisicao_com_status_de_erro_entra_no_log_mesmo_em_info(
     linhas = _linhas(_log("request", "info", status=status, path="/x"))
 
     assert bool(linhas) is interessa
+
+
+# --- a recusa do estorno que so a sandbox faz -----------------------------------------
+
+
+def _recusa(**campos: Any) -> str:
+    base: dict[str, Any] = {
+        "operacao": "estornar",
+        "status_http": 401,
+        "erro": "unauthorized",
+        "causas": [7],
+    }
+    return _log("mercadopago_request_rejected", "warning", **{**base, **campos})
+
+
+def test_estorno_bloqueado_pela_sandbox_reconhece_a_recusa_exata() -> None:
+    assert estorno_bloqueado_pela_sandbox(filtrar_log(_recusa()))
+
+
+@pytest.mark.parametrize(
+    "troca",
+    [
+        pytest.param({"operacao": "criar_cobranca"}, id="outra-operacao"),
+        pytest.param({"status_http": 403}, id="outro-http"),
+        pytest.param({"causas": [2]}, id="outra-causa"),
+        pytest.param({"causas": [7, 2]}, id="causa-a-mais"),
+        pytest.param({"causas": []}, id="sem-causa"),
+    ],
+)
+def test_estorno_bloqueado_pela_sandbox_recusa_qualquer_outra_recusa(
+    troca: dict[str, Any],
+) -> None:
+    assert not estorno_bloqueado_pela_sandbox(filtrar_log(_recusa(**troca)))
+
+
+def test_estorno_bloqueado_pela_sandbox_sem_o_evento_de_recusa_nao_vale() -> None:
+    linha = _log("refund_refused", "error", operacao="estornar", status_http=401)
+    assert not estorno_bloqueado_pela_sandbox(filtrar_log(linha))
+    assert not estorno_bloqueado_pela_sandbox([])
+
+
+def test_a_dica_do_401_do_estorno_da_sandbox_nao_manda_trocar_o_token() -> None:
+    sinais = Sinais(
+        cenario="c", passo="p", erro="e", esperado="p", real=True, contexto="kind-x"
+    )
+    chamada = _log(
+        "HTTP Request: POST https://api.mercadopago.com/v1/payments/1/refunds "
+        '"HTTP/1.1 401 Unauthorized"'
+    )
+    sinais.logs["consumidor"] = filtrar_log(f"{chamada}\n{_recusa()}")
+
+    texto = " ".join(dicas(sinais))
+
+    assert "causa 7" in texto
+    assert "Não é o token" in texto
+    assert "Leia de novo" not in texto
