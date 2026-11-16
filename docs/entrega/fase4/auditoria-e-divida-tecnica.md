@@ -1,6 +1,6 @@
 # Auditoria pré-entrega e dívida técnica
 
-Revisão de 20/10/2026, com as dívidas fechadas até 23/10/2026, a observabilidade atualizada em 24/10/2026 e as duas dívidas do Kong registradas em 24/10/2026; conferida de novo em 15/11/2026, nos commits da entrega. Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e dívidas registradas nos serviços.
+Revisão de 20/10/2026, atualizada até 24/10/2026 e conferida de novo em 15/11/2026, nos commits da seção 2 do [documento de entrega](entrega-fase-4.md#2-repositórios-e-estado-do-cicd). Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e dívidas registradas nos serviços.
 
 ## Itens que afetavam a entrega
 

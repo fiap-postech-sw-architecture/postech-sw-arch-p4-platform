@@ -21,7 +21,7 @@ Esses commits identificam a execução de 19/10, anterior aos commits da entrega
 
 O trace `af146ea716424dfc2ac5b25960b8e9ae` reúne 245 spans de OS, Billing e Execução, incluindo a chamada CLIENT da Execução ao SERVER do Billing em `/api/v1/precos/validacao`, com resposta 200. A [exportação para publicação](trace-saga-2026-10-19.json) preserva o grafo, os tempos e os 245 spans; foram retirados os atributos db.statement/db.user e os metadados dos processos. O Jaeger mantém somente os últimos 250 traces, por isso a exportação foi preservada.
 
-O simulador de pagamento trabalha dentro do Billing e não produz chamada HTTP externa. O CLIENT do Billing para o Mercado Pago, o modo real de conciliação e a respectiva observação ociosa dependem de `make mp-sandbox` com as credenciais de teste do responsável.
+O simulador de pagamento trabalha dentro do Billing e não produz chamada HTTP externa. O CLIENT do Billing para o Mercado Pago e a conciliação em modo real aparecem nos traces da [sandbox real](mp-sandbox.md), de 15/11/2026.
 
 ## Dez minutos ociosos
 
@@ -115,7 +115,6 @@ Comando: `KUBE_CONTEXT=kind-pytstop-p4-codex CLUSTER=pytstop-p4-codex scripts/ci
 
 As sondas só abriram e fecharam conexões TCP, sem autenticação ou payload SMTP/AMQP. Recusa, erro DNS, falta de pod, falha de transporte e prazo externo não aprovam a negativa. O teste operacional não amplia a política: o acesso da API ao Mailpit permanece como limite aceito da demonstração.
 
-## O que falta
+## Limites
 
-- Executar a prova real do Mercado Pago e observar a ociosidade também nesse modo.
-- Atualizar os quatro commits e as provas depois das próximas integrações; conferir o pacote e o PDF sobre as tags finais.
+- A janela de 600,9 s sem tráfego usou o simulador; a ociosidade com o Mercado Pago real não foi medida. A prova real, de 15/11/2026, está em [Mercado Pago na sandbox](mp-sandbox.md).

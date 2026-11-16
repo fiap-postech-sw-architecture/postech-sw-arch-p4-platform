@@ -117,7 +117,7 @@ O artefato guarda só as medidas, e o log não lista os avisos. Para saber o que
 | python:S1172 | sem parâmetro de função sem uso | 0 | 2 | 0 |
 | python:S8714 | asserção própria de exceção, em vez de `try`/`except` com `fail()` | 0 | 0 | 2 |
 | python:S107 | função sem parâmetros demais | 0 | 1 | 0 |
-| python:S8997 | o fixture `monkeypatch` para mudança temporária nos testes | 1 | 0 | 0 |
+| python:S8997 | a fixture `monkeypatch` para mudança temporária nos testes | 1 | 0 | 0 |
 | python:S1135 | acompanhar as marcas `TODO` | 1 | 0 | 0 |
 | Total em 20/10/2026 | | 138 | 91 | 18 |
 | Total no CD de 21/10/2026 (UTC) | | 0 | 0 | 0 |

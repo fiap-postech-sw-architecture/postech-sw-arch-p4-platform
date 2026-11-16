@@ -25,7 +25,7 @@ Comando, executado duas vezes com dados novos: `make newman KUBE_CONTEXT=kind-py
 
 O runner e a collection correspondem aos blobs preservados no commit local `af33b0fb724ae6dfb535c4d448127d815c138c2c`, preparado sobre a base `ec05e8793188309cde4e25d1fe369447e9da300d`. A collection tem SHA256 `8cd3122e152757aefe0202b25a1a6e6a38216631e3f080838326538b6c22fc85`. Esses identificadores distinguem o código dessas duas provas da base anterior.
 
-A infraestrutura do kind usava a plataforma `91d959bcba07b3a7b53653342e944ea01bdaa3c3`. Serviços: OS `b81f609a193afa669ed602d3327cb074827c25d6`, Billing `248c4071d357a867db1571081b012ff57753f834` e Execução `605a5e56b297438163cddba2a4f129b334c1699d`. A plataforma usou overlay kind, e os serviços, kind-ci; essa combinação é de ensaio.
+A infraestrutura do kind usava a plataforma `91d959bcba07b3a7b53653342e944ea01bdaa3c3`. Serviços: OS `b81f609a193afa669ed602d3327cb074827c25d6`, Billing `248c4071d357a867db1571081b012ff57753f834` e Execução `605a5e56b297438163cddba2a4f129b334c1699d`. A plataforma usou overlay kind, e os serviços, kind-ci; essa combinação é a das provas locais, não a da entrega.
 
 | Execução | Duração observada | Assertions | Chamadas HTTP | Falhas |
 |---|---|---|---|---|
@@ -44,7 +44,7 @@ O passo integrado preserva smoke, BDD, ZAP, varredura e artefatos. A prova real 
 
 O [run 39230026573](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573), [job e2e](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39230026573/job/117985474670), aprovou o passo `Collection do fluxo completo (make newman)` entre `2026-10-19T09:33:48Z` e `09:34:25Z`. Comando: `make -C platform newman`. O pytest registrou um teste aprovado em 37,23 s. Newman 6.2.3 e Node 24.21.0 executaram 105 assertions, nenhuma falha e 48 chamadas HTTP, com as sete provas de negócio aprovadas. BDD, ZAP, varredura e uploads do mesmo job também passaram.
 
-O [resumo sanitizado do CI](newman-ci-pr24-2026-10-19.json) é uma cópia exata do artefato `e2e-kind`, id 12176194955. SHA256: `f96b87d2a56f99403fec93b5c08f3ac036594c468d21535d467260bd0ab81ac5`. A collection mantém o SHA256 registrado no ensaio local. O kind do runner usou o overlay `kind-ci` e o simulador do Billing, sem credenciais do provedor.
+O [resumo sanitizado do CI](newman-ci-pr24-2026-10-19.json) é uma cópia exata do artefato `e2e-kind`, id 12176194955. SHA256: `f96b87d2a56f99403fec93b5c08f3ac036594c468d21535d467260bd0ab81ac5`. A collection mantém o SHA256 registrado nas provas locais. O kind do runner usou o overlay `kind-ci` e o simulador do Billing, sem credenciais do provedor.
 
 | Checkout efetivamente exercitado | Commit |
 |---|---|

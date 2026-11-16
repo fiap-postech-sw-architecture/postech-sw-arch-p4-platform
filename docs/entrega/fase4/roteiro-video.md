@@ -1,6 +1,6 @@
 # Roteiro do vídeo da fase 4
 
-Duração prevista: 14 minutos. Gravar sobre os quatro commits da entrega e mostrar serviço e SHA no trecho de CI/CD. Usar dados sintéticos. Credenciais, documentos pessoais, chaves, tokens e telas sensíveis não entram na gravação.
+Duração prevista: 14 minutos, sobre os quatro commits da entrega, com serviço e SHA no trecho de CI/CD e dados sintéticos. Credenciais, documentos pessoais, chaves, tokens e telas sensíveis não entram na gravação.
 
 | Tempo | Demonstração | O que mostrar | Requisitos |
 |---|---|---|---|
@@ -8,10 +8,10 @@ Duração prevista: 14 minutos. Gravar sobre os quatro commits da entrega e most
 | 00:30–04:30 | Fluxo completo, `make demo` bloco 1 | Abertura; diagnóstico; orçamento/e-mail; aprovação; reserva; pagamento; fila; execução; finalização; entrega; oito status do histórico. Mostrar a validação de CPF inválido (cenário `@validacao`, que roda no `make e2e` e não no `make demo`). Dizer que cada serviço documenta a arquitetura e publica OpenAPI e collection do Postman, e que o CD roda a collection do fluxo completo no Newman | RF-028 a RF-037; RNF-051; RNF-052 |
 | 04:30–08:30 | Saga e falhas, bloco 2 | Reserva sem saldo; cancelamento pago com estorno; 409 após início; consumidor parado e recuperação sem DLQ; API do Billing fora com 503 e circuito aberto | RF-038; RN-023 a RN-029; RNF-034; RNF-035; RNF-037; RNF-045; RNF-055 |
 | 08:30–11:00 | Pipeline de um serviço | PR/checks obrigatórios; testes e cobertura; SonarQube; build; digest; deploy kind; smoke e E2E na mesma execução | RNF-038 a RNF-043; RNF-048 a RNF-050 |
-| 11:00–14:00 | Observabilidade e encerramento | Trace dos três serviços e chamada ao provedor; correlação no Loki; erro 5xx, taxa de sucesso e latência p95; volume diário de OS (o painel só mostra dia fechado às 00:00 UTC: rodar a demonstração na véspera) e tempo médio por status; alerta e runbook; índice | RNF-046; RNF-053; RNF-054; RNF-056 |
+| 11:00–14:00 | Observabilidade e encerramento | Trace dos três serviços e chamada ao provedor; correlação no Loki; erro 5xx, taxa de sucesso e latência p95; volume diário de OS (o painel só mostra dia fechado às 00:00 UTC, por isso a demonstração roda na véspera) e tempo médio por status; alerta e runbook; índice | RNF-046; RNF-053; RNF-054; RNF-056 |
 
-Identificar quando o pagamento usa o simulador. O trecho da sandbox real deve usar a prova que o integrante com as credenciais criou no Mercado Pago; uma simulação não comprova aprovação real.
+O roteiro identifica quando o pagamento usa o simulador do Mercado Pago. A prova na sandbox real é outra execução, registrada em [Mercado Pago na sandbox](evidencias/mp-sandbox.md).
 
-Antes da gravação, conferir `make demo`, a collection integrada, o trace e as capturas com os mesmos commits. Gravar a execução do pipeline com antecedência e condensar a espera na edição, sem mudar a ordem das etapas nem cortar o resultado.
+A execução do pipeline entra condensada, sem mudar a ordem das etapas nem cortar o resultado.
 
-Após editar: duração de até 15 minutos, comandos e painéis legíveis, ausência de segredos e link acessível. O link do vídeo fica na seção 3 do documento de entrega e no índice da entrega.
+O link do vídeo fica na seção 3 do documento de entrega e no índice da entrega.

@@ -28,7 +28,7 @@ Capturas de 23/10/2026, entre 15:59 e 16:04 UTC. Em todos os repositórios só o
 | Execution Service | 24 | 23 | `b77d564` |
 | Plataforma | 39 | 38 | `16f93ce` |
 
-A versão anterior do documento de entrega contava 26, 24, 20 e 32 commits, os que cada `main` tinha nos CDs de 20/10/2026 (plataforma `d703200`, OS Service `3ce582b`, Billing `76b5f9b` e Execução `5b1bef4`). A conta sobe a cada merge: na tag `entrega-fase-4` são 40, 39, 32 e 59 commits (OS Service, Billing, Execução e `platform`), todos com o `(#N)` do PR, menos o `Initial commit` de cada repositório. Os quatro commits iniciais estão no [registro de evidências](README.md#coleta-e-conferência-reproduzíveis), e o `verificar --final` só aceita esses.
+Nos CDs de 20/10/2026 as `main` tinham 26 commits no OS Service (`3ce582b`), 24 no Billing (`76b5f9b`), 20 na Execução (`5b1bef4`) e 32 no `platform` (`d703200`). A conta sobe a cada merge: na tag `entrega-fase-4` são 40, 39, 32 e 59 commits (OS Service, Billing, Execução e `platform`), todos com o `(#N)` do PR, menos o `Initial commit` de cada repositório. Os quatro commits iniciais estão no [registro de evidências](README.md#coleta-e-conferência-reproduzíveis), e o `verificar --final` só aceita esses.
 
 ## Prints do Anexo A, A8
 
