@@ -33,7 +33,7 @@ O detalhe de cada ponto está em [Mercado Pago na sandbox](../../../mercado-pago
 
 ## O que fica provado em outro lugar
 
-O estorno completo, a compensação que falha e a retomada pelo operador estão no E2E da saga com o simulador ([BDD](bdd-resumo.md) e o [BDD de componente do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/main/tests/bdd/saga_atendimento.feature)). Pela sandbox, o estorno só pode ser feito pelo painel do Mercado Pago, seguido da retomada da compensação, como descreve o [runbook da saga](../../../operacao/runbook-saga.md#2-falha-na-compensação-e-retomada).
+O estorno completo, a compensação que falha e a retomada pelo operador estão no E2E da saga com o simulador ([BDD](bdd-resumo.md) e o [BDD de componente do OS Service](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/blob/entrega-fase-4/tests/bdd/saga_atendimento.feature)). Pela sandbox, o estorno só pode ser feito pelo painel do Mercado Pago, seguido da retomada da compensação, como descreve o [runbook da saga](../../../operacao/runbook-saga.md#2-falha-na-compensação-e-retomada).
 
 ## Arquivos
 

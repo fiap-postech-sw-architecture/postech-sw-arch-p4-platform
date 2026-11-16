@@ -1,33 +1,33 @@
 # Auditoria pré-entrega e dívida técnica
 
-Revisão de 20/10/2026, com as dívidas fechadas até 23/10/2026, a observabilidade atualizada em 24/10/2026 e as duas dívidas do Kong registradas em 24/10/2026. Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e pendências registradas nos serviços. Esta auditoria acompanha a versão preliminar do pacote; a revisão final depende dos commits congelados e das evidências listadas abaixo.
+Revisão de 20/10/2026, atualizada até 24/10/2026 e conferida de novo em 15/11/2026, nos commits da seção 2 do [documento de entrega](entrega-fase-4.md#2-repositórios-e-estado-do-cicd). Fontes: requisitos da fase, PRs integrados, gates locais, execuções do CI e dívidas registradas nos serviços.
 
-## Pendências que afetam a entrega
+## Itens que afetavam a entrega
 
-| Item | Situação | Quem fecha | Condição para fechar |
-|---|---|---|---|
-| Collection do fluxo completo | Duas provas locais e [execução no CI do platform #24](evidencias/newman-resumo.md#execução-no-ci-do-platform-24) aprovadas; CD da `main` aprovado; prova do congelamento pendente | Plataforma | Preservar a collection e comprovar o run sobre os commits finais, incluindo as métricas administrativas do OS Service; [fontes e resumos](evidencias/newman-resumo.md) |
-| Ensaio final de observabilidade | Trace com os três serviços, 600,9 s sem tráfego, smoke, alerta com recuperação e as capturas dos nove dashboards de 24/10, todas na mesma janela de seis execuções do `make demo` ([Anexo A, A7](entrega-fase-4.md#a7--dashboards-do-grafana)), comprovados localmente; a chamada ao Mercado Pago aparece nos traces da [sandbox real](evidencias/mp-sandbox.md) | Plataforma e serviços | Refazer as capturas dos dashboards se o JSON de algum mudar até o congelamento |
-| Grupo, vídeo e submissão | RNF-053/RNF-054 ainda não podem ser encerrados | Grupo | Confirmar identificação; publicar vídeo; conferir acesso do avaliador; submeter o PDF final |
+| Item | Como fechou |
+|---|---|
+| Collection do fluxo completo | Aprovada no CD da `main` de 15/11/2026, com os quatro commits da entrega, incluindo as métricas administrativas do OS Service ([fontes e resumos](evidencias/newman-resumo.md)); antes, duas provas locais, a [execução no CI do platform #24](evidencias/newman-resumo.md#execução-no-ci-do-platform-24) e o CD de 19/10 |
+| Observabilidade | Trace com os três serviços, 600,9 s sem tráfego, smoke, alerta com recuperação e as capturas dos nove dashboards de 24/10, todas na mesma janela de seis execuções do `make demo` ([Anexo A, A7](entrega-fase-4.md#a7--dashboards-do-grafana)), comprovados no kind local; a chamada ao Mercado Pago aparece nos traces da [sandbox real](evidencias/mp-sandbox.md). Os JSON dos dashboards não mudaram depois das capturas |
+| Grupo, vídeo e tag | Participantes na seção 1 e link do vídeo na seção 3 do [documento de entrega](entrega-fase-4.md); `soat-architecture` com leitura nos quatro repositórios, conferido em 15/11/2026; tag `entrega-fase-4` nos quatro |
 
 ## Provas disponíveis
 
-CD da `main` de 20/10/2026 aprovado nos quatro repositórios:
+CD da `main` de 15/11/2026 aprovado nos quatro repositórios, com a mesma combinação de commits ([registro de evidências](evidencias/README.md#cd-nos-commits-da-entrega)):
 
-- OS Service: [run 39449191933](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/39449191933), em `3ce582b`.
-- Billing: [run 39449241713](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/39449241713), em `76b5f9b`.
-- Execução: [run 39449216419](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/39449216419), em `5b1bef4`.
-- Plataforma: [run 39458619627](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/39458619627), em `d703200`.
+- OS Service: [run 43715811117](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-os-service/actions/runs/43715811117), em `4a0cec2`.
+- Billing: [run 43756767775](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/actions/runs/43756767775), em `5adb362`.
+- Execução: [run 43756770932](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/actions/runs/43756770932), em `b3451d3`.
+- Plataforma: [run 43755645721](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/actions/runs/43755645721), em `e720b43`.
 
-Cada CD de serviço roda os testes com o gate de cobertura de 95%, o SonarQube, a imagem, o kind e o E2E. A cobertura por camada está no [registro de cobertura](evidencias/coverage.md). Cada alteração posterior exige os mesmos gates e a atualização desta lista e do registro de cobertura antes do congelamento.
+Cada CD de serviço roda os testes com o gate de cobertura de 95%, o SonarQube, a imagem, o kind e o E2E. A cobertura por camada está no [registro de cobertura](evidencias/coverage.md).
 
 ## Origem dos repositórios
 
-Todo commit da `main` entrou por pull request, exceto o commit inicial de cada repositório, criado pelo GitHub junto com ele. A [proteção da `main`](evidencias/protecao-da-main.md) traz o ruleset de cada repositório e a contagem de commits, e o [registro de evidências](evidencias/README.md#coleta-e-conferência-reproduzíveis) lista os quatro commits iniciais. O congelamento repete a conferência.
+Todo commit da `main` entrou por pull request, exceto o commit inicial de cada repositório, criado pelo GitHub junto com ele. A [proteção da `main`](evidencias/protecao-da-main.md) traz o ruleset de cada repositório e a contagem de commits, e o [registro de evidências](evidencias/README.md#coleta-e-conferência-reproduzíveis) lista os quatro commits iniciais. A conferência foi repetida em 15/11/2026, nos commits da entrega.
 
 ## Ensaio de observabilidade
 
-Em 19/10/2026, o E2E local passou com 14 execuções (11 cenários e um esquema com 3 exemplos), e os três cenários da sandbox ficaram fora da seleção; o `smoke-servicos` passou em seguida. O trace `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e o span CLIENT da chamada Execução → Billing. A janela medida de 600,9 s sem tráfego terminou sem reinícios, com 18 grupos de alvos disponíveis e três bancos acessíveis. O alerta controlado de fila disparou e recuperou, e o smoke posterior passou. O [relatório parcial](evidencias/observabilidade.md) preserva os commits, timestamps, trace e capturas do alerta.
+Em 19/10/2026, o E2E local passou com 14 execuções (11 cenários e um esquema com 3 exemplos), e os três cenários da sandbox ficaram fora da seleção; o `smoke-servicos` passou em seguida. O trace `af146ea716424dfc2ac5b25960b8e9ae` contém os três serviços e o span CLIENT da chamada Execução → Billing. A janela medida de 600,9 s sem tráfego terminou sem reinícios, com 18 grupos de alvos disponíveis e três bancos acessíveis. O alerta controlado de fila disparou e recuperou, e o smoke posterior passou. O [relatório](evidencias/observabilidade.md) preserva os commits, timestamps, trace e capturas do alerta.
 
 O simulador não produz chamada HTTP externa; o span CLIENT Billing → Mercado Pago aparece nos três traces da [sandbox real de 15/11/2026](evidencias/mp-sandbox.md). Os nove dashboards foram capturados em 24/10/2026, todos na mesma janela (de 14:40 a 16:51 UTC), que cobre seis execuções do `make demo` num kind novo ([Anexo A, A7](entrega-fase-4.md#a7--dashboards-do-grafana)). O painel de volume diário só ganha barra depois de cada meia-noite UTC, limitação descrita no JSON dele, e por isso a captura, de um dia só, não tem barra. O dashboard de bancos usa apenas as séries disponíveis no exporter, sem as `mongodb_ss_*`.
 
@@ -35,6 +35,7 @@ O simulador não produz chamada HTTP externa; o span CLIENT Billing → Mercado 
 
 | Item | Limite atual | Quando revisar |
 |---|---|---|
+| Aprovação tardia de cobrança já cancelada | No cancelamento sem pagamento, o Billing fecha o checkout com a expiração 1 minuto à frente, porque o Mercado Pago recusa data que não é futura. Quem pagar nesse minuto, ou num checkout que o provedor recusou fechar, é estornado quando a notificação do Mercado Pago chega; sem ela o pagamento fica aprovado, porque a conciliação só consulta cobranças `SOLICITADO` ([arquitetura do Billing, 4.5](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-billing-service/blob/entrega-fase-4/docs/arquitetura.md#45-compensações-e-lápide)) | Antes de produção: incluir na conciliação as cobranças canceladas há pouco |
 | Detalhe do cliente devolve o CPF/CNPJ completo aos papéis atendente e admin | Comportamento herdado; a decisão de minimização cabe ao grupo. Listagem usa valor mascarado e rotas de dados pessoais têm auditoria | Antes de mudar o contrato público; atualizar API, OpenAPI e collection juntos |
 | Consultas dos coletores da Execução sem índice por data | Medidas registradas cabem no prazo de 2 s com o volume ensaiado; série indisponível não vira zero | Quando o crescimento aproximar as consultas do prazo ou o volume superar o medido |
 | DNS do driver PostgreSQL não entra no prazo de conexão | A coleta HTTP termina no prazo, mas a thread pode aguardar resolução do nome | Se o DNS do cluster apresentar travamento; medir antes de introduzir resolução paralela |
@@ -56,7 +57,7 @@ O simulador não produz chamada HTTP externa; o span CLIENT Billing → Mercado 
 | `Any` nos payloads JSON | Uso sem comentário em `dict[str, Any]` de payload nos três serviços | Na próxima mudança de payload; um alias `Json` por serviço |
 | 422 de domínio no OpenAPI do OS Service | O erro de valor inválido do domínio (`VALOR_INVALIDO`) só está descrito no cancelamento da OS; a guarda dos testes confere os status que os testes observam, e nenhum teste o provoca nas outras rotas | Ao mexer nas regras de valor dos casos de uso; declarar o 422 onde o domínio o levanta |
 
-Dívida aceita não dispensa o gate nem vale como prova. A revisão final deve confirmar se algum item ganhou impacto maior com as últimas alterações.
+Dívida aceita não dispensa o gate nem vale como prova.
 
 ## Itens resolvidos
 
