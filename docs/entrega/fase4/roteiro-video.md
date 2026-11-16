@@ -1,6 +1,6 @@
 # Roteiro do vídeo da fase 4
 
-Duração prevista: 14 minutos. Gravar sobre os quatro commits congelados e mostrar serviço e SHA no trecho de CI/CD. Usar dados sintéticos. Credenciais, documentos pessoais, chaves, tokens e telas sensíveis não entram na gravação.
+Duração prevista: 14 minutos. Gravar sobre os quatro commits da entrega e mostrar serviço e SHA no trecho de CI/CD. Usar dados sintéticos. Credenciais, documentos pessoais, chaves, tokens e telas sensíveis não entram na gravação.
 
 | Tempo | Demonstração | O que mostrar | Requisitos |
 |---|---|---|---|

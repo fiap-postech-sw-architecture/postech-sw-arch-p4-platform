@@ -1,6 +1,6 @@
 # Proteção da `main`
 
-Conferido em 20/10/2026 e de novo em 23 e 24/10/2026 com a API do GitHub, nos quatro repositórios da fase 4; a leitura de 24/10 (GET de `rulesets` e do detalhe de cada um) deu a tabela do A8. O ruleset da `main` é visível a quem tem leitura no repositório, e é ele que exige os checks ([ADR-042](../../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)).
+Conferido em 20, 23 e 24/10/2026 e de novo em 15/11/2026, com a API do GitHub, nos quatro repositórios da fase 4; a leitura de 15/11 (GET do detalhe de cada ruleset), igual à de 24/10, é a da tabela do A8. O ruleset da `main` é visível a quem tem leitura no repositório, e é ele que exige os checks ([ADR-042](../../../arquitetura/adr/fase4/042-cicd-e-deploy-kubernetes.md)).
 
 | Repositório | Ruleset | Criado em (Brasília) | Checks obrigatórios |
 |---|---|---|---|
@@ -9,7 +9,7 @@ Conferido em 20/10/2026 e de novo em 23 e 24/10/2026 com a API do GitHub, nos qu
 | Execution Service | [24594458](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-execution-service/rules/24594458) | 06/10/2026, 13:50 | `lint`, `type-check`, `security`, `test`, `sonarqube`, `build`, `pip-audit`, `gitleaks`, `trivy` |
 | Plataforma | [24599837](https://github.com/fiap-postech-sw-architecture/postech-sw-arch-p4-platform/rules/24599837) | 06/10/2026, 14:54 | `manifests`, `contratos`, `gitleaks`, `deploy-kind` |
 
-Os quatro rulesets estão ativos, valem para a branch padrão e não têm exceção: `bypass_actors` vazio e `current_user_can_bypass` igual a `never`, conferidos em 23 e 24/10/2026. Todos têm as mesmas regras: pull request obrigatório, merge só por squash, conversas resolvidas antes do merge, histórico linear, sem force push e sem exclusão da branch. A aprovação de revisão não é exigida (`Required approvals: 0`): o ruleset exige o PR e os checks.
+Os quatro rulesets estão ativos, valem para a branch padrão e não têm exceção: `bypass_actors` vazio e `current_user_can_bypass` igual a `never`, conferidos em 23 e 24/10 e em 15/11/2026. Todos têm as mesmas regras: pull request obrigatório, merge só por squash, conversas resolvidas antes do merge, histórico linear, sem force push e sem exclusão da branch. A aprovação de revisão não é exigida (`Required approvals: 0`): o ruleset exige o PR e os checks.
 
 Revisão: em 24/10/2026 (até o #36 do OS Service, o #32 do Billing, o #28 da Execução e o #50 do `platform`), 117 dos 126 PRs mesclados do grupo (32 no OS Service, 24 no Billing, 21 na Execução e 49 no `platform`) trazem no corpo o relato da revisão (a caixa "Revisão deep" marcada, uma seção de revisão ou o registro da revisão independente); nos outros nove (o #1 de cada repositório, OS #22 e #26, Billing #23 e Execução #16 e #20) a caixa "Revisão deep" está desmarcada ou ausente, e os do Dependabot (3, 7, 5 e 1) só passam pelos checks. Conferido em cada repositório com `gh pr list --state merged --limit 200 --json number,author,body`.
 
@@ -28,7 +28,7 @@ Capturas de 23/10/2026, entre 15:59 e 16:04 UTC. Em todos os repositórios só o
 | Execution Service | 24 | 23 | `b77d564` |
 | Plataforma | 39 | 38 | `16f93ce` |
 
-A versão anterior do documento de entrega contava 26, 24, 20 e 32 commits, os que cada `main` tinha nos CDs de 20/10/2026 (plataforma `d703200`, OS Service `3ce582b`, Billing `76b5f9b` e Execução `5b1bef4`). A conta sobe a cada merge. Os quatro commits iniciais estão no [registro de evidências](README.md#coleta-e-conferência-reproduzíveis), e o `verificar --final` só aceita esses.
+A versão anterior do documento de entrega contava 26, 24, 20 e 32 commits, os que cada `main` tinha nos CDs de 20/10/2026 (plataforma `d703200`, OS Service `3ce582b`, Billing `76b5f9b` e Execução `5b1bef4`). A conta sobe a cada merge: na tag `entrega-fase-4` são 40, 39, 32 e 59 commits (OS Service, Billing, Execução e `platform`), todos com o `(#N)` do PR, menos o `Initial commit` de cada repositório. Os quatro commits iniciais estão no [registro de evidências](README.md#coleta-e-conferência-reproduzíveis), e o `verificar --final` só aceita esses.
 
 ## Prints do Anexo A, A8
 

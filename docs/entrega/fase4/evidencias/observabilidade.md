@@ -1,6 +1,6 @@
 # Observabilidade no kind local: ensaio de 19/10/2026 e dashboards de 24/10/2026
 
-Estado: prova parcial. O fluxo local, o trace distribuído, a ociosidade e a saúde posterior foram exercitados, e os nove dashboards foram capturados em 24/10/2026, todos na mesma janela, com seis execuções do `make demo` num kind novo ([Dashboards e histórico](#dashboards-e-histórico)). A chamada HTTP ao Mercado Pago real continua pendente.
+Estado: execuções no kind local. O fluxo local, o trace distribuído, a ociosidade e a saúde posterior foram exercitados em 19/10/2026, e os nove dashboards foram capturados em 24/10/2026, todos na mesma janela, com seis execuções do `make demo` num kind novo ([Dashboards e histórico](#dashboards-e-histórico)). A chamada HTTP ao Mercado Pago real aparece nos traces da [sandbox real](mp-sandbox.md) de 15/11/2026.
 
 ## Ambiente e commits
 
@@ -13,7 +13,7 @@ Kind local próprio, criado em 19/10/2026 e já removido (o nome do cluster e o 
 | Billing Service | `248c4071d357a867db1571081b012ff57753f834` |
 | Execution Service | `605a5e56b297438163cddba2a4f129b334c1699d` |
 
-Esses commits identificam a execução; não constituem congelamento de entrega. A adoção do workflow de implantação pelos serviços e as correções posteriores exigem novas verificações e atualização das evidências finais. Nenhuma credencial do provedor foi usada.
+Esses commits identificam a execução de 19/10, anterior aos commits da entrega; as provas nos commits da entrega são as dos CDs de 15/11/2026 ([registro de evidências](README.md#cd-nos-commits-da-entrega)). Nenhuma credencial do provedor foi usada.
 
 ## Fluxo e trace
 
